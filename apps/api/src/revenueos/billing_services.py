@@ -45,6 +45,7 @@ from revenueos.config import Settings
 from revenueos.credit_services import CreditService
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_services import require_current_terms_acceptance
 from revenueos.models import (
     BillingAccount,
     BillingInvoiceProjection,
@@ -196,6 +197,7 @@ class BillingService:
         request: CheckoutCreateRequest,
     ) -> CheckoutCreateResponse:
         self._require_enabled()
+        await require_current_terms_acceptance(self.session, self.settings, organisation_id)
         if request.plan_code == "enterprise":
             raise PublicAPIError(
                 "enterprise_checkout_unavailable",

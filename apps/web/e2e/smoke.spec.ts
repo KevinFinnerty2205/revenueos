@@ -127,6 +127,8 @@ test("private beta onboarding, consent, feedback and admin controls stay product
 }) => {
   let onboardingStep = 0;
   let acknowledged = false;
+  let termsAccepted = false;
+  let termsPayload: Record<string, unknown> | null = null;
   let adminAllowed = true;
   let feedbackPayload: Record<string, unknown> | null = null;
 
@@ -150,6 +152,56 @@ test("private beta onboarding, consent, feedback and admin controls stay product
       },
     });
   });
+
+  await page.route(
+    "http://localhost:8000/api/v1/legal/terms-acceptance",
+    async (route) => {
+      const request = route.request();
+      if (request.method() === "POST") {
+        termsPayload = request.postDataJSON() as Record<string, unknown>;
+        termsAccepted = true;
+      }
+      await route.fulfill({
+        json: {
+          terms: {
+            status: "draft",
+            version: "owner-review-draft-v1",
+            fingerprint: `sha256:${"a".repeat(64)}`,
+            effectiveDate: null,
+            href: "/terms",
+          },
+          privacyNotice: {
+            status: "draft",
+            version: "owner-review-draft-v1",
+            fingerprint: `sha256:${"b".repeat(64)}`,
+            effectiveDate: null,
+            href: "/privacy",
+          },
+          accepted: termsAccepted,
+          acceptanceAvailable: true,
+          canAccept: true,
+          evidence: termsAccepted
+            ? {
+                id: "terms-acceptance-1",
+                acceptedByUserId: "user-1",
+                termsVersion: "owner-review-draft-v1",
+                termsFingerprint: `sha256:${"a".repeat(64)}`,
+                termsEffectiveDate: null,
+                acceptedAt: "2026-09-10T00:00:00Z",
+                acceptanceSource: "trial_onboarding",
+                privacyNoticeVersion: "owner-review-draft-v1",
+                privacyNoticeFingerprint: `sha256:${"b".repeat(64)}`,
+                privacyNoticeEffectiveDate: null,
+                privacyNoticePresentedAt: "2026-09-10T00:00:00Z",
+              }
+            : null,
+          message: termsAccepted
+            ? "Your organisation has accepted the current Terms."
+            : "An organisation administrator must accept the current Terms before continuing.",
+        },
+      });
+    },
+  );
 
   await page.route("http://localhost:8000/api/v1/beta/**", async (route) => {
     const request = route.request();
@@ -229,7 +281,41 @@ test("private beta onboarding, consent, feedback and admin controls stay product
     await route.fulfill({ status: 404, json: { message: "Not found" } });
   });
 
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/onboarding");
+  await expect(
+    page.getByRole("heading", {
+      name: "Accept the current Terms to continue",
+    }),
+  ).toBeVisible();
+  const termsCheckbox = page.getByRole("checkbox", {
+    name: /I confirm that I am authorised/i,
+  });
+  await expect(termsCheckbox).not.toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Accept Terms for organisation" }),
+  ).toBeDisabled();
+  await termsCheckbox.focus();
+  await termsCheckbox.press("Space");
+  await page
+    .getByRole("button", { name: "Accept Terms for organisation" })
+    .press("Enter");
+  const acceptedStatus = page
+    .getByRole("status")
+    .filter({ hasText: "Current Terms accepted for this organisation" });
+  await expect(acceptedStatus).toContainText(
+    "Current Terms accepted for this organisation",
+  );
+  await expect(acceptedStatus).toBeFocused();
+  expect(termsPayload).toEqual({
+    authorityAndTermsAccepted: true,
+    source: "trial_onboarding",
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await expect(
     page.getByRole("heading", {
       name: "Move your first customer conversation forward",

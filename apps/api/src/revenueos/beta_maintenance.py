@@ -190,6 +190,7 @@ from revenueos.models import (
     SellingProfileRevision,
     SourceCandidateEvidence,
     Task,
+    TermsAcceptance,
     Transcript,
     TranscriptSegment,
     TranscriptVersion,
@@ -204,7 +205,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import S3CompatibleVisualStorage, VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 38
+EXPORT_VERSION = 39
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1417,6 +1418,7 @@ async def _delete_organisation_records(
         await session.execute(
             delete(DataNoticeAcknowledgement).where(DataNoticeAcknowledgement.organisation_id == organisation_id)
         )
+        await session.execute(delete(TermsAcceptance).where(TermsAcceptance.organisation_id == organisation_id))
         await session.execute(delete(OnboardingProgress).where(OnboardingProgress.organisation_id == organisation_id))
         await session.execute(delete(AIUsageCounter).where(AIUsageCounter.organisation_id == organisation_id))
         await session.execute(
@@ -3027,6 +3029,15 @@ async def _export_payload(
             )
         ).all()
     )
+    terms_acceptances = list(
+        (
+            await session.scalars(
+                select(TermsAcceptance)
+                .where(TermsAcceptance.organisation_id == organisation_id)
+                .order_by(TermsAcceptance.accepted_at, TermsAcceptance.id)
+            )
+        ).all()
+    )
     module_entitlements = list(
         (
             await session.scalars(
@@ -4046,6 +4057,26 @@ async def _export_payload(
                 ),
             )
             for item in commercial_history
+        ],
+        "termsAcceptances": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "accepted_by_user_id",
+                    "release_status",
+                    "terms_version",
+                    "terms_sha256",
+                    "terms_effective_date",
+                    "accepted_at",
+                    "acceptance_source",
+                    "privacy_notice_version",
+                    "privacy_notice_sha256",
+                    "privacy_notice_effective_date",
+                    "privacy_notice_presented_at",
+                ),
+            )
+            for item in terms_acceptances
         ],
         "billing": {
             "accounts": [

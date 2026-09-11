@@ -308,6 +308,70 @@ class CommercialPlanVersion(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", server_default="active")
 
 
+class TermsAcceptance(Base):
+    __tablename__ = "terms_acceptances"
+    __table_args__ = (
+        CheckConstraint("release_status IN ('draft', 'approved')", name="ck_terms_acceptances_release_status"),
+        CheckConstraint(
+            "(release_status = 'draft' AND terms_effective_date IS NULL "
+            "AND privacy_notice_effective_date IS NULL) OR "
+            "(release_status = 'approved' AND terms_effective_date IS NOT NULL "
+            "AND privacy_notice_effective_date IS NOT NULL)",
+            name="ck_terms_acceptances_release_date",
+        ),
+        CheckConstraint(
+            "length(trim(terms_version)) BETWEEN 1 AND 80",
+            name="ck_terms_acceptances_terms_version",
+        ),
+        CheckConstraint(
+            "length(terms_sha256) = 64 AND terms_sha256 = lower(terms_sha256)",
+            name="ck_terms_acceptances_terms_hash",
+        ),
+        CheckConstraint(
+            "acceptance_source IN ('trial_onboarding', 'subscription_checkout', 'administrative_onboarding')",
+            name="ck_terms_acceptances_source",
+        ),
+        CheckConstraint(
+            "length(trim(privacy_notice_version)) BETWEEN 1 AND 80",
+            name="ck_terms_acceptances_privacy_version",
+        ),
+        CheckConstraint(
+            "length(privacy_notice_sha256) = 64 AND privacy_notice_sha256 = lower(privacy_notice_sha256)",
+            name="ck_terms_acceptances_privacy_hash",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "accepted_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_terms_acceptances_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_terms_acceptances_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "terms_version",
+            "terms_sha256",
+            name="uq_terms_acceptances_org_release",
+        ),
+        Index("ix_terms_acceptances_org_time", "organisation_id", "accepted_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    accepted_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    release_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    terms_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    terms_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    terms_effective_date: Mapped[date | None] = mapped_column(Date)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    acceptance_source: Mapped[str] = mapped_column(String(40), nullable=False)
+    privacy_notice_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    privacy_notice_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    privacy_notice_effective_date: Mapped[date | None] = mapped_column(Date)
+    privacy_notice_presented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class OrganisationCommercialState(TimestampMixin, Base):
     __tablename__ = "organisation_commercial_states"
     __table_args__ = (

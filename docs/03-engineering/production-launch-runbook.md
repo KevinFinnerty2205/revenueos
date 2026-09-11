@@ -2,7 +2,7 @@
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
 - Reviewed source baseline: `d8d50b216bd64726243b06b5ea4f5bd56c59ab54`; deploy only the immutable post-review merge SHA recorded in the launch evidence
-- Required migration head: `0062_live_stripe_billing`
+- Required migration head: `0063_terms_acceptance`
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
 
@@ -15,7 +15,7 @@ The production candidate is the modular monolith described by [ADR 0077](../08-d
 Production publication is fail-closed at two points:
 
 - Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth, non-production Clerk public key, a missing/non-40-hex `ORYNTELA_RELEASE_SHA`, or Privacy/Terms release records that are not approved and bound to a version, effective date and SHA-256 fingerprint.
-- `/health/ready` rejects a missing Clerk server secret without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config.
+- `/health/ready` rejects a missing Clerk server secret without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config. `production-preflight` also fails until the owner-approved Terms version and effective date are locked for acceptance.
 
 This first deployment may contain synthetic data only. The target manifest intentionally disables real-data mode, cloud export, organisation deletion, live billing, Credits, external Prospect and every external connector.
 
@@ -175,7 +175,7 @@ Before every release:
 2. Confirm a recent recoverable database backup and last restore result. If a migration is not backwards-compatible with the last app release, stop worker claims and schedule downtime.
 3. Run `alembic current` and verify the source state. Never edit `alembic_version` manually.
 4. Run once using the migration credential: `alembic upgrade head`.
-5. Verify `alembic current` is `0062_live_stripe_billing`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image.
+5. Verify `alembic current` is `0063_terms_acceptance`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`; a draft release must keep the overall result blocked.
 6. Deploy the API and require `/health/live` = 200 and `/health/ready` = 200 before traffic. Start the exact same release's single worker and require its private liveness probe. Deploy web and require `/health/ready` = 200.
 7. Run the synthetic smoke matrix below. Inspect safe error rate/restarts and queue summaries before marking the release healthy.
 
@@ -289,7 +289,7 @@ Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic 
 
 ## 10. Support and lifecycle operations
 
-- Trial: inspect commercial state; run `commercial-start-trial` with current lock version, bounded reason/operator and printed exact confirmation. It never creates a card or automatic conversion.
+- Trial: first obtain the customer's organisation-admin acceptance through the authenticated UI; support cannot provide it. Then inspect commercial state and run `commercial-start-trial` with current lock version, bounded reason/operator and printed exact confirmation. It never creates a card or automatic conversion.
 - Commercial change: use `commercial-assign-plan`/`commercial-change-state`; never edit tables. Live billing stays off until an adapter and reconciliation smoke pass.
 - Manual paid Credits: follow `manual-paid-credit-grant-runbook.md`; cleared funds and a margin review are mandatory; the grant does not enable provider execution.
 - Provider reconnect: disable the named flag if unsafe, inspect safe connection health, revoke/disconnect, rotate client secret/token as needed, reconnect through OAuth, then reconcile before writes.
@@ -299,6 +299,6 @@ Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic 
 
 ## 11. Rollback and release close
 
-Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. For billing, retain migration `0062_live_stripe_billing` during application rollback so mode and paid-through authority are preserved. Its downgrade refuses to run while any live account, operation or event receipt exists; do not delete or relabel those records to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
+Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. Retain migrations `0062_live_stripe_billing` and `0063_terms_acceptance` during application rollback so paid-through and acceptance evidence remain authoritative. The billing downgrade refuses to run while live authority exists; do not delete or relabel billing or Terms evidence to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
 
 After a successful launch window, record SHA, migration head, health/smoke results, any provider actions, spend, incidents and deviations. Public announcement and customer onboarding are separate owner gates and are not part of WO-054.

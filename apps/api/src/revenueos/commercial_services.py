@@ -29,6 +29,7 @@ from revenueos.commercial_contracts import (
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_services import require_current_terms_acceptance
 from revenueos.models import (
     ActionExecution,
     CommercialPlanVersion,
@@ -367,6 +368,7 @@ class CommercialService:
         now = _aware(self._now())
         await ensure_plan_catalogue(self.session)
         await self._lock_organisation(organisation_id)
+        await require_current_terms_acceptance(self.session, self.settings, organisation_id)
         state = await self.session.scalar(
             select(OrganisationCommercialState)
             .where(OrganisationCommercialState.organisation_id == organisation_id)
@@ -458,6 +460,8 @@ class CommercialService:
             raise PublicAPIError("commercial_state_stale", "Commercial state changed; inspect it and retry.", 409)
         if state is not None and state.lock_version != expected_lock_version:
             raise PublicAPIError("commercial_state_stale", "Commercial state changed; inspect it and retry.", 409)
+        if state is None or state.status != "active":
+            await require_current_terms_acceptance(self.session, self.settings, organisation_id)
         plan = await self._plan(plan_code)
         previous_plan_id = state.plan_version_id if state is not None else None
         trial_used_at = state.trial_used_at if state is not None else None

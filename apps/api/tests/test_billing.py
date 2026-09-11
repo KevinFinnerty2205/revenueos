@@ -42,6 +42,7 @@ from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_TERMS_RELEASE
 from revenueos.main import create_app
 from revenueos.models import (
     BillingInvoiceProjection,
@@ -1313,7 +1314,11 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                 )
                 assert await service.process_webhook(payload, signature) == "processed"
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 38
+                assert exported["exportVersion"] == EXPORT_VERSION == 39
+                acceptances = exported["termsAcceptances"]
+                assert isinstance(acceptances, list)
+                assert acceptances[0]["accepted_by_user_id"] == PRIMARY_USER_ID
+                assert acceptances[0]["terms_sha256"] == CURRENT_TERMS_RELEASE.sha256
                 billing = exported["billing"]
                 assert isinstance(billing, dict)
                 encoded = json.dumps(billing, default=str)

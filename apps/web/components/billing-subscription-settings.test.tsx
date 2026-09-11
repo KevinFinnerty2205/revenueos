@@ -51,6 +51,40 @@ const options = [
   }),
 );
 
+const acceptedTermsStatus = {
+  terms: {
+    status: "draft",
+    version: "owner-review-draft-v1",
+    fingerprint: `sha256:${"a".repeat(64)}`,
+    effectiveDate: null,
+    href: "/terms",
+  },
+  privacyNotice: {
+    status: "draft",
+    version: "owner-review-draft-v1",
+    fingerprint: `sha256:${"b".repeat(64)}`,
+    effectiveDate: null,
+    href: "/privacy",
+  },
+  accepted: true,
+  acceptanceAvailable: true,
+  canAccept: true,
+  evidence: {
+    id: "00000000-0000-4000-8000-000000000004",
+    acceptedByUserId: "00000000-0000-4000-8000-000000000001",
+    termsVersion: "owner-review-draft-v1",
+    termsFingerprint: `sha256:${"a".repeat(64)}`,
+    termsEffectiveDate: null,
+    acceptedAt: "2026-09-10T00:00:00Z",
+    acceptanceSource: "trial_onboarding",
+    privacyNoticeVersion: "owner-review-draft-v1",
+    privacyNoticeFingerprint: `sha256:${"b".repeat(64)}`,
+    privacyNoticeEffectiveDate: null,
+    privacyNoticePresentedAt: "2026-09-10T00:00:00Z",
+  },
+  message: "Your organisation has accepted the current Terms.",
+};
+
 function projection(
   subscription: BillingProjection["subscription"] = null,
 ): BillingProjection {
@@ -92,6 +126,14 @@ describe("BillingSubscriptionSettings", () => {
   it("shows honest no-card state and prepares server-priced hosted checkout", async () => {
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith("/api/v1/legal/terms-acceptance")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(acceptedTermsStatus), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
       if (
         url.endsWith("/api/v1/billing") &&
         (init?.method ?? "GET") === "GET"
@@ -125,6 +167,9 @@ describe("BillingSubscriptionSettings", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading");
     expect(await screen.findByText(/Billing not configured/i)).toBeVisible();
+    expect(
+      await screen.findByText(/Current Terms accepted for this organisation/i),
+    ).toBeVisible();
     expect(screen.getByText(/trial remains no-card/i)).toBeVisible();
     expect(screen.getByText(/Management Services Australia/i)).toBeVisible();
     expect(screen.getByText(/test billing operations/i)).toBeVisible();
@@ -297,6 +342,14 @@ describe("BillingSubscriptionSettings", () => {
       paymentNeedsAttention: false,
     });
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/api/v1/legal/terms-acceptance")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(acceptedTermsStatus), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
       if ((init?.method ?? "GET") === "GET") {
         return Promise.resolve(
           new Response(JSON.stringify(ended), {
@@ -325,6 +378,9 @@ describe("BillingSubscriptionSettings", () => {
     render(<BillingSubscriptionSettings />);
 
     expect(await screen.findByText("cancelled")).toBeVisible();
+    expect(
+      await screen.findByText(/Current Terms accepted for this organisation/i),
+    ).toBeVisible();
     expect(screen.getByText("Choose a paid plan")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Cancel at period end" }),

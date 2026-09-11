@@ -375,7 +375,7 @@ def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_project
                     "revoked",
                 }
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, app.state.settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 38
+                assert exported["exportVersion"] == EXPORT_VERSION == 39
                 deal_room_export = exported["dealRooms"]
                 assert deal_room_export["rooms"][0]["status"] == "revoked"  # type: ignore[index]
                 assert len(deal_room_export["revisions"]) == 3  # type: ignore[arg-type,index]

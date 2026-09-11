@@ -5,10 +5,10 @@
 - **Date:** 10 September 2026 (Australia/Sydney)
 - **WO-054B baseline:** `3f141ca7593aa3f19bed6c5d7acf46b4638a881c`
 - **WO-054B branch:** `codex/wo-054-live-stripe-production-readiness`
-- **Status:** live Stripe engineering remediated; owner decisions, activation and external proof remain blocked
+- **Status:** live Stripe and durable Terms acceptance engineering complete; final legal publication, owner decisions, activation and external proof remain blocked
 - **Customer data:** none
 - **Feature freeze:** preserved
-- **Migration:** `0062_live_stripe_billing`; smallest additive production-authority change after `0061_manual_paid_credit_grant`
+- **Current migration:** `0063_terms_acceptance`; additive Terms authority after `0062_live_stripe_billing`
 
 This is the canonical WO-054 launch checklist. It supersedes older target-cost and
 launch-head assumptions for production-operations decisions, without converting any
@@ -91,6 +91,28 @@ secret, customer data or infrastructure was created. Spend remains AUD 0. The ex
 later owner sequence, smoke boundary and kill/rollback procedure are in the
 [production launch runbook](../03-engineering/production-launch-runbook.md).
 
+## WO-054 durable Terms acceptance
+
+The owner approved the Terms drafting positions subject to final publication gates.
+Migration `0063_terms_acceptance` now adds the minimum organisation-owned acceptance
+event, with forced PostgreSQL RLS, an active-admin membership foreign key, exact
+server-owned release identity and database-enforced immutability. Repeated and
+concurrent submissions for the same organisation/release converge on one event.
+
+An initially unchecked, labelled control links Terms as the agreement and Privacy as
+notice. Only the authenticated organisation administrator can submit it. Trial start,
+first paid plan assignment and hosted Checkout enforce the same current-release gate
+server-side before mutation; support has no acceptance override. Export v39 includes
+only the relevant evidence and approved organisation deletion removes it through the
+existing maintenance authority.
+
+Development/tests use the exact PR #88 owner-review draft identity. Staging and
+production acceptance, plus production preflight, remain blocked until an
+owner-approved final version and effective date are locked. The detailed implementation,
+provider reconciliation, retention recommendation and PR sequence are in the
+[legal production gate](../03-engineering/oryntela-legal-production-gate.md) and
+[ADR 0079](../08-decisions/0079-immutable-organisation-terms-acceptance.md).
+
 ## Canonical launch checklist
 
 Only `PASS`, `BLOCKED`, `OWNER ACTION` and `NOT REQUIRED` are statuses in this table.
@@ -112,7 +134,7 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | Worker liveness and duplicate safety | PASS | Private freshness probe plus database leases, locks, idempotency and unknown-outcome handling; baseline count is one worker |
 | Queue/provider/billing monitoring design | PASS | Content-free platform probes, component alerts, termination controls, daily tenant queue/preflight checks and external scheduled-backup freshness requirement |
 | Production monitoring/alert destination | OWNER ACTION | Configure target alerts to Kevin's controlled operational route after hosting exists |
-| PostgreSQL migration head/drift | PASS | Current head is `0062_live_stripe_billing`; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
+| PostgreSQL migration head/drift | PASS | Current head is `0063_terms_acceptance`; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
 | Forced RLS in restored database | PASS | 173 tables reported `ENABLE` and `FORCE RLS`; temporary `NOSUPERUSER NOBYPASSRLS` role saw 28 in-tenant core rows and zero cross-tenant rows |
 | Encrypted local synthetic backup/restore | PASS | Evidence below; database plus three private objects restored and verified |
 | Automated production database backups | OWNER ACTION | Managed backup/PITR begins only after the paid HA cluster is created and its dashboard evidence is captured |
@@ -120,8 +142,9 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | Independent backup target, lifecycle and alert | OWNER ACTION | Create private Sydney S3 bucket; expire current/noncurrent versions/delete markers within 14 days; configure failure/freshness alert |
 | Named-cloud restore drill | BLOCKED | Run after owner-funded target exists and before any customer data |
 | RPO/RTO operating targets | PASS | Recommended internal V1 objectives: 24-hour RPO and four-hour RTO; not an SLA |
-| Privacy Notice | OWNER ACTION | Factual draft exists; qualified review, owner approval and published final copy required |
-| Service Terms | OWNER ACTION | Factual skeleton exists; qualified drafting and owner approval required |
+| Privacy Notice | OWNER ACTION | Substantive draft positions are owner-approved; final provider/retention facts, version, effective date and publication approval remain required |
+| Service Terms | OWNER ACTION | Substantive commercial positions are owner-approved; final version, effective date and publication approval remain required |
+| Durable Terms acceptance | PASS | Migration `0063_terms_acceptance`, admin-only explicit acceptance, immutable forced-RLS evidence, export/deletion integration and server-side trial/Checkout gates |
 | GST presentation | OWNER ACTION | Confirm registration/treatment and choose inclusive or exclusive language consistently; current public copy remains unchanged |
 | Production hosting/API/worker | OWNER ACTION | Approve USD 120/month fixed paid/customer-data baseline before any resource is created |
 | Production database/storage | OWNER ACTION | Included in target purchase; create separate migration/runtime roles and private bucket |

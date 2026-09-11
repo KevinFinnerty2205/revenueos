@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -16,6 +16,7 @@ from revenueos.ai_repositories import AIJobRepository
 from revenueos.ai_services import AIArtifactService, AIJobService
 from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.auth import VerifiedIdentity, _resolve_identity
+from revenueos.beta_maintenance import _delete_organisation_records
 from revenueos.beta_services import BetaService
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
@@ -23,7 +24,9 @@ from revenueos.daily_repositories import DailyRepository
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import AIJobStatus
 from revenueos.errors import PublicAPIError
-from revenueos.models import OrganisationCommercialState
+from revenueos.legal_contracts import AcceptanceSource, TermsAcceptanceStatusResponse
+from revenueos.legal_services import LegalService
+from revenueos.models import OrganisationCommercialState, TermsAcceptance
 from revenueos.operations import ProvisioningResult, provision_member, provision_organisation
 from revenueos.tenant import TenantContext
 
@@ -195,6 +198,67 @@ def test_postgresql_commercial_seat_boundary_serialises_concurrent_members() -> 
                         text("DELETE FROM users WHERE external_auth_id = ANY(:external_ids)"),
                         {"external_ids": user_external_ids},
                     )
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for the Terms acceptance concurrency test.")
+
+    suffix = uuid.uuid4().hex
+    settings = Settings(environment="test", database_url=database_url)
+
+    async def scenario() -> None:
+        engine = create_async_engine(database_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        organisation_id: uuid.UUID | None = None
+        try:
+            provisioned = await provision_organisation(
+                factory,
+                external_organisation_id=f"org_terms_concurrency_{suffix}",
+                organisation_name="Synthetic Terms concurrency team",
+                timezone="Australia/Sydney",
+                admin_external_user_id=f"user_terms_concurrency_{suffix}",
+                admin_email=f"terms-concurrency-{suffix}@example.com",
+                admin_display_name="Synthetic Terms administrator",
+                idempotency_key=f"terms-concurrency-org-{suffix}",
+                operator_reference="terms-concurrency-test",
+            )
+            organisation_id = uuid.UUID(provisioned.organisation_id)
+            user_id = uuid.UUID(provisioned.user_id)
+
+            async def accept(source: AcceptanceSource) -> TermsAcceptanceStatusResponse:
+                async with factory() as session:
+                    await set_tenant_database_context(session, organisation_id)
+                    return await LegalService(
+                        session,
+                        TenantContext(organisation_id, user_id, "admin"),
+                        settings,
+                    ).accept_current(source)
+
+            results = await asyncio.gather(
+                accept("trial_onboarding"),
+                accept("subscription_checkout"),
+            )
+            assert results[0].evidence is not None
+            assert results[1].evidence is not None
+            assert results[0].evidence.id == results[1].evidence.id
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(TermsAcceptance)
+                        .where(TermsAcceptance.organisation_id == organisation_id)
+                    )
+                    == 1
+                )
+        finally:
+            if organisation_id is not None:
+                await _delete_organisation_records(factory, settings, organisation_id)
             await engine.dispose()
 
     asyncio.run(scenario())
@@ -393,6 +457,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "organisation_module_entitlements",
         "organisation_commercial_states",
         "commercial_state_events",
+        "terms_acceptances",
         "billing_accounts",
         "billing_subscriptions",
         "billing_invoice_projections",
@@ -640,6 +705,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
                 "commercial_event_id": uuid.uuid4(),
+                "terms_acceptance_id": uuid.uuid4(),
                 "billing_account_id": uuid.uuid4(),
                 "billing_subscription_id": uuid.uuid4(),
                 "billing_invoice_id": uuid.uuid4(),
@@ -719,6 +785,29 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO terms_acceptances
+                                (id, organisation_id, accepted_by_user_id,
+                                 release_status, terms_version, terms_sha256,
+                                 accepted_at, acceptance_source,
+                                 privacy_notice_version,
+                                 privacy_notice_sha256,
+                                 privacy_notice_presented_at)
+                            VALUES
+                                (:terms_acceptance_id, :organisation_id,
+                                 :user_id, 'draft', 'rls-test-draft-v1',
+                                 :terms_sha256, now(), 'trial_onboarding',
+                                 'rls-test-draft-v1', :privacy_sha256, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "terms_sha256": "a" * 64,
+                            "privacy_sha256": "b" * 64,
+                        },
                     )
                     await connection.execute(
                         text(
@@ -1788,8 +1877,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         ),
                         {
                             **identity_parameters,
-                            "token_hash": suffix.lower() * 64,
-                            "approval_fingerprint": suffix.lower() * 64,
+                            "token_hash": str(tenant["create_download_grant_id"]).replace("-", "") * 2,
+                            "approval_fingerprint": str(tenant["create_presentation_version_id"]).replace("-", "") * 2,
                         },
                     )
                     await connection.execute(
@@ -3720,6 +3809,35 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     )
                 await savepoint.rollback()
 
+                savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO terms_acceptances
+                                (id, organisation_id, accepted_by_user_id,
+                                 release_status, terms_version, terms_sha256,
+                                 accepted_at, acceptance_source,
+                                 privacy_notice_version,
+                                 privacy_notice_sha256,
+                                 privacy_notice_presented_at)
+                            VALUES
+                                (:id, :organisation_id, :accepted_by_user_id,
+                                 'draft', 'cross-tenant-draft-v1', :terms_sha256,
+                                 now(), 'trial_onboarding', 'rls-test-draft-v1',
+                                 :privacy_sha256, now())
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_a["organisation_id"],
+                            "accepted_by_user_id": tenant_b["user_id"],
+                            "terms_sha256": "c" * 64,
+                            "privacy_sha256": "b" * 64,
+                        },
+                    )
+                await savepoint.rollback()
+
                 rls_state = {
                     row.relname: (row.relrowsecurity, row.relforcerowsecurity)
                     for row in (
@@ -3856,6 +3974,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'organisation_module_entitlements',
                                     'organisation_commercial_states',
                                     'commercial_state_events',
+                                    'terms_acceptances',
                                     'billing_accounts',
                                     'billing_subscriptions',
                                     'billing_invoice_projections',
@@ -4126,6 +4245,19 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     for table in tenant_tables
                 }
                 assert tenant_a_counts == expected_tenant_a_counts
+                immutable_terms_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE terms_acceptances
+                            SET acceptance_source = 'subscription_checkout'
+                            WHERE id = :id
+                            """
+                        ),
+                        {"id": tenant_a["terms_acceptance_id"]},
+                    )
+                await immutable_terms_savepoint.rollback()
                 immutable_event_savepoint = await connection.begin_nested()
                 with pytest.raises(DBAPIError):
                     await connection.execute(
@@ -4980,6 +5112,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "billing_invoice_projections",
                     "billing_subscriptions",
                     "billing_accounts",
+                    "terms_acceptances",
                     "commercial_state_events",
                     "organisation_commercial_states",
                     "organisation_module_entitlements",

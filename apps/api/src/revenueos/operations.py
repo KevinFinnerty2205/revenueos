@@ -33,6 +33,7 @@ from revenueos.config import Settings, get_settings
 from revenueos.credit_services import LARGE_MANUAL_PAID_GRANT_CREDITS, MAX_CREDITS, CreditService
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_TERMS_RELEASE, acceptance_available
 from revenueos.models import (
     ActionExecution,
     AIJob,
@@ -495,6 +496,16 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
     else:
         checks = await inspect_runtime_database(engine)
     checks.extend((await inspect_export_storage(settings), await inspect_object_storage(settings)))
+    legal_acceptance_ready = acceptance_available(settings.environment)
+    checks.append(
+        PreflightCheck(
+            "terms_acceptance_release",
+            "pass" if legal_acceptance_ready else "fail",
+            f"Terms release {CURRENT_TERMS_RELEASE.version} is approved, effective and available for acceptance."
+            if legal_acceptance_ready
+            else "Terms acceptance is disabled until the owner-approved release version and effective date are locked.",
+        )
+    )
     if settings.billing_provider_name == "stripe" and settings.billing_mode == "live":
         try:
             provider = build_billing_provider(settings)

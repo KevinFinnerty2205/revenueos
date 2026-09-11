@@ -9,7 +9,7 @@ repository does not deploy automatically. The canonical
 operation and recovery decisions; it is not production-data approval.
 
 WO-039C adds a conditional supervised real-data path through current Alembic head
-`0062_live_stripe_billing`; it is not blanket approval. Before any named partner,
+`0063_terms_acceptance`; it is not blanket approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.
