@@ -385,6 +385,53 @@ async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
                     else "Runtime role has superuser or BYPASSRLS privilege.",
                 )
             )
+            worker_discovery_authority = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                                functions.prosecdef AS is_security_definer,
+                                owners.rolsuper AS owner_is_superuser,
+                                owners.rolbypassrls AS owner_bypasses_rls,
+                                has_function_privilege(
+                                    current_user, functions.oid, 'EXECUTE'
+                                ) AS runtime_can_execute,
+                                has_function_privilege(
+                                    'public', functions.oid, 'EXECUTE'
+                                ) AS public_can_execute
+                            FROM pg_proc AS functions
+                            JOIN pg_namespace AS namespaces
+                                ON namespaces.oid = functions.pronamespace
+                            JOIN pg_roles AS owners
+                                ON owners.oid = functions.proowner
+                            WHERE namespaces.nspname = 'public'
+                                AND functions.proname =
+                                    'revenueos_ai_worker_eligible_organisations'
+                            """
+                        )
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            worker_discovery_ready = bool(
+                worker_discovery_authority is not None
+                and worker_discovery_authority.is_security_definer
+                and (worker_discovery_authority.owner_is_superuser or worker_discovery_authority.owner_bypasses_rls)
+                and worker_discovery_authority.runtime_can_execute
+                and not worker_discovery_authority.public_can_execute
+            )
+            checks.append(
+                PreflightCheck(
+                    "database_worker_discovery_authority",
+                    "pass" if worker_discovery_ready else "fail",
+                    "Worker discovery is SECURITY DEFINER, runtime-only and its isolated owner can read across "
+                    "forced RLS."
+                    if worker_discovery_ready
+                    else "Worker discovery is unavailable, over-broad or its owner cannot read across forced RLS.",
+                )
+            )
             migration = await connection.scalar(text("SELECT version_num FROM alembic_version"))
             checks.append(
                 PreflightCheck(
