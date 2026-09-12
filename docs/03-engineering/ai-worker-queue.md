@@ -48,6 +48,13 @@ Each polling cycle:
 
 The discovery function is `SECURITY DEFINER` because `organisations` and `ai_jobs` use forced RLS and there is intentionally no cross-tenant application query. Its fixed SQL body exposes only distinct organisation UUIDs for queue scheduling, accepts no organisation or arbitrary query input, caps results at 1,000 and never returns customer/job/meeting/transcript data. Every subsequent operation re-enters ordinary forced RLS for exactly one discovered organisation.
 
+Because PostgreSQL applies `FORCE ROW LEVEL SECURITY` to table owners, the isolated
+role that owns this function must be either a superuser or `BYPASSRLS`. Production
+uses the separate, operator-only `revenueos_migration` role with `BYPASSRLS`; the
+API and worker continue to use `revenueos_runtime`, which must remain
+`NOSUPERUSER NOBYPASSRLS`. Production preflight fails when the function is absent,
+is not `SECURITY DEFINER`, or its owner cannot cross forced RLS.
+
 PostgreSQL row locks are the concurrency arbiter. Two workers can poll the same organisation, but a locked job is skipped and can be owned by only one worker.
 
 ## Leases and heartbeats

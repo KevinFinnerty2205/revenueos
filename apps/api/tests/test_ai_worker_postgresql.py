@@ -21,6 +21,7 @@ from revenueos.models import (
     Transcript,
     User,
 )
+from revenueos.operations import inspect_runtime_database
 
 
 def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -> None:
@@ -35,6 +36,7 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
     transcript_id = uuid.uuid4()
     claim_job_id = uuid.uuid4()
     recovery_job_id = uuid.uuid4()
+    discovery_owner_role = f"worker_discovery_owner_{uuid.uuid4().hex}"
     now = datetime.now(UTC)
 
     async def scenario() -> None:
@@ -146,6 +148,57 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
             first = AIWorkerService(session_factory, settings, clock=lambda: now)
             second = AIWorkerService(session_factory, settings, clock=lambda: now)
             assert organisation_id in await first.discover_eligible_organisations()
+
+            async with engine.begin() as connection:
+                original_function_owner = await connection.scalar(
+                    text(
+                        """
+                        SELECT owners.rolname
+                        FROM pg_proc AS functions
+                        JOIN pg_namespace AS namespaces
+                            ON namespaces.oid = functions.pronamespace
+                        JOIN pg_roles AS owners ON owners.oid = functions.proowner
+                        WHERE namespaces.nspname = 'public'
+                            AND functions.proname =
+                                'revenueos_ai_worker_eligible_organisations'
+                        """
+                    )
+                )
+                assert isinstance(original_function_owner, str)
+                await connection.exec_driver_sql(
+                    f'CREATE ROLE "{discovery_owner_role}" NOLOGIN NOSUPERUSER NOBYPASSRLS'
+                )
+                await connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{discovery_owner_role}"')
+                await connection.exec_driver_sql(f'GRANT SELECT ON public.ai_jobs TO "{discovery_owner_role}"')
+                await connection.exec_driver_sql(
+                    "ALTER FUNCTION public.revenueos_ai_worker_eligible_organisations"
+                    f'(timestamptz, integer) OWNER TO "{discovery_owner_role}"'
+                )
+
+            try:
+                assert organisation_id not in await first.discover_eligible_organisations()
+                blocked_checks = await inspect_runtime_database(engine)
+                blocked_discovery_check = next(
+                    check for check in blocked_checks if check.name == "database_worker_discovery_authority"
+                )
+                assert blocked_discovery_check.status == "fail"
+                async with engine.begin() as connection:
+                    await connection.exec_driver_sql(f'ALTER ROLE "{discovery_owner_role}" BYPASSRLS')
+                assert organisation_id in await first.discover_eligible_organisations()
+                ready_checks = await inspect_runtime_database(engine)
+                ready_discovery_check = next(
+                    check for check in ready_checks if check.name == "database_worker_discovery_authority"
+                )
+                assert ready_discovery_check.status == "pass"
+            finally:
+                async with engine.begin() as connection:
+                    await connection.exec_driver_sql(
+                        "ALTER FUNCTION public.revenueos_ai_worker_eligible_organisations"
+                        f'(timestamptz, integer) OWNER TO "{original_function_owner}"'
+                    )
+                    await connection.exec_driver_sql(f'DROP OWNED BY "{discovery_owner_role}"')
+                    await connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{discovery_owner_role}"')
+
             claims = await asyncio.gather(
                 first.claim_next_job(organisation_id, "worker-one"),
                 second.claim_next_job(organisation_id, "worker-two"),
