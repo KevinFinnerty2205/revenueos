@@ -12,21 +12,22 @@ The production candidate is the modular monolith described by [ADR 0077](../08-d
 
 `infra/digitalocean/app.production.template.yaml` is preparation, not a live deployment. It keeps automatic deployment off, declares the externally managed apex/`www`/API domains without granting DigitalOcean DNS control, routes the API only on `api.oryntela.com.au`, makes API readiness the traffic gate and gives the worker a non-routable liveness check. App Platform supports liveness probes for workers and restarts a failed component ([DigitalOcean health checks](https://docs.digitalocean.com/products/app-platform/how-to/manage-health-checks/), verified 10 September 2026).
 
-Production publication is fail-closed at two points:
+Production activation is fail-closed at distinct infrastructure and commercial points:
 
-- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth, non-production Clerk public key, or Privacy/Terms release records that are not approved and bound to a version, effective date and SHA-256 fingerprint.
+- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth or non-production Clerk public key. This permits the production identity shell and synthetic infrastructure proof before legal approval; it does not authorise a trial, paid checkout, customer data or public launch.
 - `/health/ready` rejects a missing Clerk server secret or missing/non-40-hex `ORYNTELA_RELEASE_SHA` without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config. `production-preflight` also fails until the owner-approved Terms version and effective date are locked for acceptance.
+- The API's Terms service keeps acceptance unavailable while either legal document is draft. Trial activation and paid checkout recheck that server-owned authority before any provider or billing side effect and remain denied until the approved, effective-dated release is current.
 
 This first deployment may contain synthetic data only. The target manifest intentionally disables real-data mode, cloud export, organisation deletion, live billing, Credits, external Prospect and every external connector.
 
 ## 2. Environment model
 
-| Environment | Identity/data | Configuration and indexing | Providers |
-| --- | --- | --- | --- |
-| Development | labelled mock auth and synthetic local data | local HTTP permitted; normal developer SEO behaviour | deterministic mocks only unless a developer explicitly configures a test provider |
-| Test | deterministic isolated fixtures; no external credentials | test runner; robots disallow all | contract-compatible mocks; external credentials never skip tests |
-| Preview/staging | separate Clerk development instance, synthetic data and separate database/bucket | `ORYNTELA_ENVIRONMENT=staging`; exact HTTPS origins; global `noindex`; production secrets prohibited | all external execution off unless a bounded sandbox smoke is separately authorised |
-| Production | Clerk production instance; no customer data until WO-045 | exact `.com.au` origins; legal status must be approved; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass |
+| Environment     | Identity/data                                                                    | Configuration and indexing                                                                                                                                                | Providers                                                                          |
+| --------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Development     | labelled mock auth and synthetic local data                                      | local HTTP permitted; normal developer SEO behaviour                                                                                                                      | deterministic mocks only unless a developer explicitly configures a test provider  |
+| Test            | deterministic isolated fixtures; no external credentials                         | test runner; robots disallow all                                                                                                                                          | contract-compatible mocks; external credentials never skip tests                   |
+| Preview/staging | separate Clerk development instance, synthetic data and separate database/bucket | `ORYNTELA_ENVIRONMENT=staging`; exact HTTPS origins; global `noindex`; production secrets prohibited                                                                      | all external execution off unless a bounded sandbox smoke is separately authorised |
+| Production      | Clerk production instance; no customer data until WO-045                         | exact `.com.au` origins; identity and synthetic proof may run while legal copy is draft, but trial/checkout/public launch remain blocked; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass              |
 
 The complete production handoff template is `infra/environments/production.env.example`. Classification:
 
@@ -63,7 +64,7 @@ Do none of this until the owner approves the current cost table and payment meth
 3. Create bucket credentials scoped as narrowly as DigitalOcean supports. Block public access and CDN publication. Object keys/metadata must not contain customer names, emails or sensitive labels.
 4. Enter secret values from the template in the control plane. Keep web, API/worker, migration and backup credentials separated; the web must never receive database/provider keys.
 5. Configure platform alerts for deployment/domain failure, component restarts, CPU/memory, database health/storage/connection count and failed scheduled jobs. Route to Kevin's controlled operations destination.
-6. Create the app from the reviewed spec only after the legal pages are approved. Do not turn on deploy-on-push.
+6. Create the app from the reviewed spec for synthetic infrastructure and identity proof. Keep trial activation, paid checkout, customer data and public launch blocked until the legal pages are approved. Do not turn on deploy-on-push.
 
 ### Clerk production owner sequence (not performed)
 
@@ -119,14 +120,14 @@ order under separate activation authority:
    process; do not create a self-service Enterprise Price, production Credit pack,
    coupon or unapproved Stripe Tax configuration.
 
-   | Environment reference | Amount/recurrence | Required Price metadata |
-   | --- | --- | --- |
-   | `API_STRIPE_PRICE_CORE_MONTHLY` | AUD 200 every month | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
-   | `API_STRIPE_PRICE_CORE_ANNUAL` | AUD 2,000 every year | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
-   | `API_STRIPE_PRICE_GROWTH_MONTHLY` | AUD 350 every month | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
-   | `API_STRIPE_PRICE_GROWTH_ANNUAL` | AUD 3,500 every year | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
-   | `API_STRIPE_PRICE_COMPLETE_MONTHLY` | AUD 500 every month | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
-   | `API_STRIPE_PRICE_COMPLETE_ANNUAL` | AUD 5,000 every year | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
+   | Environment reference               | Amount/recurrence    | Required Price metadata                                         |
+   | ----------------------------------- | -------------------- | --------------------------------------------------------------- |
+   | `API_STRIPE_PRICE_CORE_MONTHLY`     | AUD 200 every month  | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
+   | `API_STRIPE_PRICE_CORE_ANNUAL`      | AUD 2,000 every year | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
+   | `API_STRIPE_PRICE_GROWTH_MONTHLY`   | AUD 350 every month  | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
+   | `API_STRIPE_PRICE_GROWTH_ANNUAL`    | AUD 3,500 every year | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
+   | `API_STRIPE_PRICE_COMPLETE_MONTHLY` | AUD 500 every month  | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
+   | `API_STRIPE_PRICE_COMPLETE_ANNUAL`  | AUD 5,000 every year | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
 
 5. Put only references in configuration: the exact verified `acct_` account ID as
    `API_STRIPE_ACCOUNT_ID`, the six Price IDs above, `sk_live_` secret as
@@ -279,7 +280,7 @@ Unknown external/delivery outcomes are never blindly retried. Check the provider
 
 Canonical recommendation: `https://oryntela.com.au`; route `www.oryntela.com.au` to the canonical origin. Leave `oryntela.com` unchanged until the owner chooses redirect versus future global use. App Platform automatically redirects HTTP to HTTPS and provisions TLS after domain validation. Do not add HSTS until both web and API TLS/redirect/callback smoke tests are stable; then set both HSTS switches true and verify `max-age=31536000`. The code deliberately omits `includeSubDomains` and `preload`.
 
-Exact DNS record *names* are apex `@`, `www` and `api`; their A/AAAA/CNAME *targets* must be copied from the created App Platform domain instructions because no destination exists yet. Record old TTL/values, lower TTL if approved, add platform verification, validate TLS, then switch. Never invent an IP. Roll back using the captured records.
+Exact DNS record _names_ are apex `@`, `www` and `api`; their A/AAAA/CNAME _targets_ must be copied from the created App Platform domain instructions because no destination exists yet. Record old TTL/values, lower TTL if approved, add platform verification, validate TLS, then switch. Never invent an IP. Roll back using the captured records.
 
 Exact production callback/endpoints:
 
@@ -298,18 +299,18 @@ No localhost redirect may be registered in a production provider app. Use separa
 
 Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic records. Never charge a card, send email, mutate a customer CRM or use customer/provider data.
 
-| Area | Required assertion | Execution boundary |
-| --- | --- | --- |
-| Public site | home/platform/pricing/integrations/security/contact/login, canonical, OG, sitemap, headers; approved legal pages only | after legal/DNS approval |
-| Auth | sign-up/invite policy, sign-in/out/session, protected routes, disabled membership and cross-tenant denial | production Clerk owner setup required |
-| Setup/Core | provision synthetic org; Selling Profile; Native CRM companies/contacts/opportunities/tasks; Pipeline, Forecast, Targets, Analytics, Manager, Business Case, Deal Room, Handover | execute before traffic with synthetic data |
-| Trial | operator starts 14-day Complete trial; no card, charge or auto-conversion; inspect commercial state | execute after production auth/database |
-| Prospect/Credits | UI truth says inactive; external call and production Credit reservation blocked | no provider use |
-| Engage | draft/review/suppression behaviour; delivery remains disabled unless synthetic mailbox separately approved | no real email |
-| Create | generate/approve/download synthetic PPTX through private object storage; verify checksum, one-time grant and restart portability | execute after bucket exists |
-| Billing | deterministic/Stripe test only outside production; signatures, replay and reconciliation tests | no real money; production remains off |
-| Microsoft/Google/HubSpot/Salesforce | UI says activation pending; connection attempts fail closed while disabled | run provider sandbox smoke only after owner credentials/consent |
-| Recovery | backup, disposable restore, head/invariants/RLS/object reconciliation, target destruction | synthetic local now; named cloud required pre-customer |
+| Area                                | Required assertion                                                                                                                                                               | Execution boundary                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Public site                         | home/platform/pricing/integrations/security/contact/login, canonical, OG, sitemap, headers; approved legal pages only                                                            | after legal/DNS approval                                        |
+| Auth                                | sign-up/invite policy, sign-in/out/session, protected routes, disabled membership and cross-tenant denial                                                                        | production Clerk owner setup required                           |
+| Setup/Core                          | provision synthetic org; Selling Profile; Native CRM companies/contacts/opportunities/tasks; Pipeline, Forecast, Targets, Analytics, Manager, Business Case, Deal Room, Handover | execute before traffic with synthetic data                      |
+| Trial                               | operator starts 14-day Complete trial; no card, charge or auto-conversion; inspect commercial state                                                                              | execute only after legal approval and production auth/database  |
+| Prospect/Credits                    | UI truth says inactive; external call and production Credit reservation blocked                                                                                                  | no provider use                                                 |
+| Engage                              | draft/review/suppression behaviour; delivery remains disabled unless synthetic mailbox separately approved                                                                       | no real email                                                   |
+| Create                              | generate/approve/download synthetic PPTX through private object storage; verify checksum, one-time grant and restart portability                                                 | execute after bucket exists                                     |
+| Billing                             | deterministic/Stripe test only outside production; signatures, replay and reconciliation tests                                                                                   | no real money; production remains off                           |
+| Microsoft/Google/HubSpot/Salesforce | UI says activation pending; connection attempts fail closed while disabled                                                                                                       | run provider sandbox smoke only after owner credentials/consent |
+| Recovery                            | backup, disposable restore, head/invariants/RLS/object reconciliation, target destruction                                                                                        | synthetic local now; named cloud required pre-customer          |
 
 ## 10. Support and lifecycle operations
 

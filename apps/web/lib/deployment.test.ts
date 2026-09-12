@@ -18,56 +18,34 @@ const productionVariables = {
   ORYNTELA_RELEASE_SHA: "a".repeat(40),
 } as const;
 
-const approvedLegalContent = {
-  privacy: {
-    status: "approved",
-    version: "2026-09-10",
-    effectiveDate: "2026-09-10",
-    sha256: `sha256:${"a".repeat(64)}`,
-  },
-  terms: {
-    status: "approved",
-    version: "2026-09-10",
-    effectiveDate: "2026-09-10",
-    sha256: `sha256:${"b".repeat(64)}`,
-  },
-} as const;
-
 describe("deployment configuration", () => {
-  it("fails a production build while committed legal copy is a gap", () => {
-    expect(() => assertDeploymentConfiguration(productionVariables)).toThrow(
-      /Privacy and Terms/,
-    );
-  });
-
-  it("accepts an exact canonical production configuration after legal approval", () => {
+  it("allows the production authentication shell before legal activation", () => {
     expect(() =>
-      assertDeploymentConfiguration(productionVariables, approvedLegalContent),
+      assertDeploymentConfiguration(productionVariables),
     ).not.toThrow();
   });
 
   it("requires the Clerk secret only in the server runtime gate", () => {
-    const contentStatus = approvedLegalContent;
     expect(() =>
-      assertDeploymentConfiguration(
-        { ...productionVariables, CLERK_SECRET_KEY: undefined },
-        contentStatus,
-      ),
+      assertDeploymentConfiguration({
+        ...productionVariables,
+        CLERK_SECRET_KEY: undefined,
+      }),
     ).not.toThrow();
     expect(() =>
-      assertWebRuntimeConfiguration(
-        { ...productionVariables, CLERK_SECRET_KEY: undefined },
-        contentStatus,
-      ),
+      assertWebRuntimeConfiguration({
+        ...productionVariables,
+        CLERK_SECRET_KEY: undefined,
+      }),
     ).toThrow(/CLERK_SECRET_KEY/);
   });
 
   it("requires an immutable release SHA at production runtime", () => {
     expect(() =>
-      assertWebRuntimeConfiguration(
-        { ...productionVariables, ORYNTELA_RELEASE_SHA: undefined },
-        approvedLegalContent,
-      ),
+      assertWebRuntimeConfiguration({
+        ...productionVariables,
+        ORYNTELA_RELEASE_SHA: undefined,
+      }),
     ).toThrow(/ORYNTELA_RELEASE_SHA/);
   });
 
@@ -77,10 +55,7 @@ describe("deployment configuration", () => {
     ["NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000"],
   ])("rejects unsafe production %s", (name, value) => {
     expect(() =>
-      assertDeploymentConfiguration(
-        { ...productionVariables, [name]: value },
-        approvedLegalContent,
-      ),
+      assertDeploymentConfiguration({ ...productionVariables, [name]: value }),
     ).toThrow();
   });
 
@@ -92,13 +67,10 @@ describe("deployment configuration", () => {
       }),
     ).toThrow(/Clerk/);
     expect(() =>
-      assertDeploymentConfiguration(
-        {
-          ...productionVariables,
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_synthetic",
-        },
-        approvedLegalContent,
-      ),
+      assertDeploymentConfiguration({
+        ...productionVariables,
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_synthetic",
+      }),
     ).toThrow(/production-instance/);
     expect(() =>
       assertDeploymentConfiguration({
@@ -112,20 +84,6 @@ describe("deployment configuration", () => {
         ORYNTELA_HSTS_ENABLED: "true",
       }),
     ).toThrow(/HSTS/);
-  });
-
-  it("rejects an approved legal status without immutable release metadata", () => {
-    expect(() =>
-      assertDeploymentConfiguration(productionVariables, {
-        ...approvedLegalContent,
-        privacy: {
-          status: "approved",
-          version: "2026-09-10",
-          effectiveDate: "2026-09-10",
-          sha256: null,
-        },
-      }),
-    ).toThrow(/fingerprinted/);
   });
 
   it("keeps staging and test deployments out of search", () => {

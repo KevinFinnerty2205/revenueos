@@ -427,6 +427,60 @@ def test_trial_and_paid_checkout_fail_before_side_effects_without_or_with_old_ac
     asyncio.run(scenario())
 
 
+def test_production_draft_terms_deny_trial_and_checkout_before_side_effects() -> None:
+    async def scenario() -> None:
+        settings = _settings()
+        settings.environment = "production"
+        provider = DeterministicBillingProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                await session.execute(
+                    delete(TermsAcceptance).where(TermsAcceptance.organisation_id == PRIMARY_ORGANISATION_ID)
+                )
+                await session.commit()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert state is not None
+
+                with pytest.raises(PublicAPIError) as trial_blocked:
+                    await CommercialService(session, settings).start_trial(
+                        PRIMARY_ORGANISATION_ID,
+                        actor_reference="wo-054-production-draft-terms",
+                        reason="Draft Terms cannot authorise production activation.",
+                        expected_lock_version=state.lock_version,
+                    )
+                assert trial_blocked.value.code == "terms_acceptance_unavailable"
+                await session.rollback()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+
+                with pytest.raises(PublicAPIError) as checkout_blocked:
+                    await BillingService(session, settings, provider).create_checkout(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        CheckoutCreateRequest(
+                            plan_code="core",
+                            billing_interval="monthly",
+                            idempotency_key="wo-054-production-draft-checkout",
+                        ),
+                    )
+                assert checkout_blocked.value.code == "terms_acceptance_unavailable"
+                assert provider.checkouts == {}
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(BillingOperation)
+                        .where(BillingOperation.organisation_id == PRIMARY_ORGANISATION_ID)
+                    )
+                    == 0
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_checkout_rechecks_and_persists_the_exact_terms_authority_before_provider_side_effects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
