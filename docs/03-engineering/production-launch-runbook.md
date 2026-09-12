@@ -10,7 +10,7 @@
 
 The production candidate is the modular monolith described by [ADR 0077](../08-decisions/0077-australian-managed-modular-monolith-production-topology.md): standalone Next.js web, FastAPI API, one independently supervised worker, managed PostgreSQL 16, private S3-compatible storage and one controlled pre-deploy migration job. The API image installs PostgreSQL client 16 explicitly so `pg_dump`/`pg_restore` match the selected server major. The worker contains the AI, recording/transcription, Prospect, Campaign, reviewed action, Create, Microsoft, Google and CRM sync loops. There is no separate laptop cron, message broker or cache.
 
-`infra/digitalocean/app.production.template.yaml` is preparation, not a live deployment. It keeps automatic deployment off, routes the API only on `api.oryntela.com.au`, makes API readiness the traffic gate and gives the worker a non-routable liveness check. App Platform supports liveness probes for workers and restarts a failed component ([DigitalOcean health checks](https://docs.digitalocean.com/products/app-platform/how-to/manage-health-checks/), verified 10 September 2026).
+`infra/digitalocean/app.production.template.yaml` is preparation, not a live deployment. It keeps automatic deployment off, declares the externally managed apex/`www`/API domains without granting DigitalOcean DNS control, routes the API only on `api.oryntela.com.au`, makes API readiness the traffic gate and gives the worker a non-routable liveness check. App Platform supports liveness probes for workers and restarts a failed component ([DigitalOcean health checks](https://docs.digitalocean.com/products/app-platform/how-to/manage-health-checks/), verified 10 September 2026).
 
 Production publication is fail-closed at two points:
 
