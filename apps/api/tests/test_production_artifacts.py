@@ -65,6 +65,24 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
     spec = _app_spec()
     assert spec["name"] == "oryntela-production"
     assert spec["region"] == "syd"
+    assert spec["domains"] == [
+        {
+            "domain": "oryntela.com.au",
+            "type": "PRIMARY",
+            "minimum_tls_version": "1.2",
+        },
+        {
+            "domain": "www.oryntela.com.au",
+            "type": "ALIAS",
+            "minimum_tls_version": "1.2",
+        },
+        {
+            "domain": "api.oryntela.com.au",
+            "type": "ALIAS",
+            "minimum_tls_version": "1.2",
+        },
+    ]
+    assert all("zone" not in domain for domain in cast(list[dict[str, object]], spec["domains"]))
     services = _component_map(spec["services"])
     workers = _component_map(spec["workers"])
     jobs = _component_map(spec["jobs"])

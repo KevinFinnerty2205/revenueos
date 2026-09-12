@@ -6,6 +6,12 @@ Before applying it, follow the canonical [production launch runbook](../../docs/
 
 The template uses one instance each for web, API and the non-routable worker. The database-backed leases and idempotency rules tolerate restart overlap and an accidental second worker, but the baseline keeps `instance_count: 1` to control cost. The worker's private liveness probe restarts an event loop that stops ticking.
 
+The app spec declares the apex as its primary domain and `www` and `api` as aliases
+so host-specific ingress passes provider validation. The domain entries deliberately
+omit `zone`: DNS remains externally managed and must not be changed merely by applying
+the spec. Follow the runbook to copy the provider-issued targets only after deployment
+and owner approval.
+
 Validate the checked-in schema with the pinned `doctl` version used by CI before
 submission. Service components support load-balancer drain plus TERM grace; workers
 support TERM grace only. The API permits provider-internal Host values only on the
