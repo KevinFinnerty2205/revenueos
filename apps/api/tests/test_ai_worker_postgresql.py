@@ -165,6 +165,21 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                     )
                 )
                 assert isinstance(original_function_owner, str)
+                original_public_execute = bool(
+                    await connection.scalar(
+                        text(
+                            """
+                            SELECT has_function_privilege('public', functions.oid, 'EXECUTE')
+                            FROM pg_proc AS functions
+                            JOIN pg_namespace AS namespaces
+                                ON namespaces.oid = functions.pronamespace
+                            WHERE namespaces.nspname = 'public'
+                                AND functions.proname =
+                                    'revenueos_ai_worker_eligible_organisations'
+                            """
+                        )
+                    )
+                )
                 await connection.exec_driver_sql(
                     f'CREATE ROLE "{discovery_owner_role}" NOLOGIN NOSUPERUSER NOBYPASSRLS'
                 )
@@ -184,6 +199,10 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                 assert blocked_discovery_check.status == "fail"
                 async with engine.begin() as connection:
                     await connection.exec_driver_sql(f'ALTER ROLE "{discovery_owner_role}" BYPASSRLS')
+                    await connection.exec_driver_sql(
+                        "REVOKE EXECUTE ON FUNCTION "
+                        "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer) FROM PUBLIC"
+                    )
                 assert organisation_id in await first.discover_eligible_organisations()
                 ready_checks = await inspect_runtime_database(engine)
                 ready_discovery_check = next(
@@ -198,6 +217,11 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                     )
                     await connection.exec_driver_sql(f'DROP OWNED BY "{discovery_owner_role}"')
                     await connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{discovery_owner_role}"')
+                    if original_public_execute:
+                        await connection.exec_driver_sql(
+                            "GRANT EXECUTE ON FUNCTION "
+                            "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer) TO PUBLIC"
+                        )
 
             claims = await asyncio.gather(
                 first.claim_next_job(organisation_id, "worker-one"),

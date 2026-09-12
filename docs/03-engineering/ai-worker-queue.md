@@ -53,7 +53,8 @@ role that owns this function must be either a superuser or `BYPASSRLS`. Producti
 uses the separate, operator-only `revenueos_migration` role with `BYPASSRLS`; the
 API and worker continue to use `revenueos_runtime`, which must remain
 `NOSUPERUSER NOBYPASSRLS`. Production preflight fails when the function is absent,
-is not `SECURITY DEFINER`, or its owner cannot cross forced RLS.
+is not `SECURITY DEFINER`, is executable by `PUBLIC`, is unavailable to runtime, or
+its owner cannot cross forced RLS.
 
 PostgreSQL row locks are the concurrency arbiter. Two workers can poll the same organisation, but a locked job is skipped and can be owned by only one worker.
 
