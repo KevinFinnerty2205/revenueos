@@ -1,19 +1,49 @@
 # WO-054 production activation boundary ledger
 
-- Evidence date: 11 September 2026 (Australia/Sydney)
-- Reviewed main: `3fdf567e2f103abd312fee7e7297af996532c910`
+- Evidence date: 12 September 2026 (Australia/Sydney)
+- Deployed source: `50906df92688529060fa7472c9aabfe2e997d581`
 - Migration head: `0063_terms_acceptance`
-- State: ready for owner account/payment actions; no production resource exists in
-  repository evidence
-- Spend in this activation pass: AUD 0 / USD 0
+- State: DigitalOcean App Platform application created; first deployment stopped at
+  the production Clerk owner boundary before migration or runtime deployment
+- Configured DigitalOcean recurring spend: USD 100.90/month before tax and usage
 - Customer data: none
 
-This is the resumption ledger for the owner-boundary pass. It records only facts
-verified without creating an account, accepting a contract, entering credentials or
-starting billable usage. The detailed execution and rollback procedure remains the
+This is the resumption ledger for the owner-boundary pass. The live activation entry
+below records only non-secret provider and verification evidence. The detailed
+execution and rollback procedure remains the
 [production launch runbook](production-launch-runbook.md).
 
-## Selected topology and current cost boundary
+## Live activation record — 12 September 2026
+
+Owner-authorised App Platform creation was performed at 15:44 AEST. No DNS, AWS,
+Clerk, Stripe, OpenAI, optional-provider or customer-data action was taken.
+
+| Evidence               | Recorded result                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application            | `oryntela-production`; DigitalOcean app `377f605e-f9d0-4135-bf86-4d086ffe7026`; Sydney (`syd`)                                                                                                                                                                                                                                   |
+| Source                 | GitHub `KevinFinnerty2205/revenueos`, branch `main`, exact remote SHA `50906df92688529060fa7472c9aabfe2e997d581`; deploy on push off                                                                                                                                                                                             |
+| Configuration and cost | Web, API and worker each use `apps-s-1vcpu-1gb-fixed` at USD 10/month; the pre-deploy migration job uses `apps-s-1vcpu-0.5gb` at USD 5 attribution; DigitalOcean's accepted proposal reported USD 35/month                                                                                                                       |
+| First deployment       | Deployment `20f4b34e-5441-4487-9449-74f04a9c04bc` ended `ERROR` during component builds                                                                                                                                                                                                                                          |
+| Component builds       | API, worker and migration images built and uploaded successfully; web failed closed because `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` was absent                                                                                                                                                                                       |
+| Runtime result         | No active deployment, temporary ingress URL, health result, worker freshness proof or migration-job execution exists yet                                                                                                                                                                                                         |
+| Database verification  | Direct verified-TLS checks passed at `0063_terms_acceptance`; Alembic drift check was clean; `revenueos_runtime` was `NOSUPERUSER`, `NOBYPASSRLS` and `NOINHERIT`; all 174 tenant tables had RLS enabled and forced; a bounded synthetic cross-tenant read and update returned no target row and all synthetic rows were deleted |
+| Spaces                 | Existing private `oryntela-production` bucket in `syd1` was bound in encrypted component configuration; no new bucket was created                                                                                                                                                                                                |
+| Providers              | Clerk inactive; Stripe, OpenAI, Prospect, Microsoft, Google, HubSpot and Salesforce disabled; disabled providers received no credentials and no network smoke                                                                                                                                                                    |
+| Domains and TLS        | Apex, `www` and `api` declarations exist, but the failed first deployment produced no default ingress or provider DNS target and no certificate; DNS remains unchanged and HSTS remains off                                                                                                                                      |
+| Temporary token        | `wo054-app-deploy-20260912` remains required for the owner-approved Clerk configuration and controlled redeployment; it was not revoked prematurely                                                                                                                                                                              |
+| Current cost boundary  | Database USD 60.90/month + Spaces USD 5/month + App Platform USD 35/month = USD 100.90/month, approximately AUD 140.69 at the 11 September RBA planning rate; within the AUD 220 ceiling before tax, card FX and usage                                                                                                           |
+
+The deployment behaviour is the documented production-authentication fail-closed
+boundary, not a new repository defect. No remediation branch is warranted. The next
+owner action is to establish the company-controlled production Clerk configuration,
+then authorise binding its production values and redeploying this unchanged reviewed
+application. AWS backup setup, DNS, public launch and WO-045 remain blocked.
+
+The sections below preserve the 11 September 2026 pre-activation planning snapshot.
+Where a historical statement conflicts with the live activation entry above, the
+live entry controls.
+
+## Selected topology and pre-activation cost boundary
 
 The selected Sydney topology remains one 1 GiB web service, one 1 GiB API service,
 one 1 GiB worker, one two-node 2 GiB highly available PostgreSQL 16 cluster, one
@@ -21,15 +51,15 @@ private Spaces subscription and one Clerk Pro subscription. The migration and da
 backup jobs run only when invoked. AWS S3 Standard in `ap-southeast-2` is the
 independent encrypted backup destination and has no fixed monthly minimum.
 
-| Item | Exact selection | Current displayed price | Billing boundary |
-| --- | --- | ---: | --- |
-| Web | DigitalOcean `apps-s-1vcpu-1gb-fixed` | USD 10/month | billed per second, one-minute minimum, capped using the provider's monthly component rules |
-| API | DigitalOcean `apps-s-1vcpu-1gb-fixed` | USD 10/month | same |
-| Worker | DigitalOcean `apps-s-1vcpu-1gb-fixed` | USD 10/month | same |
-| Database | DigitalOcean PostgreSQL HA, 2 GiB/1 vCPU primary plus one matching standby | USD 60/month | USD 30/node/month; database billing hourly with a one-hour minimum |
-| Application objects | DigitalOcean Spaces Standard, Sydney | USD 5/month | starts with the first bucket; prorated hourly after all buckets are destroyed |
-| Independent backup | AWS S3 Standard, Sydney | USD 0 fixed | USD 0.025/GB-month first 50 TB; USD 0.0055/1,000 PUT/COPY/POST/LIST; USD 0.0044/10,000 GET/other, plus transfer |
-| Authentication | Clerk Pro, month-to-month | USD 25/month | recurring subscription; USD 20/month only with annual billing |
+| Item                | Exact selection                                                            | Current displayed price | Billing boundary                                                                                                |
+| ------------------- | -------------------------------------------------------------------------- | ----------------------: | --------------------------------------------------------------------------------------------------------------- |
+| Web                 | DigitalOcean `apps-s-1vcpu-1gb-fixed`                                      |            USD 10/month | billed per second, one-minute minimum, capped using the provider's monthly component rules                      |
+| API                 | DigitalOcean `apps-s-1vcpu-1gb-fixed`                                      |            USD 10/month | same                                                                                                            |
+| Worker              | DigitalOcean `apps-s-1vcpu-1gb-fixed`                                      |            USD 10/month | same                                                                                                            |
+| Database            | DigitalOcean PostgreSQL HA, 2 GiB/1 vCPU primary plus one matching standby |            USD 60/month | USD 30/node/month; database billing hourly with a one-hour minimum                                              |
+| Application objects | DigitalOcean Spaces Standard, Sydney                                       |             USD 5/month | starts with the first bucket; prorated hourly after all buckets are destroyed                                   |
+| Independent backup  | AWS S3 Standard, Sydney                                                    |             USD 0 fixed | USD 0.025/GB-month first 50 TB; USD 0.0055/1,000 PUT/COPY/POST/LIST; USD 0.0044/10,000 GET/other, plus transfer |
+| Authentication      | Clerk Pro, month-to-month                                                  |            USD 25/month | recurring subscription; USD 20/month only with annual billing                                                   |
 
 The fixed total is **USD 120/month** before tax and usage. At the RBA observation of
 1 AUD = USD 0.7172 on 11 September 2026, that is approximately **AUD 167.32/month**.
@@ -57,15 +87,15 @@ for every account below. This proves only that the browser profile has no usable
 session; it does not prove that an account does or does not exist. No login method,
 credential, recovery flow, account creation or purchase was attempted.
 
-| Provider | Account/resource evidence | Launch classification |
-| --- | --- | --- |
-| DigitalOcean | owner login required; resources uninspected | not configured |
-| AWS | owner login required; resources uninspected | not configured |
-| Clerk | owner login required; application/plan uninspected | not configured |
-| Stripe | owner login required; account/live-mode state uninspected | not configured |
-| OpenAI API | owner login required; organisation/project/billing uninspected | not configured |
-| Zoho Mail | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing |
-| Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised | not configured; must remain disabled |
+| Provider                                                       | Account/resource evidence                                                   | Launch classification                |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------ |
+| DigitalOcean                                                   | owner login required; resources uninspected                                 | not configured                       |
+| AWS                                                            | owner login required; resources uninspected                                 | not configured                       |
+| Clerk                                                          | owner login required; application/plan uninspected                          | not configured                       |
+| Stripe                                                         | owner login required; account/live-mode state uninspected                   | not configured                       |
+| OpenAI API                                                     | owner login required; organisation/project/billing uninspected              | not configured                       |
+| Zoho Mail                                                      | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing                      |
+| Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised                          | not configured; must remain disabled |
 
 PR 88 is still open and draft. It remains untouched. The provider facts are not
 stable enough to finalise the Privacy Notice or perform publication steps 5–10.
