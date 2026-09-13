@@ -156,6 +156,11 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_IDENTITY_JIT_PROVISIONING_ENABLED": "false",
         "API_PRIVATE_BETA_REAL_DATA_ENABLED": "false",
         "API_PRIVATE_BETA_DEFAULT_RETENTION_DAYS": "90",
+        "API_CLERK_API_BASE_URL": "https://api.clerk.com/v1",
+        "API_CLERK_API_CONNECT_TIMEOUT_SECONDS": "5",
+        "API_CLERK_API_READ_TIMEOUT_SECONDS": "10",
+        "API_CLERK_API_MAX_RESPONSE_BYTES": "1000000",
+        "API_CLERK_SESSION_REVOKE_MAX_BATCHES": "4",
         "API_FEATURE_DATA_EXPORT_ENABLED": "false",
         "API_FEATURE_ORGANISATION_DELETION_ENABLED": "false",
         "API_PRIVATE_BETA_EXTERNAL_AI_APPROVED": "false",
@@ -183,6 +188,11 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
     assert {key: api_environment[key].get("value") for key in required_inert_values} == required_inert_values
     assert api_environment["OPENAI_MODEL"]["value"] == "gpt-5.6-terra"
     assert api_environment["OPENAI_MAX_OUTPUT_TOKENS"]["value"] == "4096"
+    assert api_environment["API_CLERK_SECRET_KEY"] == {
+        "key": "API_CLERK_SECRET_KEY",
+        "scope": "RUN_TIME",
+        "type": "SECRET",
+    }
     assert {
         "OPENAI_API_KEY",
         "API_CONNECTOR_CREDENTIAL_MASTER_KEY",
@@ -280,6 +290,7 @@ def test_production_environment_contract_is_unique_portable_and_exact() -> None:
     assert not any("/Users/" in value or "sqlite" in value.casefold() for value in environment.values())
     for secret_key in (
         "CLERK_SECRET_KEY",
+        "API_CLERK_SECRET_KEY",
         "DATABASE_URL",
         "API_DATABASE_CA_CERTIFICATE_BASE64",
         "API_VISUAL_S3_ACCESS_KEY_ID",

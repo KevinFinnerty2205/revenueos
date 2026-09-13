@@ -209,6 +209,7 @@ def test_clerk_adapter_verifies_signature_audience_issuer_expiry_and_active_orga
     identity = asyncio.run(authenticate(claims))
     assert identity.external_organisation_id == "org_clerk_beta"
     assert identity.role == "admin"
+    assert identity.issued_at == datetime.fromtimestamp(int(now.timestamp()), UTC)
 
     with pytest.raises(AuthenticationError):
         asyncio.run(authenticate({**claims, "aud": "wrong-api"}))
@@ -237,7 +238,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0063_terms_acceptance"
+    assert EXPECTED_MIGRATION_HEAD == "0064_deauthorisation"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 

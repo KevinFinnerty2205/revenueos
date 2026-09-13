@@ -2,7 +2,7 @@
 
 - Evidence date: 11 September 2026 (Australia/Sydney)
 - Reviewed main: `3fdf567e2f103abd312fee7e7297af996532c910`
-- Migration head: `0063_terms_acceptance`
+- Migration head: `0064_deauthorisation`
 - State: ready for owner account/payment actions; no production resource exists in
   repository evidence
 - Spend in this activation pass: AUD 0 / USD 0
@@ -139,7 +139,7 @@ production HTTPS is stable; do not preload.
 After the owner supplies authenticated sessions and explicit purchasing authority,
 resume at the resource-creation section of the launch runbook. Create company-owned
 resources, keep automatic deploy off, place secrets without exposing them, create
-separate migration/runtime roles, migrate through `0063_terms_acceptance`, prove RLS
+separate migration/runtime roles, migrate through `0064_deauthorisation`, prove RLS
 and synthetic cross-tenant denial, configure backup/monitoring, perform the
 named-cloud synthetic restore, and only then prepare provider facts for the owner's
 later PR 88 publication decision.

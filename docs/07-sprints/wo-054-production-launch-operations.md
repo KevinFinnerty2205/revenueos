@@ -8,7 +8,7 @@
 - **Status:** live Stripe and durable Terms acceptance engineering complete; final legal publication, owner decisions, activation and external proof remain blocked
 - **Customer data:** none
 - **Feature freeze:** preserved
-- **Current migration:** `0063_terms_acceptance`; additive Terms authority after `0062_live_stripe_billing`
+- **Current migration:** `0064_deauthorisation`; additive membership authority after `0063_terms_acceptance`
 
 This is the canonical WO-054 launch checklist. It supersedes older target-cost and
 launch-head assumptions for production-operations decisions, without converting any
@@ -138,7 +138,7 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | Worker liveness and duplicate safety | PASS | Private freshness probe plus database leases, locks, idempotency and unknown-outcome handling; baseline count is one worker |
 | Queue/provider/billing monitoring design | PASS | Content-free platform probes, component alerts, termination controls, daily tenant queue/preflight checks and external scheduled-backup freshness requirement |
 | Production monitoring/alert destination | OWNER ACTION | Configure target alerts to Kevin's controlled operational route after hosting exists |
-| PostgreSQL migration head/drift | PASS | Current head is `0063_terms_acceptance`; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
+| PostgreSQL migration head/drift | PASS | Current head is `0064_deauthorisation`; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
 | Forced RLS in restored database | PASS | The current 174 tenant tables report `ENABLE` and `FORCE RLS`; the earlier restore drill's temporary `NOSUPERUSER NOBYPASSRLS` role saw 28 in-tenant core rows and zero cross-tenant rows |
 | Encrypted local synthetic backup/restore | PASS | Evidence below; database plus three private objects restored and verified |
 | Automated production database backups | OWNER ACTION | Managed backup/PITR begins only after the paid HA cluster is created and its dashboard evidence is captured |

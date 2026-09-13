@@ -142,7 +142,7 @@ existing Campaign create contract.
 | `GET`       | `/api/v1/beta/admin`                              | Admin-only safe organisation overview                          |
 | `PATCH`     | `/api/v1/beta/admin/retention`                    | Admin-only 30/90/180/manual setting                            |
 | `GET`       | `/api/v1/beta/admin/feedback`                     | Admin-only bounded feedback retrieval                          |
-| `PATCH`     | `/api/v1/beta/admin/members/{userId}`             | Admin-only enable/disable membership                           |
+| `PATCH`     | `/api/v1/beta/admin/members/{userId}`             | Admin-only membership disable/re-enable with session outcome   |
 | `POST`      | `/api/v1/beta/admin/exports`                      | Queue tenant export request                                    |
 | `GET`       | `/api/v1/beta/admin/data-requests`                | Read export/deletion status                                    |
 | `GET`       | `/api/v1/beta/admin/exports/{requestId}/download` | Download non-expired restricted export                         |
@@ -152,6 +152,15 @@ existing Campaign create contract.
 database, migration-head, auth, selected-provider and worker-configuration
 checks without an external provider request. See
 [private beta readiness](private-beta-readiness.md).
+
+The membership status route is organisation-scoped. Disable commits canonical
+denial and a new authentication watermark before attempting exact-user Clerk
+session revocation for sessions active in that exact organisation. Its response contains the member plus a bounded
+`sessionRevocation` outcome and count. A failed or unknown provider outcome never
+restores access. Re-enable keeps the membership disabled until a fresh revocation
+check succeeds, retains the watermark and requires normal authentication; an older
+Clerk JWT remains denied. The route does not globally lock a Clerk identity and an
+administrator cannot disable their own membership.
 
 ## Companies
 
