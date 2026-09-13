@@ -147,6 +147,7 @@ def test_disable_revokes_exact_user_and_old_auth_never_revives(
             assert primary_membership.status == "disabled"
             assert primary_membership.authority_version == 2
             assert primary_membership.authentication_valid_after is not None
+            disabled_watermark = primary_membership.authentication_valid_after.replace(tzinfo=UTC)
             assert secondary_membership is not None
             assert secondary_membership.status == "active"
             with pytest.raises(AuthenticationError, match="disabled"):
@@ -177,15 +178,23 @@ def test_disable_revokes_exact_user_and_old_auth_never_revives(
             )
             assert membership is not None
             assert membership.authentication_valid_after is not None
+            reenabled_watermark = membership.authentication_valid_after.replace(tzinfo=UTC)
+            assert reenabled_watermark > disabled_watermark
+            disabled_period_identity = _identity(
+                "org_dev_001",
+                disabled_watermark + (reenabled_watermark - disabled_watermark) / 2,
+            )
             with pytest.raises(AuthenticationError, match="predates"):
                 _require_current_membership_authority(
                     _identity("org_dev_001", issued_before_disable),
                     membership,
                 )
+            with pytest.raises(AuthenticationError, match="predates"):
+                _require_current_membership_authority(disabled_period_identity, membership)
             _require_current_membership_authority(
                 _identity(
                     "org_dev_001",
-                    membership.authentication_valid_after.replace(tzinfo=UTC) + timedelta(seconds=1),
+                    reenabled_watermark + timedelta(seconds=1),
                 ),
                 membership,
             )

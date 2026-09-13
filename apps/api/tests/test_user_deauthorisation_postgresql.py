@@ -122,6 +122,18 @@ def test_postgresql_canonical_disable_commits_before_clerk_and_stale_auth_stays_
                 assert disabled.member.status == "disabled"
                 assert disabled.session_revocation.outcome == "succeeded"
 
+            async with factory() as disabled_request_session:
+                await set_tenant_database_context(disabled_request_session, organisation_id)
+                membership = await disabled_request_session.get(
+                    OrganisationMembership,
+                    (organisation_id, member_user_id),
+                )
+                assert membership is not None
+                assert membership.authentication_valid_after is not None
+                disabled_watermark = membership.authentication_valid_after
+                if disabled_watermark.tzinfo is None:
+                    disabled_watermark = disabled_watermark.replace(tzinfo=UTC)
+
             reenable_revoker = BlockingSessionRevoker(member_external_user_id, external_organisation_id)
             async with factory() as reenable_session:
                 await set_tenant_database_context(reenable_session, organisation_id)
@@ -164,6 +176,13 @@ def test_postgresql_canonical_disable_commits_before_clerk_and_stale_auth_stays_
                 watermark = membership.authentication_valid_after
                 if watermark.tzinfo is None:
                     watermark = watermark.replace(tzinfo=UTC)
+                assert watermark > disabled_watermark
+                disabled_period_identity = replace(
+                    stale_identity,
+                    issued_at=disabled_watermark + (watermark - disabled_watermark) / 2,
+                )
+                with pytest.raises(AuthenticationError, match="predates"):
+                    _require_current_membership_authority(disabled_period_identity, membership)
                 _require_current_membership_authority(
                     replace(stale_identity, issued_at=watermark + timedelta(seconds=1)),
                     membership,

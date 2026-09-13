@@ -158,8 +158,8 @@ denial and a new authentication watermark before attempting exact-user Clerk
 session revocation for sessions active in that exact organisation. Its response contains the member plus a bounded
 `sessionRevocation` outcome and count. A failed or unknown provider outcome never
 restores access. Re-enable keeps the membership disabled until a fresh revocation
-check succeeds, retains the watermark and requires normal authentication; an older
-Clerk JWT remains denied. The route does not globally lock a Clerk identity and an
+check succeeds, advances the watermark again and requires normal authentication;
+both pre-disable and disabled-period Clerk JWTs remain denied. The route does not globally lock a Clerk identity and an
 administrator cannot disable their own membership.
 
 ## Companies
