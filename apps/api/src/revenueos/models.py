@@ -167,6 +167,7 @@ class OrganisationMembership(Base):
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'member')", name="ck_memberships_role"),
         CheckConstraint("status IN ('active', 'disabled')", name="ck_memberships_status"),
+        CheckConstraint("authority_version > 0", name="ck_memberships_authority_version"),
         Index("ix_memberships_organisation_role", "organisation_id", "role"),
     )
 
@@ -182,6 +183,8 @@ class OrganisationMembership(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    authority_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    authentication_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

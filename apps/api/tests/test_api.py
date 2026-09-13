@@ -6,6 +6,32 @@ from revenueos.config import Settings
 from revenueos.main import create_app
 
 
+def production_settings_values() -> dict[str, object]:
+    return {
+        "environment": "production",
+        "auth_mode": "clerk",
+        "mock_auth_enabled": False,
+        "identity_jit_provisioning_enabled": False,
+        "clerk_jwks_url": "https://identity.example.test/jwks",
+        "clerk_issuer": "https://identity.example.test",
+        "clerk_audience": "revenueos",
+        "database_url": "postgresql+asyncpg://example.invalid/revenueos",
+        "release_sha": "a" * 40,
+        "database_tls_mode": "verify_full_system",
+        "cors_origins": "https://app.example.test",
+        "allowed_hosts": "api.example.test",
+        "outreach_suppression_hmac_key": "synthetic-production-suppression-key",
+        "visual_storage_backend": "s3_compatible",
+        "visual_storage_signing_secret": "synthetic-signing-secret",
+        "visual_s3_endpoint": "https://storage.example.test",
+        "visual_s3_bucket": "private",
+        "visual_s3_region": "syd1",
+        "visual_s3_access_key_id": "synthetic-id",
+        "visual_s3_secret_access_key": "synthetic-secret",
+        "feature_mock_connectors_enabled": False,
+    }
+
+
 def test_health_returns_exact_process_status(client: TestClient) -> None:
     response = client.get("/health", headers={"X-Request-ID": "test-health-001"})
 
@@ -129,6 +155,28 @@ def test_production_rejects_mock_authentication() -> None:
             auth_mode="mock",
             mock_auth_enabled=True,
         )
+
+
+def test_production_requires_live_clerk_session_management_on_official_origin() -> None:
+    common = production_settings_values()
+    with pytest.raises(ValidationError, match="session-management configuration"):
+        Settings(**common)  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="session-management configuration"):
+        Settings(**common, clerk_secret_key="sk_test_synthetic_never_sent")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="session-management configuration"):
+        Settings(**common, clerk_secret_key="sk_live_short")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="official Backend API origin"):
+        Settings(  # type: ignore[arg-type]
+            **common,
+            clerk_secret_key="sk_live_synthetic_never_sent",
+            clerk_api_base_url="https://proxy.example.test/v1",
+        )
+
+    settings = Settings(  # type: ignore[arg-type]
+        **common,
+        clerk_secret_key="sk_live_synthetic_never_sent",
+    )
+    assert settings.clerk_session_management_configuration_complete is True
 
 
 def test_staging_is_explicit_and_rejects_mock_authentication() -> None:

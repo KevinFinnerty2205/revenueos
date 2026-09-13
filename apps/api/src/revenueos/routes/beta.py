@@ -14,8 +14,8 @@ from revenueos.beta_contracts import (
     DataRequestResponse,
     FeedbackCreate,
     FeedbackResponse,
-    MemberResponse,
     MemberStatusUpdate,
+    MemberStatusUpdateResponse,
     OnboardingResponse,
     OnboardingUpdate,
     OrganisationDeletionRequest,
@@ -84,12 +84,12 @@ async def list_feedback(
     return await service.list_feedback(limit)
 
 
-@router.patch("/admin/members/{user_id}", response_model=MemberResponse)
+@router.patch("/admin/members/{user_id}", response_model=MemberStatusUpdateResponse)
 async def update_member_status(
     user_id: UUID,
     request: MemberStatusUpdate,
     service: Beta,
-) -> MemberResponse:
+) -> MemberStatusUpdateResponse:
     return await service.update_member_status(user_id, request.status)
 
 

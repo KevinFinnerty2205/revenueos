@@ -2,7 +2,7 @@
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
 - Reviewed source baseline: `3fdf567e2f103abd312fee7e7297af996532c910`; deploy only the immutable post-review merge SHA recorded in the launch evidence
-- Required migration head: `0063_terms_acceptance`
+- Required migration head: `0064_deauthorisation`
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
 
@@ -210,7 +210,7 @@ Before every release:
 2. Confirm a recent recoverable database backup and last restore result. If a migration is not backwards-compatible with the last app release, stop worker claims and schedule downtime.
 3. Run `alembic current` and verify the source state. Never edit `alembic_version` manually.
 4. Run once using the migration credential: `alembic upgrade head`.
-5. Verify `alembic current` is `0063_terms_acceptance`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`; a draft release must keep the overall result blocked.
+5. Verify `alembic current` is `0064_deauthorisation`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`; a draft release must keep the overall result blocked.
 6. Deploy the API and require `/health/live` = 200 and `/health/ready` = 200 before traffic. Start the exact same release's single worker and require its private liveness probe. Deploy web and require `/health/ready` = 200.
 7. Run the synthetic smoke matrix below. Inspect safe error rate/restarts and queue summaries before marking the release healthy.
 
@@ -358,6 +358,6 @@ Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic 
 
 ## 11. Rollback and release close
 
-Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. Retain migrations `0062_live_stripe_billing` and `0063_terms_acceptance` during application rollback so paid-through and acceptance evidence remain authoritative. The billing downgrade refuses to run while live authority exists; do not delete or relabel billing or Terms evidence to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
+Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. Retain migrations `0062_live_stripe_billing`, `0063_terms_acceptance` and `0064_deauthorisation` during application rollback so paid-through, acceptance and membership-authority evidence remain authoritative. The billing downgrade refuses to run while live authority exists; do not delete or relabel billing, Terms or membership-authority evidence to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
 
 After a successful launch window, record SHA, migration head, health/smoke results, any provider actions, spend, incidents and deviations. Public announcement and customer onboarding are separate owner gates and are not part of WO-054.

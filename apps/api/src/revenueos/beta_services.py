@@ -24,14 +24,17 @@ from revenueos.beta_contracts import (
     FeedbackCreate,
     FeedbackResponse,
     MemberResponse,
+    MemberStatusUpdateResponse,
     OnboardingResponse,
     OnboardingUpdate,
     OrganisationDeletionRequest,
     RetentionPolicy,
     RetentionSettingsResponse,
+    SessionRevocationResponse,
     SystemEventResponse,
     UsageResponse,
 )
+from revenueos.clerk_sessions import NoopSessionRevoker, SessionRevocationResult, SessionRevoker
 from revenueos.commercial_services import refresh_seat_limit_status, require_seat_available
 from revenueos.config import Settings
 from revenueos.contracts import OrganisationSummary, UserSummary
@@ -84,10 +87,17 @@ RETENTION_TO_DAYS: dict[RetentionPolicy, int | None] = {
 class BetaService:
     """Tenant-scoped private-beta policy and metadata operations."""
 
-    def __init__(self, session: AsyncSession, tenant: TenantContext, settings: Settings) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        tenant: TenantContext,
+        settings: Settings,
+        session_revoker: SessionRevoker | None = None,
+    ) -> None:
         self.session = session
         self.tenant = tenant
         self.settings = settings
+        self.session_revoker = session_revoker or NoopSessionRevoker()
 
     def require_admin(self) -> None:
         if self.tenant.role != "admin":
@@ -455,112 +465,302 @@ class BetaService:
             shutil.rmtree(temporary_root, ignore_errors=True)
             raise PublicAPIError("export_unavailable", "The export file is unavailable.", 404) from exc
 
-    async def update_member_status(self, user_id: UUID, status: str) -> MemberResponse:
+    async def update_member_status(
+        self,
+        user_id: UUID,
+        status: Literal["active", "disabled"],
+    ) -> MemberStatusUpdateResponse:
         self.require_admin()
-        membership = await self.session.get(OrganisationMembership, (self.tenant.organisation_id, user_id))
+        membership = await self.session.scalar(
+            select(OrganisationMembership)
+            .where(
+                OrganisationMembership.organisation_id == self.tenant.organisation_id,
+                OrganisationMembership.user_id == user_id,
+            )
+            .with_for_update()
+        )
         if membership is None:
             raise PublicAPIError("member_not_found", "The organisation member was not found.", 404)
+        user = await self.session.get(User, user_id)
+        if user is None:
+            raise PublicAPIError("member_not_found", "The organisation member was not found.", 404)
+        organisation = await self.session.get(Organisation, self.tenant.organisation_id)
+        if organisation is None:
+            raise PublicAPIError("organisation_not_found", "The organisation was not found.", 404)
         if user_id == self.tenant.user_id and status == "disabled":
             raise PublicAPIError("cannot_disable_self", "An administrator cannot disable their own membership.", 409)
-        if status == "active" and membership.status != "active":
-            await require_seat_available(
-                self.session,
-                self.tenant.organisation_id,
-                now=datetime.now(UTC),
-            )
-        membership.status = status
-        await self.session.flush()
-        await refresh_seat_limit_status(self.session, self.tenant.organisation_id)
-        archived_target_count = 0
-        if status == "disabled":
-            owned_targets = await self.session.scalars(
-                select(SalesTarget).where(
-                    SalesTarget.organisation_id == self.tenant.organisation_id,
-                    SalesTarget.owner_user_id == user_id,
-                    SalesTarget.archived_at.is_(None),
-                )
-            )
-            now = datetime.now(UTC)
-            connections = list(
-                (
-                    await self.session.scalars(
-                        select(IntegrationConnection)
-                        .where(
-                            IntegrationConnection.organisation_id == self.tenant.organisation_id,
-                            IntegrationConnection.created_by_user_id == user_id,
-                            IntegrationConnection.connector_key.in_(
-                                (
-                                    ConnectorKey.MICROSOFT_365.value,
-                                    ConnectorKey.GOOGLE_WORKSPACE.value,
-                                )
-                            ),
-                            IntegrationConnection.connection_status != "revoked",
-                        )
-                        .with_for_update()
-                    )
-                ).all()
-            )
-            repository = IntegrationRepository(self.session)
-            for connection in connections:
-                await self.session.execute(
-                    delete(EncryptedConnectorCredential).where(
-                        EncryptedConnectorCredential.organisation_id == self.tenant.organisation_id,
-                        EncryptedConnectorCredential.connection_id == connection.id,
-                    )
-                )
-                connection.credential_reference = None
-                connection.connection_status = "revoked"
-                connection.capability_state_json = []
-                connection.revoked_at = now
-                connection.metadata_version += 1
-                await repository.invalidate_connection_previews(
-                    self.tenant.organisation_id,
-                    connection.id,
-                    now,
-                )
-                await repository.cancel_queued_executions(
-                    self.tenant.organisation_id,
-                    connection.id,
-                    now,
-                )
-                self.session.add(
-                    IntegrationAuditEvent(
-                        id=uuid.uuid4(),
-                        organisation_id=self.tenant.organisation_id,
-                        actor_user_id=self.tenant.user_id,
-                        event_type="connection_revoked",
-                        subject_type="connection",
-                        subject_id=connection.id,
-                        connector_key=connection.connector_key,
-                        capability=None,
-                        risk_class=None,
-                        attempt_count=None,
-                        safe_failure_code="membership_disabled",
-                        external_result_id=None,
-                        duration_ms=None,
-                        created_at=now,
-                    )
-                )
-            for target in owned_targets.all():
-                try:
-                    local_today = now.astimezone(ZoneInfo(target.timezone)).date()
-                except ZoneInfoNotFoundError:
-                    local_today = now.date()
-                if target.period_end >= local_today:
-                    target.archived_at = now
-                    target.updated_at = now
-                    archived_target_count += 1
-        self._add_event("member_status_changed", subject_id=user_id, metadata={"status": status})
+        if status == "active":
+            return await self._reenable_member(membership, user, organisation.external_auth_id)
+        return await self._disable_member(membership, user, organisation.external_auth_id)
+
+    async def _disable_member(
+        self,
+        membership: OrganisationMembership,
+        user: User,
+        external_organisation_id: str | None,
+    ) -> MemberStatusUpdateResponse:
+        now = datetime.now(UTC)
+        membership.status = "disabled"
+        membership.authority_version += 1
+        membership.authentication_valid_after = now
+        archived_target_count = await self._apply_member_disable_side_effects(user.id, now)
+        self._add_event(
+            "member_status_changed",
+            subject_id=user.id,
+            metadata={"status": "disabled", "authorityVersion": membership.authority_version},
+        )
+        self._add_event(
+            "member_session_revocation_requested",
+            subject_id=user.id,
+            metadata={"reason": "membership_disabled", "authorityVersion": membership.authority_version},
+        )
         if archived_target_count:
             self._add_event(
                 "member_sales_targets_archived",
-                subject_id=user_id,
+                subject_id=user.id,
                 metadata={"target_count": archived_target_count},
             )
         await self._commit("The member status could not be changed.")
-        user = await self.session.get(User, user_id)
-        assert user is not None
-        return self._member_response(membership, user)
+
+        result = await self._revoke_member_sessions(user.external_auth_id, external_organisation_id)
+        await self._record_session_revocation_result(
+            user.id,
+            result,
+            reason="membership_disabled",
+            authority_version=membership.authority_version,
+        )
+        return MemberStatusUpdateResponse(
+            member=self._member_response(membership, user),
+            session_revocation=self._session_revocation_response(result),
+        )
+
+    async def _reenable_member(
+        self,
+        membership: OrganisationMembership,
+        user: User,
+        external_organisation_id: str | None,
+    ) -> MemberStatusUpdateResponse:
+        if membership.status == "active":
+            result = SessionRevocationResult(outcome="not_required", revoked_session_count=0)
+            return MemberStatusUpdateResponse(
+                member=self._member_response(membership, user),
+                session_revocation=self._session_revocation_response(result),
+            )
+        await require_seat_available(
+            self.session,
+            self.tenant.organisation_id,
+            now=datetime.now(UTC),
+        )
+        expected_authority_version = membership.authority_version
+        self._add_event(
+            "member_session_revocation_requested",
+            subject_id=user.id,
+            metadata={"reason": "membership_reenabled", "authorityVersion": expected_authority_version},
+        )
+        await self._commit("The member could not be prepared for re-enablement.")
+
+        result = await self._revoke_member_sessions(user.external_auth_id, external_organisation_id)
+        await set_tenant_database_context(self.session, self.tenant.organisation_id)
+        refreshed_membership = await self.session.scalar(
+            select(OrganisationMembership)
+            .where(
+                OrganisationMembership.organisation_id == self.tenant.organisation_id,
+                OrganisationMembership.user_id == user.id,
+            )
+            .with_for_update()
+        )
+        if refreshed_membership is None:
+            await self.session.rollback()
+            raise PublicAPIError("member_not_found", "The organisation member was not found.", 404)
+        self._add_session_revocation_result_event(
+            user.id,
+            result,
+            reason="membership_reenabled",
+            authority_version=expected_authority_version,
+        )
+        if not result.confirmed:
+            await self._commit("The session-revocation result could not be recorded.")
+            raise PublicAPIError(
+                "session_revocation_unconfirmed",
+                "The member remains disabled because active-session revocation could not be confirmed.",
+                503,
+            )
+        if (
+            refreshed_membership.status != "disabled"
+            or refreshed_membership.authority_version != expected_authority_version
+        ):
+            await self._commit("The session-revocation result could not be recorded.")
+            raise PublicAPIError(
+                "member_authority_changed",
+                "The member authority changed during re-enablement. Review the current member status.",
+                409,
+            )
+        await require_seat_available(
+            self.session,
+            self.tenant.organisation_id,
+            now=datetime.now(UTC),
+        )
+        refreshed_membership.status = "active"
+        refreshed_membership.authority_version += 1
+        await self.session.flush()
+        await refresh_seat_limit_status(self.session, self.tenant.organisation_id)
+        self._add_event(
+            "member_status_changed",
+            subject_id=user.id,
+            metadata={"status": "active", "authorityVersion": refreshed_membership.authority_version},
+        )
+        await self._commit("The member status could not be changed.")
+        return MemberStatusUpdateResponse(
+            member=self._member_response(refreshed_membership, user),
+            session_revocation=self._session_revocation_response(result),
+        )
+
+    async def _apply_member_disable_side_effects(self, user_id: UUID, now: datetime) -> int:
+        owned_targets = await self.session.scalars(
+            select(SalesTarget).where(
+                SalesTarget.organisation_id == self.tenant.organisation_id,
+                SalesTarget.owner_user_id == user_id,
+                SalesTarget.archived_at.is_(None),
+            )
+        )
+        connections = list(
+            (
+                await self.session.scalars(
+                    select(IntegrationConnection)
+                    .where(
+                        IntegrationConnection.organisation_id == self.tenant.organisation_id,
+                        IntegrationConnection.created_by_user_id == user_id,
+                        IntegrationConnection.connector_key.in_(
+                            (
+                                ConnectorKey.MICROSOFT_365.value,
+                                ConnectorKey.GOOGLE_WORKSPACE.value,
+                            )
+                        ),
+                        IntegrationConnection.connection_status != "revoked",
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        repository = IntegrationRepository(self.session)
+        for connection in connections:
+            await self.session.execute(
+                delete(EncryptedConnectorCredential).where(
+                    EncryptedConnectorCredential.organisation_id == self.tenant.organisation_id,
+                    EncryptedConnectorCredential.connection_id == connection.id,
+                )
+            )
+            connection.credential_reference = None
+            connection.connection_status = "revoked"
+            connection.capability_state_json = []
+            connection.revoked_at = now
+            connection.metadata_version += 1
+            await repository.invalidate_connection_previews(
+                self.tenant.organisation_id,
+                connection.id,
+                now,
+            )
+            await repository.cancel_queued_executions(
+                self.tenant.organisation_id,
+                connection.id,
+                now,
+            )
+            self.session.add(
+                IntegrationAuditEvent(
+                    id=uuid.uuid4(),
+                    organisation_id=self.tenant.organisation_id,
+                    actor_user_id=self.tenant.user_id,
+                    event_type="connection_revoked",
+                    subject_type="connection",
+                    subject_id=connection.id,
+                    connector_key=connection.connector_key,
+                    capability=None,
+                    risk_class=None,
+                    attempt_count=None,
+                    safe_failure_code="membership_disabled",
+                    external_result_id=None,
+                    duration_ms=None,
+                    created_at=now,
+                )
+            )
+        archived_target_count = 0
+        for target in owned_targets.all():
+            try:
+                local_today = now.astimezone(ZoneInfo(target.timezone)).date()
+            except ZoneInfoNotFoundError:
+                local_today = now.date()
+            if target.period_end >= local_today:
+                target.archived_at = now
+                target.updated_at = now
+                archived_target_count += 1
+        await self.session.flush()
+        await refresh_seat_limit_status(self.session, self.tenant.organisation_id)
+        return archived_target_count
+
+    async def _revoke_member_sessions(
+        self,
+        external_user_id: str,
+        external_organisation_id: str | None,
+    ) -> SessionRevocationResult:
+        if external_organisation_id is None:
+            return SessionRevocationResult(
+                outcome="failed",
+                revoked_session_count=0,
+                failure_code="clerk_organisation_identity_missing",
+            )
+        try:
+            return await self.session_revoker.revoke_active_sessions(
+                external_user_id,
+                external_organisation_id,
+            )
+        except Exception:
+            return SessionRevocationResult(
+                outcome="failed",
+                revoked_session_count=0,
+                failure_code="clerk_session_revoker_unexpected_failure",
+            )
+
+    async def _record_session_revocation_result(
+        self,
+        user_id: UUID,
+        result: SessionRevocationResult,
+        *,
+        reason: str,
+        authority_version: int,
+    ) -> None:
+        await set_tenant_database_context(self.session, self.tenant.organisation_id)
+        self._add_session_revocation_result_event(
+            user_id,
+            result,
+            reason=reason,
+            authority_version=authority_version,
+        )
+        await self._commit("The session-revocation result could not be recorded.")
+
+    def _add_session_revocation_result_event(
+        self,
+        user_id: UUID,
+        result: SessionRevocationResult,
+        *,
+        reason: str,
+        authority_version: int,
+    ) -> None:
+        metadata: dict[str, object] = {
+            "reason": reason,
+            "outcome": result.outcome,
+            "revokedSessionCount": result.revoked_session_count,
+            "authorityVersion": authority_version,
+        }
+        if result.failure_code is not None:
+            metadata["failureCode"] = result.failure_code
+        self._add_event("member_session_revocation_completed", subject_id=user_id, metadata=metadata)
+
+    @staticmethod
+    def _session_revocation_response(result: SessionRevocationResult) -> SessionRevocationResponse:
+        return SessionRevocationResponse(
+            outcome=result.outcome,
+            revoked_session_count=result.revoked_session_count,
+        )
 
     async def admin_overview(self) -> AdminOverviewResponse:
         self.require_admin()

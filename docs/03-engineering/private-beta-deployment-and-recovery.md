@@ -30,7 +30,7 @@ not production options.
 4. Stop new worker claims or scale the worker to zero when the migration plan
    requires it; allow active bounded jobs to finish or recover by lease.
 5. Run `alembic upgrade head` exactly once with the migration role.
-6. Verify the database reports Alembic head `0063_terms_acceptance` and
+6. Verify the database reports Alembic head `0064_deauthorisation` and
    drift check passes.
 7. Deploy API, then confirm `/health/live` and `/health/ready` are green.
 8. Start the worker only after readiness confirms migration/config compatibility.
@@ -51,7 +51,8 @@ production decisions include:
 - `API_ENVIRONMENT=production`, `API_AUTH_MODE=clerk`,
   `API_MOCK_AUTH_ENABLED=false`;
 - PostgreSQL URL for the non-bypass runtime role and a separate migration URL;
-- exact Clerk JWKS URL, issuer and API audience; restricted sign-up,
+- exact Clerk JWKS URL, issuer and API audience; the existing live Clerk secret in
+  server runtime only for exact-user session management; restricted sign-up,
   organisation creation and invitations;
 - explicit TLS web/API URLs and CORS origins;
 - data-notice version, default retention, transcript/generation/provider/visual limits,
@@ -64,6 +65,25 @@ production decisions include:
 
 Never expose `CLERK_SECRET_KEY`, database credentials or `OPENAI_API_KEY` as
 `NEXT_PUBLIC_*`.
+
+## User deauthorisation
+
+Use the canonical administrator membership action. A disable response confirms the
+membership state independently from the bounded Clerk session-revocation outcome.
+If that outcome is `failed` or `unknown`, protected access is still denied; record
+and reconcile the provider incident without re-enabling the member. Do not use an
+organisation-wide revocation and do not globally lock a multi-organisation identity
+for this membership-only action. The backend revokes only the exact user's active
+sessions whose Clerk `last_active_organization_id` matches the disabled organisation;
+it preserves sessions active in unrelated organisations.
+
+Re-enable only through the same action. It rechecks session revocation while the
+membership remains disabled and fails closed if the outcome is unconfirmed. A
+successful re-enable does not revive old sessions; instruct the user to authenticate
+again. Validate the metadata-only `member_status_changed`,
+`member_session_revocation_requested` and
+`member_session_revocation_completed` events. Never copy token, session, credential
+or provider payload data into an incident record.
 
 ## Retention schedule
 

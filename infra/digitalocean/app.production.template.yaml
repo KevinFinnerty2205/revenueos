@@ -186,6 +186,24 @@ services:
       - key: API_CLERK_AUDIENCE
         scope: RUN_TIME
         type: SECRET
+      - key: API_CLERK_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_CLERK_API_BASE_URL
+        scope: RUN_TIME
+        value: https://api.clerk.com/v1
+      - key: API_CLERK_API_CONNECT_TIMEOUT_SECONDS
+        scope: RUN_TIME
+        value: "5"
+      - key: API_CLERK_API_READ_TIMEOUT_SECONDS
+        scope: RUN_TIME
+        value: "10"
+      - key: API_CLERK_API_MAX_RESPONSE_BYTES
+        scope: RUN_TIME
+        value: "1000000"
+      - key: API_CLERK_SESSION_REVOKE_MAX_BATCHES
+        scope: RUN_TIME
+        value: "4"
       - key: API_OUTREACH_SUPPRESSION_HMAC_KEY
         scope: RUN_TIME
         type: SECRET

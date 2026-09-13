@@ -62,6 +62,7 @@ def test_production_crm_activation_and_provider_origins_fail_closed(provider: st
         "clerk_jwks_url": "https://identity.example.test/jwks.json",
         "clerk_issuer": "https://identity.example.test",
         "clerk_audience": "revenueos-api",
+        "clerk_secret_key": "sk_live_synthetic_never_sent_wo054",
         "database_url": "postgresql+asyncpg://runtime.example.test/revenueos?ssl=require",
         "release_sha": "a" * 40,
         "database_tls_mode": "verify_full_system",

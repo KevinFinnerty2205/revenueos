@@ -205,6 +205,7 @@ This is the canonical product and engineering documentation index. Documents dis
 180. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 181. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
 182. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
+183. [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
 
 ## First design-partner launch package
 
@@ -823,6 +824,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 - [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 - [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
+- [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
 
 ## Current delivery boundary
 
