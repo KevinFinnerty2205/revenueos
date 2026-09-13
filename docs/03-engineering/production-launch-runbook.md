@@ -100,6 +100,40 @@ the required MFA/passkey and operational-log posture. After the owner approves P
    and cross-tenant-denial checks. Record safe IDs/results, never JWTs. Production
    auth is not ready until all pass.
 
+#### Clerk production CSP sources
+
+The production web CSP follows Clerk's manual Next.js requirements
+([Clerk CSP guidance](https://clerk.com/docs/guides/secure/best-practices/csp-headers),
+verified 13 September 2026) without importing development-instance wildcards into
+production:
+
+- The Frontend API origin is decoded from the `pk_live_` publishable key and must
+  equal `https://clerk.oryntela.com.au`, derived from the canonical
+  `https://oryntela.com.au` site origin. It is allowed only by `script-src` (ClerkJS
+  loading) and `connect-src` (browser Frontend API calls). A malformed key, another
+  hostname, an HTTP site origin or header-shaped input fails the build.
+- `https://challenges.cloudflare.com` is allowed by `script-src` and `frame-src`
+  for Clerk's challenge flow. `https://*.protect.clerk.com` is allowed by those same
+  directives for Clerk abuse/fraud protection, while `connect-src` uses the
+  provider-required `https://*.protect.clerk.com:*` source because that service may
+  use non-443 ports.
+- `worker-src 'self' blob:` supports Clerk's documented worker path. The pre-existing
+  `style-src 'unsafe-inline'` remains because Clerk uses runtime CSS-in-JS, and the
+  App Router already requires the pre-existing `script-src 'unsafe-inline'` unless a
+  separate nonce/`strict-dynamic` design is adopted. Production does not include
+  `unsafe-eval`; development retains it for the Next.js development runtime.
+- Clerk's `https://img.clerk.com` requirement is already covered by the existing
+  `img-src https:` policy. That broader image policy remains because authenticated
+  visual-evidence features intentionally display tenant-authorised HTTPS resources;
+  changing it is outside this remediation.
+- `https://*.clerk.accounts.dev` and `https://*.clerk.com` remain non-production
+  compatibility sources only. Production permits neither source and has no bare
+  wildcard.
+
+The custom account portal is a top-level destination, not an embedded frame, so
+`accounts.oryntela.com.au` is not added to `frame-src`. Add no Clerk source to CSP
+merely because it exists in DNS.
+
 ### Stripe live preparation record (inactive)
 
 WO-054B makes the adapter production-capable but does not activate it. The checked-in
