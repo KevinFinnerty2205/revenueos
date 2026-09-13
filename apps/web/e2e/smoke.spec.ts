@@ -130,6 +130,7 @@ test("private beta onboarding, consent, feedback and admin controls stay product
   let termsAccepted = false;
   let termsPayload: Record<string, unknown> | null = null;
   let adminAllowed = true;
+  let memberDisabled = false;
   let feedbackPayload: Record<string, unknown> | null = null;
 
   await page.route("http://localhost:8000/api/v1/me", async (route) => {
@@ -263,10 +264,27 @@ test("private beta onboarding, consent, feedback and admin controls stay product
       });
       return;
     }
+    if (
+      path.endsWith("/admin/members/user-2") &&
+      request.method() === "PATCH"
+    ) {
+      expect(request.postDataJSON()).toEqual({ status: "disabled" });
+      memberDisabled = true;
+      await route.fulfill({
+        json: {
+          member: betaAdminOverview(memberDisabled).members[1],
+          sessionRevocation: {
+            outcome: "succeeded",
+            revokedSessionCount: 1,
+          },
+        },
+      });
+      return;
+    }
     if (path.endsWith("/admin")) {
       await route.fulfill(
         adminAllowed
-          ? { json: betaAdminOverview() }
+          ? { json: betaAdminOverview(memberDisabled) }
           : {
               status: 403,
               json: {
@@ -376,6 +394,20 @@ test("private beta onboarding, consent, feedback and admin controls stay product
   await expect(
     page.getByRole("button", { name: "Queue organisation deletion" }),
   ).toHaveCount(0);
+  await page.getByRole("button", { name: "Disable Synthetic Member" }).click();
+  await expect(
+    page.getByRole("status").filter({
+      hasText:
+        "Protected access is denied and their relevant active authentication sessions were revoked.",
+    }),
+  ).toBeVisible();
+  expect(memberDisabled).toBe(true);
+  if (process.env.CAPTURE_WO_054_DEAUTHORISATION_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-054/deauthorisation-success-mobile-390.png",
+      fullPage: true,
+    });
+  }
   for (const prohibited of ["prompt", "worker", "api key", "AI provider"]) {
     await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
   }
@@ -4252,7 +4284,7 @@ function dataNotice(acknowledged: boolean) {
   };
 }
 
-function betaAdminOverview() {
+function betaAdminOverview(memberDisabled = false) {
   return {
     organisation: {
       id: "organisation-1",
@@ -4270,11 +4302,21 @@ function betaAdminOverview() {
         status: "active",
         joinedAt: "2026-07-25T00:00:00Z",
       },
+      {
+        user: {
+          id: "user-2",
+          displayName: "Synthetic Member",
+          email: "member@example.test",
+        },
+        role: "member",
+        status: memberDisabled ? "disabled" : "active",
+        joinedAt: "2026-07-25T00:00:00Z",
+      },
     ],
     retention: { policy: "days_90", defaultApplied: true },
     noticeVersion: 1,
     acknowledgementCount: 1,
-    activeMemberCount: 1,
+    activeMemberCount: memberDisabled ? 1 : 2,
     featureFlags: {
       openaiProvider: false,
       revenueBrain: true,
