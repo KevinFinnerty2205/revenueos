@@ -1,3 +1,5 @@
+import { resolveProductionClerkFrontendApiOrigin } from "./clerk-origin";
+
 export type DeploymentEnvironment =
   "development" | "test" | "staging" | "production";
 
@@ -96,6 +98,7 @@ export function assertDeploymentConfiguration(
     if (!publishableKey.startsWith("pk_live_")) {
       throw new Error("Production requires Clerk production-instance keys.");
     }
+    resolveProductionClerkFrontendApiOrigin(publishableKey, siteOrigin);
   }
   if (
     variables.ORYNTELA_HSTS_ENABLED === "true" &&

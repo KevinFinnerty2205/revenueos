@@ -13,7 +13,9 @@ const productionVariables = {
   NEXT_PUBLIC_API_BASE_URL: "https://api.oryntela.com.au",
   AUTH_MODE: "clerk",
   MOCK_AUTH_ENABLED: "false",
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_live_synthetic",
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: `pk_live_${Buffer.from(
+    "clerk.oryntela.com.au$",
+  ).toString("base64url")}`,
   CLERK_SECRET_KEY: "sk_live_synthetic",
   ORYNTELA_RELEASE_SHA: "a".repeat(40),
 } as const;
@@ -57,6 +59,25 @@ describe("deployment configuration", () => {
     expect(() =>
       assertDeploymentConfiguration({ ...productionVariables, [name]: value }),
     ).toThrow();
+  });
+
+  it("rejects a production Clerk key for an arbitrary or malformed origin", () => {
+    expect(() =>
+      assertDeploymentConfiguration({
+        ...productionVariables,
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: `pk_live_${Buffer.from(
+          "evil.example$",
+        ).toString("base64url")}`,
+      }),
+    ).toThrow(/canonical Oryntela Clerk origin/);
+    expect(() =>
+      assertDeploymentConfiguration({
+        ...productionVariables,
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: `pk_live_${Buffer.from(
+          "clerk.oryntela.com.au\r\nconnect-src *$",
+        ).toString("base64url")}`,
+      }),
+    ).toThrow(/hostname is invalid/);
   });
 
   it("rejects mock auth, development Clerk keys and production HSTS in staging", () => {
