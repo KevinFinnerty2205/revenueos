@@ -79,8 +79,10 @@ it preserves sessions active in unrelated organisations.
 
 Re-enable only through the same action. It rechecks session revocation while the
 membership remains disabled and fails closed if the outcome is unconfirmed. A
-successful re-enable does not revive old sessions; instruct the user to authenticate
-again. Validate the metadata-only `member_status_changed`,
+successful re-enable advances the authentication watermark again so neither a
+pre-disable JWT nor one minted during the disabled period can regain access. It does
+not revive old sessions; instruct the user to authenticate again. Validate the
+metadata-only `member_status_changed`,
 `member_session_revocation_requested` and
 `member_session_revocation_completed` events. Never copy token, session, credential
 or provider payload data into an incident record.

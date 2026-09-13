@@ -602,6 +602,7 @@ class BetaService:
         )
         refreshed_membership.status = "active"
         refreshed_membership.authority_version += 1
+        refreshed_membership.authentication_valid_after = datetime.now(UTC)
         await self.session.flush()
         await refresh_seat_limit_status(self.session, self.tenant.organisation_id)
         self._add_event(

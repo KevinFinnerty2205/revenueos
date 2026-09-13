@@ -31,9 +31,10 @@ logged. A Clerk failure cannot roll back canonical denial.
 
 Re-enablement starts while the membership remains disabled, repeats exact-user
 session revocation and proceeds only after revocation is confirmed. It restores only
-that organisation membership and never recreates a session. The authentication
-watermark is retained, so a JWT issued before disablement remains unusable after the
-membership is restored; the user must authenticate normally again.
+that organisation membership and never recreates a session. It advances the
+authentication watermark again at restoration, so JWTs issued before disablement or
+while the membership was disabled remain unusable; the user must authenticate
+normally again.
 
 This action does not globally lock the Clerk identity. Another organisation's
 membership authority is unchanged, and sessions active in another organisation are
