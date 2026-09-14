@@ -68,7 +68,7 @@ Repository engineering now provides:
   livemode, amount, currency, recurrence and metadata;
 - exact live Account ID plus separate API, webhook and portal configuration
   references, exact Stripe API
-  version `2026-02-25.clover`, timestamp/signature/mode/version checks, immutable event
+  version `2026-08-26.dahlia`, timestamp/signature/mode/version checks, immutable event
   receipts, replay idempotency and current-object reconciliation;
 - entitlement only from the current subscription plus its latest verified paid invoice,
   with Stripe item service periods persisted separately as `paid_period_start` and

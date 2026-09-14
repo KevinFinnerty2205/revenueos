@@ -167,14 +167,16 @@ order under separate activation authority:
    `API_STRIPE_ACCOUNT_ID`, the six Price IDs above, `sk_live_` secret as
    `API_STRIPE_SECRET_KEY`, `API_BILLING_TAX_TREATMENT=inclusive|exclusive`, the
    approved `API_BILLING_TAX_POLICY_REFERENCE`, exact HTTPS return URLs and
-   `API_STRIPE_API_VERSION=2026-02-25.clover`. Keep the feature flag false.
+   `API_STRIPE_API_VERSION=2026-08-26.dahlia`. Keep the feature flag false.
 6. Configure the live webhook at
    `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`, pin it to
-   `2026-02-25.clover`, and subscribe only to `checkout.session.completed`,
+   `2026-08-26.dahlia`, and subscribe only to `checkout.session.completed`,
    `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
    `invoice.payment_failed`, `invoice.finalized`, `invoice.voided` and
    `invoice.marked_uncollectible`. Store its `whsec_` value only as
    `API_STRIPE_WEBHOOK_SECRET`.
+   The adapter must use subscription-schedule phase `duration` fields; Dahlia does not
+   accept the removed `iterations` parameter.
 7. Configure a separate live customer portal. Initially allow invoice history,
    billing details and payment-method updates; keep plan switching and promotion codes
    off; set approved legal links and `https://oryntela.com.au/settings` as the return
