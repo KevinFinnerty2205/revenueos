@@ -174,7 +174,7 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_BILLING_SUCCESS_URL": "https://oryntela.com.au/billing/success",
         "API_BILLING_CANCEL_URL": "https://oryntela.com.au/settings",
         "API_BILLING_PORTAL_RETURN_URL": "https://oryntela.com.au/settings",
-        "API_STRIPE_API_VERSION": "2026-02-25.clover",
+        "API_STRIPE_API_VERSION": "2026-08-26.dahlia",
         "API_PROSPECT_RESEARCH_PROVIDER_NAME": "mock",
         "API_FEATURE_PROSPECT_EXTERNAL_PROVIDER_ENABLED": "false",
         "API_FEATURE_INTEGRATIONS_ENABLED": "false",

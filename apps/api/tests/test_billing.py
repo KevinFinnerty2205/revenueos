@@ -1425,7 +1425,7 @@ def test_test_live_configuration_separation() -> None:
             feature_document_evidence_enabled=False,
             feature_create_enabled=False,
         )
-    with pytest.raises(ValidationError, match="2026-02-25.clover"):
+    with pytest.raises(ValidationError, match="2026-08-26.dahlia"):
         Settings(stripe_api_version="2025-03-31.basil")
     with pytest.raises(ValidationError, match="explicit live billing mode"):
         Settings(
@@ -1622,7 +1622,7 @@ def test_live_stripe_webhook_rejects_wrong_secret_version_and_test_objects() -> 
     event = {
         "id": "evt_live_stripe_001",
         "type": "customer.subscription.updated",
-        "api_version": "2026-02-25.clover",
+        "api_version": "2026-08-26.dahlia",
         "created": timestamp,
         "livemode": True,
         "data": {
@@ -1687,7 +1687,7 @@ def test_live_stripe_unknown_event_is_safely_ignored_without_tenant_mapping_or_m
             {
                 "id": "evt_live_unsupported_001",
                 "type": "customer.created",
-                "api_version": "2026-02-25.clover",
+                "api_version": "2026-08-26.dahlia",
                 "created": timestamp,
                 "livemode": True,
             },
@@ -2018,7 +2018,7 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
     event = {
         "id": "evt_test_stripe_001",
         "type": "customer.subscription.updated",
-        "api_version": "2026-02-25.clover",
+        "api_version": "2026-08-26.dahlia",
         "created": timestamp,
         "livemode": False,
         "data": {
@@ -2092,19 +2092,20 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
         ) -> dict[str, object]:
             calls.append((method, path, form or [], idempotency_key))
             if path.startswith("/v1/prices/"):
-                amount = 35000 if path.endswith("growth_monthly") else 20000
+                price_identifier = path.rsplit("/", 1)[-1]
+                amount, interval, plan_version_id = {
+                    "price_test_core_annual": (200000, "year", CORE_PLAN_ID),
+                    "price_test_core_monthly": (20000, "month", CORE_PLAN_ID),
+                    "price_test_growth_monthly": (35000, "month", GROWTH_PLAN_ID),
+                }[price_identifier]
                 return {
-                    "id": path.rsplit("/", 1)[-1],
+                    "id": price_identifier,
                     "livemode": False,
                     "active": True,
                     "currency": "aud",
                     "unit_amount": amount,
-                    "recurring": {"interval": "month", "interval_count": 1},
-                    "metadata": {
-                        "oryntela_plan_version_id": str(
-                            GROWTH_PLAN_ID if path.endswith("growth_monthly") else CORE_PLAN_ID
-                        )
-                    },
+                    "recurring": {"interval": interval, "interval_count": 1},
+                    "metadata": {"oryntela_plan_version_id": str(plan_version_id)},
                 }
             if method == "GET" and path == "/v1/subscriptions/sub_test_change_001":
                 return subscription_data("price_test_core_monthly")
@@ -2167,7 +2168,29 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
             call for call in calls if call[0] == "POST" and call[1] == "/v1/subscription_schedules/sub_sched_test_001"
         )
         assert ("phases[1][items][0][price]", "price_test_core_monthly") in phase_call[2]
+        assert ("phases[1][duration][interval]", "month") in phase_call[2]
+        assert ("phases[1][duration][interval_count]", "1") in phase_call[2]
+        assert not any(key.endswith("[iterations]") for key, _ in phase_call[2])
         assert ("phases[1][proration_behavior]", "none") in phase_call[2]
+
+        calls.clear()
+        await provider.schedule_plan_change(
+            "sub_test_change_001",
+            price=ProviderPriceReference(
+                identifier="price_test_core_annual",
+                plan_code="core",
+                billing_interval="annual",
+                amount=Decimal("2000.00"),
+                plan_version_id=CORE_PLAN_ID,
+            ),
+            idempotency_key="scheduled-provider-interval-change-0001",
+        )
+        annual_phase_call = next(
+            call for call in calls if call[0] == "POST" and call[1] == "/v1/subscription_schedules/sub_sched_test_001"
+        )
+        assert ("phases[1][duration][interval]", "year") in annual_phase_call[2]
+        assert ("phases[1][duration][interval_count]", "1") in annual_phase_call[2]
+        assert not any(key.endswith("[iterations]") for key, _ in annual_phase_call[2])
 
         async def ambiguous_subscription_request(
             method: str,

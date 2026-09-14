@@ -14,8 +14,9 @@ explicitly rejected extending WO-055's exceptional manual paid-Credit workflow i
 general subscription ledger. GST treatment, provider setup, production spend and live
 activation remain outside the engineering authority.
 
-Stripe can deliver duplicate and out-of-order events. Its current Clover contract
-places the service period on subscription items, exposes environment through
+Stripe can deliver duplicate and out-of-order events. Its pinned
+`2026-08-26.dahlia` contract places the service period on subscription items, exposes
+environment through
 `livemode`, and links invoices to subscriptions through parent subscription details.
 The system therefore needs durable mode and payment authority without storing raw
 payment payloads or card data.
@@ -84,6 +85,16 @@ links, webhook bodies, credentials and card data.
 The feature flag is the billing mutation kill switch; a configured Stripe endpoint
 continues verified reconciliation while mutations are disabled. Operational rollback
 retains the forward schema and settles unknown outcomes before credential revocation.
+
+The WO-054 production setup exposed that Stripe creates new event destinations on
+`2026-08-26.dahlia`, while the adapter still pinned `2026-02-25.clover`. The bounded
+REST surface remains compatible with Dahlia's GA breaking changes: Oryntela uses
+hosted Checkout and does not consume the renamed Checkout UI-mode enums, Stripe.js,
+Connect Capabilities, Issuing or cancellation-reason enums. The adapter replaces the
+already-removed subscription-schedule `iterations` request parameter with one
+interval of `duration`, pins API requests and webhook events to Dahlia, and continues
+to reject any other event version. Production billing stays disabled until this
+compatibility change is reviewed, merged and deployed.
 
 Engineering readiness does not mean live readiness. GST/legal approval, Stripe account
 verification, live Products/Prices, secrets, webhook, portal, read-only external

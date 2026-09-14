@@ -99,7 +99,7 @@ class Settings(BaseSettings):
         pattern=r"^bpc_[A-Za-z0-9]+$",
     )
     stripe_api_base_url: str = "https://api.stripe.com"
-    stripe_api_version: Literal["2026-02-25.clover"] = "2026-02-25.clover"
+    stripe_api_version: Literal["2026-08-26.dahlia"] = "2026-08-26.dahlia"
     stripe_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     stripe_read_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     stripe_webhook_tolerance_seconds: int = Field(default=300, ge=30, le=900)

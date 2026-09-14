@@ -305,7 +305,7 @@ services:
         value: https://oryntela.com.au/settings
       - key: API_STRIPE_API_VERSION
         scope: RUN_TIME
-        value: 2026-02-25.clover
+        value: 2026-08-26.dahlia
       - key: API_PROSPECT_RESEARCH_PROVIDER_NAME
         scope: RUN_TIME
         value: mock

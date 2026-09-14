@@ -217,7 +217,7 @@ set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
 `API_STRIPE_WEBHOOK_SECRET`, the exact verified `acct_` value in
 `API_STRIPE_ACCOUNT_ID`, an active live `bpc_` value in
 `API_STRIPE_PORTAL_CONFIGURATION_ID`, and the six `API_STRIPE_PRICE_*` mappings.
-`API_STRIPE_API_VERSION` remains exactly `2026-02-25.clover` and the API origin remains
+`API_STRIPE_API_VERSION` remains exactly `2026-08-26.dahlia` and the API origin remains
 `https://api.stripe.com`.
 
 GST remains unresolved. `API_BILLING_TAX_TREATMENT` must stay `unresolved` and the
@@ -230,9 +230,11 @@ The exact live webhook URL is
 `checkout.session.completed`, `customer.subscription.updated`,
 `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`,
 `invoice.finalized`, `invoice.voided` and `invoice.marked_uncollectible`, pinned to the
-same API version. Portal configuration is a separate live object; start with invoice
-history, billing details and payment-method updates, keep plan switching and promotion
-codes off, and use the configured return URL. Both remain external owner actions.
+same API version. Subscription-schedule phases use Dahlia's `duration` fields rather
+than the removed `iterations` parameter. Portal configuration is a separate live
+object; start with invoice history, billing details and payment-method updates, keep
+plan switching and promotion codes off, and use the configured return URL. Both remain
+external owner actions.
 
 The adapter is direct REST over `httpx`; there is no Stripe SDK dependency to upgrade.
 The pinned REST contract was reverified against Stripe's current Clover changelog.
