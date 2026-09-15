@@ -274,7 +274,7 @@ def test_reviewed_closed_won_handover_lifecycle_sources_supersession_and_export(
             await engine.dispose()
 
     export, audit_actions = asyncio.run(exported())
-    assert export["exportVersion"] == EXPORT_VERSION == 38
+    assert export["exportVersion"] == EXPORT_VERSION == 39
     handover_export = export["closedWonHandovers"]
     assert len(handover_export["handovers"]) == 1  # type: ignore[arg-type,index]
     assert len(handover_export["revisions"]) == 2  # type: ignore[arg-type,index]

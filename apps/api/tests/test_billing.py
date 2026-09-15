@@ -42,6 +42,7 @@ from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_TERMS_RELEASE
 from revenueos.main import create_app
 from revenueos.models import (
     BillingInvoiceProjection,
@@ -202,6 +203,7 @@ def live_stripe_settings(**changes: object) -> Settings:
         "clerk_jwks_url": "https://identity.example.test/jwks",
         "clerk_issuer": "https://identity.example.test",
         "clerk_audience": "revenueos-api",
+        "clerk_secret_key": "sk_live_synthetic_never_sent_wo054",
         "database_url": "postgresql+asyncpg://runtime.example.test/revenueos",
         "release_sha": "a" * 40,
         "database_tls_mode": "verify_full_system",
@@ -315,6 +317,7 @@ def test_exact_checkout_catalogue_idempotency_and_server_authority() -> None:
                 )
                 stored_operation = await session.get(BillingOperation, first.operation_id)
                 assert stored_operation is not None and stored_operation.status == "pending"
+                assert stored_operation.terms_acceptance_id is not None
                 with pytest.raises(PublicAPIError, match="previous checkout"):
                     await service.create_checkout(
                         PRIMARY_ORGANISATION_ID,
@@ -1313,10 +1316,15 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                 )
                 assert await service.process_webhook(payload, signature) == "processed"
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 38
+                assert exported["exportVersion"] == EXPORT_VERSION == 39
+                acceptances = exported["termsAcceptances"]
+                assert isinstance(acceptances, list)
+                assert acceptances[0]["accepted_by_user_id"] == PRIMARY_USER_ID
+                assert acceptances[0]["terms_sha256"] == CURRENT_TERMS_RELEASE.sha256
                 billing = exported["billing"]
                 assert isinstance(billing, dict)
                 encoded = json.dumps(billing, default=str)
+                assert billing["operations"][0]["terms_acceptance_id"] == acceptances[0]["id"]
                 subscriptions = billing["subscriptions"]
                 assert isinstance(subscriptions, list)
                 assert subscriptions[0]["payment_status"] == "paid"
@@ -1404,6 +1412,7 @@ def test_test_live_configuration_separation() -> None:
             clerk_jwks_url="https://identity.example.test/jwks",
             clerk_issuer="https://identity.example.test",
             clerk_audience="revenueos",
+            clerk_secret_key="sk_live_synthetic_never_sent_wo054",
             database_url="postgresql+asyncpg://example.invalid/revenueos",
             release_sha="a" * 40,
             database_tls_mode="verify_full_system",
@@ -1416,7 +1425,7 @@ def test_test_live_configuration_separation() -> None:
             feature_document_evidence_enabled=False,
             feature_create_enabled=False,
         )
-    with pytest.raises(ValidationError, match="2026-02-25.clover"):
+    with pytest.raises(ValidationError, match="2026-08-26.dahlia"):
         Settings(stripe_api_version="2025-03-31.basil")
     with pytest.raises(ValidationError, match="explicit live billing mode"):
         Settings(
@@ -1427,6 +1436,7 @@ def test_test_live_configuration_separation() -> None:
             clerk_jwks_url="https://identity.example.test/jwks",
             clerk_issuer="https://identity.example.test",
             clerk_audience="revenueos",
+            clerk_secret_key="sk_live_synthetic_never_sent_wo054",
             database_url="postgresql+asyncpg://example.invalid/revenueos",
             release_sha="a" * 40,
             database_tls_mode="verify_full_system",
@@ -1612,7 +1622,7 @@ def test_live_stripe_webhook_rejects_wrong_secret_version_and_test_objects() -> 
     event = {
         "id": "evt_live_stripe_001",
         "type": "customer.subscription.updated",
-        "api_version": "2026-02-25.clover",
+        "api_version": "2026-08-26.dahlia",
         "created": timestamp,
         "livemode": True,
         "data": {
@@ -1677,7 +1687,7 @@ def test_live_stripe_unknown_event_is_safely_ignored_without_tenant_mapping_or_m
             {
                 "id": "evt_live_unsupported_001",
                 "type": "customer.created",
-                "api_version": "2026-02-25.clover",
+                "api_version": "2026-08-26.dahlia",
                 "created": timestamp,
                 "livemode": True,
             },
@@ -2008,7 +2018,7 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
     event = {
         "id": "evt_test_stripe_001",
         "type": "customer.subscription.updated",
-        "api_version": "2026-02-25.clover",
+        "api_version": "2026-08-26.dahlia",
         "created": timestamp,
         "livemode": False,
         "data": {
@@ -2082,19 +2092,20 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
         ) -> dict[str, object]:
             calls.append((method, path, form or [], idempotency_key))
             if path.startswith("/v1/prices/"):
-                amount = 35000 if path.endswith("growth_monthly") else 20000
+                price_identifier = path.rsplit("/", 1)[-1]
+                amount, interval, plan_version_id = {
+                    "price_test_core_annual": (200000, "year", CORE_PLAN_ID),
+                    "price_test_core_monthly": (20000, "month", CORE_PLAN_ID),
+                    "price_test_growth_monthly": (35000, "month", GROWTH_PLAN_ID),
+                }[price_identifier]
                 return {
-                    "id": path.rsplit("/", 1)[-1],
+                    "id": price_identifier,
                     "livemode": False,
                     "active": True,
                     "currency": "aud",
                     "unit_amount": amount,
-                    "recurring": {"interval": "month", "interval_count": 1},
-                    "metadata": {
-                        "oryntela_plan_version_id": str(
-                            GROWTH_PLAN_ID if path.endswith("growth_monthly") else CORE_PLAN_ID
-                        )
-                    },
+                    "recurring": {"interval": interval, "interval_count": 1},
+                    "metadata": {"oryntela_plan_version_id": str(plan_version_id)},
                 }
             if method == "GET" and path == "/v1/subscriptions/sub_test_change_001":
                 return subscription_data("price_test_core_monthly")
@@ -2157,7 +2168,29 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
             call for call in calls if call[0] == "POST" and call[1] == "/v1/subscription_schedules/sub_sched_test_001"
         )
         assert ("phases[1][items][0][price]", "price_test_core_monthly") in phase_call[2]
+        assert ("phases[1][duration][interval]", "month") in phase_call[2]
+        assert ("phases[1][duration][interval_count]", "1") in phase_call[2]
+        assert not any(key.endswith("[iterations]") for key, _ in phase_call[2])
         assert ("phases[1][proration_behavior]", "none") in phase_call[2]
+
+        calls.clear()
+        await provider.schedule_plan_change(
+            "sub_test_change_001",
+            price=ProviderPriceReference(
+                identifier="price_test_core_annual",
+                plan_code="core",
+                billing_interval="annual",
+                amount=Decimal("2000.00"),
+                plan_version_id=CORE_PLAN_ID,
+            ),
+            idempotency_key="scheduled-provider-interval-change-0001",
+        )
+        annual_phase_call = next(
+            call for call in calls if call[0] == "POST" and call[1] == "/v1/subscription_schedules/sub_sched_test_001"
+        )
+        assert ("phases[1][duration][interval]", "year") in annual_phase_call[2]
+        assert ("phases[1][duration][interval_count]", "1") in annual_phase_call[2]
+        assert not any(key.endswith("[iterations]") for key, _ in annual_phase_call[2])
 
         async def ambiguous_subscription_request(
             method: str,

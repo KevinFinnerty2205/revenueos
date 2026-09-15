@@ -1,35 +1,7 @@
+import { resolveProductionClerkFrontendApiOrigin } from "./clerk-origin";
+
 export type DeploymentEnvironment =
   "development" | "test" | "staging" | "production";
-
-type LegalDocumentRelease = {
-  status: "gap" | "draft" | "approved";
-  version: string | null;
-  effectiveDate: string | null;
-  sha256: string | null;
-};
-
-export type LegalContentStatus = {
-  privacy: LegalDocumentRelease;
-  terms: LegalDocumentRelease;
-};
-
-// These values describe the copy committed to the public routes. Draft copy may
-// be previewed, but production remains blocked until the owner supplies the
-// effective date and a reviewed change records approved versions/fingerprints.
-export const legalContentStatus: LegalContentStatus = {
-  privacy: {
-    status: "draft",
-    version: null,
-    effectiveDate: null,
-    sha256: null,
-  },
-  terms: {
-    status: "draft",
-    version: null,
-    effectiveDate: null,
-    sha256: null,
-  },
-};
 
 type DeploymentVariables = Readonly<Record<string, string | undefined>>;
 
@@ -78,18 +50,8 @@ function requireValue(variables: DeploymentVariables, name: string): string {
   return value;
 }
 
-function isApprovedLegalRelease(release: LegalDocumentRelease): boolean {
-  return (
-    release.status === "approved" &&
-    Boolean(release.version?.trim()) &&
-    /^\d{4}-\d{2}-\d{2}$/.test(release.effectiveDate ?? "") &&
-    /^sha256:[a-f0-9]{64}$/.test(release.sha256 ?? "")
-  );
-}
-
 export function assertDeploymentConfiguration(
   variables: DeploymentVariables = process.env,
-  contentStatus: LegalContentStatus = legalContentStatus,
 ): void {
   const environment = resolveDeploymentEnvironment(
     variables.ORYNTELA_ENVIRONMENT,
@@ -136,14 +98,7 @@ export function assertDeploymentConfiguration(
     if (!publishableKey.startsWith("pk_live_")) {
       throw new Error("Production requires Clerk production-instance keys.");
     }
-    if (
-      !isApprovedLegalRelease(contentStatus.privacy) ||
-      !isApprovedLegalRelease(contentStatus.terms)
-    ) {
-      throw new Error(
-        "Production publication is blocked until Privacy and Terms copy is owner-approved, versioned, effective-dated, fingerprinted and committed.",
-      );
-    }
+    resolveProductionClerkFrontendApiOrigin(publishableKey, siteOrigin);
   }
   if (
     variables.ORYNTELA_HSTS_ENABLED === "true" &&
@@ -157,9 +112,8 @@ export function assertDeploymentConfiguration(
 
 export function assertWebRuntimeConfiguration(
   variables: DeploymentVariables = process.env,
-  contentStatus: LegalContentStatus = legalContentStatus,
 ): void {
-  assertDeploymentConfiguration(variables, contentStatus);
+  assertDeploymentConfiguration(variables);
   const environment = resolveDeploymentEnvironment(
     variables.ORYNTELA_ENVIRONMENT,
   );

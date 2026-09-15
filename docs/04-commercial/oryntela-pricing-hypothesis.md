@@ -40,7 +40,7 @@ and prices are not decided.
 | Add-on prices                          | **UNDECIDED**                                |
 | Extra-user bands/prices                | **UNDECIDED**                                |
 | GST-inclusive or ex-GST public display | **GST-INCLUSIVE FIXED CUSTOMER TOTALS — OWNER DECIDED 11 SEPTEMBER 2026** |
-| Billing provider and implementation    | **STRIPE SELECTED FOR PAID LAUNCH; LIVE EXTERNAL CONFIGURATION DEFERRED UNTIL OWNER-APPROVED LEGAL AND PRODUCTION GATES PASS** |
+| Billing provider and implementation    | **STRIPE LIVE CONTROL PLANE CONFIGURED; CUSTOMER BILLING DISABLED UNTIL OWNER-APPROVED LEGAL RELEASE AND SEPARATE ENABLEMENT GATE PASS** |
 | Terms, cancellation and public launch  | **NOT READY**                                |
 
 ## Economic risks to test

@@ -83,6 +83,16 @@ class MemberStatusUpdate(APIModel):
     status: Literal["active", "disabled"]
 
 
+class SessionRevocationResponse(APIModel):
+    outcome: Literal["succeeded", "failed", "unknown", "not_required"]
+    revoked_session_count: int = Field(ge=0)
+
+
+class MemberStatusUpdateResponse(APIModel):
+    member: MemberResponse
+    session_revocation: SessionRevocationResponse
+
+
 class UsageResponse(APIModel):
     date: str
     generations: int

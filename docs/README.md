@@ -197,14 +197,18 @@ This is the canonical product and engineering documentation index. Documents dis
 172. [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
 173. [WO-054: Production Deployment & Launch Operations](07-sprints/wo-054-production-launch-operations.md) — canonical launch checklist, synthetic restore proof and consolidated owner actions
 174. [Oryntela production launch runbook](03-engineering/production-launch-runbook.md) — deployment, monitoring, recovery, callbacks, smoke, kill-switch and support procedure
-175. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
-176. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
-177. [WO-054 Privacy and Terms factual drafting inputs](00-company/wo-054-draft-privacy-and-terms.md) — historical factual source; external engagement deferred by owner
-178. [Oryntela Terms & Conditions](00-company/oryntela-terms-and-conditions.md) — complete owner-review draft; not approved or effective
-179. [Oryntela Privacy Policy](00-company/oryntela-privacy-policy.md) — complete owner-review draft; not approved or effective
-180. [Oryntela owner legal document review checklist](00-company/oryntela-owner-legal-document-review-checklist.md) — ten grouped decisions and production acceptance gap
-181. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
-182. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+175. [WO-054 production activation boundary ledger](03-engineering/wo-054-production-activation-ledger.md) — dated cost, account-session, secret, provider and owner-boundary evidence for resumption
+176. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
+177. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
+178. [WO-054 Privacy and Terms factual drafting inputs](00-company/wo-054-draft-privacy-and-terms.md) — historical factual source; external engagement deferred by owner
+179. [Oryntela Terms & Conditions](00-company/oryntela-terms-and-conditions.md) — complete owner-review draft; not approved or effective
+180. [Oryntela Privacy Policy](00-company/oryntela-privacy-policy.md) — complete owner-review draft; not approved or effective
+181. [Oryntela owner legal document review checklist](00-company/oryntela-owner-legal-document-review-checklist.md) — approved substantive positions and remaining final publication decisions
+182. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+183. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+184. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
+185. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
+186. [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
 
 ## First design-partner launch package
 
@@ -391,6 +395,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Application architecture](03-engineering/architecture.md)
 - [Oryntela production launch runbook](03-engineering/production-launch-runbook.md)
+- [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md)
 - [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 - [Prospect and Engage foundation review](03-engineering/prospect-engage-foundation-review.md)
 - [Core experience readiness implementation](03-engineering/core-experience-readiness-implementation.md)
@@ -821,6 +826,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
 - [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 - [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+- [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
+- [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
 
 ## Current delivery boundary
 

@@ -158,6 +158,45 @@ export interface BillingCheckoutResponse {
   paymentStatement: string;
 }
 
+export type TermsAcceptanceSource =
+  | "trial_onboarding"
+  | "subscription_checkout"
+  | "administrative_onboarding";
+
+export interface TermsAcceptanceStatus {
+  terms: {
+    status: "draft" | "approved";
+    version: string;
+    fingerprint: string;
+    effectiveDate: string | null;
+    href: string;
+  };
+  privacyNotice: {
+    status: "draft" | "approved";
+    version: string;
+    fingerprint: string;
+    effectiveDate: string | null;
+    href: string;
+  };
+  accepted: boolean;
+  acceptanceAvailable: boolean;
+  canAccept: boolean;
+  evidence: {
+    id: string;
+    acceptedByUserId: string;
+    termsVersion: string;
+    termsFingerprint: string;
+    termsEffectiveDate: string | null;
+    acceptedAt: string;
+    acceptanceSource: TermsAcceptanceSource;
+    privacyNoticeVersion: string;
+    privacyNoticeFingerprint: string;
+    privacyNoticeEffectiveDate: string | null;
+    privacyNoticePresentedAt: string;
+  } | null;
+  message: string;
+}
+
 export interface BillingSuccessStatus {
   confirmed: boolean;
   status: BillingSubscriptionStatus | "not_configured";

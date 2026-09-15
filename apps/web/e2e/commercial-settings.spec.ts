@@ -273,6 +273,48 @@ async function routeSettings(page: Page) {
       body: JSON.stringify(billingProjection),
     });
   });
+  await page.route(
+    `${apiOrigin}/api/v1/legal/terms-acceptance`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          terms: {
+            status: "draft",
+            version: "owner-review-draft-v1",
+            fingerprint: `sha256:${"a".repeat(64)}`,
+            effectiveDate: null,
+            href: "/terms",
+          },
+          privacyNotice: {
+            status: "draft",
+            version: "owner-review-draft-v1",
+            fingerprint: `sha256:${"b".repeat(64)}`,
+            effectiveDate: null,
+            href: "/privacy",
+          },
+          accepted: true,
+          acceptanceAvailable: true,
+          canAccept: true,
+          evidence: {
+            id: "00000000-0000-4000-8000-000000000004",
+            acceptedByUserId: "00000000-0000-4000-8000-000000000001",
+            termsVersion: "owner-review-draft-v1",
+            termsFingerprint: `sha256:${"a".repeat(64)}`,
+            termsEffectiveDate: null,
+            acceptedAt: "2026-09-10T00:00:00Z",
+            acceptanceSource: "administrative_onboarding",
+            privacyNoticeVersion: "owner-review-draft-v1",
+            privacyNoticeFingerprint: `sha256:${"b".repeat(64)}`,
+            privacyNoticeEffectiveDate: null,
+            privacyNoticePresentedAt: "2026-09-10T00:00:00Z",
+          },
+          message: "Your organisation has accepted the current Terms.",
+        }),
+      });
+    },
+  );
   await page.route(`${apiOrigin}/api/v1/credits`, async (route) => {
     await route.fulfill({
       status: 200,

@@ -55,6 +55,7 @@ class VerifiedIdentity:
     organisation_name: str
     role: Role
     auth_mode: AuthMode
+    issued_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -162,6 +163,7 @@ class ClerkAuthAdapter:
             organisation_name=organisation_name[:200],
             role=role,
             auth_mode="clerk",
+            issued_at=self._issued_at(claims),
         )
 
     @staticmethod
@@ -175,6 +177,16 @@ class ClerkAuthAdapter:
     def _optional_claim(claims: dict[str, object], key: str) -> str | None:
         value = claims.get(key)
         return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
+    def _issued_at(claims: dict[str, object]) -> datetime:
+        value = claims.get("iat")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise AuthenticationError("Authentication is required.")
+        try:
+            return datetime.fromtimestamp(value, UTC)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise AuthenticationError("Authentication is required.") from exc
 
 
 def get_auth_adapter(settings: Settings = Depends(get_settings)) -> AuthAdapter:
@@ -321,10 +333,10 @@ async def _resolve_identity(
             status="active",
         )
         session.add(membership)
-    elif membership.status != "active":
-        raise AuthenticationError("The authenticated membership is disabled.")
-    elif allow_provisioning and membership.role != identity.role and identity.auth_mode == "clerk":
-        membership.role = identity.role
+    else:
+        _require_current_membership_authority(identity, membership)
+        if allow_provisioning and membership.role != identity.role and identity.auth_mode == "clerk":
+            membership.role = identity.role
 
     if identity.auth_mode == "clerk":
         user.email = identity.email
@@ -343,6 +355,20 @@ async def _resolve_identity(
         role="admin" if membership.role == "admin" else "member",
         auth_mode=identity.auth_mode,
     )
+
+
+def _require_current_membership_authority(
+    identity: VerifiedIdentity,
+    membership: OrganisationMembership,
+) -> None:
+    if membership.status != "active":
+        raise AuthenticationError("The authenticated membership is disabled.")
+    if identity.auth_mode == "clerk" and membership.authentication_valid_after is not None:
+        valid_after = membership.authentication_valid_after
+        if valid_after.tzinfo is None:
+            valid_after = valid_after.replace(tzinfo=UTC)
+        if identity.issued_at is None or identity.issued_at <= valid_after:
+            raise AuthenticationError("The authenticated session predates the current membership authority.")
 
 
 def _organisation_slug(external_organisation_id: str) -> str:

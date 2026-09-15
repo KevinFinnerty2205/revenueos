@@ -36,6 +36,7 @@ build-backend = "hatchling.build"
 dev = [
   "aiosqlite>=0.20.0,<1.0.0",
   "mypy>=1.15.0,<2.0.0",
+  "pyyaml>=6.0.3,<7.0.0",
   "pytest>=8.3.0,<9.0.0",
   "pytest-cov>=6.0.0,<7.0.0",
   "ruff>=0.9.0,<1.0.0",

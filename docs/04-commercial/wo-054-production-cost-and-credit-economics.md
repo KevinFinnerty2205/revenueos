@@ -1,6 +1,6 @@
 # WO-054 production cost and Credit economics
 
-- Research date: 10 September 2026 (Australia/Sydney)
+- Research date: 11 September 2026 (Australia/Sydney)
 - Currency: provider prices are quoted in their source currency; no tax treatment is assumed
 - Approval status: proposal only; no purchase, subscription, price or Credit policy is active
 
@@ -8,7 +8,7 @@
 
 The recommended new-production baseline is **USD 120/month** before tax and variable usage: three USD 10 App Platform 1 GiB components, a USD 60 two-node highly available managed PostgreSQL cluster, USD 5 Spaces and USD 25 month-to-month Clerk Pro. The [DigitalOcean App Platform price list](https://docs.digitalocean.com/products/app-platform/details/pricing/), [PostgreSQL price list](https://docs.digitalocean.com/products/databases/postgresql/details/pricing/), [Spaces price list](https://docs.digitalocean.com/products/spaces/details/pricing/) and [Clerk price list](https://clerk.com/pricing) were verified on the research date. DigitalOcean expressly recommends its single-node database for preliminary development/testing; USD 15 is therefore not used as a paid-customer production baseline.
 
-The latest Reserve Bank of Australia daily observation available during research was 1 AUD = USD 0.7164 on 3 September 2026 ([RBA exchange rates](https://www.rba.gov.au/statistics/frequency/exchange-rates.html)). At that reference rate, USD 120 / 0.7164 = approximately AUD 167.50. Existing known annual domain/email costs add AUD 5.1083333333/month equivalent, producing approximately **AUD 172.61/month** before tax, FX movement and variable backup usage. Clerk Pro billed annually would reduce the USD equivalent by USD 5/month but creates an annual commitment; the month-to-month figure is the conservative approval baseline. This is a planning conversion, not a bank quote.
+The latest Reserve Bank of Australia daily observation available during research was 1 AUD = USD 0.7172 on 11 September 2026 ([RBA exchange rates](https://www.rba.gov.au/statistics/frequency/exchange-rates.html)). At that reference rate, USD 120 / 0.7172 = approximately AUD 167.32. Existing known annual domain/email costs add AUD 5.1083333333/month equivalent, producing approximately **AUD 172.43/month** before tax, FX movement and variable backup usage. Clerk Pro billed annually would reduce the USD equivalent by USD 5/month but creates an annual commitment; the month-to-month figure is the conservative approval baseline. This is a planning conversion, not a bank quote.
 
 | Category | Provider | Required | Allowance / baseline | Fixed monthly | Usage component | Card / auto-renew | Owner action |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
@@ -18,7 +18,7 @@ The latest Reserve Bank of Australia daily observation available during research
 | Scheduled backup job | DigitalOcean App Platform, Sydney | yes before customer data | 1 GiB fixed job, daily | USD 0 continuously allocated | billed only while running, one-minute minimum; roughly USD 0.007–0.069/month at 1–10 minutes/day using the USD 10 continuous-plan equivalent | covered by DigitalOcean payment method | approve variable cap and prove observed duration |
 | PostgreSQL | DigitalOcean managed PostgreSQL, Sydney | yes | 2 GiB primary plus matching standby; managed backups/PITR | USD 60 | transfer/resize if applicable | payment method; recurring | approve HA purchase; create admin/runtime roles |
 | Object storage | DigitalOcean Spaces, Sydney | yes | 250 GiB and 1 TiB outbound | USD 5 | USD 0.02/GiB storage, USD 0.01/GiB outbound above allowance | payment method; recurring | approve purchase and separate backup destination |
-| Independent backup | AWS S3 Standard, Sydney (`ap-southeast-2`) | yes before customer data | no minimum charge; daily encrypted logical bundle; 14-day lifecycle | USD 0 fixed | USD 0.025/GB-month for the first 50 TiB plus requests/transfer; scheduled-job seconds | payment method; ongoing usage billing | approve account/bucket/lifecycle and run named restore proof |
+| Independent backup | AWS S3 Standard, Sydney (`ap-southeast-2`) | yes before customer data | no minimum charge; daily encrypted logical bundle; 14-day lifecycle | USD 0 fixed | USD 0.025/GB-month for the first 50 TB; USD 0.0055/1,000 PUT/COPY/POST/LIST; USD 0.0044/10,000 GET/other; transfer and scheduled-job seconds extra. At a 1–10 GB average retained footprint and about 30 uploads/month, storage plus upload requests is about USD 0.03–0.26/month before transfer/tax | payment method; ongoing usage billing | approve account/bucket/lifecycle and run named restore proof |
 | Monitoring | App Platform/DB metrics, probes and email alerts | yes | baseline included | USD 0 incremental | none at launch | no separate card | set Kevin's controlled operational destination |
 | Auth | Clerk Pro | yes | production organisation identity, MFA/passkeys and seven-day logs | USD 25 month-to-month; USD 20/month billed annually | upgrade/overages beyond allowance | payment method for Pro; recurring | approve Pro and create production instance/domain |
 | External AI | OpenAI API | required for the advertised paid Sales Brain profile; synthetic/no-AI launch can disable | no free allowance relied upon | USD 0 | `gpt-5.6-terra`: USD 2/million input and USD 12/million output tokens | billing method and usage-based charges | approve data flow, project/key and stop amount separately |
@@ -36,8 +36,8 @@ The latest Reserve Bank of Australia daily observation available during research
 Clerk pricing and feature boundaries come from [Clerk pricing](https://clerk.com/pricing). Hobby has no card requirement but lacks MFA/passkeys and retains only one day of logs; it is not approved for paid/customer-data production. Stripe values come from [Stripe Australia pricing](https://stripe.com/au/pricing); the page says the domestic rate changes on 1 October 2026, so recheck immediately before activation. Domain and email equivalents use the actual current costs in the [Oryntela owner register](../00-company/oryntela-owner-register.md); they are existing commitments, not WO-054 spend.
 
 AWS publishes no minimum S3 charge and currently identifies S3 Standard in Sydney at
-USD 0.025/GB-month for the first 50 TiB ([AWS S3 pricing](https://aws.amazon.com/s3/pricing/),
-[current AWS Sydney price example](https://aws.amazon.com/blogs/machine-learning/automated-reasoning-checks-rewriting-chatbot-reference-implementation/)).
+USD 0.025/GB-month for the first 50 TB ([AWS S3 pricing](https://aws.amazon.com/s3/pricing/),
+[current AWS Sydney price file](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/ap-southeast-2/index.json)).
 Requests, transfer and the scheduled DigitalOcean job are additional variable costs.
 The repository now includes a daily scheduled job that streams an encrypted database
 and source-object bundle to independent S3, verifies uploaded size/SHA metadata and
@@ -47,7 +47,7 @@ external proofs remain customer-data blockers.
 
 ## Current provider activation research
 
-All links in this section were rechecked on 10 September 2026. No account, app,
+All links in this section were rechecked on 11 September 2026. No account, app,
 project, key, API or trial was created.
 
 - **OpenAI:** the implemented production candidate remains `gpt-5.6-terra`, currently
@@ -119,15 +119,15 @@ Production action prices cannot honestly be numerical until an approved provider
 - For pack `p`, calculate exact ex-GST usable proceeds per Credit after Stripe fees. For provider action `a`, convert the worst-case contracted provider cost into AUD with the treasury rate fixed for the pricing review and add any non-refundable request fees. Set `actionCredits = ceiling(providerCostAud / (usableProceedsPerCredit × 0.30))`.
 - Reserve the full `actionCredits` before execution; prohibit post-paid provider use. Re-price before the quote TTL expires when FX or provider pricing changes. Failed/no-match/refund behaviour must follow the provider contract and existing durable reservation rules.
 
-Example only, not an Apollo price: if an action's exact landed provider cost were AUD 0.21 and usable proceeds were AUD 0.09 per Oryntela Credit, `ceiling(0.21 / (0.09 × 0.30)) = ceiling(7.777...) = 8 Credits`. The repository continues to reject production Credits, external Prospect execution and live Stripe. Owner approval requires a versioned provider contract/quote, GST decision, pack terms, action table and the 70% margin decision together.
+Example only, not an Apollo price: if an action's exact landed provider cost were AUD 0.21 and usable proceeds were AUD 0.09 per Oryntela Credit, `ceiling(0.21 / (0.09 × 0.30)) = ceiling(7.777...) = 8 Credits`. The repository continues to reject production Credits and external Prospect execution. Live Stripe engineering is production-capable but remains fail-closed until its separate account, secret, Price, preflight and activation gates pass. Owner approval requires a versioned provider contract/quote, GST decision, pack terms, action table and the 70% margin decision together.
 
 ## Fixed, variable and customer-provided separation
 
-- Fixed recommended paid/customer-data baseline after approval: USD 120/month month-to-month; known all-in fixed equivalent including current domain/email costs is about AUD 172.61/month before tax/FX.
+- Fixed recommended paid/customer-data baseline after approval: USD 120/month month-to-month; known all-in fixed equivalent including current domain/email costs is about AUD 172.43/month before tax/FX.
 - Variable: independent backup storage/requests, platform overages, scheduled-job seconds, OpenAI, Stripe Payments/Billing fees, Prospect calls, foreign exchange and tax.
 - Customer-provided: Microsoft 365, Google Workspace, HubSpot and Salesforce licences/API entitlements used by that customer.
 - Optional/deferred: dedicated error reporting, Google/CASA assessment and any connector/provider not selected for V1. Clerk Pro and database HA are not optional for paid/customer-data production.
 
-At the reference rate and before tax/FX/variable usage, one AUD 200 Core subscription leaves about AUD 27.39 after the known fixed platform/domain/email amount. If a future domestic Stripe payment and Billing PAYG both apply at the researched rates, their illustrative combined fee is AUD 5.10 and the remainder is about AUD 22.29. One AUD 350 Growth subscription leaves about AUD 168.69 on the same assumptions. These are contribution examples, not profit forecasts: owner labour, advice, tax, backup, AI and other variable costs remain excluded. The current repository cannot safely collect either subscription because live Stripe is prohibited and the operator commercial-state commands do not record cleared funds, paid-through dates, renewal/expiry or invoice evidence.
+At the reference rate and before tax/FX/variable usage, one AUD 200 Core subscription leaves about AUD 27.57 after the known fixed platform/domain/email amount. If a future domestic Stripe payment and Billing PAYG both apply at the researched rates, their illustrative combined fee is AUD 5.10 and the remainder is about AUD 22.47. One AUD 350 Growth subscription leaves about AUD 168.87 on the same assumptions. These are contribution examples, not profit forecasts: owner labour, advice, tax, backup, AI and other variable costs remain excluded. The production-capable Stripe adapter still cannot collect either subscription until the live account, exact Prices, webhook, portal, mode-matched secrets and production preflight are configured and approved; the operator commercial-state commands are not a substitute for cleared-funds evidence.
 
 No amount in this document authorises spend or activation.

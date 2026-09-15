@@ -18,6 +18,7 @@ from sqlalchemy.pool import ConnectionPoolEntry
 from revenueos.commercial_contracts import ModuleCode, PlanCode
 from revenueos.commercial_services import PLAN_CATALOGUE, CommercialService, ensure_plan_catalogue
 from revenueos.config import Settings
+from revenueos.legal_releases import CURRENT_PRIVACY_NOTICE, CURRENT_TERMS_RELEASE
 from revenueos.main import create_app
 from revenueos.models import (
     ActionAuditEvent,
@@ -190,6 +191,7 @@ from revenueos.models import (
     SellingProfileRevision,
     SourceCandidateEvidence,
     Task,
+    TermsAcceptance,
     Transcript,
     TranscriptSegment,
     TranscriptVersion,
@@ -431,6 +433,36 @@ def database() -> Iterator[None]:
                         user_id=SECONDARY_USER_ID,
                         notice_version=1,
                     ),
+                    TermsAcceptance(
+                        id=UUID("00000000-0000-4000-8000-000000000004"),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        accepted_by_user_id=PRIMARY_USER_ID,
+                        release_status=CURRENT_TERMS_RELEASE.status,
+                        terms_version=CURRENT_TERMS_RELEASE.version,
+                        terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                        terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                        accepted_at=datetime(2026, 9, 10, tzinfo=UTC),
+                        acceptance_source="administrative_onboarding",
+                        privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                        privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                        privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                        privacy_notice_presented_at=datetime(2026, 9, 10, tzinfo=UTC),
+                    ),
+                    TermsAcceptance(
+                        id=UUID("00000000-0000-4000-8000-000000000014"),
+                        organisation_id=SECONDARY_ORGANISATION_ID,
+                        accepted_by_user_id=SECONDARY_USER_ID,
+                        release_status=CURRENT_TERMS_RELEASE.status,
+                        terms_version=CURRENT_TERMS_RELEASE.version,
+                        terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                        terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                        accepted_at=datetime(2026, 9, 10, tzinfo=UTC),
+                        acceptance_source="administrative_onboarding",
+                        privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                        privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                        privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                        privacy_notice_presented_at=datetime(2026, 9, 10, tzinfo=UTC),
+                    ),
                 ]
             )
             await session.commit()
@@ -453,6 +485,7 @@ def clean_business_entities() -> Iterator[None]:
     async def clean() -> None:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
+            await session.execute(delete(TermsAcceptance))
             await session.execute(update(RecordingSession).values(transcript_version_id=None))
             for model in (
                 ClosedWonHandoverAuditEvent,
@@ -658,6 +691,40 @@ def clean_business_entities() -> Iterator[None]:
                     reason="Synthetic test commercial baseline.",
                     lock_version=1,
                 )
+            )
+            session.add_all(
+                [
+                    TermsAcceptance(
+                        id=UUID("00000000-0000-4000-8000-000000000004"),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        accepted_by_user_id=PRIMARY_USER_ID,
+                        release_status=CURRENT_TERMS_RELEASE.status,
+                        terms_version=CURRENT_TERMS_RELEASE.version,
+                        terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                        terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                        accepted_at=datetime(2026, 9, 10, tzinfo=UTC),
+                        acceptance_source="administrative_onboarding",
+                        privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                        privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                        privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                        privacy_notice_presented_at=datetime(2026, 9, 10, tzinfo=UTC),
+                    ),
+                    TermsAcceptance(
+                        id=UUID("00000000-0000-4000-8000-000000000014"),
+                        organisation_id=SECONDARY_ORGANISATION_ID,
+                        accepted_by_user_id=SECONDARY_USER_ID,
+                        release_status=CURRENT_TERMS_RELEASE.status,
+                        terms_version=CURRENT_TERMS_RELEASE.version,
+                        terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                        terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                        accepted_at=datetime(2026, 9, 10, tzinfo=UTC),
+                        acceptance_source="administrative_onboarding",
+                        privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                        privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                        privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                        privacy_notice_presented_at=datetime(2026, 9, 10, tzinfo=UTC),
+                    ),
+                ]
             )
             await session.commit()
 

@@ -4,6 +4,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.beta_services import BetaService
+from revenueos.clerk_sessions import SessionRevoker, create_session_revoker
 from revenueos.config import Settings, get_settings
 from revenueos.database import get_db, set_tenant_database_context
 from revenueos.errors import PublicAPIError
@@ -11,16 +12,21 @@ from revenueos.models import OrganisationMembership
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
+def get_session_revoker(settings: Settings = Depends(get_settings)) -> SessionRevoker:
+    return create_session_revoker(settings)
+
+
 async def get_beta_service(
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
     settings: Settings = Depends(get_settings),
+    session_revoker: SessionRevoker = Depends(get_session_revoker),
 ) -> AsyncIterator[BetaService]:
     await set_tenant_database_context(session, tenant.organisation_id)
     membership = await session.get(OrganisationMembership, (tenant.organisation_id, tenant.user_id))
     if membership is None or membership.status != "active":
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
-    yield BetaService(session, tenant, settings)
+    yield BetaService(session, tenant, settings, session_revoker)
 
 
 async def require_data_notice_acknowledgement(

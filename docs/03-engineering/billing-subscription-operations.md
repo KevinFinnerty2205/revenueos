@@ -1,7 +1,7 @@
 # Billing and subscription operations
 
 - **Status:** test and live Stripe engineering implemented; live activation remains blocked
-- **Migrations:** `0053_billing_subscriptions`, `0062_live_stripe_billing`
+- **Migrations:** `0053_billing_subscriptions`, `0062_live_stripe_billing`, `0063_terms_acceptance`
 - **Providers:** deterministic test provider and mode-separated Stripe adapter
 - **Live billing:** production-capable but not configured, authorised or activated
 - **Legal billing entity:** Management Services Australia Pty. Ltd., ABN 15 113 119 556
@@ -217,24 +217,27 @@ set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
 `API_STRIPE_WEBHOOK_SECRET`, the exact verified `acct_` value in
 `API_STRIPE_ACCOUNT_ID`, an active live `bpc_` value in
 `API_STRIPE_PORTAL_CONFIGURATION_ID`, and the six `API_STRIPE_PRICE_*` mappings.
-`API_STRIPE_API_VERSION` remains exactly `2026-02-25.clover` and the API origin remains
+`API_STRIPE_API_VERSION` remains exactly `2026-08-26.dahlia` and the API origin remains
 `https://api.stripe.com`.
 
 The owner confirmed on 11 September 2026 that the six standard prices are
-GST-inclusive customer totals. `API_BILLING_TAX_TREATMENT` must nevertheless stay
-`unresolved` and billing must stay false until the inclusive treatment has a durable
-`API_BILLING_TAX_POLICY_REFERENCE`, the owner approves the Terms and Privacy Policy,
-and the remaining external preflight passes. This work does not activate Stripe Tax
-or change the approved customer totals.
+GST-inclusive customer totals. The production target records `inclusive` treatment
+with its durable owner-decision reference, and the read-only live Stripe preflight
+passes. `API_FEATURE_BILLING_ENABLED` must nevertheless stay false until the owner
+approves the final Terms and Privacy Policy release, that release is deployed and its
+named acceptance proof passes. Stripe Tax remains disabled and no customer, charge or
+subscription exists.
 
 The exact live webhook URL is
 `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`. Subscribe only to
 `checkout.session.completed`, `customer.subscription.updated`,
 `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`,
 `invoice.finalized`, `invoice.voided` and `invoice.marked_uncollectible`, pinned to the
-same API version. Portal configuration is a separate live object; start with invoice
-history, billing details and payment-method updates, keep plan switching and promotion
-codes off, and use the configured return URL. Both remain external owner actions.
+same API version. Subscription-schedule phases use Dahlia's `duration` fields rather
+than the removed `iterations` parameter. Portal configuration is a separate live
+object; start with invoice history, billing details and payment-method updates, keep
+plan switching and promotion codes off, and use the configured return URL. Both remain
+external owner actions.
 
 The adapter is direct REST over `httpx`; there is no Stripe SDK dependency to upgrade.
 The pinned REST contract was reverified against Stripe's current Clover changelog.

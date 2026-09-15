@@ -910,7 +910,11 @@ class StripeBillingProvider:
                 ("phases[1][start_date]", str(int(current.current_period_end.timestamp()))),
                 ("phases[1][items][0][price]", price.identifier),
                 ("phases[1][items][0][quantity]", "1"),
-                ("phases[1][iterations]", "1"),
+                (
+                    "phases[1][duration][interval]",
+                    "month" if price.billing_interval == "monthly" else "year",
+                ),
+                ("phases[1][duration][interval_count]", "1"),
                 ("phases[1][proration_behavior]", "none"),
             ],
             idempotency_key=f"{idempotency_key}:phases",

@@ -118,15 +118,15 @@ We may disclose personal information only as reasonably needed for the purposes 
 - regulators, courts, law-enforcement bodies and other persons where required or authorised by law; and
 - a genuine prospective purchaser, investor or successor in a corporate transaction, subject to appropriate confidentiality and lawful handling.
 
-Our proposed launch provider set may include DigitalOcean for Sydney-region core hosting, Amazon Web Services for an independent encrypted backup, Clerk for identity and organisation access, Zoho for business and support email, a payment provider such as Stripe, and an AI provider such as OpenAI. These providers are not all active during this owner-review draft. Before this Policy is approved, we will reconcile the list against the providers actually enabled for launch. Listing a conditional or proposed provider does not mean it receives information when its capability is disabled.
+The production launch configuration uses DigitalOcean for Sydney-region application, database and private object storage; Amazon Web Services for a separate encrypted backup in the Sydney region; Clerk for identity, organisation access and session security; Zoho for business and support email; and Stripe for payment-account infrastructure. Stripe customer billing is disabled until Oryntela’s remaining legal and production gates pass. OpenAI, Prospect-data providers, Microsoft 365, Google Workspace, HubSpot and Salesforce are not enabled for production and do not receive production Customer Data merely because conditional adapter code exists.
 
 We require providers to handle information for the contracted service and apply appropriate safeguards. Their own infrastructure, subcontractors and legal obligations may also affect processing.
 
 ## 7. Overseas processing and disclosure
 
-Core application infrastructure may be located in Sydney, but Oryntela does not claim that information is processed only in Australia. Depending on the enabled provider, customer connection, support path and the provider’s current infrastructure or subprocessors, information may be processed or disclosed outside Australia.
+Core application, database, object storage and independent backup data are configured in Sydney, but Oryntela does not claim that all information is processed only in Australia. Identity services, payment services, email, provider support, control planes, security operations and subprocessors may process or access information outside Australia.
 
-Countries can vary by provider and feature. Before final approval, we will identify likely overseas countries where practicable based on the providers actually enabled for launch. Overseas recipients may be subject to different laws. We take reasonable steps appropriate to the relationship and applicable requirements when selecting and contracting providers, but cannot control the laws applying to an overseas recipient.
+Based on the enabled launch providers’ current published service-provider information, likely overseas processing locations include the United States and may include Ireland, Colombia, Malaysia, the Philippines, India, the United Kingdom and Japan. Provider lists and routing can change, and this does not mean that every provider or every item of information is processed in every listed country. Overseas recipients may be subject to different laws. We take reasonable steps appropriate to the relationship and applicable requirements when selecting and contracting providers, but cannot control the laws applying to an overseas recipient.
 
 ## 8. Security
 
@@ -140,11 +140,11 @@ We assess and respond to suspected data breaches under our incident processes an
 
 We retain information for as long as reasonably needed to provide and secure the Service, administer the customer relationship, support export or recovery, resolve disputes, prevent fraud and meet accounting, tax, regulatory and legal obligations. Different categories may therefore have different retention periods.
 
-Organisation data may be subject to a customer or deployment retention setting. Operational settings, proposed 30, 90 or 180-day choices, and a 90-day engineering default are not a promise that every category is retained for the same period. The production policy must match the configuration actually approved for launch.
+The production application setting is 90 days for content that is eligible for the configured retention process. It is not a promise that every record is automatically deleted after 90 days. Active canonical records, account and organisation state, acceptance evidence, billing and Credit records, security and audit evidence, support material, fraud and dispute records, and information subject to accounting, tax, regulatory or legal obligations can follow different lifecycles.
 
 Supported organisation exports are tenant-scoped and may be provided through authenticated, time-limited access. An export covers supported Oryntela records and formats; it does not guarantee export in every conceivable format or direct compatibility with every third-party platform.
 
-When an authorised deletion is completed, we delete or de-identify information from active Oryntela systems subject to technical feasibility, legitimate records and applicable obligations. Deletion from backups occurs through the applicable backup rotation rather than instantaneously. Restricted billing, security, audit, fraud, dispute or legal records may be retained for as long as reasonably required. Information in a customer-controlled third-party service is governed by that service and is not necessarily deleted when Oryntela is disconnected or deleted.
+When an authorised deletion is completed, we delete or de-identify information from active Oryntela systems subject to technical feasibility, legitimate records and applicable obligations. The independent encrypted daily backup has a 14-day rotation, so deletion from that backup occurs through rotation rather than instantaneously. Provider-managed operational or recovery copies may also age out under the applicable provider controls. Restricted billing, security, audit, fraud, dispute or legal records may be retained for as long as reasonably required. Information in a customer-controlled third-party service is governed by that service and is not necessarily deleted when Oryntela is disconnected or deleted.
 
 ## 10. Access and correction
 

@@ -99,7 +99,7 @@ class Settings(BaseSettings):
         pattern=r"^bpc_[A-Za-z0-9]+$",
     )
     stripe_api_base_url: str = "https://api.stripe.com"
-    stripe_api_version: Literal["2026-02-25.clover"] = "2026-02-25.clover"
+    stripe_api_version: Literal["2026-08-26.dahlia"] = "2026-08-26.dahlia"
     stripe_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     stripe_read_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     stripe_webhook_tolerance_seconds: int = Field(default=300, ge=30, le=900)
@@ -112,6 +112,15 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
     clerk_audience: str | None = None
+    clerk_secret_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("API_CLERK_SECRET_KEY", "CLERK_SECRET_KEY"),
+    )
+    clerk_api_base_url: str = "https://api.clerk.com/v1"
+    clerk_api_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
+    clerk_api_read_timeout_seconds: float = Field(default=10.0, gt=0, le=30)
+    clerk_api_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
+    clerk_session_revoke_max_batches: int = Field(default=4, ge=1, le=10)
     clerk_jwks_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
     clerk_jwt_leeway_seconds: int = Field(default=30, ge=0, le=120)
     private_beta_data_notice_version: int = Field(default=1, ge=1)
@@ -495,6 +504,7 @@ class Settings(BaseSettings):
         "prospect_provider_health_reference",
         "prospect_provider_cost_model_reference",
         "apollo_api_key",
+        "clerk_secret_key",
         mode="before",
     )
     @classmethod
@@ -572,6 +582,10 @@ class Settings(BaseSettings):
                 raise ValueError("Production log level must not be DEBUG.")
             if self.identity_jit_provisioning_enabled:
                 raise ValueError("Production identity must use deliberate operator provisioning.")
+            if not self.clerk_session_management_configuration_complete:
+                raise ValueError("Production requires Clerk session-management configuration.")
+            if self.clerk_api_base_url != "https://api.clerk.com/v1":
+                raise ValueError("Production Clerk session management must use the official Backend API origin.")
             if (
                 not self.allowed_host_list
                 or "*" in self.allowed_host_list
@@ -978,6 +992,13 @@ class Settings(BaseSettings):
     @property
     def clerk_configuration_complete(self) -> bool:
         return all((self.clerk_jwks_url, self.clerk_issuer, self.clerk_audience))
+
+    @property
+    def clerk_session_management_configuration_complete(self) -> bool:
+        if self.clerk_secret_key is None:
+            return False
+        value = self.clerk_secret_key.get_secret_value()
+        return len(value) <= 512 and re.fullmatch(r"sk_live_\S{16,}", value) is not None
 
     @property
     def selected_ai_model_identifier(self) -> str:

@@ -7,6 +7,7 @@ import type {
   BillingProjection,
 } from "@revenueos/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TermsAcceptance } from "@/components/terms-acceptance";
 import { apiRequest } from "@/lib/api";
 
 function formatDate(value: string): string {
@@ -47,6 +48,7 @@ export function BillingSubscriptionSettings() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async (signal: AbortSignal) => {
@@ -353,15 +355,32 @@ export function BillingSubscriptionSettings() {
         </div>
       )}
 
-      <fieldset className="mt-6 min-w-0" disabled={!planSelectionAvailable}>
+      {canStartCheckout ? (
+        <div className="mt-6">
+          <TermsAcceptance
+            source="subscription_checkout"
+            onAcceptanceChange={setTermsAccepted}
+          />
+        </div>
+      ) : null}
+
+      <fieldset
+        className="mt-6 min-w-0"
+        disabled={
+          !planSelectionAvailable ||
+          (canStartCheckout && termsAccepted !== true)
+        }
+      >
         <legend className="text-sm font-bold text-slate-950">
           {!planSelectionAvailable
             ? subscription?.paymentNeedsAttention
               ? "Resolve payment attention before changing plan"
               : "Keep the subscription before changing plan"
-            : canStartCheckout
-              ? "Choose a paid plan"
-              : "Change plan"}
+            : canStartCheckout && termsAccepted !== true
+              ? "Accept the current Terms before choosing a paid plan"
+              : canStartCheckout
+                ? "Choose a paid plan"
+                : "Change plan"}
         </legend>
         <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {selfServiceOptions.map((option) => {

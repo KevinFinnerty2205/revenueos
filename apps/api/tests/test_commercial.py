@@ -27,6 +27,7 @@ from revenueos.config import Settings
 from revenueos.crm_contracts import CRMSettingsUpdate
 from revenueos.crm_services import CRMService
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_PRIVACY_NOTICE, CURRENT_TERMS_RELEASE
 from revenueos.models import (
     Base,
     CommercialPlanVersion,
@@ -35,6 +36,7 @@ from revenueos.models import (
     OrganisationCommercialState,
     OrganisationMembership,
     OrganisationModuleEntitlement,
+    TermsAcceptance,
     User,
 )
 from revenueos.prospect_services import ProspectService
@@ -91,6 +93,20 @@ async def with_database(
                         user_id=user_id,
                         role="admin",
                         status="active",
+                    ),
+                    TermsAcceptance(
+                        organisation_id=organisation_id,
+                        accepted_by_user_id=user_id,
+                        release_status=CURRENT_TERMS_RELEASE.status,
+                        terms_version=CURRENT_TERMS_RELEASE.version,
+                        terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                        terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                        accepted_at=FIXED_NOW,
+                        acceptance_source="administrative_onboarding",
+                        privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                        privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                        privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                        privacy_notice_presented_at=FIXED_NOW,
                     ),
                 ]
             )

@@ -43,6 +43,14 @@ interface AdminOverview {
   }>;
 }
 
+interface MemberStatusUpdateResponse {
+  member: AdminOverview["members"][number];
+  sessionRevocation: {
+    outcome: "succeeded" | "failed" | "unknown" | "not_required";
+    revokedSessionCount: number;
+  };
+}
+
 const retentionLabels: Record<AdminOverview["retention"]["policy"], string> = {
   days_30: "30 days",
   days_90: "90 days",
@@ -147,14 +155,20 @@ export function BetaAdmin() {
     setStatus(null);
     setBusyMember(userId);
     try {
-      await apiRequest(`/api/v1/beta/admin/members/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: membershipStatus }),
-      });
+      const result = await apiRequest<MemberStatusUpdateResponse>(
+        `/api/v1/beta/admin/members/${userId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: membershipStatus }),
+        },
+      );
       setStatus(
         membershipStatus === "disabled"
-          ? "The member has been disabled. Their next authenticated request will be rejected."
-          : "The member has been re-enabled.",
+          ? result.sessionRevocation.outcome === "succeeded" ||
+            result.sessionRevocation.outcome === "not_required"
+            ? "The member has been disabled. Protected access is denied and their relevant active authentication sessions were revoked."
+            : "The member has been disabled and protected access is denied. Authentication-session revocation requires operator reconciliation."
+          : "The member has been re-enabled. Previously revoked sessions remain unusable; they must authenticate again.",
       );
       await load();
     } catch (reason) {
