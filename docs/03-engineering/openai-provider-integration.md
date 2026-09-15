@@ -158,6 +158,14 @@ controls, and alert on safe rate-limit/authentication/timeout metrics. Productio
 customer-content use is an explicit operational gate; this code alone does not
 approve it.
 
+The WO-054 synthetic-only production posture keeps `AI_PROVIDER=mock` and
+`API_FEATURE_OPENAI_PROVIDER_ENABLED=false` outside the one deliberately observed
+smoke window. Its deployment contract limits a tenant to ten generation jobs and
+ten OpenAI requests per UTC day, uses one structured-output attempt, one durable
+worker attempt, a 30-second request timeout and 2,048 output tokens. The dedicated
+provider project additionally limits model access and spend. These controls bound
+the proof but are not authority to transmit customer content.
+
 Rollback does not require a database migration: set `AI_PROVIDER=mock`, restart
 the worker, confirm new jobs record the mock provider, then remove/revoke the
 OpenAI secret where it is no longer required. Existing completed artefacts
