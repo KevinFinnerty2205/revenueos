@@ -1,11 +1,12 @@
 # WO-054 production activation boundary ledger
 
-- Evidence date: 11 September 2026 (Australia/Sydney)
-- Reviewed main: `3fdf567e2f103abd312fee7e7297af996532c910`
+- Initial evidence date: 11 September 2026 (Australia/Sydney)
+- Latest Stripe control-plane evidence: 15 September 2026 (Australia/Sydney)
+- Reviewed main: `90717cb6de9a3d3d2fef422f79f42d32cc3d9f18`
 - Migration head: `0064_deauthorisation`
-- State: ready for owner account/payment actions; no production resource exists in
-  repository evidence
-- Spend in this activation pass: AUD 0 / USD 0
+- State: core production healthy; Stripe live configuration bound and verified;
+  customer checkout and Credits disabled; legal/public launch gates remain blocked
+- Stripe fixed spend in this activation pass: AUD 0 / USD 0; no transaction fee
 - Customer data: none
 
 This is the resumption ledger for the owner-boundary pass. It records only facts
@@ -52,17 +53,17 @@ and [RBA exchange rates](https://www.rba.gov.au/statistics/frequency/exchange-ra
 
 ## Account and provider reconciliation
 
-Direct dashboard navigation in the in-app browser produced a signed-out login page
-for every account below. This proves only that the browser profile has no usable
-session; it does not prove that an account does or does not exist. No login method,
-credential, recovery flow, account creation or purchase was attempted.
+The initial 11 September pass produced signed-out provider pages and therefore proved
+only that the browser profile had no usable session. The Stripe row below is updated
+from the later authenticated production control-plane evidence; the remaining rows
+retain the initial classification until their own reconciliation record is updated.
 
 | Provider | Account/resource evidence | Launch classification |
 | --- | --- | --- |
 | DigitalOcean | owner login required; resources uninspected | not configured |
 | AWS | owner login required; resources uninspected | not configured |
 | Clerk | owner login required; application/plan uninspected | not configured |
-| Stripe | owner login required; account/live-mode state uninspected | not configured |
+| Stripe | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled; draft Terms gate blocks customer billing |
 | OpenAI API | owner login required; organisation/project/billing uninspected | not configured |
 | Zoho Mail | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing |
 | Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised | not configured; must remain disabled |
@@ -70,13 +71,47 @@ credential, recovery flow, account creation or purchase was attempted.
 PR 88 is still open and draft. It remains untouched. The provider facts are not
 stable enough to finalise the Privacy Notice or perform publication steps 5–10.
 
+### Stripe live control-plane evidence — 15 September 2026
+
+- Oryntela is the customer-facing brand for Management Services Australia Pty. Ltd.
+  (ABN 15 113 119 556) on the Australian live Stripe account above.
+- The canonical catalogue contains no Enterprise self-service Price and no Credit
+  pack. The six recurring Prices are GST-inclusive totals: Core AUD 200/month or
+  AUD 2,000/year, Growth AUD 350/month or AUD 3,500/year, and Complete AUD 500/month
+  or AUD 5,000/year.
+- The webhook targets
+  `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`, uses
+  `2026-08-26.dahlia`, and receives only the eight approved Checkout,
+  subscription and invoice events. Its signing secret and the live API key are
+  encrypted, runtime-only DigitalOcean component secrets. A replacement API key was
+  verified by preflight before the superseded exposed key was expired; exactly one
+  labelled production runtime key remains active.
+- The portal permits invoice history, customer-information updates and payment-method
+  updates. Portal subscription changes and cancellations are disabled. Stripe Tax
+  and Climate are off; Radar Lite is the selected baseline protection.
+- On 15 September 2026 the owner personally completed Stripe's `Agree and submit`
+  certification for the displayed company, representative, control and payout facts.
+  Stripe then reported no active verification tasks and listed Payments and Payouts
+  as active. This provider activation does not override the Oryntela legal or feature
+  gates and is not authority for a customer transaction.
+- Production API and worker use Stripe live mode and the exact live references while
+  `API_FEATURE_BILLING_ENABLED=false` and
+  `API_FEATURE_CREDITS_ENABLED=false`. The read-only production preflight reported
+  `live_stripe_billing=pass`; its overall status remains blocked by the draft Terms
+  release and incomplete real-data approvals.
+- No live-money smoke was performed. Customers, charges, subscriptions and refunds
+  remain none, and this Stripe configuration incurred no fixed or transaction fee.
+
 ## Secret and recovery inventory
 
-No value was generated because no production secret manager is available. Never
-create a value in a captured terminal merely to hold it locally. After the owner
-creates the DigitalOcean control plane, generate each application secret in a
-private non-recorded terminal and paste it directly into the correct secret scope,
-then record only its safe provider/key identifier and rotation metadata.
+The initial evidence pass generated no value because no production secret manager
+was then available. DigitalOcean encrypted component variables are now the production
+secret store. Never create a value in a captured terminal merely to hold it locally;
+place each value directly into its encrypted least-privilege scope and record only
+the variable name, safe provider/key identifier and rotation metadata. On
+15 September the live Stripe API and webhook secrets were bound to the API and
+worker as runtime-only encrypted variables. Read-only reconciliation proved the
+replacement API key before the superseded exposed key was expired.
 
 **Core required:** `CLERK_SECRET_KEY`; `DATABASE_URL` runtime credential;
 `API_DATABASE_CA_CERTIFICATE_BASE64`; Clerk JWKS/issuer/audience configuration;
