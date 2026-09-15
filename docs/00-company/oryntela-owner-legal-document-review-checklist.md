@@ -1,13 +1,14 @@
 # Oryntela owner legal document review checklist
 
-- **Status:** SUBSTANTIVE OWNER DECISIONS RECORDED — FINAL PUBLICATION PENDING
+- **Status:** OWNER APPROVED — PRODUCTION PUBLICATION AUTHORISED
 - **Prepared:** 11 September 2026
+- **Final owner approval:** 15 September 2026
 - **Operator:** Management Services Australia Pty. Ltd., ABN 15 113 119 556
 - **External legal review:** deferred by owner; none requested or performed
 - **Documents:** [Oryntela Terms & Conditions](oryntela-terms-and-conditions.md) and [Oryntela Privacy Policy](oryntela-privacy-policy.md)
-- **Effective date:** `[OWNER APPROVAL DATE]` remains deliberately unresolved
+- **Effective date/version:** `2026-09-15`
 
-Kevin approved these ten grouped substantive positions on 11 September 2026. That approval did not assign an effective date, approve production publication or authorise customer billing. Fixed owner facts such as the Oryntela name, operator, GST-inclusive plan amounts, user limits, trial and plan-change mechanics are not reopened here.
+Kevin approved these ten grouped substantive positions on 11 September 2026. On 15 September 2026, after reviewing the exact PR #88 documents, Kevin approved both complete documents with effective date and version `2026-09-15` and authorised production publication. That final approval does not authorise customer billing, Credits, checkout or a real charge. Fixed owner facts such as the Oryntela name, operator, GST-inclusive plan amounts, user limits, trial and plan-change mechanics are not reopened here.
 
 | # | Consequential decision | Draft position | Owner decision |
 | -: | --- | --- | --- |
@@ -32,7 +33,7 @@ The owner approved the retention and provider-list principle on 11 September 202
 
 ## Terms acceptance implementation
 
-PR #89 implemented durable organisation-scoped Terms acceptance and Privacy Policy presentation. The owner must still approve the final release identity before that path can be used in production.
+PR #89 implemented durable organisation-scoped Terms acceptance and Privacy Policy presentation. The 15 September 2026 owner approval unlocks that path in production only for the exact versioned and fingerprinted release recorded below.
 
 The implemented path:
 
@@ -43,8 +44,14 @@ The implemented path:
 - block activation when the required current record is absent and preserve prior records after document updates; and
 - test cross-organisation denial, idempotency, version changes, audit minimisation, keyboard use and safe failure.
 
-This does not create a legal-document management system. Live checkout remains blocked until the final document versions, effective date and fingerprints are approved, committed and verified against the acceptance registry.
+This does not create a legal-document management system. Live checkout remains disabled under the separate billing gate even after the approved legal release is committed and verified against the acceptance registry.
 
-## Final owner publication boundary
+## Final owner publication approval
 
-The only unresolved legal-document decision is the final release itself. Kevin must personally approve the exact Terms and Privacy Policy text, choose the effective date, and authorise production publication. That approval will permit a reviewed follow-up to remove the draft banner, set final versions and effective date, compute the canonical SHA-256 fingerprints, update the server release registry and run the named legal-link/acceptance proof. It will not by itself authorise customer checkout; billing enablement remains a separate explicit gate.
+Kevin personally approved the exact PR #88 Terms and Privacy Policy text on 15 September 2026, selected effective date `2026-09-15`, and authorised production publication. The release binds:
+
+- Terms version `2026-09-15`, SHA-256 `0c4fea346d5f4774a92819b1a8be1e83dcb1289d2650acce0bafc5f400cea3f7`;
+- Privacy version `2026-09-15`, SHA-256 `c707fa92f6dcd2dd4657a60fe96dce9f04bd805a15112cd224fa740fbc6cc1d5`; and
+- public `/terms` and `/privacy` routes to the same canonical Markdown bytes packaged in the web release.
+
+Publication and Terms-acceptance proof must use this exact identity. Billing and Credits stay disabled; customer checkout and real charges require a separate explicit owner gate.

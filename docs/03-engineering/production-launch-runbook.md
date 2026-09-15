@@ -14,7 +14,7 @@ The production candidate is the modular monolith described by [ADR 0077](../08-d
 
 Production activation is fail-closed at distinct infrastructure and commercial points:
 
-- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth or non-production Clerk public key. This permits the production identity shell and synthetic infrastructure proof before legal approval; it does not authorise a trial, paid checkout, customer data or public launch.
+- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth or non-production Clerk public key. The approved legal release permits publication, but does not itself authorise a trial, paid checkout, customer data or a broader public launch.
 - `/health/ready` rejects a missing Clerk server secret or missing/non-40-hex `ORYNTELA_RELEASE_SHA` without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config. `production-preflight` also fails until the owner-approved Terms version and effective date are locked for acceptance.
 - The API's Terms service keeps acceptance unavailable while either legal document is draft. Trial activation and paid checkout recheck that server-owned authority before any provider or billing side effect and remain denied until the approved, effective-dated release is current.
 
@@ -27,7 +27,7 @@ This first deployment may contain synthetic data only. The target manifest inten
 | Development     | labelled mock auth and synthetic local data                                      | local HTTP permitted; normal developer SEO behaviour                                                                                                                      | deterministic mocks only unless a developer explicitly configures a test provider  |
 | Test            | deterministic isolated fixtures; no external credentials                         | test runner; robots disallow all                                                                                                                                          | contract-compatible mocks; external credentials never skip tests                   |
 | Preview/staging | separate Clerk development instance, synthetic data and separate database/bucket | `ORYNTELA_ENVIRONMENT=staging`; exact HTTPS origins; global `noindex`; production secrets prohibited                                                                      | all external execution off unless a bounded sandbox smoke is separately authorised |
-| Production      | Clerk production instance; no customer data until WO-045                         | exact `.com.au` origins; identity and synthetic proof may run while legal copy is draft, but trial/checkout/public launch remain blocked; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass              |
+| Production      | Clerk production instance; no customer data until WO-045                         | exact `.com.au` origins; legal version `2026-09-15` is indexable; trial requires exact administrator acceptance; checkout remains disabled; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass              |
 
 The complete production handoff template is `infra/environments/production.env.example`. Classification:
 
@@ -145,9 +145,9 @@ holds encrypted live Stripe references and `inclusive` tax treatment, but preser
 totals on 11 September 2026, completed Stripe certification on 15 September 2026,
 and the read-only live preflight passes. The remaining sequence is:
 
-1. Owner approves the exact final Privacy Policy and Terms, their shared effective
-   date and production publication. The release change records the exact versions and
-   canonical fingerprints.
+1. **Complete 15 September 2026:** owner approved the exact final Privacy Policy and
+   Terms, shared effective date `2026-09-15` and production publication. The release
+   change records the exact versions and canonical fingerprints.
 2. Deploy the approved release and prove public legal links, durable acceptance and
    production preflight while billing remains disabled.
 

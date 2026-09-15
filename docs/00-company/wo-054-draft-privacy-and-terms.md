@@ -11,9 +11,10 @@ The current owner-review documents are the
 [Oryntela Terms & Conditions](oryntela-terms-and-conditions.md),
 [Oryntela Privacy Policy](oryntela-privacy-policy.md) and
 [owner legal document review checklist](oryntela-owner-legal-document-review-checklist.md).
-The `/terms` and `/privacy` routes show those drafts with noindex metadata. The
-production gate remains closed until owner approval, an effective date, versions
-and content fingerprints are recorded.
+The owner approved the exact documents on 15 September 2026 with effective date and
+version `2026-09-15`. The final release replaces the draft/noindex presentation and
+binds the canonical fingerprints in the production registry. Billing and Credits
+remain disabled under their separate gate.
 
 ## Confirmed publisher facts
 
@@ -113,12 +114,15 @@ The repository does not implement a marketing analytics or advertising tracker. 
 11. Good-faith dispute process, New South Wales governing law/jurisdiction, notices, assignment, subcontracting, force majeure, severability, waiver and entire agreement.
 12. Version, effective date and how material changes are notified/accepted.
 
-## Current owner actions before publication
+## Owner actions completed for publication
 
-1. Review the ten grouped positions in the owner checklist, including the exact liability, indemnity, refund and unused-Credit treatment.
-2. Confirm the exact enabled launch providers, likely overseas countries and production retention/backup settings.
-3. Approve or change the complete Terms and Privacy Policy.
-4. Supply the effective date; record versions and SHA-256 fingerprints in the existing release gate.
-5. Implement durable Terms acceptance and separate Privacy acknowledgement evidence before trial or paid production activation.
+1. The ten grouped positions, including liability, indemnity, refund and unused-Credit treatment, were approved on 11 September 2026.
+2. Enabled launch providers, likely overseas countries and production retention/backup settings were reconciled in PR #88.
+3. The exact complete Terms and Privacy Policy were approved on 15 September 2026.
+4. Effective date/version `2026-09-15` and canonical SHA-256 fingerprints are recorded in the release gate.
+5. Durable Terms acceptance and Privacy presentation evidence are implemented before trial or paid production activation.
 
-Until those actions are complete, the public legal launch gate is **BLOCKED**. External legal review is deferred by owner and is not an active selected prerequisite.
+The legal-document publication gate is owner-approved. Deployment and named
+acceptance proof remain engineering steps. Customer billing, Credits, checkout and
+real charges remain separately disabled. External legal review is deferred by owner
+and is not an active selected prerequisite.

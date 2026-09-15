@@ -16,14 +16,16 @@ describe("canonical legal documents", () => {
       "Stripe customer billing is disabled",
     ],
   ] as const)(
-    "loads the complete %s owner-review draft",
+    "loads the complete approved %s release",
     (name, title, section, currentFact) => {
       const source = loadLegalDocument(name);
       expect(source).toContain(title);
       expect(source).toContain(section);
       expect(source).toContain(currentFact);
-      expect(source).toContain("OWNER REVIEW DRAFT");
-      expect(source.match(/\[[^\]]+\]/gu)).toEqual(["[OWNER APPROVAL DATE]"]);
+      expect(source).toContain("OWNER APPROVED — effective 2026-09-15");
+      expect(source).toContain("Version: 2026-09-15");
+      expect(source).not.toContain("OWNER REVIEW DRAFT");
+      expect(source.match(/\[[^\]]+\]/gu)).toBeNull();
       expect(source).not.toMatch(/RevenueOS/iu);
       expect(source).not.toMatch(/Service Terms not yet published/iu);
     },

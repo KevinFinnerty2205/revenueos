@@ -144,17 +144,17 @@ role-aware checks, reviewed consequential actions, AES-256-GCM connector credent
 envelopes, positive allow-listed Deal Room snapshots and organisation export/deletion
 workflows. It explicitly avoids certification, penetration-test and residency claims.
 
-Repository legal evidence gives the following exact status after the 11 September
-2026 owner-drafting update:
+Repository legal evidence gives the following exact status after the 15 September
+2026 owner approval:
 
-- **Privacy: OWNER REVIEW DRAFT** — complete copy exists but is not approved or effective;
-- **Terms: OWNER REVIEW DRAFT** — complete copy exists but is not approved or effective; and
+- **Privacy: OWNER APPROVED** — version `2026-09-15`, effective 15 September 2026;
+- **Terms: OWNER APPROVED** — version `2026-09-15`, effective 15 September 2026; and
 - **Contact: READY** — general and support addresses are approved and routing-tested.
 
-The Privacy and Terms pages render the canonical drafts with visible status and
-noindex metadata. The website must not be treated as public-launch ready until the
-owner approves the text, supplies the effective date, records versions and
-fingerprints, and the required Terms-acceptance evidence exists.
+The Privacy and Terms pages render the canonical approved documents with visible
+current-version status and indexable metadata. The exact canonical bytes are bound
+to the server registry by SHA-256. Each organisation still requires its own
+administrator acceptance event before trial or paid activation.
 
 ## SEO and social metadata
 

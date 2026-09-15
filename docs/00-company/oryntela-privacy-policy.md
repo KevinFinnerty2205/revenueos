@@ -4,9 +4,11 @@ Operator: Management Services Australia Pty. Ltd.
 
 ABN 15 113 119 556
 
-Effective date: [OWNER APPROVAL DATE]
+Effective date: 2026-09-15
 
-> OWNER REVIEW DRAFT — not approved or effective. This document was prepared internally by the owner and has not been externally legally reviewed.
+Version: 2026-09-15
+
+> OWNER APPROVED — effective 2026-09-15. This document was prepared internally by the owner and has not been externally legally reviewed.
 
 ## 1. About this Policy
 

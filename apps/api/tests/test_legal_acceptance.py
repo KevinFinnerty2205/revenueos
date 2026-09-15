@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import cast
 
@@ -47,7 +47,7 @@ def _settings(**changes: object) -> Settings:
     return Settings(**values)  # type: ignore[arg-type]
 
 
-def test_draft_release_fingerprints_match_canonical_markdown() -> None:
+def test_approved_release_fingerprints_match_canonical_markdown() -> None:
     repository_root = Path(__file__).resolve().parents[3]
     for release in (CURRENT_TERMS_RELEASE, CURRENT_PRIVACY_NOTICE):
         canonical_bytes = (repository_root / release.canonical_source).read_bytes()
@@ -70,17 +70,17 @@ def test_admin_acceptance_is_explicit_server_owned_and_idempotent(client: TestCl
         assert response.status_code == 200
         assert response.json() == {
             "terms": {
-                "status": "draft",
+                "status": "approved",
                 "version": CURRENT_TERMS_RELEASE.version,
                 "fingerprint": f"sha256:{CURRENT_TERMS_RELEASE.sha256}",
-                "effectiveDate": None,
+                "effectiveDate": "2026-09-15",
                 "href": "/terms",
             },
             "privacyNotice": {
-                "status": "draft",
+                "status": "approved",
                 "version": CURRENT_PRIVACY_NOTICE.version,
                 "fingerprint": f"sha256:{CURRENT_PRIVACY_NOTICE.sha256}",
-                "effectiveDate": None,
+                "effectiveDate": "2026-09-15",
                 "href": "/privacy",
             },
             "accepted": False,
@@ -123,7 +123,7 @@ def test_admin_acceptance_is_explicit_server_owned_and_idempotent(client: TestCl
         assert body["evidence"]["acceptanceSource"] == "trial_onboarding"
         assert body["evidence"]["termsVersion"] == CURRENT_TERMS_RELEASE.version
         assert body["evidence"]["termsFingerprint"] == f"sha256:{CURRENT_TERMS_RELEASE.sha256}"
-        assert body["evidence"]["termsEffectiveDate"] is None
+        assert body["evidence"]["termsEffectiveDate"] == "2026-09-15"
         assert body["evidence"]["privacyNoticePresentedAt"] == body["evidence"]["acceptedAt"]
 
         repeated = client.post(
@@ -147,7 +147,7 @@ def test_admin_acceptance_is_explicit_server_owned_and_idempotent(client: TestCl
         asyncio.run(engine.dispose())
 
 
-def test_member_cannot_bind_and_draft_release_is_disabled_outside_test() -> None:
+def test_member_cannot_bind_and_approved_release_is_available_in_production() -> None:
     async def scenario() -> None:
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
         try:
@@ -170,11 +170,11 @@ def test_member_cannot_bind_and_draft_release_is_disabled_outside_test() -> None
                     production_settings,
                 )
                 status = await production.status()
-                assert status.acceptance_available is False
-                assert status.accepted is False
-                with pytest.raises(PublicAPIError) as unavailable:
-                    await production.accept_current("administrative_onboarding")
-                assert unavailable.value.code == "terms_acceptance_unavailable"
+                assert status.acceptance_available is True
+                accepted = await production.accept_current("administrative_onboarding")
+                assert accepted.accepted is True
+                assert accepted.evidence is not None
+                assert accepted.evidence.terms_effective_date == CURRENT_TERMS_RELEASE.effective_date
         finally:
             await engine.dispose()
 
@@ -241,10 +241,10 @@ def test_new_material_terms_version_creates_a_new_event_without_mutating_history
                 assert original is not None
                 original_identity = (original.id, original.terms_version, original.terms_sha256, original.accepted_at)
                 changed_terms = type(CURRENT_TERMS_RELEASE)(
-                    status="draft",
+                    status="approved",
                     version="future-material-terms-v2",
                     sha256="f" * 64,
-                    effective_date=None,
+                    effective_date=date(2026, 10, 1),
                     href="/terms",
                     canonical_source="synthetic-review-only",
                 )
@@ -322,7 +322,7 @@ def test_acceptance_endpoint_uses_current_database_authority_and_denies_disabled
         asyncio.run(engine.dispose())
 
 
-def test_production_preflight_keeps_draft_acceptance_release_blocked(
+def test_production_preflight_accepts_the_approved_legal_release(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def storage_ready(_: Settings) -> PreflightCheck:
@@ -337,7 +337,7 @@ def test_production_preflight_keeps_draft_acceptance_release_blocked(
     result = asyncio.run(production_preflight(settings))
     checks = cast(list[dict[str, object]], result["checks"])
     terms_check = next(check for check in checks if check["name"] == "terms_acceptance_release")
-    assert terms_check["status"] == "fail"
+    assert terms_check["status"] == "pass"
     assert result["status"] == "blocked"
 
 
@@ -436,7 +436,28 @@ def test_trial_and_paid_checkout_fail_before_side_effects_without_or_with_old_ac
     asyncio.run(scenario())
 
 
-def test_production_draft_terms_deny_trial_and_checkout_before_side_effects() -> None:
+def test_synthetic_production_draft_terms_deny_trial_and_checkout_before_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    draft_terms = type(CURRENT_TERMS_RELEASE)(
+        status="draft",
+        version="synthetic-draft-terms",
+        sha256="d" * 64,
+        effective_date=None,
+        href="/terms",
+        canonical_source="synthetic-review-only",
+    )
+    draft_privacy = type(CURRENT_PRIVACY_NOTICE)(
+        status="draft",
+        version="synthetic-draft-privacy",
+        sha256="e" * 64,
+        effective_date=None,
+        href="/privacy",
+        canonical_source="synthetic-review-only",
+    )
+    monkeypatch.setattr("revenueos.legal_releases.CURRENT_TERMS_RELEASE", draft_terms)
+    monkeypatch.setattr("revenueos.legal_releases.CURRENT_PRIVACY_NOTICE", draft_privacy)
+
     async def scenario() -> None:
         settings = _settings()
         settings.environment = "production"

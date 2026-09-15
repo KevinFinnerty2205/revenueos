@@ -201,9 +201,9 @@ This is the canonical product and engineering documentation index. Documents dis
 176. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 177. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
 178. [WO-054 Privacy and Terms factual drafting inputs](00-company/wo-054-draft-privacy-and-terms.md) — historical factual source; external engagement deferred by owner
-179. [Oryntela Terms & Conditions](00-company/oryntela-terms-and-conditions.md) — complete owner-review draft; not approved or effective
-180. [Oryntela Privacy Policy](00-company/oryntela-privacy-policy.md) — complete owner-review draft; not approved or effective
-181. [Oryntela owner legal document review checklist](00-company/oryntela-owner-legal-document-review-checklist.md) — approved substantive positions and remaining final publication decisions
+179. [Oryntela Terms & Conditions](00-company/oryntela-terms-and-conditions.md) — owner-approved version `2026-09-15`
+180. [Oryntela Privacy Policy](00-company/oryntela-privacy-policy.md) — owner-approved version `2026-09-15`
+181. [Oryntela owner legal document review checklist](00-company/oryntela-owner-legal-document-review-checklist.md) — final owner approval, release identities and separate billing boundary
 182. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 183. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 184. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision

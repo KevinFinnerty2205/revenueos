@@ -4,10 +4,9 @@ import { loadLegalDocument } from "@/lib/legal-documents";
 import { createMarketingMetadata } from "@/lib/marketing";
 
 export const metadata: Metadata = createMarketingMetadata(
-  "Privacy Policy — owner review draft",
-  "Owner-review draft of the Oryntela Privacy Policy. Not approved or effective.",
+  "Privacy Policy",
+  "The current Oryntela Privacy Policy, effective 15 September 2026.",
   "/privacy",
-  { index: false },
 );
 
 export default function PrivacyPage() {

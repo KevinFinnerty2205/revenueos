@@ -223,9 +223,10 @@ set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
 The owner confirmed on 11 September 2026 that the six standard prices are
 GST-inclusive customer totals. The production target records `inclusive` treatment
 with its durable owner-decision reference, and the read-only live Stripe preflight
-passes. `API_FEATURE_BILLING_ENABLED` must nevertheless stay false until the owner
-approves the final Terms and Privacy Policy release, that release is deployed and its
-named acceptance proof passes. Stripe Tax remains disabled and no customer, charge or
+passes. The owner approved final Terms and Privacy Policy version `2026-09-15` on
+15 September 2026. `API_FEATURE_BILLING_ENABLED` must nevertheless stay false until
+that release is deployed, its named acceptance proof passes, and the owner separately
+authorises billing enablement. Stripe Tax remains disabled and no customer, charge or
 subscription exists.
 
 The exact live webhook URL is

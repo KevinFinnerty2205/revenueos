@@ -57,8 +57,10 @@ Privacy and Terms have honest noindex shells. They are not represented as approv
 legal documents and remain a launch blocker for WO-054.
 
 The later 11 September 2026 WO-054 owner-drafting change replaced those shells with
-complete noindex owner-review drafts. They remain unapproved and ineffective, so the
-production legal gate and launch blocker remain in force.
+complete noindex owner-review drafts. On 15 September 2026 the owner approved the
+exact PR #88 documents, effective `2026-09-15`, and authorised publication. The legal
+release supersedes this historical WO-053 gap when deployed; billing remains a
+separate disabled gate.
 
 ## Security, privacy and product truth
 

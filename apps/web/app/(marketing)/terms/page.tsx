@@ -4,10 +4,9 @@ import { loadLegalDocument } from "@/lib/legal-documents";
 import { createMarketingMetadata } from "@/lib/marketing";
 
 export const metadata: Metadata = createMarketingMetadata(
-  "Terms & Conditions — owner review draft",
-  "Owner-review draft of the Oryntela Terms & Conditions. Not approved or effective.",
+  "Terms & Conditions",
+  "The current Oryntela Terms & Conditions, effective 15 September 2026.",
   "/terms",
-  { index: false },
 );
 
 export default function TermsPage() {

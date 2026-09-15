@@ -113,7 +113,7 @@ for (const legalPage of [
     expectedSection: "9. Retention, export and deletion",
   },
 ] as const) {
-  test(`${legalPage.path} renders the owner-review draft accessibly at desktop and 390px`, async ({
+  test(`${legalPage.path} renders the approved release accessibly at desktop and 390px`, async ({
     page,
   }) => {
     for (const viewport of [
@@ -127,7 +127,7 @@ for (const legalPage of [
         page.getByRole("heading", { level: 1, name: legalPage.title }),
       ).toBeVisible();
       await expect(page.getByLabel("Document status")).toHaveText(
-        "OWNER REVIEW DRAFT",
+        "CURRENT VERSION",
       );
       await expect(
         page.getByRole("heading", {
@@ -137,14 +137,13 @@ for (const legalPage of [
       ).toBeAttached();
       await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
         "content",
-        /noindex, nofollow/iu,
+        /index, follow/iu,
       );
 
       const pageFacts = await page.locator("main").innerText();
-      expect(pageFacts).toContain("Effective date: [OWNER APPROVAL DATE]");
-      expect(pageFacts.match(/\[[^\]]+\]/gu)).toEqual([
-        "[OWNER APPROVAL DATE]",
-      ]);
+      expect(pageFacts).toContain("Effective date: 2026-09-15");
+      expect(pageFacts).toContain("Version: 2026-09-15");
+      expect(pageFacts.match(/\[[^\]]+\]/gu)).toBeNull();
       expect(pageFacts).not.toMatch(/RevenueOS/iu);
       expect(pageFacts).not.toMatch(/lawyer approved|legally reviewed/iu);
 

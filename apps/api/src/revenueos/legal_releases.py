@@ -19,24 +19,24 @@ class LegalDocumentRelease:
     canonical_source: str
 
 
-# These fingerprints identify the exact canonical Markdown documents on the
-# refreshed PR #88 final-review branch. They deliberately exclude rendered
+# These fingerprints identify the exact owner-approved canonical Markdown
+# documents effective on 15 September 2026. They deliberately exclude rendered
 # navigation and footer content. Updating either identity requires the reviewed
 # legal-release procedure and must never rewrite an acceptance row.
 CURRENT_TERMS_RELEASE = LegalDocumentRelease(
-    status="draft",
-    version="owner-review-draft-v1",
-    sha256="9425fe5c0d056e7669ee1fc8e3f977a5cd7d639ce775d36926bb89de54330652",
-    effective_date=None,
+    status="approved",
+    version="2026-09-15",
+    sha256="0c4fea346d5f4774a92819b1a8be1e83dcb1289d2650acce0bafc5f400cea3f7",
+    effective_date=date(2026, 9, 15),
     href="/terms",
     canonical_source="docs/00-company/oryntela-terms-and-conditions.md",
 )
 
 CURRENT_PRIVACY_NOTICE = LegalDocumentRelease(
-    status="draft",
-    version="owner-review-draft-v2",
-    sha256="3026606e1eecf522b41ef6bd3008be3be3f0a6f55b30e3aa26f717ba33aeb115",
-    effective_date=None,
+    status="approved",
+    version="2026-09-15",
+    sha256="c707fa92f6dcd2dd4657a60fe96dce9f04bd805a15112cd224fa740fbc6cc1d5",
+    effective_date=date(2026, 9, 15),
     href="/privacy",
     canonical_source="docs/00-company/oryntela-privacy-policy.md",
 )

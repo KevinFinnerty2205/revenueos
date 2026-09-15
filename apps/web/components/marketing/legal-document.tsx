@@ -138,13 +138,12 @@ export function LegalDocument({
             aria-label="Document status"
             className="mt-7 inline-flex rounded-full border border-brand-accent/40 bg-brand-accent/10 px-4 py-2 text-sm font-bold tracking-[0.08em] text-brand-primary"
           >
-            OWNER REVIEW DRAFT
+            CURRENT VERSION
           </div>
           <p className="mt-5 max-w-3xl text-sm leading-7 text-brand-muted">
-            This review copy is not approved or effective and must not be relied
-            on as Oryntela&apos;s published policy. Production publication
-            remains blocked until explicit owner approval, an effective date,
-            version and content fingerprints are recorded.
+            Owner approved and effective from 15 September 2026. The exact
+            version and content fingerprint are recorded with Oryntela&apos;s
+            production legal release.
           </p>
         </header>
 
