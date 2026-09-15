@@ -39,8 +39,8 @@ and prices are not decided.
 | Complete module matrix                 | Growth + Create + external CRM connectors    |
 | Add-on prices                          | **UNDECIDED**                                |
 | Extra-user bands/prices                | **UNDECIDED**                                |
-| GST-inclusive or ex-GST public display | **OWNER/LEGAL/COMMERCIAL DECISION REQUIRED** |
-| Billing provider and implementation    | **PROVIDER-NEUTRAL TEST MODE BUILT; STRIPE TEST ADAPTER UNACTIVATED; LIVE NOT APPROVED** |
+| GST-inclusive or ex-GST public display | **GST-INCLUSIVE FIXED CUSTOMER TOTALS — OWNER DECIDED 11 SEPTEMBER 2026** |
+| Billing provider and implementation    | **STRIPE LIVE CONTROL PLANE CONFIGURED; CUSTOMER BILLING DISABLED UNTIL OWNER-APPROVED LEGAL RELEASE AND SEPARATE ENABLEMENT GATE PASS** |
 | Terms, cancellation and public launch  | **NOT READY**                                |
 
 ## Economic risks to test

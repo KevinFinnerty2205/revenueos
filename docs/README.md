@@ -200,12 +200,15 @@ This is the canonical product and engineering documentation index. Documents dis
 175. [WO-054 production activation boundary ledger](03-engineering/wo-054-production-activation-ledger.md) — dated cost, account-session, secret, provider and owner-boundary evidence for resumption
 176. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 177. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
-178. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
-179. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
-180. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
-181. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
-182. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
-183. [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
+178. [WO-054 Privacy and Terms factual drafting inputs](00-company/wo-054-draft-privacy-and-terms.md) — historical factual source; external engagement deferred by owner
+179. [Oryntela Terms & Conditions](00-company/oryntela-terms-and-conditions.md) — owner-approved version `2026-09-15`
+180. [Oryntela Privacy Policy](00-company/oryntela-privacy-policy.md) — owner-approved version `2026-09-15`
+181. [Oryntela owner legal document review checklist](00-company/oryntela-owner-legal-document-review-checklist.md) — final owner approval, release identities and separate billing boundary
+182. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+183. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+184. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
+185. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
+186. [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
 
 ## First design-partner launch package
 

@@ -5,7 +5,7 @@
 - **Date:** 10 September 2026 (Australia/Sydney)
 - **WO-054B baseline:** `3f141ca7593aa3f19bed6c5d7acf46b4638a881c`
 - **WO-054B branch:** `codex/wo-054-live-stripe-production-readiness`
-- **Status:** live Stripe and durable Terms acceptance engineering complete; final legal publication, owner decisions, activation and external proof remain blocked
+- **Status:** exact legal release owner-approved and bound for publication; billing, Credits and checkout remain disabled pending their separate gate
 - **Customer data:** none
 - **Feature freeze:** preserved
 - **Current migration:** `0064_deauthorisation`; additive membership authority after `0063_terms_acceptance`
@@ -84,8 +84,10 @@ Repository engineering now provides:
   the existing forced-RLS tables. Export v38 includes those safe fields; no raw Stripe
   payload, credential or card data is stored.
 
-GST remains deliberately unresolved and live checkout fails closed until an owner or
-accounting decision supplies inclusive/exclusive treatment plus a durable reference.
+The owner confirmed on 11 September 2026 that the six standard prices are
+GST-inclusive customer totals and approved the exact legal documents, effective
+`2026-09-15`, on 15 September 2026. Live checkout remains disabled until a separate
+billing-enablement approval and the remaining external preflight pass.
 No Stripe account, Product, Price, webhook, portal, customer, charge, production
 secret, customer data or infrastructure was created. Spend remains AUD 0. The exact
 later owner sequence, smoke boundary and kill/rollback procedure are in the
@@ -93,7 +95,8 @@ later owner sequence, smoke boundary and kill/rollback procedure are in the
 
 ## WO-054 durable Terms acceptance
 
-The owner approved the Terms drafting positions subject to final publication gates.
+The owner approved the Terms drafting positions and, on 15 September 2026, the exact
+final release for production publication.
 Migration `0063_terms_acceptance` now adds the minimum organisation-owned acceptance
 event, with forced PostgreSQL RLS, a tenant-consistent membership foreign key,
 current database-backed active-user/admin checks, exact server-owned release identity
@@ -110,10 +113,10 @@ Terms acceptance and its original presentation evidence. Export v39 includes onl
 relevant evidence and approved organisation deletion removes it through the existing
 maintenance authority.
 
-Development/tests use the exact PR #88 owner-review draft identity. Staging and
-production acceptance, plus production preflight, remain blocked until an
-owner-approved final version and effective date are locked. The detailed implementation,
-provider reconciliation, retention recommendation and PR sequence are in the
+All environments use the exact owner-approved PR #88 identity: version and effective
+date `2026-09-15` with canonical SHA-256 fingerprints. Production acceptance is
+available for that identity while billing remains disabled. The detailed implementation,
+provider reconciliation, retention decision and PR sequence are in the
 [legal production gate](../03-engineering/oryntela-legal-production-gate.md) and
 [ADR 0079](../08-decisions/0079-immutable-organisation-terms-acceptance.md).
 
@@ -146,10 +149,10 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | Independent backup target, lifecycle and alert | OWNER ACTION | Create private Sydney S3 bucket; expire current/noncurrent versions/delete markers within 14 days; configure failure/freshness alert |
 | Named-cloud restore drill | BLOCKED | Run after owner-funded target exists and before any customer data |
 | RPO/RTO operating targets | PASS | Recommended internal V1 objectives: 24-hour RPO and four-hour RTO; not an SLA |
-| Privacy Notice | OWNER ACTION | Substantive draft positions are owner-approved; final provider/retention facts, version, effective date and publication approval remain required |
-| Service Terms | OWNER ACTION | Substantive commercial positions are owner-approved; final version, effective date and publication approval remain required |
+| Privacy Policy | PASS | Exact owner-approved version `2026-09-15`, effective 15 September 2026, with enabled-provider disclosure and canonical SHA-256 fingerprint |
+| Service Terms | PASS | Exact owner-approved version `2026-09-15`, effective 15 September 2026, with canonical SHA-256 fingerprint |
 | Durable Terms acceptance | PASS | Migration `0063_terms_acceptance`, admin-only explicit acceptance, immutable forced-RLS evidence, export/deletion integration and server-side trial/Checkout gates |
-| GST presentation | OWNER ACTION | Confirm registration/treatment and choose inclusive or exclusive language consistently; current public copy remains unchanged |
+| GST presentation | PASS | Owner confirmed GST-inclusive standard customer totals on 11 September 2026; billing remains disabled until the legal release and named production proofs pass |
 | Production hosting/API/worker | OWNER ACTION | Approve USD 120/month fixed paid/customer-data baseline before any resource is created |
 | Production database/storage | OWNER ACTION | Included in target purchase; create separate migration/runtime roles and private bucket |
 | Clerk production auth | OWNER ACTION | Approve Clerk Pro; create/configure separate production instance, domain, JWT template, invite policy, branding and smoke matrix |
@@ -157,7 +160,7 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | DNS/TLS | OWNER ACTION | Create target first, copy provider-issued targets, approve `@`/`www`/`api` records and validate TLS before HSTS |
 | Primary domain | PASS | Canonical recommendation is `https://oryntela.com.au`; leave `oryntela.com` unchanged pending owner decision |
 | Oryntela system/support email | PASS | Existing Zoho sender/routes and SPF/DKIM/DMARC proof remain valid; Clerk will own identity mail when configured |
-| Public marketing routes/SEO assets | PASS | Routes, canonical, sitemap and OpenGraph exist; legal routes intentionally remain non-indexed GAP pages |
+| Public marketing routes/SEO assets | PASS | Routes, canonical, sitemap and OpenGraph exist; complete owner-review legal drafts remain visibly draft and non-indexed |
 | Public production publication | BLOCKED | Legal, GST, hosting, auth, backup, monitoring, secrets, DNS/TLS and target smoke have not passed |
 | Production customer onboarding | BLOCKED | WO-045 is not started and no named-target/partner gate is complete |
 | Customer-data migration | NOT REQUIRED | No customer data exists |
@@ -230,9 +233,9 @@ required` means no public exact price exists; it is not authority to accept a qu
 
 ### BATCH A — LEGAL / COMMERCIAL DECISIONS
 
-**ACTION:** Approve final Privacy Notice, Service Terms, contracting/publishing facts and subprocessor schedule after qualified review. **WHY:** the build and all public/customer-data levels fail closed without versioned, effective, fingerprinted legal releases. **COST:** UNKNOWN/quote required. **CARD REQUIRED:** UNKNOWN. **AUTO-RENEW:** UNKNOWN. **OWNER CREDENTIAL/ROLE:** contracting owner and qualified Australian legal/privacy adviser. **UNLOCKS:** legal release records and public provider URLs. **CAN LAUNCH WITHOUT IT:** NO for every public or customer-data level. **RECOMMENDATION:** resolve the factual gaps; do not approve the draft as legal advice.
+**COMPLETED — 15 September 2026:** The owner approved the exact final Privacy Policy and Service Terms text, selected effective date `2026-09-15` and authorised production publication. The release is versioned and fingerprinted atomically. This approval does not enable billing, Credits, checkout or a real charge; those remain behind a separate explicit owner gate.
 
-**ACTION:** Confirm GST registration/treatment and choose consistent inclusive or exclusive presentation plus any separately approved Stripe Tax treatment. Live Stripe is now the owner-selected subscription-payment implementation; WO-055 remains only the exceptional manual paid-Credit path. **WHY:** ABN does not establish GST status, and live checkout fails closed until the tax decision has a durable approval reference. **COST:** advice UNKNOWN; Stripe has AUD 0 fixed standard fee plus researched transaction/Billing fees once activated. **CARD REQUIRED:** NO for the decision; Stripe requires business/bank verification to activate. **AUTO-RENEW:** usage-based after activation. **OWNER CREDENTIAL/ROLE:** entity/tax records, accountant/legal authority and product owner. **UNLOCKS:** truthful price/tax language and external Stripe configuration/preflight. **CAN LAUNCH WITHOUT IT:** YES for private synthetic/free design-partner work; NO for paid launch. **RECOMMENDATION:** resolve GST before creating live Prices or enabling checkout.
+**ACTION:** Apply the owner decision that the six standard prices are GST-inclusive, confirm any live invoice/tax configuration, and record the durable policy reference before billing preflight. Live Stripe remains the selected subscription-payment implementation; WO-055 remains only the exceptional manual paid-Credit path. **WHY:** checked-in billing deliberately fails closed until tax treatment and the owner-approved documents are durable configuration facts. **COST:** AUD 0 for this decision; provider fees apply only if separately activated. **CARD REQUIRED:** NO for the decision; Stripe later requires business/bank verification. **AUTO-RENEW:** usage-based after activation. **OWNER CREDENTIAL/ROLE:** entity/tax records and product owner. **UNLOCKS:** later live Stripe configuration/preflight. **CAN LAUNCH WITHOUT IT:** YES for private synthetic work; NO for paid launch. **RECOMMENDATION:** keep live billing disabled until the entire preflight passes.
 
 **ACTION:** Approve the minimum fixed production budget and first-customer provider profile. **WHY:** paid/customer-data production needs HA PostgreSQL and Clerk Pro; the advertised Sales Brain profile needs an approved AI provider. **COST:** USD 120/month fixed month-to-month before tax/FX, plus S3/job usage and any OpenAI spend; proposed OpenAI stop amount AUD 50/month. **CARD REQUIRED:** YES. **AUTO-RENEW:** YES for DigitalOcean/Clerk; usage-based for AWS/OpenAI. **OWNER CREDENTIAL/ROLE:** owner/billing authority plus privacy approval for OpenAI. **UNLOCKS:** Batch B and a precise no-AI versus bounded-AI offer. **CAN LAUNCH WITHOUT IT:** NO for external production activation; OpenAI alone can be omitted only from an explicitly reduced synthetic/no-AI offer. **RECOMMENDATION:** approve an AUD 220/month platform ceiling before tax/FX with the OpenAI stop amount separately stated; keep Prospect disabled.
 

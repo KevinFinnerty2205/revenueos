@@ -14,7 +14,7 @@ The production candidate is the modular monolith described by [ADR 0077](../08-d
 
 Production activation is fail-closed at distinct infrastructure and commercial points:
 
-- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth or non-production Clerk public key. This permits the production identity shell and synthetic infrastructure proof before legal approval; it does not authorise a trial, paid checkout, customer data or public launch.
+- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth or non-production Clerk public key. The approved legal release permits publication, but does not itself authorise a trial, paid checkout, customer data or a broader public launch.
 - `/health/ready` rejects a missing Clerk server secret or missing/non-40-hex `ORYNTELA_RELEASE_SHA` without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config. `production-preflight` also fails until the owner-approved Terms version and effective date are locked for acceptance.
 - The API's Terms service keeps acceptance unavailable while either legal document is draft. Trial activation and paid checkout recheck that server-owned authority before any provider or billing side effect and remain denied until the approved, effective-dated release is current.
 
@@ -27,7 +27,7 @@ This first deployment may contain synthetic data only. The target manifest inten
 | Development     | labelled mock auth and synthetic local data                                      | local HTTP permitted; normal developer SEO behaviour                                                                                                                      | deterministic mocks only unless a developer explicitly configures a test provider  |
 | Test            | deterministic isolated fixtures; no external credentials                         | test runner; robots disallow all                                                                                                                                          | contract-compatible mocks; external credentials never skip tests                   |
 | Preview/staging | separate Clerk development instance, synthetic data and separate database/bucket | `ORYNTELA_ENVIRONMENT=staging`; exact HTTPS origins; global `noindex`; production secrets prohibited                                                                      | all external execution off unless a bounded sandbox smoke is separately authorised |
-| Production      | Clerk production instance; no customer data until WO-045                         | exact `.com.au` origins; identity and synthetic proof may run while legal copy is draft, but trial/checkout/public launch remain blocked; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass              |
+| Production      | Clerk production instance; no customer data until WO-045                         | exact `.com.au` origins; legal version `2026-09-15` is indexable; trial requires exact administrator acceptance; checkout remains disabled; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass              |
 
 The complete production handoff template is `infra/environments/production.env.example`. Classification:
 
@@ -136,23 +136,30 @@ merely because it exists in DNS.
 
 ### Stripe live preparation record (inactive)
 
-WO-054B makes the adapter production-capable but does not activate it. The checked-in
-production template deliberately remains `API_FEATURE_BILLING_ENABLED=false`,
-`API_BILLING_PROVIDER_NAME=deterministic`, `API_BILLING_MODE=test`, GST unresolved and
-all live Stripe references empty. The following owner sequence must be performed in
-order under separate activation authority:
+WO-054B makes the adapter production-capable. The checked-in production template
+deliberately remains `API_FEATURE_BILLING_ENABLED=false`,
+`API_BILLING_PROVIDER_NAME=deterministic`, `API_BILLING_MODE=test`, tax treatment
+unset and all live Stripe references empty. The live DigitalOcean target separately
+holds encrypted live Stripe references and `inclusive` tax treatment, but preserves
+`API_FEATURE_BILLING_ENABLED=false`. The owner confirmed GST-inclusive fixed customer
+totals on 11 September 2026, completed Stripe certification on 15 September 2026,
+and the read-only live preflight passes. The remaining sequence is:
 
-1. Owner/accounting resolves GST presentation and Stripe tax treatment, records the
-   durable policy reference, and approves the final Privacy Notice and Service Terms.
-2. Owner creates and verifies the Stripe business account, including contracting
-   entity, Australian business verification, settlement bank account and support
-   contact. Do not put identity or bank evidence in Git or tickets.
-3. Configure Oryntela branding, approved legal URLs and a Stripe-accepted statement
-   descriptor. Keep the existing 14-day Complete trial outside Stripe: no card, no
-   automatic conversion and no automatic charge.
-4. Create the exact live Products/Prices below. Enterprise stays a manual commercial
-   process; do not create a self-service Enterprise Price, production Credit pack,
-   coupon or unapproved Stripe Tax configuration.
+1. **Complete 15 September 2026:** owner approved the exact final Privacy Policy and
+   Terms, shared effective date `2026-09-15` and production publication. The release
+   change records the exact versions and canonical fingerprints.
+2. Deploy the approved release and prove public legal links, durable acceptance and
+   production preflight while billing remains disabled.
+
+Completed inactive Stripe control-plane preparation, retained here as the recovery
+record:
+
+1. Oryntela branding and Stripe-accepted statement descriptors are configured. The
+   existing 14-day Complete trial remains outside Stripe: no card, automatic
+   conversion or automatic charge.
+2. The following exact live Products/Prices exist. Enterprise remains a manual
+   commercial process; no self-service Enterprise Price, production Credit pack,
+   coupon or Stripe Tax configuration was created.
 
    | Environment reference               | Amount/recurrence    | Required Price metadata                                         |
    | ----------------------------------- | -------------------- | --------------------------------------------------------------- |
@@ -163,46 +170,48 @@ order under separate activation authority:
    | `API_STRIPE_PRICE_COMPLETE_MONTHLY` | AUD 500 every month  | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
    | `API_STRIPE_PRICE_COMPLETE_ANNUAL`  | AUD 5,000 every year | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
 
-5. Put only references in configuration: the exact verified `acct_` account ID as
-   `API_STRIPE_ACCOUNT_ID`, the six Price IDs above, `sk_live_` secret as
-   `API_STRIPE_SECRET_KEY`, `API_BILLING_TAX_TREATMENT=inclusive|exclusive`, the
+3. The live target stores only encrypted secrets and references: the exact verified
+   `acct_` account ID as `API_STRIPE_ACCOUNT_ID`, the six Price IDs above, `sk_live_`
+   secret as `API_STRIPE_SECRET_KEY`, `API_BILLING_TAX_TREATMENT=inclusive`, the
    approved `API_BILLING_TAX_POLICY_REFERENCE`, exact HTTPS return URLs and
-   `API_STRIPE_API_VERSION=2026-08-26.dahlia`. Keep the feature flag false.
-6. Configure the live webhook at
-   `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`, pin it to
-   `2026-08-26.dahlia`, and subscribe only to `checkout.session.completed`,
+   `API_STRIPE_API_VERSION=2026-08-26.dahlia`. The feature flag remains false.
+4. The live webhook is configured at
+   `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`, pinned to
+   `2026-08-26.dahlia` and subscribed only to `checkout.session.completed`,
    `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
    `invoice.payment_failed`, `invoice.finalized`, `invoice.voided` and
    `invoice.marked_uncollectible`. Store its `whsec_` value only as
    `API_STRIPE_WEBHOOK_SECRET`.
    The adapter must use subscription-schedule phase `duration` fields; Dahlia does not
    accept the removed `iterations` parameter.
-7. Configure a separate live customer portal. Initially allow invoice history,
-   billing details and payment-method updates; keep plan switching and promotion codes
-   off; set approved legal links and `https://oryntela.com.au/settings` as the return
-   URL. Store its live `bpc_` ID as `API_STRIPE_PORTAL_CONFIGURATION_ID`.
-8. Set `API_BILLING_PROVIDER_NAME=stripe` and `API_BILLING_MODE=live`, still with the
-   feature flag false, then run `revenueos-operations production-preflight` from the
-   exact release. It performs read-only retrieval of the authenticated Account, every
-   Price and portal configuration and fails closed on account identity, charge/payout
-   readiness, portal action policy, ID, mode, activity, AUD amount, recurrence or
-   plan-version metadata mismatch.
-9. Only after separate written authority, run one synthetic/minimum live smoke using
+5. The separate live customer portal allows invoice history, customer-information
+   updates and payment-method updates. Cancellation and subscription changes remain
+   disabled. Its live `bpc_` ID is stored as
+   `API_STRIPE_PORTAL_CONFIGURATION_ID`.
+6. `API_BILLING_PROVIDER_NAME=stripe` and `API_BILLING_MODE=live` are configured with
+   the feature flag false. The exact release's read-only production preflight passes
+   authenticated Account, Price and portal retrieval, including account identity,
+   charge/payout readiness, portal action policy, ID, mode, activity, AUD amount,
+   recurrence and plan-version metadata.
+
+No customer, charge or subscription was created by this preparation. The future
+paid-customer gate remains unapproved:
+
+1. Only after separate written authority, run one synthetic/minimum live smoke using
    an owner-controlled test identity: admin starts server-owned Core monthly checkout,
    Stripe-hosted collection settles the minimum authorised real transaction, the
    webhook establishes the paid item period/latest paid invoice, the success page
    confirms only after reconciliation, portal loads, end-of-period cancellation and
    reactivation reconcile, and duplicate/stale delivery causes no second effect.
-10. Confirm the database's mode-scoped account/subscription/invoice/receipt projection,
-    `paid_through`, commercial transition, support view and Stripe dashboard agree;
-    capture safe identifiers/results only and refund only under separately approved
-    policy.
-11. Only then enable `API_FEATURE_BILLING_ENABLED=true` for the paid-customer path and
+2. Confirm the database's mode-scoped account/subscription/invoice/receipt projection,
+   `paid_through`, commercial transition, support view and Stripe dashboard agree;
+   capture safe identifiers/results only and refund only under separately approved
+   policy.
+3. Only then enable `API_FEATURE_BILLING_ENABLED=true` for the paid-customer path and
     monitor failed webhooks, reconciliation-required operations and payment failures.
 
-This sequence is a runbook, not permission. None of its external steps has been
-performed. Raw card data stays entirely in Stripe-hosted Checkout/portal surfaces;
-Oryntela does not claim PCI certification.
+This future sequence is a runbook, not permission. Raw card data stays entirely in
+Stripe-hosted Checkout/portal surfaces; Oryntela does not claim PCI certification.
 
 ## 4. Database migration and deployment
 
@@ -220,7 +229,7 @@ If migration fails, keep the new API/worker out of traffic, preserve the databas
 
 ## 5. Backup, restore and objectives
 
-Production policy, pending owner-funded target creation and proof:
+Production policy and WO-054 proof:
 
 - database: DigitalOcean automatic encrypted backups/PITR plus the independent logical bundle; named owner checks managed-backup health daily;
 - application logical bundle: the scheduled App Platform job runs daily at 03:30 Australia/Sydney, streams `pg_dump` plus every source Spaces object through AES-256-GCM, authenticates the format-v2 manifest with a domain-separated HMAC-SHA256 key, uploads each encrypted payload to private AWS S3 Standard in Sydney, uploads the manifest last only after remote size/SHA-256 metadata verification, then downloads and cryptographically verifies the committed bundle before reporting success;
@@ -231,11 +240,13 @@ Production policy, pending owner-funded target creation and proof:
   expired delete markers. S3 evaluates lifecycle asynchronously, so 14 days is a
   rotation threshold rather than a deletion-to-the-second guarantee;
 - secrets/config: provider-controlled recovery/escrow owned separately and never copied into the bundle; maintain a separately controlled offline copy of the backup encryption key; and
-- drill: synthetic before launch, named cloud restore before customer data, quarterly during beta and after material hosting/schema changes.
+- drill: synthetic before launch, named cloud restore before customer data, quarterly during beta and after material hosting/schema changes. The initial named-cloud restore proof passed before any customer data was introduced.
 
-The repository now contains the scheduled remote backup/verify/restore implementation,
-but that is not evidence that an AWS bucket, lifecycle policy, alert route or successful
-cloud restore exists. Those remain **BLOCKED for customer data** until WO-054C/D.
+The private AWS Sydney bucket, encryption, versioning, 14-day lifecycle, least-privilege
+job credential, daily 03:30 schedule and initial restore proof are active. The broken
+credential was removed after the replacement was proven, leaving only the intended
+working backup credential active. Preserve content-free daily freshness monitoring and
+repeat the restore drill quarterly and after material hosting or schema changes.
 
 The logical-backup source principal is a dedicated, tightly controlled backup/migration
 principal able to read all tenant rows despite forced RLS. Never grant that authority

@@ -5,7 +5,7 @@
 - Reviewed main: `90717cb6de9a3d3d2fef422f79f42d32cc3d9f18`
 - Migration head: `0064_deauthorisation`
 - State: core production healthy; Stripe live configuration bound and verified;
-  customer checkout and Credits disabled; legal/public launch gates remain blocked
+  exact legal release owner-approved and bound; customer checkout and Credits disabled
 - Stripe fixed spend in this activation pass: AUD 0 / USD 0; no transaction fee
 - Customer data: none
 
@@ -63,13 +63,15 @@ retain the initial classification until their own reconciliation record is updat
 | DigitalOcean | owner login required; resources uninspected | not configured |
 | AWS | owner login required; resources uninspected | not configured |
 | Clerk | owner login required; application/plan uninspected | not configured |
-| Stripe | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled; draft Terms gate blocks customer billing |
+| Stripe | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled under the separate billing gate |
 | OpenAI API | owner login required; organisation/project/billing uninspected | not configured |
 | Zoho Mail | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing |
 | Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised | not configured; must remain disabled |
 
-PR 88 is still open and draft. It remains untouched. The provider facts are not
-stable enough to finalise the Privacy Notice or perform publication steps 5–10.
+On 15 September 2026 the owner approved the exact PR #88 Terms and Privacy Policy,
+selected effective date `2026-09-15`, and authorised publication. The legal-release
+commit binds those canonical bytes, versions and fingerprints. Until that commit is
+merged and deployed, the runtime remains on the preceding release.
 
 ### Stripe live control-plane evidence — 15 September 2026
 
@@ -97,8 +99,9 @@ stable enough to finalise the Privacy Notice or perform publication steps 5–10
 - Production API and worker use Stripe live mode and the exact live references while
   `API_FEATURE_BILLING_ENABLED=false` and
   `API_FEATURE_CREDITS_ENABLED=false`. The read-only production preflight reported
-  `live_stripe_billing=pass`; its overall status remains blocked by the draft Terms
-  release and incomplete real-data approvals.
+  `live_stripe_billing=pass`; the approved legal release makes
+  `terms_acceptance_release=pass`, while incomplete real-data and billing approvals
+  continue to block customer checkout.
 - No live-money smoke was performed. Customers, charges, subscriptions and refunds
   remain none, and this Stripe configuration incurred no fixed or transaction fee.
 

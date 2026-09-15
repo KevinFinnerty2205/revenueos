@@ -144,16 +144,17 @@ role-aware checks, reviewed consequential actions, AES-256-GCM connector credent
 envelopes, positive allow-listed Deal Room snapshots and organisation export/deletion
 workflows. It explicitly avoids certification, penetration-test and residency claims.
 
-Repository legal evidence gives the following exact status:
+Repository legal evidence gives the following exact status after the 15 September
+2026 owner approval:
 
-- **Privacy: GAP** — no owner-approved public Privacy Notice;
-- **Terms: GAP** — no owner-approved public service Terms; and
+- **Privacy: OWNER APPROVED** — version `2026-09-15`, effective 15 September 2026;
+- **Terms: OWNER APPROVED** — version `2026-09-15`, effective 15 September 2026; and
 - **Contact: READY** — general and support addresses are approved and routing-tested.
 
-The Privacy and Terms shells are useful, linked and honest, but noindex. They are not
-a substitute for the WO-054 legal launch pack. The website must not be treated as
-public-launch ready until approved text, versions, effective dates and acceptance
-mechanics replace those shells.
+The Privacy and Terms pages render the canonical approved documents with visible
+current-version status and indexable metadata. The exact canonical bytes are bound
+to the server registry by SHA-256. Each organisation still requires its own
+administrator acceptance event before trial or paid activation.
 
 ## SEO and social metadata
 
@@ -191,7 +192,7 @@ deployed marketing surface, belongs to WO-054 and must preserve private-route sa
 WO-054 may deploy only after it separately confirms:
 
 1. final canonical domain, hosting, DNS and TLS;
-2. approved Privacy Notice and Terms replacing noindex gap shells;
+2. owner-approved Privacy Policy and Terms replacing draft/noindex status;
 3. exact publisher/contracting treatment and public legal details;
 4. Clerk production verification and public trial eligibility/abuse controls;
 5. live Stripe, tax and purchase behaviour if payment is enabled;

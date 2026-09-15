@@ -220,10 +220,14 @@ set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
 `API_STRIPE_API_VERSION` remains exactly `2026-08-26.dahlia` and the API origin remains
 `https://api.stripe.com`.
 
-GST remains unresolved. `API_BILLING_TAX_TREATMENT` must stay `unresolved` and the
-billing flag must stay false until the owner/accounting decision supplies either
-`inclusive` or `exclusive` plus a durable `API_BILLING_TAX_POLICY_REFERENCE`. This
-engineering work does not choose tax wording or activate Stripe Tax.
+The owner confirmed on 11 September 2026 that the six standard prices are
+GST-inclusive customer totals. The production target records `inclusive` treatment
+with its durable owner-decision reference, and the read-only live Stripe preflight
+passes. The owner approved final Terms and Privacy Policy version `2026-09-15` on
+15 September 2026. `API_FEATURE_BILLING_ENABLED` must nevertheless stay false until
+that release is deployed, its named acceptance proof passes, and the owner separately
+authorises billing enablement. Stripe Tax remains disabled and no customer, charge or
+subscription exists.
 
 The exact live webhook URL is
 `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`. Subscribe only to
