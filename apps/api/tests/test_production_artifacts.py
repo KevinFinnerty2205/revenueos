@@ -164,8 +164,12 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_FEATURE_DATA_EXPORT_ENABLED": "false",
         "API_FEATURE_ORGANISATION_DELETION_ENABLED": "false",
         "API_PRIVATE_BETA_EXTERNAL_AI_APPROVED": "false",
+        "API_PRIVATE_BETA_MAX_GENERATIONS_PER_DAY": "10",
+        "API_PRIVATE_BETA_MAX_OPENAI_REQUESTS_PER_DAY": "10",
         "API_FEATURE_OPENAI_PROVIDER_ENABLED": "false",
         "AI_PROVIDER": "mock",
+        "API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS": "1",
+        "API_WORKER_DEFAULT_MAX_ATTEMPTS": "1",
         "API_FEATURE_BILLING_ENABLED": "false",
         "API_FEATURE_CREDITS_ENABLED": "false",
         "API_BILLING_PROVIDER_NAME": "deterministic",
@@ -187,14 +191,18 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
     }
     assert {key: api_environment[key].get("value") for key in required_inert_values} == required_inert_values
     assert api_environment["OPENAI_MODEL"]["value"] == "gpt-5.6-terra"
-    assert api_environment["OPENAI_MAX_OUTPUT_TOKENS"]["value"] == "4096"
+    assert api_environment["OPENAI_MAX_OUTPUT_TOKENS"]["value"] == "2048"
+    assert api_environment["OPENAI_API_KEY"] == {
+        "key": "OPENAI_API_KEY",
+        "scope": "RUN_TIME",
+        "type": "SECRET",
+    }
     assert api_environment["API_CLERK_SECRET_KEY"] == {
         "key": "API_CLERK_SECRET_KEY",
         "scope": "RUN_TIME",
         "type": "SECRET",
     }
     assert {
-        "OPENAI_API_KEY",
         "API_CONNECTOR_CREDENTIAL_MASTER_KEY",
         "API_MICROSOFT_CLIENT_SECRET",
         "API_GOOGLE_CLIENT_SECRET",

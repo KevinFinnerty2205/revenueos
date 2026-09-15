@@ -2,10 +2,13 @@
 
 - Initial evidence date: 11 September 2026 (Australia/Sydney)
 - Latest Stripe control-plane evidence: 15 September 2026 (Australia/Sydney)
-- Reviewed main: `90717cb6de9a3d3d2fef422f79f42d32cc3d9f18`
+- Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
+- Reviewed main: `7c128d6b1367c6c29beb5c670fbf09015652f870`
 - Migration head: `0064_deauthorisation`
 - State: core production healthy; Stripe live configuration bound and verified;
-  exact legal release owner-approved and bound; customer checkout and Credits disabled
+  exact legal release owner-approved and bound; OpenAI project funded and its
+  least-privilege secret bound while execution remains disabled; customer checkout
+  and Credits disabled
 - Stripe fixed spend in this activation pass: AUD 0 / USD 0; no transaction fee
 - Customer data: none
 
@@ -64,7 +67,7 @@ retain the initial classification until their own reconciliation record is updat
 | AWS | owner login required; resources uninspected | not configured |
 | Clerk | owner login required; application/plan uninspected | not configured |
 | Stripe | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled under the separate billing gate |
-| OpenAI API | owner login required; organisation/project/billing uninspected | not configured |
+| OpenAI API | owner-controlled `Personal` organisation; project `Oryntela Production` (`proj_fb1vGtmPRjlbzlMamBvJbPKf`); USD 5 prepaid balance with auto-reload off; organisation and project hard limits each USD 5/month; only `gpt-5.6-terra` allowed at 10,000 TPM / 1 RPM; 90-day service-account key restricted to Responses write and bound as an encrypted runtime secret to API and worker | configured for one synthetic proof; execution remains fail-closed pending reviewed deployment and the recorded smoke |
 | Zoho Mail | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing |
 | Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised | not configured; must remain disabled |
 
@@ -116,6 +119,14 @@ the variable name, safe provider/key identifier and rotation metadata. On
 worker as runtime-only encrypted variables. Read-only reconciliation proved the
 replacement API key before the superseded exposed key was expired.
 
+On 15 September the OpenAI service-account key was bound directly to the API and
+worker as `OPENAI_API_KEY`, encrypted and runtime-only. It expires on 14 December
+2026 and is restricted to write access on `/v1/responses`; all other API resources
+are denied. The first generated value entered an automation trace and was therefore
+treated as exposed, revoked immediately and never bound or used. The replacement
+value was transferred directly without being read and is the only active key for
+this production project.
+
 **Core required:** `CLERK_SECRET_KEY`; `DATABASE_URL` runtime credential;
 `API_DATABASE_CA_CERTIFICATE_BASE64`; Clerk JWKS/issuer/audience configuration;
 `API_OUTREACH_SUPPRESSION_HMAC_KEY`; private Spaces bucket/access credentials; and
@@ -141,29 +152,35 @@ copy. It must never be inside the database, Spaces bucket, S3 backup, Git, a tic
 or a screenshot. Recovery ownership, rotation and revocation sequences are in the
 [incident and secret-rotation runbook](production-incident-and-secret-rotation.md).
 
-## OpenAI AUD 50 control
+## OpenAI synthetic-proof controls
 
-The intended model remains `gpt-5.6-terra`, standard short-context processing at
-USD 2/million input and USD 12/million output tokens on the evidence date. No paid
-request is authorised by this ledger.
+The selected production model is `gpt-5.6-terra`, using the Responses API with
+strict structured output and `store=false`. Published pricing on the evidence date
+is USD 2/million input tokens and USD 12/million output tokens for standard
+processing. The owner separately confirmed the provider's minimum USD 5 prepaid
+purchase plus USD 0.50 tax. The account now displays a USD 5 API credit balance and
+auto-reload is off.
 
-- Set the dedicated project's monthly notification threshold to the owner-approved
-  USD planning equivalent and configure a lower early-warning alert. A notification
-  is not a stop.
-- If the account exposes enforceable organisation/project hard-spend controls, set
-  the narrow project control no higher than the current USD equivalent of AUD 50.
-  Confirm the UI labels it as enforced; do not infer this from a budget alert.
-- If the account uses prepaid billing, buy only the separately approved amount and
-  turn **auto-recharge off**. Prepaid exhaustion can still overshoot during provider
-  processing delay, so it is not an instantaneous hard cap.
-- The application stop is `API_FEATURE_OPENAI_PROVIDER_ENABLED=false` together with
-  the affected customer-content feature flags and worker claim stop. Never replace
-  real-customer output with mock intelligence. The 50 generations/75 attempts daily
-  tenant limits bound volume but are not monetary caps.
+- The organisation and `Oryntela Production` project each enforce a USD 5 monthly
+  hard limit with alerts at 20%, 80% and 100%. The provider warns that enforcement
+  is not instantaneous and final usage can exceed the threshold by a small amount.
+- Project model usage permits only `gpt-5.6-terra`; the saved project rate limit is
+  10,000 tokens/minute and one request/minute.
+- The application stop remains `AI_PROVIDER=mock` together with
+  `API_FEATURE_OPENAI_PROVIDER_ENABLED=false`. Outside the single synthetic smoke
+  window, production must return to that state even though the encrypted key remains
+  bound.
+- The deployment contract allows at most ten generation jobs and ten OpenAI requests
+  per tenant per UTC day, one structured-output attempt, one durable worker attempt,
+  a 30-second OpenAI timeout and 2,048 output tokens.
+- The published Privacy Policy says OpenAI is not enabled in production. Therefore
+  the key and controls are configuration evidence only: no customer-content call is
+  authorised, and permanent provider enablement requires a separately approved legal
+  and real-data release.
 
-New prepaid API accounts require an initial USD 5 minimum purchase; credits expire
-after one year and are non-refundable. That purchase, payment details, project/key
-creation and any synthetic paid request are separate owner boundaries.
+The owner authorised one deliberately supplied synthetic Sales Brain request up to
+USD 0.25 after the reviewed hardening release is deployed and read-only preflight
+passes. That paid proof has not yet run at this ledger revision.
 
 ## DNS and continuation boundary
 
@@ -193,9 +210,11 @@ later PR 88 publication decision.
 4. Sign into or create the company-controlled Stripe account and complete the
    business, identity and Australian bank/payout verification. This starts no fixed
    subscription and authorises no real charge.
-5. Sign into or create the OpenAI API organisation and decide whether to approve the
-   minimum USD 5 prepaid purchase with auto-recharge off and the AUD 50 control
-   profile. Do not create a production key or run a paid request under this pass.
+5. Deploy the reviewed OpenAI hardening release, pass read-only production preflight,
+   run exactly one synthetic request within USD 0.25, capture metadata-only evidence,
+   and immediately return the application provider and feature flag to their disabled
+   values. Do not send customer content or treat the proof as legal authority for
+   continuing production AI use.
 
 Completing a login is not permission for Codex to purchase, deploy, create live
 payment objects, create API keys or accept provider terms. Kevin must return with the

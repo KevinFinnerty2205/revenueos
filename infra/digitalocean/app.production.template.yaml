@@ -254,10 +254,10 @@ services:
         value: "false"
       - key: API_PRIVATE_BETA_MAX_GENERATIONS_PER_DAY
         scope: RUN_TIME
-        value: "50"
+        value: "10"
       - key: API_PRIVATE_BETA_MAX_OPENAI_REQUESTS_PER_DAY
         scope: RUN_TIME
-        value: "75"
+        value: "10"
       - key: API_FEATURE_OPENAI_PROVIDER_ENABLED
         scope: RUN_TIME
         value: "false"
@@ -270,6 +270,15 @@ services:
       - key: API_AI_PROVIDER_TIMEOUT_SECONDS
         scope: RUN_TIME
         value: "10"
+      - key: API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS
+        scope: RUN_TIME
+        value: "1"
+      - key: API_WORKER_DEFAULT_MAX_ATTEMPTS
+        scope: RUN_TIME
+        value: "1"
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
       - key: OPENAI_MODEL
         scope: RUN_TIME
         value: gpt-5.6-terra
@@ -278,7 +287,7 @@ services:
         value: "30"
       - key: OPENAI_MAX_OUTPUT_TOKENS
         scope: RUN_TIME
-        value: "4096"
+        value: "2048"
       - key: API_FEATURE_BILLING_ENABLED
         scope: RUN_TIME
         value: "false"
