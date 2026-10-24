@@ -154,6 +154,7 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_AUTH_MODE": "clerk",
         "API_MOCK_AUTH_ENABLED": "false",
         "API_IDENTITY_JIT_PROVISIONING_ENABLED": "false",
+        "API_HSTS_ENABLED": "true",
         "API_PRIVATE_BETA_REAL_DATA_ENABLED": "false",
         "API_PRIVATE_BETA_PRELAUNCH_INFRASTRUCTURE_ONLY": "true",
         "API_PRIVATE_BETA_DEFAULT_RETENTION_DAYS": "90",
@@ -181,6 +182,7 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_BILLING_PORTAL_RETURN_URL": "https://oryntela.com.au/settings",
         "API_STRIPE_API_VERSION": "2026-08-26.dahlia",
         "API_PROSPECT_RESEARCH_PROVIDER_NAME": "mock",
+        "API_FEATURE_PROSPECT_ENABLED": "false",
         "API_FEATURE_PROSPECT_EXTERNAL_PROVIDER_ENABLED": "false",
         "API_FEATURE_INTEGRATIONS_ENABLED": "false",
         "API_FEATURE_ACTION_EXECUTION_ENABLED": "false",
@@ -272,6 +274,7 @@ def test_web_build_arguments_match_provider_build_time_contract() -> None:
     assert environment["NEXT_PUBLIC_API_BASE_URL"]["value"] == "https://api.oryntela.com.au"
     assert environment["AUTH_MODE"]["value"] == "clerk"
     assert environment["MOCK_AUTH_ENABLED"]["value"] == "false"
+    assert environment["ORYNTELA_HSTS_ENABLED"]["value"] == "true"
     assert environment["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"] == {
         "key": "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
         "scope": "RUN_AND_BUILD_TIME",
@@ -283,6 +286,10 @@ def test_production_environment_contract_is_unique_portable_and_exact() -> None:
     environment = _production_environment_contract()
     assert environment["ORYNTELA_ENVIRONMENT"] == "production"
     assert environment["API_ENVIRONMENT"] == "production"
+    assert environment["ORYNTELA_HSTS_ENABLED"] == "true"
+    assert environment["API_HSTS_ENABLED"] == "true"
+    assert environment["API_FEATURE_PROSPECT_ENABLED"] == "false"
+    assert environment["API_FEATURE_PROSPECT_EXTERNAL_PROVIDER_ENABLED"] == "false"
     assert environment["API_DATABASE_TLS_MODE"] == "verify_full_custom_ca"
     assert environment["API_DATABASE_POOL_SIZE"] == "5"
     assert environment["API_DATABASE_MAX_OVERFLOW"] == "2"
