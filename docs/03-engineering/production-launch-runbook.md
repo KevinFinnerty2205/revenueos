@@ -259,7 +259,7 @@ rerun health, production-equivalent load and recovery tests; and obtain explicit
 owner approval for the resulting production cost. The configuration and preflight
 controls described in [Real-data production operations](real-data-operations.md)
 enforce that gate for real-data mode, live billing enablement and operator-assisted
-trial or paid-plan activation.
+organisation/member provisioning, member re-enablement, trial or paid-plan activation.
 
 The logical-backup source principal is a dedicated, tightly controlled backup/migration
 principal able to read all tenant rows despite forced RLS. Never grant that authority

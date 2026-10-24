@@ -47,6 +47,7 @@ def test_postgresql_commercial_seat_boundary_serialises_concurrent_members() -> 
         try:
             provisioned = await provision_organisation(
                 factory,
+                Settings(environment="test", database_url=database_url),
                 external_organisation_id=external_organisation_id,
                 organisation_name="Synthetic commercial concurrency team",
                 timezone="Australia/Sydney",
@@ -60,6 +61,7 @@ def test_postgresql_commercial_seat_boundary_serialises_concurrent_members() -> 
             for index in range(1, 4):
                 await provision_member(
                     factory,
+                    Settings(environment="test", database_url=database_url),
                     organisation_id=organisation_id,
                     external_user_id=user_external_ids[index],
                     email=f"{user_external_ids[index]}@example.com",
@@ -73,6 +75,7 @@ def test_postgresql_commercial_seat_boundary_serialises_concurrent_members() -> 
                 *(
                     provision_member(
                         factory,
+                        Settings(environment="test", database_url=database_url),
                         organisation_id=organisation_id,
                         external_user_id=user_external_ids[index],
                         email=f"{user_external_ids[index]}@example.com",
@@ -218,6 +221,7 @@ def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
         try:
             provisioned = await provision_organisation(
                 factory,
+                settings,
                 external_organisation_id=f"org_terms_concurrency_{suffix}",
                 organisation_name="Synthetic Terms concurrency team",
                 timezone="Australia/Sydney",
@@ -231,6 +235,7 @@ def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
             user_id = uuid.UUID(provisioned.user_id)
             second_admin = await provision_member(
                 factory,
+                settings,
                 organisation_id=organisation_id,
                 external_user_id=f"user_terms_concurrency_second_{suffix}",
                 email=f"terms-concurrency-second-{suffix}@example.com",

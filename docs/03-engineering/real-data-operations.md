@@ -34,9 +34,11 @@ in `API_PRIVATE_BETA_CAPACITY_RESILIENCE_REVIEW_REFERENCE` and
 `API_PRIVATE_BETA_PRODUCTION_COST_APPROVAL_REFERENCE`, then deliberately set the
 pre-launch-only marker to `false`. A flag change or one reference alone cannot open
 the gate. The same readiness predicate rejects `API_FEATURE_BILLING_ENABLED=true`
-in production and is checked again by operator-assisted trial and paid-plan
-activation before any database mutation. This prevents a checkout flag, webhook
-path or support command from bypassing the infrastructure review.
+in production and is checked again by operator-assisted organisation/member
+provisioning, member re-enablement, trial and paid-plan activation before any
+database mutation. This prevents a
+checkout flag, webhook path or support command from bypassing the infrastructure
+review.
 
 The migration role is separate. A production runtime-role sketch is:
 
@@ -76,7 +78,7 @@ immutable provisioning/commercial events. Native CRM itself is Core; select the 
 add-on only for supported external CRM connector access. Repeating identical input
 returns `already_applied`; reusing the key for different input blocks.
 
-Add a verified Clerk user with `provision-member` and its printed exact confirmation. Role changes and disable/re-enable use the existing authenticated admin membership route so the decision remains visible to the tenant. Disable the Clerk membership/session first for emergency revocation, then disable Oryntela membership. Existing business history remains, active personal targets are archived and access/download grants fail on the next API request; already-issued JWTs remain valid only until Clerk revocation/expiry, so the target Clerk policy and measured maximum latency belong in partner evidence.
+Add a verified Clerk user with `provision-member` and its printed exact confirmation. The paid-customer resilience gate blocks both this command and member re-enablement while the pre-launch infrastructure marker remains set. Role changes and disable/re-enable use the existing authenticated admin membership route so the decision remains visible to the tenant. Disable the Clerk membership/session first for emergency revocation, then disable Oryntela membership. Existing business history remains, active personal targets are archived and access/download grants fail on the next API request; already-issued JWTs remain valid only until Clerk revocation/expiry, so the target Clerk policy and measured maximum latency belong in partner evidence.
 
 Run `tenant-preflight --organisation-id <uuid>` before access. It checks an active admin, Native CRM configuration and pipeline/import state without printing names or content.
 

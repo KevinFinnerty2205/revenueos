@@ -612,6 +612,7 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
 
 async def provision_organisation(
     session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
     *,
     external_organisation_id: str,
     organisation_name: str,
@@ -625,6 +626,12 @@ async def provision_organisation(
     retention_days: int | None = 90,
     native_crm: bool = True,
 ) -> ProvisioningResult:
+    if settings.environment == "production" and not settings.paid_customer_resilience_gate_ready:
+        raise PublicAPIError(
+            "paid_customer_resilience_gate_blocked",
+            "Organisation provisioning is blocked until capacity, resilience and production cost are approved.",
+            503,
+        )
     external_organisation_id = external_organisation_id.strip()
     admin_external_user_id = admin_external_user_id.strip()
     organisation_name = organisation_name.strip()
@@ -845,6 +852,7 @@ async def provision_organisation(
 
 async def provision_member(
     session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
     *,
     organisation_id: uuid.UUID,
     external_user_id: str,
@@ -854,6 +862,12 @@ async def provision_member(
     idempotency_key: str,
     operator_reference: str,
 ) -> ProvisioningResult:
+    if settings.environment == "production" and not settings.paid_customer_resilience_gate_ready:
+        raise PublicAPIError(
+            "paid_customer_resilience_gate_blocked",
+            "Member provisioning is blocked until capacity, resilience and production cost are approved.",
+            503,
+        )
     external_user_id = external_user_id.strip()
     display_name = display_name.strip()
     if not external_user_id or len(external_user_id) > 255:
@@ -1167,6 +1181,7 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
                 return 2, {"status": "blocked", "code": "confirmation_mismatch"}
             provisioning_result = await provision_organisation(
                 session_factory,
+                settings,
                 external_organisation_id=arguments.external_organisation_id,
                 organisation_name=arguments.organisation_name,
                 timezone=arguments.timezone,
@@ -1186,6 +1201,7 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
                 return 2, {"status": "blocked", "code": "confirmation_mismatch"}
             member_result = await provision_member(
                 session_factory,
+                settings,
                 organisation_id=arguments.organisation_id,
                 external_user_id=arguments.external_user_id,
                 email=arguments.email,
