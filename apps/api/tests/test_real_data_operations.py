@@ -47,6 +47,9 @@ def safe_real_data_settings(**changes: object) -> Settings:
         "cors_origins": "https://app.example.test",
         "allowed_hosts": "api.example.test",
         "private_beta_real_data_enabled": True,
+        "private_beta_prelaunch_infrastructure_only": False,
+        "private_beta_capacity_resilience_review_reference": "capacity-review-001",
+        "private_beta_production_cost_approval_reference": "owner-cost-approval-001",
         "private_beta_legal_approval_reference": "approval-private-beta-001",
         "private_beta_support_email": "support@example.test",
         "private_beta_export_directory": "/var/lib/revenueos/private-exports",
@@ -83,6 +86,7 @@ def test_real_data_configuration_has_one_known_safe_restricted_profile() -> None
     settings = safe_real_data_settings()
 
     assert settings.private_beta_real_data_enabled is True
+    assert settings.paid_customer_resilience_gate_ready is True
     assert settings.safe_feature_flags()["nativeCrm"] is True
     assert settings.safe_feature_flags()["revenueBrain"] is False
 
@@ -96,6 +100,15 @@ def test_real_data_configuration_has_one_known_safe_restricted_profile() -> None
         ({"visual_storage_backend": "local"}, "S3-compatible object storage"),
         ({"feature_revenue_brain_enabled": True}, "mock intelligence"),
         ({"log_level": "DEBUG"}, "must not be DEBUG"),
+        ({"private_beta_prelaunch_infrastructure_only": True}, "pre-launch infrastructure"),
+        (
+            {"private_beta_capacity_resilience_review_reference": None},
+            "capacity/resilience review and production-cost approval",
+        ),
+        (
+            {"private_beta_production_cost_approval_reference": None},
+            "capacity/resilience review and production-cost approval",
+        ),
     ],
 )
 def test_real_data_configuration_rejects_unsafe_variants(change: dict[str, object], message: str) -> None:

@@ -576,6 +576,15 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
             )
     checks.append(
         PreflightCheck(
+            "paid_customer_resilience_gate",
+            "pass" if settings.paid_customer_resilience_gate_ready else "fail",
+            "The deployment has an approved capacity/resilience review and resulting production-cost approval."
+            if settings.paid_customer_resilience_gate_ready
+            else "Pre-launch infrastructure cannot admit customer data until capacity, resilience and cost are reapproved.",
+        )
+    )
+    checks.append(
+        PreflightCheck(
             "real_data_release_approvals",
             "pass"
             if settings.private_beta_real_data_enabled

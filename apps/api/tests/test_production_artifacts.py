@@ -126,7 +126,7 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
     assert services["api"]["termination"] == {"drain_seconds": 15, "grace_period_seconds": 120}
     for component in (*services.values(), *workers.values()):
         assert component["instance_count"] == 1
-        assert component["instance_size_slug"] == "apps-s-1vcpu-1gb-fixed"
+        assert component["instance_size_slug"] == "apps-s-1vcpu-0.5gb"
     assert workers["worker"]["run_command"] == "revenueos-ai-worker"
     assert workers["worker"]["liveness_health_check"] == {
         "http_path": "/health",
@@ -155,6 +155,7 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_MOCK_AUTH_ENABLED": "false",
         "API_IDENTITY_JIT_PROVISIONING_ENABLED": "false",
         "API_PRIVATE_BETA_REAL_DATA_ENABLED": "false",
+        "API_PRIVATE_BETA_PRELAUNCH_INFRASTRUCTURE_ONLY": "true",
         "API_PRIVATE_BETA_DEFAULT_RETENTION_DAYS": "90",
         "API_CLERK_API_BASE_URL": "https://api.clerk.com/v1",
         "API_CLERK_API_CONNECT_TIMEOUT_SECONDS": "5",
@@ -190,6 +191,11 @@ def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None
         "API_FEATURE_SALESFORCE_CRM_ENABLED": "false",
     }
     assert {key: api_environment[key].get("value") for key in required_inert_values} == required_inert_values
+    for key in (
+        "API_PRIVATE_BETA_CAPACITY_RESILIENCE_REVIEW_REFERENCE",
+        "API_PRIVATE_BETA_PRODUCTION_COST_APPROVAL_REFERENCE",
+    ):
+        assert api_environment[key] == {"key": key, "scope": "RUN_TIME"}
     assert api_environment["OPENAI_MODEL"]["value"] == "gpt-5.6-terra"
     assert api_environment["OPENAI_MAX_OUTPUT_TOKENS"]["value"] == "2048"
     assert api_environment["OPENAI_API_KEY"] == {

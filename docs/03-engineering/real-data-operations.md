@@ -20,8 +20,23 @@ The command exits non-zero unless typed configuration has already passed and it 
 prove: current Alembic head `0064_deauthorisation`; immutable 40-hex release identity; a runtime PostgreSQL role
 that is neither superuser nor `BYPASSRLS`; transaction-local tenant context reset;
 private object write/read/delete; tenant-scoped durable S3 export write/read/delete; real-data
-flag; legal approval reference; and support address. Output contains safe feature
-states and generic results only.
+flag; legal approval reference; support address; and the paid-customer resilience gate.
+Output contains safe feature states and generic results only.
+
+The deliberately downsized pre-launch environment sets
+`API_PRIVATE_BETA_PRELAUNCH_INFRASTRUCTURE_ONLY=true`. While that marker is set,
+typed configuration rejects real-data mode and `production-preflight` reports
+`paid_customer_resilience_gate=fail`. Before any real customer data, the owner must
+approve a fresh capacity/resilience record covering database size, web/API/worker
+memory, database connection limits, the required PostgreSQL standby/HA posture, and
+new health/load/recovery results. Record that review and the resulting cost approval
+in `API_PRIVATE_BETA_CAPACITY_RESILIENCE_REVIEW_REFERENCE` and
+`API_PRIVATE_BETA_PRODUCTION_COST_APPROVAL_REFERENCE`, then deliberately set the
+pre-launch-only marker to `false`. A flag change or one reference alone cannot open
+the gate. The same readiness predicate rejects `API_FEATURE_BILLING_ENABLED=true`
+in production and is checked again by operator-assisted trial and paid-plan
+activation before any database mutation. This prevents a checkout flag, webhook
+path or support command from bypassing the infrastructure review.
 
 The migration role is separate. A production runtime-role sketch is:
 

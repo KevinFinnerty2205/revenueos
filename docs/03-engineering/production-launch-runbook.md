@@ -221,7 +221,7 @@ Before every release:
 2. Confirm a recent recoverable database backup and last restore result. If a migration is not backwards-compatible with the last app release, stop worker claims and schedule downtime.
 3. Run `alembic current` and verify the source state. Never edit `alembic_version` manually.
 4. Run once using the migration credential: `alembic upgrade head`.
-5. Verify `alembic current` is `0064_deauthorisation`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`; a draft release must keep the overall result blocked.
+5. Verify `alembic current` is `0064_deauthorisation`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`. Before real customer data, also require `paid_customer_resilience_gate=pass`, backed by a fresh capacity/resilience review and explicit owner approval of the resulting production cost. A draft release or the downsized pre-launch profile must keep the overall result blocked.
 6. Deploy the API and require `/health/live` = 200 and `/health/ready` = 200 before traffic. Start the exact same release's single worker and require its private liveness probe. Deploy web and require `/health/ready` = 200.
 7. Run the synthetic smoke matrix below. Inspect safe error rate/restarts and queue summaries before marking the release healthy.
 
@@ -247,6 +247,19 @@ job credential, daily 03:30 schedule and initial restore proof are active. The b
 credential was removed after the replacement was proven, leaving only the intended
 working backup credential active. Preserve content-free daily freshness monitoring and
 repeat the restore drill quarterly and after material hosting or schema changes.
+
+### Downsized pre-launch profile
+
+The 15 September 2026 owner decision reduces web, API and worker to one 512 MiB
+shared-CPU container each and PostgreSQL to the 1 GiB single-node development tier.
+This profile is for synthetic pre-launch work only and is not the paid-customer
+resilience standard. Before customer onboarding or real customer data, reassess the
+database and component sizes, database connection limits and HA/standby requirement;
+rerun health, production-equivalent load and recovery tests; and obtain explicit
+owner approval for the resulting production cost. The configuration and preflight
+controls described in [Real-data production operations](real-data-operations.md)
+enforce that gate for real-data mode, live billing enablement and operator-assisted
+trial or paid-plan activation.
 
 The logical-backup source principal is a dedicated, tightly controlled backup/migration
 principal able to read all tenant rows despite forced RLS. Never grant that authority

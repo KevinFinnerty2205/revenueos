@@ -364,6 +364,7 @@ class CommercialService:
         reason: str,
         expected_lock_version: int = 0,
     ) -> CommercialProjectionResponse:
+        self._require_customer_activation_ready()
         actor_reference, reason = self._validate_operator_metadata(actor_reference, reason)
         now = _aware(self._now())
         await ensure_plan_catalogue(self.session)
@@ -436,6 +437,7 @@ class CommercialService:
         source: Literal["manual_support", "billing_provider"] = "manual_support",
         commit: bool = True,
     ) -> CommercialProjectionResponse:
+        self._require_customer_activation_ready()
         actor_reference, reason = self._validate_operator_metadata(actor_reference, reason)
         now = _aware(self._now())
         requested_add_ons = tuple(sorted(set(add_ons)))
@@ -504,6 +506,14 @@ class CommercialService:
         if commit:
             await self._commit(organisation_id, "The commercial plan could not be assigned.")
         return await self.projection(organisation_id)
+
+    def _require_customer_activation_ready(self) -> None:
+        if self.settings.environment == "production" and not self.settings.paid_customer_resilience_gate_ready:
+            raise PublicAPIError(
+                "paid_customer_resilience_gate_blocked",
+                "Customer activation is blocked until capacity, resilience and production cost are approved.",
+                503,
+            )
 
     async def change_state(
         self,

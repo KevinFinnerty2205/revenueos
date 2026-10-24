@@ -234,6 +234,37 @@ def test_trial_boundaries_are_deterministic_and_never_charge_or_delete() -> None
     asyncio.run(with_database(scenario))
 
 
+def test_prelaunch_production_blocks_trial_and_paid_plan_activation_before_database_mutation() -> None:
+    async def scenario(factory: async_sessionmaker[AsyncSession], organisation_id: UUID, user_id: UUID) -> None:
+        del user_id
+        prelaunch_settings = settings().model_copy(update={"environment": "production"})
+        async with factory() as session:
+            service = CommercialService(session, prelaunch_settings, now=lambda: FIXED_NOW)
+            with pytest.raises(PublicAPIError) as trial_blocked:
+                await service.start_trial(
+                    organisation_id,
+                    actor_reference="wo-054-prelaunch-proof",
+                    reason="This must remain blocked before the paid-customer resilience gate passes.",
+                )
+            assert trial_blocked.value.code == "paid_customer_resilience_gate_blocked"
+            assert trial_blocked.value.status_code == 503
+
+            with pytest.raises(PublicAPIError) as paid_plan_blocked:
+                await service.assign_plan(
+                    organisation_id,
+                    plan_code="core",
+                    billing_interval="monthly",
+                    actor_reference="wo-054-prelaunch-proof",
+                    reason="This must remain blocked before the paid-customer resilience gate passes.",
+                    expected_lock_version=0,
+                )
+            assert paid_plan_blocked.value.code == "paid_customer_resilience_gate_blocked"
+            assert paid_plan_blocked.value.status_code == 503
+            assert await session.scalar(select(func.count()).select_from(OrganisationCommercialState)) == 0
+
+    asyncio.run(with_database(scenario))
+
+
 def test_database_rejects_contradictory_trial_state() -> None:
     async def scenario(factory: async_sessionmaker[AsyncSession], organisation_id: UUID, user_id: UUID) -> None:
         del user_id

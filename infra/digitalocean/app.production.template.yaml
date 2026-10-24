@@ -25,7 +25,7 @@ services:
     dockerfile_path: infra/docker/web.Dockerfile
     source_dir: /
     instance_count: 1
-    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    instance_size_slug: apps-s-1vcpu-0.5gb
     http_port: 8080
     health_check:
       http_path: /health/ready
@@ -100,7 +100,7 @@ services:
     dockerfile_path: infra/docker/api.Dockerfile
     source_dir: /
     instance_count: 1
-    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    instance_size_slug: apps-s-1vcpu-0.5gb
     http_port: 8080
     health_check:
       http_path: /health/ready
@@ -240,6 +240,13 @@ services:
       - key: API_PRIVATE_BETA_REAL_DATA_ENABLED
         scope: RUN_TIME
         value: "false"
+      - key: API_PRIVATE_BETA_PRELAUNCH_INFRASTRUCTURE_ONLY
+        scope: RUN_TIME
+        value: "true"
+      - key: API_PRIVATE_BETA_CAPACITY_RESILIENCE_REVIEW_REFERENCE
+        scope: RUN_TIME
+      - key: API_PRIVATE_BETA_PRODUCTION_COST_APPROVAL_REFERENCE
+        scope: RUN_TIME
       - key: API_PRIVATE_BETA_DEFAULT_RETENTION_DAYS
         scope: RUN_TIME
         value: "90"
@@ -371,7 +378,7 @@ workers:
     source_dir: /
     run_command: revenueos-ai-worker
     instance_count: 1
-    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    instance_size_slug: apps-s-1vcpu-0.5gb
     liveness_health_check:
       http_path: /health
       port: 8081

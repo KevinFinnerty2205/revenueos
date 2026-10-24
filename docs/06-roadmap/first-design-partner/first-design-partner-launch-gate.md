@@ -138,7 +138,7 @@ All are currently **WAITING FOR PARTNER**.
 
 ## Decision rule
 
-Stop immediately on any technical `FAIL`. If technical proof passes but owner/legal approval is absent, the state is **WAITING FOR OWNER/LEGAL APPROVAL**. If both pass but partner approval is absent, the state remains **WAITING FOR PARTNER** and no data may enter. `API_PRIVATE_BETA_REAL_DATA_ENABLED=true` is never approval by itself.
+Stop immediately on any technical `FAIL`. If technical proof passes but owner/legal approval is absent, the state is **WAITING FOR OWNER/LEGAL APPROVAL**. If both pass but partner approval is absent, the state remains **WAITING FOR PARTNER** and no data may enter. `API_PRIVATE_BETA_REAL_DATA_ENABLED=true` is never approval by itself. The 15 September 2026 downsized pre-launch infrastructure also blocks real-data mode until a fresh capacity/resilience review covers database size, component memory, connection limits, HA/standby posture and repeated health/load/recovery proof, and the owner explicitly approves the resulting production cost.
 
 The present highest-level state is **WAITING FOR TARGET ENVIRONMENT PROOF** because
 the owner approval block is blank and no target deployment or named-target drill
