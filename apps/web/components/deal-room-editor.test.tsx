@@ -198,13 +198,13 @@ describe("DealRoomEditor", () => {
     expect(mockedApiRequest).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves unsaved Deal Room edits across close and reopen status refreshes", async () => {
+  it("preserves unsaved Deal Room edits when reopen follows the close response immediately", async () => {
+    const closing = deferred<DealRoomWorkspace>();
+    const reopening = deferred<DealRoomWorkspace>();
     mockedApiRequest
       .mockResolvedValueOnce(workspace())
-      .mockResolvedValueOnce(
-        workspace({ opportunityStatus: "won", canEdit: false }),
-      )
-      .mockResolvedValueOnce(workspace());
+      .mockImplementationOnce(() => closing.promise)
+      .mockImplementationOnce(() => reopening.promise);
 
     render(<DealRoomEditor opportunityId="opportunity-1" />);
 
@@ -217,19 +217,20 @@ describe("DealRoomEditor", () => {
     });
 
     act(() => notifyOpportunityChanged("opportunity-1", "won"));
+    await waitFor(() => expect(mockedApiRequest).toHaveBeenCalledTimes(2));
 
-    expect(
-      await screen.findByText(/unsaved Deal Room edits were preserved/i),
-    ).toHaveTextContent(/read-only; reopen it before saving/i);
-    expect(screen.getByLabelText(/Customer-facing overview/i)).toHaveValue(
-      "Unsaved reviewed context",
-    );
-    expect(screen.getByLabelText(/Link expiry/i)).toHaveValue(
-      "2026-10-31T09:30",
-    );
-    expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
+    await act(async () => {
+      closing.resolve(workspace({ opportunityStatus: "won", canEdit: false }));
+      await Promise.resolve();
+      notifyOpportunityChanged("opportunity-1", "open");
+      await Promise.resolve();
+    });
+    expect(mockedApiRequest).toHaveBeenCalledTimes(3);
 
-    act(() => notifyOpportunityChanged("opportunity-1", "open"));
+    await act(async () => {
+      reopening.resolve(workspace());
+      await Promise.resolve();
+    });
 
     expect(
       await screen.findByText(/save them before publishing/i),
@@ -241,7 +242,6 @@ describe("DealRoomEditor", () => {
       "2026-10-31T09:30",
     );
     expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
-    expect(mockedApiRequest).toHaveBeenCalledTimes(3);
   });
 
   it("ignores an aborted status response without losing the latest dirty Deal Room snapshot", async () => {
