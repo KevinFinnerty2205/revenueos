@@ -608,7 +608,7 @@ class DeterministicMockProspectProvider:
                     verification_method="provider_reported",
                     source_key="contact_data",
                     observed_at=datetime(2026, 8, 25, tzinfo=UTC),
-                    expires_at=datetime(2026, 9, 24, tzinfo=UTC),
+                    expires_at=datetime(2099, 9, 24, tzinfo=UTC),
                     export_allowed=True,
                 ),
                 ProviderContactPoint(
