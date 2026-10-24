@@ -11,7 +11,7 @@ from sqlalchemy import and_, exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.campaign_repositories import CampaignRepository
-from revenueos.campaign_services import CampaignService
+from revenueos.campaign_services import CampaignService, campaign_simulation_enabled
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import (
@@ -398,10 +398,13 @@ class CampaignWorkerService:
         connection = await campaign_repository.active_email_connection_for_user(
             tenant.organisation_id,
             enrollment.sender_user_id,
-            microsoft_enabled=self._settings.feature_microsoft_365_enabled,
-            google_enabled=self._settings.feature_google_workspace_enabled,
+            simulation_only=True,
         )
-        if connection is None:
+        if (
+            not campaign_simulation_enabled(self._settings)
+            or connection is None
+            or connection.connector_key != "mock_email"
+        ):
             campaign.state = CampaignState.NEEDS_ATTENTION.value
             campaign.needs_attention_reason = "campaign_mailbox_unavailable"
             campaign.updated_at = datetime.now(UTC)
@@ -897,18 +900,7 @@ class CampaignWorkerService:
         )
 
     def _features_enabled(self) -> bool:
-        return (
-            self._settings.feature_engage_enabled
-            and self._settings.feature_engage_campaigns_enabled
-            and self._settings.feature_integrations_enabled
-            and self._settings.feature_action_execution_enabled
-            and self._settings.feature_action_layer_enabled
-            and (
-                self._settings.feature_microsoft_365_enabled
-                or self._settings.feature_google_workspace_enabled
-                or (self._settings.environment != "production" and self._settings.feature_mock_connectors_enabled)
-            )
-        )
+        return campaign_simulation_enabled(self._settings)
 
     @staticmethod
     def _as_utc(value: datetime) -> datetime:

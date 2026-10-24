@@ -146,6 +146,18 @@ _PAYLOAD_ADAPTER: TypeAdapter[ActionPayload] = TypeAdapter(ActionPayload)
 _SOURCE_ADAPTER: TypeAdapter[list[ActionSourceReference]] = TypeAdapter(list[ActionSourceReference])
 
 
+def connector_execution_enabled(settings: Settings, connector_key: str) -> bool:
+    """Return whether the selected connector, rather than any connector, is enabled."""
+    if connector_key.startswith("mock_"):
+        return settings.feature_mock_connectors_enabled and settings.environment != "production"
+    return {
+        ConnectorKey.HUBSPOT.value: settings.feature_hubspot_crm_enabled,
+        ConnectorKey.SALESFORCE.value: settings.feature_salesforce_crm_enabled,
+        ConnectorKey.MICROSOFT_365.value: settings.feature_microsoft_365_enabled,
+        ConnectorKey.GOOGLE_WORKSPACE.value: settings.feature_google_workspace_enabled,
+    }.get(connector_key, False)
+
+
 class IntegrationService:
     """Tenant connection, OAuth and focused CRM mapping management."""
 
@@ -2348,6 +2360,10 @@ class ActionExecutionService:
             from revenueos.hubspot_connector import HubSpotClient, HubSpotCRMExecutor
 
             live_executor = HubSpotCRMExecutor(HubSpotClient(settings, self.credential_store))
+        if settings.feature_salesforce_crm_enabled:
+            from revenueos.salesforce_connector import SalesforceClient, SalesforceCRMExecutor
+
+            live_executors.append(SalesforceCRMExecutor(SalesforceClient(settings, self.credential_store)))
         if settings.feature_microsoft_365_enabled:
             from revenueos.microsoft_graph import MicrosoftEmailExecutor, MicrosoftGraphClient
 
@@ -2367,6 +2383,7 @@ class ActionExecutionService:
         self._require_execution_features()
         action_record = await self._require_approved_action(action_id)
         connection = await self._require_active_connection(connection_id, for_update=True)
+        self._require_connector_enabled(connection.connector_key)
         await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
@@ -2425,6 +2442,7 @@ class ActionExecutionService:
             if connection.connection_status != ConnectionStatus.ACTIVE.value:
                 continue
             try:
+                self._require_connector_enabled(connection.connector_key)
                 await self._require_connection_entitlement(connection)
                 self._require_outreach_mailbox_binding(action, connection)
                 await self._require_mailbox_email_send_safety(action, connection)
@@ -2460,6 +2478,7 @@ class ActionExecutionService:
             raise PublicAPIError("execution_preview_not_found", "The execution preview was not found.", 404)
         existing = await self.repository.execution_by_preview(self.tenant.organisation_id, preview.id)
         if preview.confirmed_at is not None and existing is not None:
+            self._require_connector_enabled(existing.execution.connector_key)
             return self._execution_response(existing)
         now = datetime.now(UTC)
         if preview.invalidated_at is not None or self._as_utc(preview.expires_at) <= now:
@@ -2476,6 +2495,7 @@ class ActionExecutionService:
                 "action_version_stale", "The approved Action version changed. Review execution again.", 409
             )
         connection = await self._require_active_connection(request.connection_id, for_update=True)
+        self._require_connector_enabled(connection.connector_key)
         await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
@@ -2638,6 +2658,7 @@ class ActionExecutionService:
         if record is None:
             raise PublicAPIError("execution_not_found", "The requested execution was not found.", 404)
         execution = record.execution
+        self._require_connector_enabled(execution.connector_key)
         if execution.execution_mode != "live":
             raise PublicAPIError(
                 "reconciliation_unavailable", "Simulation executions do not require reconciliation.", 409
@@ -2772,6 +2793,7 @@ class ActionExecutionService:
             and self.settings.feature_action_layer_enabled
             and (
                 self.settings.feature_hubspot_crm_enabled
+                or self.settings.feature_salesforce_crm_enabled
                 or self.settings.feature_microsoft_365_enabled
                 or self.settings.feature_google_workspace_enabled
                 or (self.settings.feature_mock_connectors_enabled and self.settings.environment != "production")
@@ -2788,6 +2810,7 @@ class ActionExecutionService:
     def _credential_store(self) -> CredentialStore:
         if not (
             self.settings.feature_hubspot_crm_enabled
+            or self.settings.feature_salesforce_crm_enabled
             or self.settings.feature_microsoft_365_enabled
             or self.settings.feature_google_workspace_enabled
         ):
@@ -3237,6 +3260,7 @@ class ActionExecutionService:
         capability: ConnectorCapability,
         risk_class: ActionRiskClass,
     ) -> ActionExecutor:
+        self._require_connector_enabled(connection.connector_key)
         try:
             state = {ConnectorCapability(item) for item in connection.capability_state_json}
         except ValueError as exc:
@@ -3257,6 +3281,14 @@ class ActionExecutionService:
                 409,
             )
         return executor
+
+    def _require_connector_enabled(self, connector_key: str) -> None:
+        if not connector_execution_enabled(self.settings, connector_key):
+            raise PublicAPIError(
+                "connector_unavailable",
+                "The selected connector is unavailable in this environment.",
+                404,
+            )
 
     @staticmethod
     def _capability(action_type: str) -> ConnectorCapability:
@@ -3384,14 +3416,20 @@ class ActionExecutionService:
             ConnectorCapability.CREATE_ACTIVITY: "Log interaction in CRM",
             ConnectorCapability.CREATE_TASK: "Create task",
         }[capability]
+        crm_opportunity_label = "deal" if definition.connector_key == ConnectorKey.HUBSPOT else "opportunity"
         live_summary = {
             ConnectorCapability.SEND_EMAIL: (
                 f"Send this reviewed email through the connected {definition.display_name} work mailbox."
             ),
-            ConnectorCapability.UPDATE_OPPORTUNITY: "Apply this reviewed field update to the linked HubSpot deal.",
-            ConnectorCapability.UPDATE_CONTACT: "Apply this reviewed field update to the linked HubSpot contact.",
+            ConnectorCapability.UPDATE_OPPORTUNITY: (
+                f"Apply this reviewed field update to the linked {definition.display_name} {crm_opportunity_label}."
+            ),
+            ConnectorCapability.UPDATE_CONTACT: (
+                f"Apply this reviewed field update to the linked {definition.display_name} contact."
+            ),
             ConnectorCapability.CREATE_ACTIVITY: (
-                "Log this reviewed interaction summary against the linked HubSpot deal. No transcript is sent."
+                f"Log this reviewed interaction summary against the linked {definition.display_name} "
+                f"{crm_opportunity_label}. No transcript is sent."
             ),
         }
         simulation_summary = {
@@ -3437,7 +3475,7 @@ class ActionExecutionService:
             ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
                 "Outcome is unknown. Oryntela will not retry without reconciliation."
             ),
-            ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
+            ExecutionStatus.SUCCEEDED: "The reviewed external action completed and was verified.",
         }[status]
         if execution.execution_mode == "live":
             if execution.connector_key in {
@@ -3481,15 +3519,20 @@ class ActionExecutionService:
                         ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
                     }[status]
             else:
+                provider_name = definition.display_name
                 safe_message = {
-                    ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",
-                    ExecutionStatus.EXECUTING: "Oryntela is applying the reviewed HubSpot action.",
-                    ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
-                    ExecutionStatus.FAILED_RETRYABLE: "HubSpot did not apply the action; a bounded retry is safe.",
-                    ExecutionStatus.FAILED_PERMANENT: "The HubSpot action stopped safely and will not be retried.",
-                    ExecutionStatus.CANCELLED: "The HubSpot action was cancelled before execution.",
+                    ExecutionStatus.QUEUED: (f"{provider_name} update queued. No external change has occurred yet."),
+                    ExecutionStatus.EXECUTING: f"Oryntela is applying the reviewed {provider_name} action.",
+                    ExecutionStatus.SUCCEEDED: (f"The reviewed {provider_name} action completed and was verified."),
+                    ExecutionStatus.FAILED_RETRYABLE: (
+                        f"{provider_name} did not apply the action; a bounded retry is safe."
+                    ),
+                    ExecutionStatus.FAILED_PERMANENT: (
+                        f"The {provider_name} action stopped safely and will not be retried."
+                    ),
+                    ExecutionStatus.CANCELLED: (f"The {provider_name} action was cancelled before execution."),
                     ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                        "The HubSpot outcome is unknown. Oryntela will not retry without reconciliation."
+                        f"The {provider_name} outcome is unknown. Oryntela will not retry without reconciliation."
                     ),
                     ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
                 }[status]

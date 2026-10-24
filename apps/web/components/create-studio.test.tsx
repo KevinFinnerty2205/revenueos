@@ -327,6 +327,10 @@ describe("Create", () => {
     expect(
       within(more).getByRole("link", { name: "Pipeline" }),
     ).toHaveAttribute("href", "/opportunities");
+    expect(within(more).getByRole("link", { name: "Tasks" })).toHaveAttribute(
+      "href",
+      "/tasks",
+    );
     expect(
       within(more).getByRole("link", { name: "Insights" }),
     ).toHaveAttribute("href", "/insights");

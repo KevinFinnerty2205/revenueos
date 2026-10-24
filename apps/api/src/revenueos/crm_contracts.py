@@ -164,7 +164,7 @@ class CRMRecordChangeResponse(APIModel):
 
 class CRMActivityItemResponse(APIModel):
     id: str
-    activity_type: Literal["interaction", "outreach", "action", "event", "opportunity"]
+    activity_type: Literal["interaction", "outreach", "task", "event", "opportunity"]
     title: str
     detail: str | None
     occurred_at: datetime

@@ -110,9 +110,10 @@ export default function SecurityPage() {
             </h2>
             <p className="mt-5 text-sm leading-7 text-brand-muted">
               Organisation-scoped export and reviewed deletion workflows cover
-              current product data. Production retention, backup expiry and
-              provider-processing terms must still be owner-approved and
-              published before customer data is accepted.
+              current product data. The owner-approved 90-day application
+              retention setting and 14-day backup rotation are documented for
+              the current production profile. Real customer data remains blocked
+              until its separate release gate is explicitly approved.
             </p>
           </article>
           <article className="rounded-[1.75rem] border border-brand-primary/10 bg-white p-7 sm:p-9">
@@ -133,18 +134,18 @@ export default function SecurityPage() {
           </article>
         </div>
         <p className="mx-auto mt-8 max-w-7xl text-xs leading-6 text-brand-muted">
-          Looking for legal notices? The current repository does not yet contain
-          owner-approved public Privacy or Terms content. Owner-review drafts
-          are available at the links below, while production remains blocked.
-          See the honest status on the{" "}
+          Oryntela&apos;s owner-approved Privacy Policy and Terms &amp;
+          Conditions, effective 15 September 2026, are published below.
+          Publication does not activate customer data, billing, Credits or
+          disabled providers. Read the{" "}
           <Link className="font-bold underline" href="/privacy">
-            Privacy
+            Privacy Policy
           </Link>{" "}
           and{" "}
           <Link className="font-bold underline" href="/terms">
-            Terms
-          </Link>{" "}
-          pages.
+            Terms &amp; Conditions
+          </Link>
+          .
         </p>
       </section>
 

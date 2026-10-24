@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsExperience } from "@/components/settings-experience";
 
 vi.mock("@/components/beta-admin", () => ({
-  BetaAdmin: () => <section>Administrator controls</section>,
+  BetaAdmin: ({ currentUserId }: { currentUserId: string }) => (
+    <section>Administrator controls for {currentUserId}</section>
+  ),
 }));
 vi.mock("@/components/commercial-plan-settings", () => ({
   CommercialPlanSettings: () => <section>Commercial plan controls</section>,
@@ -96,6 +98,6 @@ describe("SettingsExperience", () => {
     expect(screen.getByText("Prospect controls")).toBeVisible();
     expect(screen.getByText("CRM controls")).toBeVisible();
     expect(screen.getByText("Pipeline controls")).toBeVisible();
-    expect(screen.getByText("Administrator controls")).toBeVisible();
+    expect(screen.getByText("Administrator controls for user-1")).toBeVisible();
   });
 });

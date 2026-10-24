@@ -1,5 +1,10 @@
 import { BusinessEntityForm } from "@/components/business-entity-form";
 
-export default function NewContactPage() {
-  return <BusinessEntityForm entity="contacts" />;
+export default async function NewContactPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ companyId?: string }>;
+}) {
+  const { companyId } = await searchParams;
+  return <BusinessEntityForm entity="contacts" initialCompanyId={companyId} />;
 }

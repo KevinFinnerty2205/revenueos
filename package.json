@@ -4,9 +4,11 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "dev:web": "pnpm --filter @revenueos/web dev",
+    "dev:web": "pnpm --filter @revenueos/web dev --hostname 127.0.0.1",
     "dev:api": "uv --directory apps/api run uvicorn revenueos.main:app --reload --port 8000",
     "dev:worker": "uv --directory apps/api run revenueos-ai-worker",
+    "demo:owner": "uv --directory apps/api run revenueos-demo-data owner-demo --organisation-id 00000000-0000-4000-8000-000000000002 --user-id 00000000-0000-4000-8000-000000000001",
+    "demo:reset": "uv --directory apps/api run revenueos-demo-data reset --organisation-id 00000000-0000-4000-8000-000000000002",
     "build:web": "pnpm --filter @revenueos/web build",
     "build:api": "uv --directory apps/api build",
     "build": "pnpm build:web && pnpm build:api",

@@ -23,24 +23,11 @@ export interface MeResponse {
   requestId: string;
 }
 
-export type CommercialPlanCode =
-  | "core"
-  | "growth"
-  | "complete"
-  | "enterprise";
+export type CommercialPlanCode = "core" | "growth" | "complete" | "enterprise";
 export type CommercialStatus =
-  | "trial_active"
-  | "active"
-  | "grace"
-  | "expired"
-  | "inactive"
-  | "suspended";
+  "trial_active" | "active" | "grace" | "expired" | "inactive" | "suspended";
 export type CommercialModuleCode =
-  | "core"
-  | "prospect"
-  | "engage"
-  | "create"
-  | "crm";
+  "core" | "prospect" | "engage" | "create" | "crm";
 
 export interface CommercialProjection {
   plan: {
@@ -159,9 +146,7 @@ export interface BillingCheckoutResponse {
 }
 
 export type TermsAcceptanceSource =
-  | "trial_onboarding"
-  | "subscription_checkout"
-  | "administrative_onboarding";
+  "trial_onboarding" | "subscription_checkout" | "administrative_onboarding";
 
 export interface TermsAcceptanceStatus {
   terms: {
@@ -245,6 +230,9 @@ export interface DealRoomDraftContent {
 }
 
 export interface DealRoomWorkspace {
+  opportunityStatus: OpportunityStatus;
+  canEdit: boolean;
+  canManageAccess: boolean;
   room: {
     id: string;
     opportunityId: string;
@@ -343,11 +331,7 @@ export interface PublicDealRoomResolveResponse {
 }
 
 export type ClosedWonHandoverStatus =
-  | "draft"
-  | "in_review"
-  | "approved"
-  | "superseded"
-  | "retired";
+  "draft" | "in_review" | "approved" | "superseded" | "retired";
 export type HandoverAuthorityType =
   | "customer_evidence"
   | "seller_confirmed"
@@ -1061,7 +1045,7 @@ export interface CRMRecordChange {
 
 export interface CRMActivityItem {
   id: string;
-  activityType: "interaction" | "outreach" | "action" | "event" | "opportunity";
+  activityType: "interaction" | "outreach" | "task" | "event" | "opportunity";
   title: string;
   detail: string | null;
   occurredAt: string;
@@ -3322,7 +3306,8 @@ export interface ProviderCalendarEvent {
   onlineMeetingUrl: string | null;
   sensitivity: string;
   state: "active" | "cancelled" | "deleted";
-  matchState: "unmatched" | "matched" | "review_required" | "internal" | "private";
+  matchState:
+    "unmatched" | "matched" | "review_required" | "internal" | "private";
   contactId: string | null;
   companyId: string | null;
   opportunityId: string | null;
@@ -3339,7 +3324,8 @@ export type MicrosoftSyncResource = ProviderSyncResource;
 export type MicrosoftSyncResponse = ProviderSyncResponse;
 export type MicrosoftSyncStatus = ProviderSyncStatus;
 export type MicrosoftCalendarEvent = ProviderCalendarEvent;
-export type MicrosoftCalendarEventListResponse = ProviderCalendarEventListResponse;
+export type MicrosoftCalendarEventListResponse =
+  ProviderCalendarEventListResponse;
 
 export interface ActionExecutionOption {
   connectionId: string;
@@ -3474,11 +3460,7 @@ export interface OAuthStartResponse {
 }
 
 export type CRMObjectType =
-  | "account"
-  | "company"
-  | "contact"
-  | "opportunity"
-  | "deal";
+  "account" | "company" | "contact" | "opportunity" | "deal";
 
 export interface CRMSearchResult {
   externalObjectType: CRMObjectType;
@@ -3655,9 +3637,7 @@ export interface CRMConflict {
   externalVersion: string;
   mappingVersion: number;
   authority:
-    | "crm_authoritative"
-    | "revenueos_authoritative"
-    | "review_before_sync";
+    "crm_authoritative" | "revenueos_authoritative" | "review_before_sync";
   observedAt: string;
   allowedResolutions: ("provider" | "oryntela" | "manual")[];
   status: "open" | "resolved" | "ignored";
@@ -5766,10 +5746,7 @@ export interface SalesTargetList {
 }
 
 export type SellingProfileRevisionState =
-  | "draft"
-  | "approved"
-  | "superseded"
-  | "retired";
+  "draft" | "approved" | "superseded" | "retired";
 
 export interface SellingOffering {
   name: string;

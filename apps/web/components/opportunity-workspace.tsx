@@ -315,6 +315,12 @@ export function OpportunityWorkspace({
                 >
                   Create presentation
                 </Link>
+                <Link
+                  href={`/interactions/new?companyId=${opportunity.companyId}&opportunityId=${opportunity.id}`}
+                  className="secondary-button"
+                >
+                  Plan interaction
+                </Link>
               </>
             ) : null}
             <Link href="#recommended-actions" className="primary-button">

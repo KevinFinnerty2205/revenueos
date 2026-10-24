@@ -35,8 +35,8 @@ secondary CTA is **Explore the platform**.
 | `/integrations` | Native CRM option and honest Microsoft/Google/HubSpot/Salesforce status    | Index                            |
 | `/security`     | Implemented trust controls, explicit assurance limits and legal dependency | Index                            |
 | `/contact`      | Trial, demo and support mail routes plus concise company identity          | Index                            |
-| `/privacy`      | Honest shell recording the missing approved public Privacy Notice          | Noindex; absent from sitemap     |
-| `/terms`        | Honest shell recording the missing approved public Terms                   | Noindex; absent from sitemap     |
+| `/privacy`      | Canonical owner-approved Privacy Notice                                     | Index                            |
+| `/terms`        | Canonical owner-approved Terms of Service                                   | Index                            |
 | `/sign-in`      | Existing product authentication entry                                      | Noindex; disallowed in robots    |
 | `/deal-room`    | Existing bearer-link buyer route                                           | Noindex/noarchive; not marketing |
 
@@ -170,11 +170,11 @@ OpenGraph description and X/Twitter summary-card metadata. The site-wide OpenGra
 image is generated locally at build time with the approved Oryntela wordmark,
 symbol geometry and palette. No remote asset is needed.
 
-`robots.ts` allows only the selected public marketing surface and disallows product,
-auth, Deal Room and incomplete legal paths. `sitemap.ts` includes only Home,
-Platform, Pricing, Integrations, Security and Contact. Structured data is limited to
-truthful `Organization` and `SoftwareApplication` facts; there are no ratings,
-reviews, customer counts or offer-availability claims.
+`robots.ts` allows the selected public marketing and approved legal surface and
+disallows product, auth and Deal Room paths. `sitemap.ts` includes Home, Platform,
+Pricing, Integrations, Security, Contact, Privacy and Terms. Structured data is
+limited to truthful `Organization` and `SoftwareApplication` facts; there are no
+ratings, reviews, customer counts or offer-availability claims.
 
 ## Privacy, analytics and performance
 
@@ -192,7 +192,8 @@ deployed marketing surface, belongs to WO-054 and must preserve private-route sa
 WO-054 may deploy only after it separately confirms:
 
 1. final canonical domain, hosting, DNS and TLS;
-2. owner-approved Privacy Policy and Terms replacing draft/noindex status;
+2. the current owner-approved Privacy Policy and Terms remaining byte-identical to
+   the server registry and their public routes;
 3. exact publisher/contracting treatment and public legal details;
 4. Clerk production verification and public trial eligibility/abuse controls;
 5. live Stripe, tax and purchase behaviour if payment is enabled;
@@ -216,5 +217,6 @@ The 10 September 2026 engineering review found and fixed three bounded website d
 
 Regression coverage now enumerates every current protected route root against the
 Clerk boundary, samples nested and lookalike paths, verifies canonical protocol rules,
-and exercises the complete mobile-menu keyboard lifecycle. Privacy and Terms remain
-documented WO-054 launch blockers, not unresolved WO-053 engineering defects.
+and exercises the complete mobile-menu keyboard lifecycle. Privacy and Terms were
+subsequently owner-approved and published; their exact versions and per-organisation
+acceptance remain launch controls rather than unresolved website defects.

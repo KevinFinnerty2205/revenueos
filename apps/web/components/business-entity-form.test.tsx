@@ -107,6 +107,73 @@ describe("BusinessEntityForm", () => {
     expect(screen.queryByLabelText(/probability/i)).not.toBeInTheDocument();
   });
 
+  it("prefills the account when an opportunity starts from an account", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/v1/companies")) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [{ id: "company-1", name: "Acme Australia" }],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+            pages: 1,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BusinessEntityForm
+        entity="opportunities"
+        initialCompanyId="company-1"
+      />,
+    );
+
+    expect(await screen.findByLabelText("Account")).toHaveValue("company-1");
+  });
+
+  it("appends an exact prefilled account beyond the first reference page", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/api/v1/companies/company-101")) {
+        return Promise.resolve(
+          jsonResponse({ id: "company-101", name: "Beyond Page Account" }),
+        );
+      }
+      if (path.includes("/api/v1/companies?pageSize=100")) {
+        return Promise.resolve(
+          jsonResponse({
+            items: [{ id: "company-1", name: "First Page Account" }],
+            page: 1,
+            pageSize: 100,
+            total: 101,
+            pages: 2,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BusinessEntityForm
+        entity="opportunities"
+        initialCompanyId="company-101"
+      />,
+    );
+
+    expect(await screen.findByLabelText("Account")).toHaveValue("company-101");
+    expect(
+      screen.getByRole("option", { name: "Beyond Page Account" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/companies/company-101"),
+      expect.any(Object),
+    );
+  });
+
   it("shows safe API validation errors without navigating", async () => {
     vi.stubGlobal(
       "fetch",

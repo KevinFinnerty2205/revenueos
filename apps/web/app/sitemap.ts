@@ -8,12 +8,14 @@ const marketingPages = [
   { path: "/integrations", priority: 0.8 },
   { path: "/security", priority: 0.8 },
   { path: "/contact", priority: 0.7 },
+  { path: "/privacy", priority: 0.6 },
+  { path: "/terms", priority: 0.6 },
 ] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return marketingPages.map((page) => ({
     url: `${siteOrigin}${page.path}`,
-    lastModified: new Date("2026-09-10T00:00:00+10:00"),
+    lastModified: new Date("2026-09-15T00:00:00+10:00"),
     changeFrequency: "monthly",
     priority: page.priority,
   }));

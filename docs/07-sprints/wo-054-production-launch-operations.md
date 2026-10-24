@@ -5,16 +5,21 @@
 - **Date:** 10 September 2026 (Australia/Sydney)
 - **WO-054B baseline:** `3f141ca7593aa3f19bed6c5d7acf46b4638a881c`
 - **WO-054B branch:** `codex/wo-054-live-stripe-production-readiness`
-- **Status:** exact legal release owner-approved and bound for publication; billing, Credits and checkout remain disabled pending their separate gate
+- **Latest reconciliation:** 24 October 2026 (Australia/Sydney)
+- **Status:** downsized synthetic-only production remains in place at USD 35.15/month fixed; exact legal release is published; billing, Credits, checkout, customer data and provider execution remain disabled pending separate gates
 - **Customer data:** none
 - **Feature freeze:** preserved
-- **Current migration:** `0064_deauthorisation`; additive membership authority after `0063_terms_acceptance`
+- **Current repository migration:** `0065_campaign_trigger_guard`
+- **Deployed pre-build migration:** `0064_deauthorisation`; this build-only work does not deploy `0065`
 
-This is the canonical WO-054 launch checklist. It supersedes older target-cost and
-launch-head assumptions for production-operations decisions, without converting any
-recommendation into an owner approval. The implementation does not create hosting,
-provider accounts, OAuth apps, DNS records, production secrets, charges or customer
-data.
+This is the dated WO-054 launch-planning record. It was the canonical purchase and
+activation checklist on 10 September 2026. Subsequent owner-authorised work created
+the downsized synthetic-only environment recorded in the current
+[activation boundary ledger](../03-engineering/wo-054-production-activation-ledger.md).
+Use that ledger and the [production launch runbook](../03-engineering/production-launch-runbook.md)
+for current operations. The historical recommendations below do not authorise a new
+purchase, resize, provider activation, deployment, DNS change, charge or customer
+data. The owner-demo completion branch changes none of those external states.
 
 ## Delivered repository controls
 
@@ -120,7 +125,7 @@ provider reconciliation, retention decision and PR sequence are in the
 [legal production gate](../03-engineering/oryntela-legal-production-gate.md) and
 [ADR 0079](../08-decisions/0079-immutable-organisation-terms-acceptance.md).
 
-## Canonical launch checklist
+## Historical launch checklist — 10 September 2026 baseline
 
 Only `PASS`, `BLOCKED`, `OWNER ACTION` and `NOT REQUIRED` are statuses in this table.
 A repository `PASS` is not proof that a cloud environment or external provider exists.
@@ -141,7 +146,7 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | Worker liveness and duplicate safety | PASS | Private freshness probe plus database leases, locks, idempotency and unknown-outcome handling; baseline count is one worker |
 | Queue/provider/billing monitoring design | PASS | Content-free platform probes, component alerts, termination controls, daily tenant queue/preflight checks and external scheduled-backup freshness requirement |
 | Production monitoring/alert destination | OWNER ACTION | Configure target alerts to Kevin's controlled operational route after hosting exists |
-| PostgreSQL migration head/drift | PASS | Current head is `0064_deauthorisation`; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
+| PostgreSQL migration head/drift | PASS | Current repository Alembic head is `0065_campaign_trigger_guard`; the deployed pre-build environment remains on reviewed migration `0064_deauthorisation` until a separately approved deployment; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
 | Forced RLS in restored database | PASS | The current 174 tenant tables report `ENABLE` and `FORCE RLS`; the earlier restore drill's temporary `NOSUPERUSER NOBYPASSRLS` role saw 28 in-tenant core rows and zero cross-tenant rows |
 | Encrypted local synthetic backup/restore | PASS | Evidence below; database plus three private objects restored and verified |
 | Automated production database backups | OWNER ACTION | Managed backup/PITR begins only after the paid HA cluster is created and its dashboard evidence is captured |
@@ -160,7 +165,7 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | DNS/TLS | OWNER ACTION | Create target first, copy provider-issued targets, approve `@`/`www`/`api` records and validate TLS before HSTS |
 | Primary domain | PASS | Canonical recommendation is `https://oryntela.com.au`; leave `oryntela.com` unchanged pending owner decision |
 | Oryntela system/support email | PASS | Existing Zoho sender/routes and SPF/DKIM/DMARC proof remain valid; Clerk will own identity mail when configured |
-| Public marketing routes/SEO assets | PASS | Routes, canonical, sitemap and OpenGraph exist; complete owner-review legal drafts remain visibly draft and non-indexed |
+| Public marketing routes/SEO assets | PASS | Routes, canonical, sitemap and OpenGraph exist; the owner-approved Privacy Policy and Terms effective 15 September 2026 are published and included in the public index surface |
 | Public production publication | BLOCKED | Legal, GST, hosting, auth, backup, monitoring, secrets, DNS/TLS and target smoke have not passed |
 | Production customer onboarding | BLOCKED | WO-045 is not started and no named-target/partner gate is complete |
 | Customer-data migration | NOT REQUIRED | No customer data exists |
@@ -200,13 +205,18 @@ restored it into a distinct PostgreSQL database/object root, byte-compared the o
 and confirmed 173 forced-RLS tables. Temporary databases, objects and the ephemeral
 key were removed.
 
-Result: **PASS locally for current format**. This is not a claim that production
-backups exist; the named DigitalOcean/AWS drill remains blocked until the owner
-creates the targets.
+Result at the 10 September baseline: **PASS locally for that format**. It was not a
+claim that production backups existed at that time. An existing production backup
+schedule is now retained under the activation ledger, but this build-only pass neither
+re-tests recovery nor creates, deletes or changes any backup target.
 
-## Provider readiness and launch classification
+## Historical provider readiness and launch classification
 
-| Capability | Classification | Current truth |
+The classifications and prices in this section record the 10 September 2026
+proposal. The current downsized environment and no-additional-spend boundary are in
+the activation ledger; nothing below is a current purchase instruction.
+
+| Capability | Classification | Truth at 10 September 2026 baseline |
 | --- | --- | --- |
 | Native Oryntela CRM/Core | MUST HAVE FOR V1 LAUNCH | Repository-ready; target/auth/legal/WO-045 gates remain |
 | Microsoft 365 | CAN LAUNCH DISABLED | Built, production-inactive; use exact OAuth callback after owner app registration and synthetic mailbox proof |
@@ -226,7 +236,7 @@ only the deterministic Native CRM surface. Growth/Complete trials may be provisi
 only with exact feature-availability disclosure; unavailable providers never fall
 back to mocks.
 
-## Consolidated owner action package
+## Historical consolidated owner action package — superseded
 
 Prices are current as of 10 September 2026 and must be rechecked at purchase. `Quote
 required` means no public exact price exists; it is not authority to accept a quote.
@@ -263,7 +273,7 @@ See the dated [cost and Credit economics](../04-commercial/wo-054-production-cos
 [incident/rotation runbook](../03-engineering/production-incident-and-secret-rotation.md)
 for the supporting detail.
 
-## External actions and spend
+## Historical external actions and spend — 10 September 2026
 
 - Read-only official provider documentation and pricing research: performed.
 - Provider account/app/project created: none.

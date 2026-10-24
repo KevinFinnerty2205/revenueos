@@ -161,6 +161,9 @@ def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_project
     workspace = client.get(f"/api/v1/opportunities/{opportunity['id']}/deal-room")
     assert workspace.status_code == 200, workspace.text
     assert workspace.json()["room"] is None
+    assert workspace.json()["opportunityStatus"] == "open"
+    assert workspace.json()["canEdit"] is True
+    assert workspace.json()["canManageAccess"] is True
     assert workspace.json()["entitlement"] == "create"
     assert workspace.json()["creditsRequired"] is False
 
@@ -694,6 +697,11 @@ def test_expired_and_closed_opportunity_links_fail_with_the_same_safe_response(c
             await engine.dispose()
 
     asyncio.run(close_opportunity())
+    closed_workspace = client.get(f"/api/v1/opportunities/{opportunity['id']}/deal-room")
+    assert closed_workspace.status_code == 200, closed_workspace.text
+    assert closed_workspace.json()["opportunityStatus"] == "lost"
+    assert closed_workspace.json()["canEdit"] is False
+    assert closed_workspace.json()["canManageAccess"] is True
     closed = _resolve(client, current_token)
     assert closed.status_code == 404
     assert closed.json()["code"] == safe_body["code"]

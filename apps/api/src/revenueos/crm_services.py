@@ -413,13 +413,13 @@ class CRMService:
         for task in await self.repository.tasks(self.tenant.organisation_id, entity_type, entity_id, limit=20):
             items.append(
                 CRMActivityItemResponse(
-                    id=f"action:{task.id}",
-                    activity_type="action",
+                    id=f"task:{task.id}",
+                    activity_type="task",
                     title=task.title,
                     detail=task.status.replace("_", " ").title(),
                     occurred_at=task.updated_at,
                     href=f"/tasks/{task.id}/edit",
-                    source_label="Action",
+                    source_label="Task",
                 )
             )
         engage_enabled = self.settings.feature_engage_enabled and await self.repository.module_enabled(

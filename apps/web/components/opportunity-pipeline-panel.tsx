@@ -126,7 +126,7 @@ export function OpportunityPipelinePanel({
       });
       setPipeline(response);
       setTargetStageId(firstOpenStage(response)?.id ?? "");
-      notifyOpportunityChanged(opportunityId);
+      notifyOpportunityChanged(opportunityId, response.status);
       return true;
     } catch (reason: unknown) {
       setError(

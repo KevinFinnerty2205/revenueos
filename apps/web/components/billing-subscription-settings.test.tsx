@@ -198,6 +198,88 @@ describe("BillingSubscriptionSettings", () => {
     expect(posted).not.toHaveProperty("currency");
   });
 
+  it("does not offer Terms acceptance or an empty plan picker when checkout is disabled", async () => {
+    const disabled = projection();
+    disabled.checkoutOptions = disabled.checkoutOptions.map((option) => ({
+      ...option,
+      selfServiceAvailable: false,
+    }));
+    const fetch = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(disabled), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    render(<BillingSubscriptionSettings />);
+
+    expect(
+      await screen.findByText(/Self-service customer checkout is disabled/i),
+    ).toBeVisible();
+    expect(
+      screen.getAllByText(/no subscription or charge/i).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/Choose a paid plan/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Current Terms accepted for this organisation/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves existing subscription controls when plan selection is disabled", async () => {
+    const current = projection({
+      id: "00000000-0000-4000-8000-000000000085",
+      planCode: "growth",
+      planName: "Growth",
+      billingInterval: "monthly",
+      amount: "350.00",
+      currency: "AUD",
+      status: "active",
+      currentPeriodStart: "2032-04-01T00:00:00Z",
+      currentPeriodEnd: "2032-05-01T00:00:00Z",
+      paymentStatus: "paid",
+      paidPeriodStart: "2032-04-01T00:00:00Z",
+      paidThrough: "2032-05-01T00:00:00Z",
+      cancelAtPeriodEnd: false,
+      pendingPlanCode: null,
+      pendingBillingInterval: null,
+      paymentNeedsAttention: false,
+    });
+    current.checkoutOptions = current.checkoutOptions.map((option) => ({
+      ...option,
+      selfServiceAvailable: false,
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(current), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    );
+
+    render(<BillingSubscriptionSettings />);
+
+    expect(await screen.findByText("Growth")).toBeVisible();
+    expect(
+      screen.getByText(/Use the subscription controls above/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Manage billing securely" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Cancel at period end" }),
+    ).toBeEnabled();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  });
+
   it("shows payment attention, cancellation timing and reconciled invoices", async () => {
     const current = projection({
       id: "00000000-0000-4000-8000-000000000080",

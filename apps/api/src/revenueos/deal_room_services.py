@@ -607,6 +607,9 @@ class DealRoomService:
         opportunity: Opportunity,
         room: DealRoom | None,
     ) -> DealRoomWorkspaceResponse:
+        commercial = CommercialService(self.session, self.settings)
+        has_write_access = await commercial.module_access(self.tenant.organisation_id, "create") == "write"
+        can_edit = opportunity.status == "open" and opportunity.archived_at is None and has_write_access
         case_rows = await self.repository.approved_business_cases(self.tenant.organisation_id, opportunity.id)
         presentation_rows = await self.repository.approved_presentations(
             self.tenant.organisation_id,
@@ -655,6 +658,9 @@ class DealRoomService:
                 updated_at=room.updated_at,
             )
         return DealRoomWorkspaceResponse(
+            opportunity_status=cast(Literal["open", "won", "lost", "on_hold"], opportunity.status),
+            can_edit=can_edit,
+            can_manage_access=has_write_access,
             room=room_response,
             business_cases=[
                 DealRoomBusinessCaseOption(

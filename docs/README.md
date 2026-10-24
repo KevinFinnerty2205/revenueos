@@ -435,6 +435,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Business Case retention, export and deletion](03-engineering/business-case-retention-export-deletion.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
+- [Private owner demo runbook](03-engineering/owner-demo-runbook.md) — local synthetic end-to-end walkthrough and safety boundary
 - [Deployment guide](03-engineering/deployment-guide.md)
 - [Commercial authority](03-engineering/commercial-authority.md)
 - [Billing and subscription operations](03-engineering/billing-subscription-operations.md)

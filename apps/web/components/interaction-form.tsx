@@ -12,12 +12,38 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { interactionTypes } from "@/lib/interactions";
 
-export function InteractionForm() {
+interface LinkedInteractionContext {
+  companyId: string;
+  opportunityId: string;
+  contactId: string;
+  interactionType: InteractionType;
+}
+
+function appendUnique<T extends { id: string }>(
+  items: T[],
+  item: T | null,
+): T[] {
+  return item && !items.some((candidate) => candidate.id === item.id)
+    ? [...items, item]
+    : items;
+}
+
+export function InteractionForm({
+  initialCompanyId = "",
+  initialOpportunityId = "",
+  initialContactId = "",
+  initialInteractionType = "manual_interaction",
+}: {
+  initialCompanyId?: string;
+  initialOpportunityId?: string;
+  initialContactId?: string;
+  initialInteractionType?: InteractionType;
+}) {
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -27,17 +53,22 @@ export function InteractionForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
-  const [interactionType, setInteractionType] =
-    useState<InteractionType>("manual_interaction");
-  const [companyId, setCompanyId] = useState("");
-  const [opportunityId, setOpportunityId] = useState("");
-  const [contactId, setContactId] = useState("");
+  const [interactionType, setInteractionType] = useState<InteractionType>(
+    initialInteractionType,
+  );
+  const [companyId, setCompanyId] = useState(initialCompanyId);
+  const [opportunityId, setOpportunityId] = useState(initialOpportunityId);
+  const [contactId, setContactId] = useState(initialContactId);
   const [callDirection, setCallDirection] = useState<CallDirection>("unknown");
   const [meetingPlatform, setMeetingPlatform] =
     useState<OnlineMeetingPlatform>("microsoft_teams");
   const [meetingUrl, setMeetingUrl] = useState("");
   const [scheduledStartAt, setScheduledStartAt] = useState("");
   const [scheduledEndAt, setScheduledEndAt] = useState("");
+  const [pendingLinkedContext, setPendingLinkedContext] =
+    useState<LinkedInteractionContext | null>(null);
+  const contextDirtyRef = useRef(false);
+  const linkedContextLoadedRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,10 +84,88 @@ export function InteractionForm() {
         signal: controller.signal,
       }),
     ])
-      .then(([companyPage, opportunityPage, contactPage]) => {
-        setCompanies(companyPage.items);
-        setOpportunities(opportunityPage.items);
-        setContacts(contactPage.items);
+      .then(async ([companyPage, opportunityPage, contactPage]) => {
+        const [exactCompany, exactOpportunity, exactContact] =
+          await Promise.all([
+            initialCompanyId &&
+            !companyPage.items.some(
+              (company) => company.id === initialCompanyId,
+            )
+              ? apiRequest<Company>(
+                  `/api/v1/companies/${encodeURIComponent(initialCompanyId)}`,
+                  { signal: controller.signal },
+                )
+              : Promise.resolve(null),
+            initialOpportunityId &&
+            !opportunityPage.items.some(
+              (opportunity) => opportunity.id === initialOpportunityId,
+            )
+              ? apiRequest<Opportunity>(
+                  `/api/v1/opportunities/${encodeURIComponent(initialOpportunityId)}`,
+                  { signal: controller.signal },
+                )
+              : Promise.resolve(null),
+            initialContactId &&
+            !contactPage.items.some(
+              (contact) => contact.id === initialContactId,
+            )
+              ? apiRequest<Contact>(
+                  `/api/v1/contacts/${encodeURIComponent(initialContactId)}`,
+                  { signal: controller.signal },
+                )
+              : Promise.resolve(null),
+          ]);
+        let nextCompanies = appendUnique(companyPage.items, exactCompany);
+        const nextOpportunities = appendUnique(
+          opportunityPage.items,
+          exactOpportunity,
+        );
+        const nextContacts = appendUnique(contactPage.items, exactContact);
+        const selectedContact = nextContacts.find(
+          (contact) => contact.id === initialContactId,
+        );
+        const selectedOpportunity = nextOpportunities.find(
+          (opportunity) => opportunity.id === initialOpportunityId,
+        );
+        const linkedCompanyId =
+          initialCompanyId ||
+          selectedContact?.companyId ||
+          selectedOpportunity?.companyId ||
+          "";
+        if (
+          linkedCompanyId &&
+          !nextCompanies.some((company) => company.id === linkedCompanyId)
+        ) {
+          nextCompanies = appendUnique(
+            nextCompanies,
+            await apiRequest<Company>(
+              `/api/v1/companies/${encodeURIComponent(linkedCompanyId)}`,
+              { signal: controller.signal },
+            ),
+          );
+        }
+        if (controller.signal.aborted) return;
+        setLoadError(null);
+        setCompanies(nextCompanies);
+        setOpportunities(nextOpportunities);
+        setContacts(nextContacts);
+        const linkedContext: LinkedInteractionContext = {
+          companyId: linkedCompanyId,
+          opportunityId: initialOpportunityId,
+          contactId: initialContactId,
+          interactionType: initialInteractionType,
+        };
+        if (!linkedContextLoadedRef.current || !contextDirtyRef.current) {
+          setCompanyId(linkedContext.companyId);
+          setOpportunityId(linkedContext.opportunityId);
+          setContactId(linkedContext.contactId);
+          setInteractionType(linkedContext.interactionType);
+          contextDirtyRef.current = false;
+          setPendingLinkedContext(null);
+        } else {
+          setPendingLinkedContext(linkedContext);
+        }
+        linkedContextLoadedRef.current = true;
       })
       .catch((requestError: unknown) => {
         if (
@@ -75,7 +184,25 @@ export function InteractionForm() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [
+    initialCompanyId,
+    initialContactId,
+    initialInteractionType,
+    initialOpportunityId,
+  ]);
+
+  function markContextDirty(): void {
+    contextDirtyRef.current = true;
+  }
+
+  function applyLinkedContext(context: LinkedInteractionContext): void {
+    setCompanyId(context.companyId);
+    setOpportunityId(context.opportunityId);
+    setContactId(context.contactId);
+    setInteractionType(context.interactionType);
+    contextDirtyRef.current = false;
+    setPendingLinkedContext(null);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -158,6 +285,24 @@ export function InteractionForm() {
       ) : null}
       {!loading && !loadError ? (
         <form onSubmit={submit} className="mt-8 grid gap-5">
+          {pendingLinkedContext ? (
+            <aside
+              role="status"
+              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+            >
+              <p>
+                The linked relationship context changed. Your current selections
+                were kept because you had already edited them.
+              </p>
+              <button
+                type="button"
+                className="secondary-button mt-3"
+                onClick={() => applyLinkedContext(pendingLinkedContext)}
+              >
+                Use linked context
+              </button>
+            </aside>
+          ) : null}
           <label className="grid gap-2 text-sm font-bold text-slate-800">
             Title
             <input
@@ -173,9 +318,10 @@ export function InteractionForm() {
             <select
               className="form-control"
               value={interactionType}
-              onChange={(event) =>
-                setInteractionType(event.target.value as InteractionType)
-              }
+              onChange={(event) => {
+                markContextDirty();
+                setInteractionType(event.target.value as InteractionType);
+              }}
             >
               {interactionTypes.map((value) => (
                 <option key={value} value={value}>
@@ -191,6 +337,7 @@ export function InteractionForm() {
                 className="form-control"
                 value={companyId}
                 onChange={(event) => {
+                  markContextDirty();
                   const nextCompanyId = event.target.value;
                   setCompanyId(nextCompanyId);
                   if (
@@ -215,7 +362,10 @@ export function InteractionForm() {
               <select
                 className="form-control"
                 value={opportunityId}
-                onChange={(event) => setOpportunityId(event.target.value)}
+                onChange={(event) => {
+                  markContextDirty();
+                  setOpportunityId(event.target.value);
+                }}
               >
                 <option value="">No opportunity</option>
                 {opportunities.map((opportunity) => (
@@ -255,7 +405,10 @@ export function InteractionForm() {
                 <select
                   className="form-control"
                   value={contactId}
-                  onChange={(event) => setContactId(event.target.value)}
+                  onChange={(event) => {
+                    markContextDirty();
+                    setContactId(event.target.value);
+                  }}
                 >
                   <option value="">No contact</option>
                   {contacts

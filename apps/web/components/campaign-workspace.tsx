@@ -176,8 +176,8 @@ export function CampaignListWorkspace() {
 
       <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
         <strong>Private-beta sending:</strong> campaign execution uses the
-        sender-bound mock mailbox in this release. No production mailbox
-        provider is enabled.
+        sender-bound Mock Email simulation in this release. Connected Microsoft
+        365 or Google Workspace mailboxes are never used by Campaigns.
       </div>
       <Notice error={error} />
       {loading ? (
@@ -860,8 +860,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             {campaign.approvalMode === "review_each_send"
               ? "Every message requires sender review"
               : "Approved campaign auto-send"}{" "}
-            ·{" "}
-            {campaign.simulationOnly ? "Mock email only" : "Production mailbox"}
+            · Mock Email simulation only
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -896,6 +895,14 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       </header>
       <div className="mt-5 space-y-3">
         <Notice error={error} notice={notice} />
+        {campaign.launchWarning ? (
+          <p
+            role="status"
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
+          >
+            {campaign.launchWarning}
+          </p>
+        ) : null}
       </div>
       {campaign.needsAttentionReason ? (
         <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">

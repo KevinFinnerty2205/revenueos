@@ -23,7 +23,7 @@ docker compose -f infra/docker/compose.yml up -d
 pnpm api:migrate
 ```
 
-The default identity is a clearly labelled development mock. After migrations, the API idempotently provisions only that example organisation, user and membership in development. No paid credentials are required. Never use production customer data in the mock environment.
+The default identity is a clearly labelled development mock. After migrations, the API idempotently provisions only that example organisation, user and membership in development. The Compose PostgreSQL host port is bound only to `127.0.0.1`. No paid credentials are required. Never use production customer data in the mock environment.
 
 ## Run
 
@@ -41,7 +41,7 @@ pnpm dev:web
 pnpm dev:worker
 ```
 
-Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the worker runs as a separate backend process. The worker requires a migrated database. Its default deterministic mock provider makes no network call and needs no API key.
+Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the worker runs as a separate backend process. The root `pnpm dev:web` command explicitly binds Next.js to `127.0.0.1`, keeping the development/demo surface local to the computer. The worker requires a migrated database. Its default deterministic mock provider makes no network call and needs no API key.
 
 Provider selection defaults to `AI_PROVIDER=mock`, with
 `API_AI_PROVIDER_MODEL_IDENTIFIER=mock-infrastructure-v1` and
@@ -143,7 +143,7 @@ WO-031 Event development additionally uses
 500 attendees per Event and five confirmed imports per Event/day. Use synthetic UTF-8
 CSV through the browser or preview API; raw bytes are not retained and standard tests
 make no Event-platform, Prospect-provider or email-provider request. The current
-single Alembic head is `0064_deauthorisation`.
+single Alembic head is `0065_campaign_trigger_guard`.
 
 ## Database workflow
 

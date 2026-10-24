@@ -262,6 +262,9 @@ async function routeOpportunity(page: Page) {
     (route) =>
       route.fulfill({
         json: {
+          opportunityStatus: "open",
+          canEdit: true,
+          canManageAccess: true,
           room: null,
           businessCases: [],
           presentations: [],

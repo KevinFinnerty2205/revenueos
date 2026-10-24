@@ -85,6 +85,15 @@ const record = {
       href: "/interactions/interaction-1",
       sourceLabel: "Interaction",
     },
+    {
+      id: "task:1",
+      activityType: "task",
+      title: "Prepare the workshop",
+      detail: "Open",
+      occurredAt: "2026-08-29T09:00:00Z",
+      href: "/tasks/task-1/edit",
+      sourceLabel: "Task",
+    },
   ],
 };
 
@@ -106,6 +115,10 @@ describe("CRMRecordPanel", () => {
     expect(
       screen.getByRole("link", { name: "Discovery workshop" }),
     ).toHaveAttribute("href", "/interactions/interaction-1");
+    expect(
+      screen.getByRole("link", { name: "Prepare the workshop" }),
+    ).toHaveAttribute("href", "/tasks/task-1/edit");
+    expect(screen.getByText("Task")).toBeVisible();
     expect(screen.getByText(/Growth → Strategic/)).toBeVisible();
     expect(screen.getByText("Owner")).toBeVisible();
     expect(screen.getByText(/Unassigned → Alex Morgan/)).toBeVisible();

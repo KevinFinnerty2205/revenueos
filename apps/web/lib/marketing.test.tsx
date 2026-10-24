@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import IntegrationsPage from "@/app/(marketing)/integrations/page";
 import PricingPage from "@/app/(marketing)/pricing/page";
+import SecurityPage from "@/app/(marketing)/security/page";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import {
@@ -95,6 +96,20 @@ describe("marketing commercial truth", () => {
 });
 
 describe("marketing claim and metadata boundaries", () => {
+  it("publishes the approved legal release without opening the customer-data gate", () => {
+    render(<SecurityPage />);
+
+    expect(
+      screen.getByText(/owner-approved Privacy Policy and Terms/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Real customer data remains blocked/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/does not yet contain owner-approved public Privacy/i),
+    ).toBeNull();
+  });
+
   it("accepts HTTPS and local HTTP canonical origins but rejects unsafe schemes", () => {
     expect(resolveSiteOrigin("https://preview.example.test/path?q=1")).toBe(
       "https://preview.example.test",
@@ -138,10 +153,10 @@ describe("marketing claim and metadata boundaries", () => {
       `${siteOrigin}/integrations`,
       `${siteOrigin}/security`,
       `${siteOrigin}/contact`,
+      `${siteOrigin}/privacy`,
+      `${siteOrigin}/terms`,
     ]);
-    expect(urls.join(" ")).not.toMatch(
-      /dashboard|deal-room|sign-in|privacy|terms/iu,
-    );
+    expect(urls.join(" ")).not.toMatch(/dashboard|deal-room|sign-in/iu);
   });
 
   it("keeps every current protected route root inside the identity boundary", () => {
@@ -162,7 +177,7 @@ describe("marketing claim and metadata boundaries", () => {
     }
   });
 
-  it("keeps authenticated, Deal Room and incomplete legal routes out of search", () => {
+  it("keeps authenticated and Deal Room routes out of search while publishing approved legal pages", () => {
     const rules = robots().rules;
     expect(Array.isArray(rules)).toBe(false);
     if (Array.isArray(rules))
@@ -176,8 +191,15 @@ describe("marketing claim and metadata boundaries", () => {
     expect(disallowed).toContain("/dashboard");
     expect(disallowed).toContain("/sign-in");
     expect(disallowed.filter((path) => path.endsWith("/"))).toEqual([]);
-    expect(disallowed).toContain("/privacy");
-    expect(disallowed).toContain("/terms");
+    expect(disallowed).not.toContain("/privacy");
+    expect(disallowed).not.toContain("/terms");
+    const allowed = Array.isArray(rules.allow)
+      ? rules.allow
+      : rules.allow
+        ? [rules.allow]
+        : [];
+    expect(allowed).toContain("/privacy");
+    expect(allowed).toContain("/terms");
   });
 
   it("ships every curated real-product screenshot", () => {

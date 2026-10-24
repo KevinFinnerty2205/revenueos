@@ -1,37 +1,41 @@
 # First supervised real-data design-partner launch gate
 
 > **Superseded 10 September 2026:** this historical WO-039C/WO-050 gate is no
-> longer the controlling operational record. Use the canonical
-> [WO-054 Production Deployment & Launch Operations record](../../07-sprints/wo-054-production-launch-operations.md),
-> which evaluates current migration head `0064_deauthorisation` and the
-> DigitalOcean Sydney candidate. None of the historical target, cost or approval
-> assumptions below authorises spend, deployment or customer data.
+> longer the controlling operational record. Use the current
+> [activation boundary ledger](../../03-engineering/wo-054-production-activation-ledger.md)
+> and [production launch runbook](../../03-engineering/production-launch-runbook.md).
+> The [WO-054 Production Deployment & Launch Operations record](../../07-sprints/wo-054-production-launch-operations.md)
+> is itself a dated planning record.
+> The repository candidate now evaluates `0065_campaign_trigger_guard`; the
+> existing downsized Sydney environment remains unchanged until a separately
+> approved deployment. None of the historical target, cost or approval assumptions
+> below authorises spend, deployment or customer data.
 
 - **Gate date:** 2 September 2026; commercial consolidation reviewed 4 September 2026 (Australia/Sydney)
-- **Current documentation branch:** `docs/oryntela-product-commercial-consolidation`
+- **Documentation branch at the dated baseline:** `docs/oryntela-product-commercial-consolidation`
 - **Reviewed repository baseline:** `daedbbc`
-- **Repository candidate:** WO-039A through WO-055 plus WO-054 productionisation are on `main` or the current WO-054 review branch, with Alembic head `0064_deauthorisation` and production billing/Credits/provider execution disabled
-- **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
+- **Current repository boundary:** Alembic head `0065_campaign_trigger_guard`; production billing, Credits and provider execution disabled
+- **Current launch boundary:** production expansion paused; real-customer data and onboarding denied pending fresh resilience, release and owner approvals
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
 This was the controlling launch record for its dated baseline. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
 
 The [Oryntela commercial-product handoff](../oryntela-commercial-product-handoff.md)
-consolidates brand and commercial hypotheses without changing this gate. The
-current launch decision remains **WAITING FOR TARGET ENVIRONMENT PROOF**.
+consolidated brand and commercial hypotheses without changing this dated gate. At
+that baseline the launch decision was **WAITING FOR TARGET ENVIRONMENT PROOF**.
 
 The 2 September 2026 owner/target preparation reduces the remaining business input
 to the [authoritative eight-decision register](owner-decision-register.md), recommends
 one [primary target and one alternative](private-beta-target-environment-options.md),
 and provides one [owner approval block](owner-approval-block.md). This preparation
-does not change the current launch decision: no owner response, target selection,
-spend, provider or real-data use has been approved.
+did not change the dated launch decision: at that baseline no owner response, target
+selection, spend, provider or real-data use had been approved.
 
 ## Named launch identity
 
 Complete this before any final drill. An abstract customer cannot pass this gate.
 
-| Field                                     | Required value                                                      | Current status                                 |
+| Field                                     | Required value                                                      | Status at 2 September 2026 baseline            |
 | ----------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- |
 | Design partner legal and trading name     | Owner-approved name                                                 | **WAITING FOR PARTNER**                        |
 | Partner accountable administrator         | Name, business email and role                                       | **WAITING FOR PARTNER**                        |
@@ -53,7 +57,7 @@ Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PART
 | ----------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Requested branch started clean from `main`            | **PASS**                     | Git inspection at gate start; no branch was created or changed                                                                                                     |
 | WO-039A, WO-039B and WO-039C are on `main`            | **PASS**                     | Merge commits `558795c`, `5f0a61c` and `93c386e`                                                                                                                   |
-| One Alembic head: `0064_deauthorisation`             | **PASS**                     | Migration chain plus commercial, billing, Terms acceptance, deauthorisation, Credits and provider metadata migration/RLS tests                                       |
+| One Alembic head: `0065_campaign_trigger_guard`      | **PASS**                     | Current migration chain plus commercial, billing, Terms acceptance, deauthorisation, Credits, provider metadata and published-campaign guard migration/RLS tests      |
 | Production build and complete repository gate         | **PASS AT WO-039C BASELINE** | [WO-039C validation record](../../07-sprints/wo-039c-real-data-operations.md#frozen-validation-gate); this documentation branch must also pass its required checks |
 | Production preflight command                          | **PASS**                     | `revenueos-operations production-preflight` exists and fails closed                                                                                                |
 | Forced RLS and runtime-role requirements              | **PASS — REPOSITORY ONLY**   | All-table PostgreSQL proof and non-bypass preflight exist; target repetition is separate                                                                           |
@@ -67,11 +71,12 @@ Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PART
 
 ### Target environment ready
 
-Every row is currently **WAITING FOR TARGET**. The operator must complete the [target preflight](target-environment-preflight-checklist.md), [Clerk/session proof](Clerk-session-proof-procedure.md), [target RLS proof](target-RLS-proof-procedure.md), [backup/restore drill](named-target-backup-restore-drill.md), [support/monitoring gate](support-monitoring-launch-checklist.md) and [offboarding proof](offboarding-proof-checklist.md). A pass requires the exact named environment, release, partner, feature profile, CRM mode, storage and AI configuration.
+At the 2 September baseline every row was **WAITING FOR TARGET**. Before any future
+real-data release, the operator must complete the [target preflight](target-environment-preflight-checklist.md), [Clerk/session proof](Clerk-session-proof-procedure.md), [target RLS proof](target-RLS-proof-procedure.md), [backup/restore drill](named-target-backup-restore-drill.md), [support/monitoring gate](support-monitoring-launch-checklist.md) and [offboarding proof](offboarding-proof-checklist.md). A pass requires the exact named environment, release, partner, feature profile, CRM mode, storage and AI configuration.
 
 ### Owner/legal approval required
 
-Every item in the [legal and owner checklist](legal-owner-approval-checklist.md) is blocking and currently **OWNER APPROVAL REQUIRED**. The repository contains technical guidance, not approved Privacy Terms, Terms of Use, a DPA, a subprocessor schedule or legal certification. The owner must also approve the AI processing profile, hosting/data locations, support route, retention/backup periods and exact feature profile.
+At the 2 September baseline every item in the [legal and owner checklist](legal-owner-approval-checklist.md) was **OWNER APPROVAL REQUIRED**. Privacy and Terms were subsequently owner-approved and published; DPA, subprocessor, named-customer, AI processing, hosting/data-location, support, retention and exact feature-profile approvals remain separate gates where applicable.
 
 Use the [owner decision register](owner-decision-register.md) as the single question
 surface and the [owner approval block](owner-approval-block.md) as the response. The
@@ -95,7 +100,8 @@ Before upload, the named partner must:
 - acknowledge the [data boundary](partner-data-boundary.md), AI/provider data flow if enabled, hosting/data locations and subprocessors; and
 - approve the small-subset results before the larger import.
 
-All are currently **WAITING FOR PARTNER**.
+At the dated baseline all were **WAITING FOR PARTNER**. The current owner direction
+pauses partner selection and customer onboarding while the platform build is reviewed.
 
 ## Concise operator runbook
 
@@ -140,12 +146,12 @@ All are currently **WAITING FOR PARTNER**.
 
 Stop immediately on any technical `FAIL`. If technical proof passes but owner/legal approval is absent, the state is **WAITING FOR OWNER/LEGAL APPROVAL**. If both pass but partner approval is absent, the state remains **WAITING FOR PARTNER** and no data may enter. `API_PRIVATE_BETA_REAL_DATA_ENABLED=true` is never approval by itself. The 15 September 2026 downsized pre-launch infrastructure also blocks real-data mode until a fresh capacity/resilience review covers database size, component memory, connection limits, HA/standby posture and repeated health/load/recovery proof, and the owner explicitly approves the resulting production cost.
 
-The present highest-level state is **WAITING FOR TARGET ENVIRONMENT PROOF** because
-the owner approval block is blank and no target deployment or named-target drill
-evidence exists. It is appropriate to seek and select the first design partner now
-against the [approved target profile](first-design-partner-profile.md) for discovery,
-agreement and fit only, but not to accept, copy or preview their real data until this
-record is fully signed.
+The historical highest-level state was **WAITING FOR TARGET ENVIRONMENT PROOF**
+because the owner approval block was blank and no target deployment or named-target
+drill evidence existed. An existing downsized synthetic-only target now exists, but it
+is not approved for first-customer resilience or real data. The current owner direction
+also pauses design-partner selection and onboarding; do not seek a partner or accept,
+copy or preview real customer data under this record.
 
 ## Package
 

@@ -215,6 +215,9 @@ class DealRoomAdminResponse(APIModel):
 
 
 class DealRoomWorkspaceResponse(APIModel):
+    opportunity_status: Literal["open", "won", "lost", "on_hold"]
+    can_edit: bool
+    can_manage_access: bool
     room: DealRoomAdminResponse | None
     business_cases: list[DealRoomBusinessCaseOption]
     presentations: list[DealRoomPresentationOption]
