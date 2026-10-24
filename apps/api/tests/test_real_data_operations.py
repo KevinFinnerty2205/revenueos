@@ -8,13 +8,15 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.auth import AuthenticationError, VerifiedIdentity, _resolve_identity
+from revenueos.beta_services import BetaService
 from revenueos.config import Settings
+from revenueos.errors import PublicAPIError
 from revenueos.main import create_app
-from revenueos.models import OperatorProvisioningEvent, OrganisationMembership
+from revenueos.models import OperatorProvisioningEvent, Organisation, OrganisationMembership, User
 from revenueos.operations import (
     _manual_paid_confirmation,
     _parse_credit_quantity,
@@ -28,6 +30,7 @@ from revenueos.operations import (
     support_bundle,
     tenant_preflight,
 )
+from revenueos.tenant import TenantContext
 from tests.conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
 
 
@@ -47,6 +50,9 @@ def safe_real_data_settings(**changes: object) -> Settings:
         "cors_origins": "https://app.example.test",
         "allowed_hosts": "api.example.test",
         "private_beta_real_data_enabled": True,
+        "private_beta_prelaunch_infrastructure_only": False,
+        "private_beta_capacity_resilience_review_reference": "capacity-review-001",
+        "private_beta_production_cost_approval_reference": "owner-cost-approval-001",
         "private_beta_legal_approval_reference": "approval-private-beta-001",
         "private_beta_support_email": "support@example.test",
         "private_beta_export_directory": "/var/lib/revenueos/private-exports",
@@ -83,6 +89,7 @@ def test_real_data_configuration_has_one_known_safe_restricted_profile() -> None
     settings = safe_real_data_settings()
 
     assert settings.private_beta_real_data_enabled is True
+    assert settings.paid_customer_resilience_gate_ready is True
     assert settings.safe_feature_flags()["nativeCrm"] is True
     assert settings.safe_feature_flags()["revenueBrain"] is False
 
@@ -96,6 +103,15 @@ def test_real_data_configuration_has_one_known_safe_restricted_profile() -> None
         ({"visual_storage_backend": "local"}, "S3-compatible object storage"),
         ({"feature_revenue_brain_enabled": True}, "mock intelligence"),
         ({"log_level": "DEBUG"}, "must not be DEBUG"),
+        ({"private_beta_prelaunch_infrastructure_only": True}, "pre-launch infrastructure"),
+        (
+            {"private_beta_capacity_resilience_review_reference": None},
+            "capacity/resilience review and production-cost approval",
+        ),
+        (
+            {"private_beta_production_cost_approval_reference": None},
+            "capacity/resilience review and production-cost approval",
+        ),
     ],
 )
 def test_real_data_configuration_rejects_unsafe_variants(change: dict[str, object], message: str) -> None:
@@ -129,6 +145,7 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
     async def scenario() -> None:
         engine = create_async_engine(TEST_DB_URL)
         factory = async_sessionmaker(engine, expire_on_commit=False)
+        test_settings = Settings(environment="test", database_url=TEST_DB_URL)
         unprovisioned = VerifiedIdentity(
             external_auth_id=f"unprovisioned_user_{suffix}",
             external_organisation_id=f"unprovisioned_org_{suffix}",
@@ -144,6 +161,7 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
 
         first = await provision_organisation(
             factory,
+            test_settings,
             external_organisation_id=external_organisation_id,
             organisation_name="Synthetic Design Partner",
             timezone="Australia/Sydney",
@@ -155,6 +173,7 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
         )
         second = await provision_organisation(
             factory,
+            test_settings,
             external_organisation_id=external_organisation_id,
             organisation_name="Synthetic Design Partner",
             timezone="Australia/Sydney",
@@ -221,6 +240,7 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
         member_external_id = f"member_real_data_{suffix}"
         member_first = await provision_member(
             factory,
+            test_settings,
             organisation_id=uuid.UUID(first.organisation_id),
             external_user_id=member_external_id,
             email=f"member-{suffix}@example.com",
@@ -231,6 +251,7 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
         )
         member_second = await provision_member(
             factory,
+            test_settings,
             organisation_id=uuid.UUID(first.organisation_id),
             external_user_id=member_external_id,
             email=f"member-{suffix}@example.com",
@@ -267,6 +288,120 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
             assert member_membership.role == "member" and member_membership.status == "active"
             assert {event.action for event in events} == {"organisation_provisioned", "member_provisioned"}
         await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_prelaunch_production_blocks_organisation_provisioning_before_database_mutation() -> None:
+    suffix = uuid.uuid4().hex
+    external_organisation_id = f"org_prelaunch_blocked_{suffix}"
+    prelaunch_settings = safe_real_data_settings().model_copy(
+        update={
+            "private_beta_real_data_enabled": False,
+            "private_beta_prelaunch_infrastructure_only": True,
+            "private_beta_capacity_resilience_review_reference": None,
+            "private_beta_production_cost_approval_reference": None,
+        }
+    )
+
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            with pytest.raises(PublicAPIError) as blocked:
+                await provision_organisation(
+                    factory,
+                    prelaunch_settings,
+                    external_organisation_id=external_organisation_id,
+                    organisation_name="Blocked first customer",
+                    timezone="Australia/Sydney",
+                    admin_external_user_id=f"user_prelaunch_blocked_{suffix}",
+                    admin_email=f"blocked-{suffix}@example.test",
+                    admin_display_name="Blocked Admin",
+                    idempotency_key=f"blocked-{suffix}",
+                    operator_reference="wo-054-prelaunch-proof",
+                )
+            assert blocked.value.code == "paid_customer_resilience_gate_blocked"
+            assert blocked.value.status_code == 503
+            async with factory() as session:
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(Organisation)
+                        .where(Organisation.external_auth_id == external_organisation_id)
+                    )
+                    == 0
+                )
+
+            test_settings = Settings(environment="test", database_url=TEST_DB_URL)
+            provisioned = await provision_organisation(
+                factory,
+                test_settings,
+                external_organisation_id=external_organisation_id,
+                organisation_name="Synthetic blocked-member tenant",
+                timezone="Australia/Sydney",
+                admin_external_user_id=f"admin_prelaunch_blocked_{suffix}",
+                admin_email=f"admin-blocked-{suffix}@example.com",
+                admin_display_name="Synthetic Admin",
+                idempotency_key=f"test-setup-{suffix}",
+                operator_reference="wo-054-prelaunch-proof",
+            )
+            blocked_member_external_id = f"member_prelaunch_blocked_{suffix}"
+            with pytest.raises(PublicAPIError) as blocked_member:
+                await provision_member(
+                    factory,
+                    prelaunch_settings,
+                    organisation_id=uuid.UUID(provisioned.organisation_id),
+                    external_user_id=blocked_member_external_id,
+                    email=f"member-blocked-{suffix}@example.com",
+                    display_name="Blocked Member",
+                    role="member",
+                    idempotency_key=f"blocked-member-{suffix}",
+                    operator_reference="wo-054-prelaunch-proof",
+                )
+            assert blocked_member.value.code == "paid_customer_resilience_gate_blocked"
+            assert blocked_member.value.status_code == 503
+            async with factory() as session:
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(User)
+                        .where(User.external_auth_id == blocked_member_external_id)
+                    )
+                    == 0
+                )
+
+            allowed_member = await provision_member(
+                factory,
+                test_settings,
+                organisation_id=uuid.UUID(provisioned.organisation_id),
+                external_user_id=blocked_member_external_id,
+                email=f"member-blocked-{suffix}@example.com",
+                display_name="Blocked Member",
+                role="member",
+                idempotency_key=f"test-member-setup-{suffix}",
+                operator_reference="wo-054-prelaunch-proof",
+            )
+            member_id = uuid.UUID(allowed_member.user_id)
+            organisation_id = uuid.UUID(provisioned.organisation_id)
+            async with factory() as session:
+                membership = await session.get(OrganisationMembership, (organisation_id, member_id))
+                assert membership is not None
+                membership.status = "disabled"
+                await session.commit()
+                service = BetaService(
+                    session,
+                    TenantContext(organisation_id, uuid.UUID(provisioned.user_id), "admin"),
+                    prelaunch_settings,
+                )
+                with pytest.raises(PublicAPIError) as blocked_reenable:
+                    await service.update_member_status(member_id, "active")
+                assert blocked_reenable.value.code == "paid_customer_resilience_gate_blocked"
+                assert blocked_reenable.value.status_code == 503
+                await session.refresh(membership)
+                assert membership.status == "disabled"
+        finally:
+            await engine.dispose()
 
     asyncio.run(scenario())
 

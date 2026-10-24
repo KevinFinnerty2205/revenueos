@@ -3,12 +3,12 @@
 - Initial evidence date: 11 September 2026 (Australia/Sydney)
 - Latest Stripe control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
-- Reviewed main: `7c128d6b1367c6c29beb5c670fbf09015652f870`
+- Pre-gate main baseline: `4facc04`
 - Migration head: `0064_deauthorisation`
-- State: core production healthy; Stripe live configuration bound and verified;
+- State: downsized synthetic-only production healthy; Stripe live configuration bound and verified;
   exact legal release owner-approved and bound; OpenAI project funded and its
   least-privilege secret bound while execution remains disabled; customer checkout
-  and Credits disabled
+  and Credits disabled; paid-customer resilience gate pending review and deployment
 - Stripe fixed spend in this activation pass: AUD 0 / USD 0; no transaction fee
 - Customer data: none
 
@@ -19,28 +19,28 @@ starting billable usage. The detailed execution and rollback procedure remains t
 
 ## Selected topology and current cost boundary
 
-The selected Sydney topology remains one 1 GiB web service, one 1 GiB API service,
-one 1 GiB worker, one two-node 2 GiB highly available PostgreSQL 16 cluster, one
-private Spaces subscription and one Clerk Pro subscription. The migration and daily
-backup jobs run only when invoked. AWS S3 Standard in `ap-southeast-2` is the
-independent encrypted backup destination and has no fixed monthly minimum.
+The owner-approved pre-launch Sydney topology is one 512 MiB web service, one
+512 MiB API service, one 512 MiB worker, one single-node 1 GiB PostgreSQL 16 cluster
+and one private Spaces subscription. The migration and daily backup jobs run only
+when invoked. AWS S3 Standard in `ap-southeast-2` is the independent encrypted backup
+destination and has no fixed monthly minimum. This configuration is synthetic-only
+and is not approved as the first paid-customer or customer-data resilience profile.
 
 | Item | Exact selection | Current displayed price | Billing boundary |
 | --- | --- | ---: | --- |
-| Web | DigitalOcean `apps-s-1vcpu-1gb-fixed` | USD 10/month | billed per second, one-minute minimum, capped using the provider's monthly component rules |
-| API | DigitalOcean `apps-s-1vcpu-1gb-fixed` | USD 10/month | same |
-| Worker | DigitalOcean `apps-s-1vcpu-1gb-fixed` | USD 10/month | same |
-| Database | DigitalOcean PostgreSQL HA, 2 GiB/1 vCPU primary plus one matching standby | USD 60/month | USD 30/node/month; database billing hourly with a one-hour minimum |
+| Web | DigitalOcean `apps-s-1vcpu-0.5gb` | USD 5/month | billed per second, one-minute minimum, capped using the provider's monthly component rules |
+| API | DigitalOcean `apps-s-1vcpu-0.5gb` | USD 5/month | same |
+| Worker | DigitalOcean `apps-s-1vcpu-0.5gb` | USD 5/month | same |
+| Database | DigitalOcean PostgreSQL, 1 GiB/1 shared vCPU/10 GiB, primary only | USD 15.15/month | prorated provider monthly rate; no standby in the pre-launch profile |
 | Application objects | DigitalOcean Spaces Standard, Sydney | USD 5/month | starts with the first bucket; prorated hourly after all buckets are destroyed |
 | Independent backup | AWS S3 Standard, Sydney | USD 0 fixed | USD 0.025/GB-month first 50 TB; USD 0.0055/1,000 PUT/COPY/POST/LIST; USD 0.0044/10,000 GET/other, plus transfer |
-| Authentication | Clerk Pro, month-to-month | USD 25/month | recurring subscription; USD 20/month only with annual billing |
 
-The fixed total is **USD 120/month** before tax and usage. At the RBA observation of
-1 AUD = USD 0.7172 on 11 September 2026, that is approximately **AUD 167.32/month**.
-It leaves AUD 52.68 of the AUD 220 planning ceiling before GST/tax, card FX spread,
-backup usage and other variable charges. No displayed SKU price changed from the 10
-September review; only the planning exchange rate changed. The provider invoice and
-card conversion remain authoritative.
+The current fixed DigitalOcean total is **USD 35.15/month** before tax and short-lived
+job usage. The former fixed DigitalOcean total was USD 95.90/month, so the approved
+pre-launch reduction saves USD 60.75/month. Before a first real customer, reassess
+capacity, high availability, load and recovery evidence and obtain explicit owner
+approval for the resulting production cost. No amount in this ledger pre-approves
+that future spend.
 
 For a 1–10 GB average retained AWS backup footprint and about 30 uploads per month,
 storage plus upload requests is approximately USD 0.03–0.26/month before transfer

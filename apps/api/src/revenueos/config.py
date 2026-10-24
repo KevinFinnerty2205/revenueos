@@ -125,6 +125,9 @@ class Settings(BaseSettings):
     clerk_jwt_leeway_seconds: int = Field(default=30, ge=0, le=120)
     private_beta_data_notice_version: int = Field(default=1, ge=1)
     private_beta_real_data_enabled: bool = False
+    private_beta_prelaunch_infrastructure_only: bool = True
+    private_beta_capacity_resilience_review_reference: str | None = Field(default=None, min_length=3, max_length=200)
+    private_beta_production_cost_approval_reference: str | None = Field(default=None, min_length=3, max_length=200)
     private_beta_external_ai_approved: bool = False
     private_beta_legal_approval_reference: str | None = Field(default=None, min_length=3, max_length=200)
     private_beta_support_email: str | None = Field(default=None, min_length=3, max_length=320)
@@ -480,6 +483,8 @@ class Settings(BaseSettings):
         "clerk_issuer",
         "clerk_audience",
         "private_beta_legal_approval_reference",
+        "private_beta_capacity_resilience_review_reference",
+        "private_beta_production_cost_approval_reference",
         "private_beta_support_email",
         "private_beta_backup_encryption_key",
         "openai_api_key",
@@ -597,6 +602,10 @@ class Settings(BaseSettings):
                 raise ValueError("Production allowed hosts must be explicit.")
             if self.feature_billing_enabled and (self.billing_provider_name != "stripe" or self.billing_mode != "live"):
                 raise ValueError("Production billing requires the Stripe provider in explicit live mode.")
+            if self.feature_billing_enabled and not self.paid_customer_resilience_gate_ready:
+                raise ValueError(
+                    "Production billing is blocked until the paid-customer capacity, resilience and cost gate passes."
+                )
             if self.feature_credits_enabled:
                 raise ValueError("Production Credit execution is not authorised; production prices are absent.")
         if self.billing_mode == "live" and (self.environment != "production" or self.billing_provider_name != "stripe"):
@@ -677,6 +686,17 @@ class Settings(BaseSettings):
         if self.private_beta_real_data_enabled:
             if self.environment != "production":
                 raise ValueError("Real-data private beta mode is permitted only in production.")
+            if self.private_beta_prelaunch_infrastructure_only:
+                raise ValueError(
+                    "Real-data private beta mode is blocked while the deployment is marked as pre-launch infrastructure."
+                )
+            if (
+                self.private_beta_capacity_resilience_review_reference is None
+                or self.private_beta_production_cost_approval_reference is None
+            ):
+                raise ValueError(
+                    "Real-data private beta mode requires capacity/resilience review and production-cost approval references."
+                )
             if self.private_beta_legal_approval_reference is None or self.private_beta_support_email is None:
                 raise ValueError("Real-data private beta mode requires legal approval and support references.")
             if self.feature_data_export_enabled:
@@ -964,6 +984,14 @@ class Settings(BaseSettings):
             ("complete", "monthly"): self.stripe_price_complete_monthly,
             ("complete", "annual"): self.stripe_price_complete_annual,
         }
+
+    @property
+    def paid_customer_resilience_gate_ready(self) -> bool:
+        return (
+            not self.private_beta_prelaunch_infrastructure_only
+            and self.private_beta_capacity_resilience_review_reference is not None
+            and self.private_beta_production_cost_approval_reference is not None
+        )
 
     @property
     def _mock_customer_content_features_enabled(self) -> bool:

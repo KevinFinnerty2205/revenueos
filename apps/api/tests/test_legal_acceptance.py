@@ -337,7 +337,9 @@ def test_production_preflight_accepts_the_approved_legal_release(
     result = asyncio.run(production_preflight(settings))
     checks = cast(list[dict[str, object]], result["checks"])
     terms_check = next(check for check in checks if check["name"] == "terms_acceptance_release")
+    resilience_check = next(check for check in checks if check["name"] == "paid_customer_resilience_gate")
     assert terms_check["status"] == "pass"
+    assert resilience_check["status"] == "fail"
     assert result["status"] == "blocked"
 
 
@@ -461,6 +463,9 @@ def test_synthetic_production_draft_terms_deny_trial_and_checkout_before_side_ef
     async def scenario() -> None:
         settings = _settings()
         settings.environment = "production"
+        settings.private_beta_prelaunch_infrastructure_only = False
+        settings.private_beta_capacity_resilience_review_reference = "capacity-ha-load-recovery-review-001"
+        settings.private_beta_production_cost_approval_reference = "owner-cost-approval-001"
         provider = DeterministicBillingProvider(settings)
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
         try:

@@ -216,6 +216,9 @@ def live_stripe_settings(**changes: object) -> Settings:
         "feature_document_evidence_enabled": False,
         "feature_create_enabled": False,
         "feature_billing_enabled": True,
+        "private_beta_prelaunch_infrastructure_only": False,
+        "private_beta_capacity_resilience_review_reference": "capacity-ha-load-recovery-review-001",
+        "private_beta_production_cost_approval_reference": "owner-cost-approval-001",
         "billing_provider_name": "stripe",
         "billing_mode": "live",
         "billing_tax_treatment": "inclusive",
@@ -1454,6 +1457,12 @@ def test_test_live_configuration_separation() -> None:
 @pytest.mark.parametrize(
     ("change", "message"),
     [
+        ({"private_beta_prelaunch_infrastructure_only": True}, "capacity, resilience and cost gate"),
+        (
+            {"private_beta_capacity_resilience_review_reference": None},
+            "capacity, resilience and cost gate",
+        ),
+        ({"private_beta_production_cost_approval_reference": None}, "capacity, resilience and cost gate"),
         ({"stripe_secret_key": "sk_test_wrong_mode"}, "Stripe live mode"),
         ({"stripe_webhook_secret": None}, "API_STRIPE_WEBHOOK_SECRET"),
         ({"stripe_account_id": None}, "API_STRIPE_ACCOUNT_ID"),

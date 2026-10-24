@@ -471,6 +471,16 @@ class BetaService:
         status: Literal["active", "disabled"],
     ) -> MemberStatusUpdateResponse:
         self.require_admin()
+        if (
+            status == "active"
+            and self.settings.environment == "production"
+            and not self.settings.paid_customer_resilience_gate_ready
+        ):
+            raise PublicAPIError(
+                "paid_customer_resilience_gate_blocked",
+                "Member re-enablement is blocked until capacity, resilience and production cost are approved.",
+                503,
+            )
         membership = await self.session.scalar(
             select(OrganisationMembership)
             .where(

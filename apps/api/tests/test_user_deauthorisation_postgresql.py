@@ -59,6 +59,7 @@ def test_postgresql_canonical_disable_commits_before_clerk_and_stale_auth_stays_
         try:
             organisation = await provision_organisation(
                 factory,
+                settings,
                 external_organisation_id=external_organisation_id,
                 organisation_name="Synthetic deauthorisation concurrency tenant",
                 timezone="Australia/Sydney",
@@ -72,6 +73,7 @@ def test_postgresql_canonical_disable_commits_before_clerk_and_stale_auth_stays_
             admin_user_id = uuid.UUID(organisation.user_id)
             member = await provision_member(
                 factory,
+                settings,
                 organisation_id=organisation_id,
                 external_user_id=member_external_user_id,
                 email=f"{member_external_user_id}@example.com",
