@@ -12,6 +12,186 @@ import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { onOpportunityChanged } from "@/lib/opportunity-events";
 
+const opportunityStatuses: ReadonlySet<string> = new Set([
+  "open",
+  "won",
+  "lost",
+  "on_hold",
+]);
+const dealRoomStatuses: ReadonlySet<string> = new Set([
+  "draft",
+  "published",
+  "paused",
+  "revoked",
+]);
+const milestoneOwnerParties: ReadonlySet<string> = new Set([
+  "our_team",
+  "customer",
+  "joint",
+]);
+const milestoneStatuses: ReadonlySet<string> = new Set([
+  "not_started",
+  "in_progress",
+  "done",
+  "blocked",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStakeholder(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.role === "string" &&
+    typeof value.company === "string" &&
+    (value.party === "seller" || value.party === "customer") &&
+    isNullableString(value.sourceContactId)
+  );
+}
+
+function isMilestone(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.ownerParty === "string" &&
+    milestoneOwnerParties.has(value.ownerParty) &&
+    isNullableString(value.targetDate) &&
+    typeof value.status === "string" &&
+    milestoneStatuses.has(value.status) &&
+    isNullableString(value.note)
+  );
+}
+
+function isResource(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    (value.kind === "external_link" || value.kind === "presentation") &&
+    typeof value.title === "string" &&
+    isNullableString(value.externalUrl) &&
+    isNullableString(value.presentationVersionId)
+  );
+}
+
+function isDraft(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNullableString(value.overview) &&
+    isNullableString(value.commercialSummary) &&
+    isNullableString(value.businessCaseVersionId) &&
+    Array.isArray(value.stakeholders) &&
+    value.stakeholders.every(isStakeholder) &&
+    Array.isArray(value.milestones) &&
+    value.milestones.every(isMilestone) &&
+    Array.isArray(value.resources) &&
+    value.resources.every(isResource) &&
+    isNullableString(value.nextMeetingAt)
+  );
+}
+
+function isLink(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.active === "boolean" &&
+    isNullableString(value.expiresAt) &&
+    isNullableString(value.createdAt)
+  );
+}
+
+function isRevision(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isFiniteNumber(value.revision) &&
+    typeof value.publishedAt === "string" &&
+    typeof value.publishedByUserId === "string" &&
+    typeof value.contentFingerprint === "string"
+  );
+}
+
+function isRoom(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.opportunityId === "string" &&
+    typeof value.status === "string" &&
+    dealRoomStatuses.has(value.status) &&
+    (value.effectiveAccess === "available" ||
+      value.effectiveAccess === "unavailable") &&
+    isFiniteNumber(value.draftVersion) &&
+    isFiniteNumber(value.lockVersion) &&
+    isDraft(value.draft) &&
+    isNullableString(value.publishedRevisionId) &&
+    (value.publishedRevision === null ||
+      isFiniteNumber(value.publishedRevision)) &&
+    isNullableString(value.lastPublishedAt) &&
+    isLink(value.link) &&
+    Array.isArray(value.revisions) &&
+    value.revisions.every(isRevision) &&
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string"
+  );
+}
+
+function isBusinessCase(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.caseId === "string" &&
+    typeof value.versionId === "string" &&
+    typeof value.title === "string" &&
+    isFiniteNumber(value.version) &&
+    typeof value.approvedAt === "string"
+  );
+}
+
+function isPresentation(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.presentationId === "string" &&
+    typeof value.versionId === "string" &&
+    typeof value.title === "string" &&
+    isFiniteNumber(value.version) &&
+    typeof value.approvedAt === "string"
+  );
+}
+
+function isDealRoomWorkspace(value: unknown): value is DealRoomWorkspace {
+  return (
+    isRecord(value) &&
+    typeof value.opportunityStatus === "string" &&
+    opportunityStatuses.has(value.opportunityStatus) &&
+    typeof value.canEdit === "boolean" &&
+    typeof value.canManageAccess === "boolean" &&
+    (value.room === null || isRoom(value.room)) &&
+    Array.isArray(value.businessCases) &&
+    value.businessCases.every(isBusinessCase) &&
+    Array.isArray(value.presentations) &&
+    value.presentations.every(isPresentation) &&
+    value.entitlement === "create" &&
+    value.creditsRequired === false
+  );
+}
+
+function assertDealRoomWorkspace(
+  value: unknown,
+): asserts value is DealRoomWorkspace {
+  if (!isDealRoomWorkspace(value)) {
+    throw new Error("The Deal Room service returned an invalid response.");
+  }
+}
+
 function newId(): string {
   return (
     globalThis.crypto?.randomUUID?.() ??
@@ -92,6 +272,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           generation !== refreshGenerationRef.current
         )
           return;
+        assertDealRoomWorkspace(response);
         const preserveDirtyDraft =
           dirtyRefresh !== null && dirtyRefresh.roomId === response.room?.id;
         pendingDirtyRefreshRef.current = null;
@@ -183,6 +364,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
       const response = await apiRequest<DealRoomWorkspace>(
         `/api/v1/opportunities/${opportunityId}/deal-room`,
       );
+      assertDealRoomWorkspace(response);
       setWorkspace(response);
       setDraft(response.room?.draft ?? null);
       setExpiry(toDateTimeLocal(response.room?.link.expiresAt ?? null));
@@ -199,6 +381,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   function applyMutation(result: DealRoomMutation, success: string): void {
+    assertDealRoomWorkspace(result.workspace);
     setWorkspace(result.workspace);
     setDraft(result.workspace.room?.draft ?? null);
     setExpiry(toDateTimeLocal(result.workspace.room?.link.expiresAt ?? null));
