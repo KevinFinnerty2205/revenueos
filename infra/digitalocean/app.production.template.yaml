@@ -90,7 +90,7 @@ services:
         value: oryntela-api
       - key: ORYNTELA_HSTS_ENABLED
         scope: RUN_AND_BUILD_TIME
-        value: "false"
+        value: "true"
 
   - name: api
     github:
@@ -152,7 +152,7 @@ services:
         value: "${_self.COMMIT_HASH}"
       - key: API_HSTS_ENABLED
         scope: RUN_TIME
-        value: "false"
+        value: "true"
       - key: API_CORS_ORIGINS
         scope: RUN_TIME
         value: https://oryntela.com.au
@@ -325,6 +325,9 @@ services:
       - key: API_PROSPECT_RESEARCH_PROVIDER_NAME
         scope: RUN_TIME
         value: mock
+      - key: API_FEATURE_PROSPECT_ENABLED
+        scope: RUN_TIME
+        value: "false"
       - key: API_FEATURE_PROSPECT_EXTERNAL_PROVIDER_ENABLED
         scope: RUN_TIME
         value: "false"
