@@ -360,15 +360,20 @@ class CampaignRepository:
         *,
         microsoft_enabled: bool = False,
         google_enabled: bool = False,
+        simulation_only: bool = False,
     ) -> IntegrationConnection | None:
-        connector_keys = tuple(
-            key
-            for key, enabled in (
-                ("microsoft_365", microsoft_enabled),
-                ("google_workspace", google_enabled),
-                ("mock_email", True),
+        connector_keys = (
+            ("mock_email",)
+            if simulation_only
+            else tuple(
+                key
+                for key, enabled in (
+                    ("microsoft_365", microsoft_enabled),
+                    ("google_workspace", google_enabled),
+                    ("mock_email", True),
+                )
+                if enabled
             )
-            if enabled
         )
         return cast(
             IntegrationConnection | None,

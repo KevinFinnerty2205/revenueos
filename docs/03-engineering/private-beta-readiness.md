@@ -4,7 +4,7 @@
 > in the [WO-039A record](../07-sprints/wo-039a-end-to-end-journey-reliability.md).
 > WO-039B Create trust/security is implemented and documented in the
 > [WO-039B record](../07-sprints/wo-039b-create-trust-security.md). WO-039C real-data
-> operations is complete at repository level through `0064_deauthorisation`.
+> operations is complete at repository level through `0065_campaign_trigger_guard`.
 > The [named first-partner launch gate](../06-roadmap/first-design-partner/first-design-partner-launch-gate.md)
 > still requires exact target, owner/legal and partner evidence before production
 > customer data.
@@ -240,7 +240,7 @@ privacy, migration/RLS and rollout evidence is approved.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  current Alembic head (`0064_deauthorisation`), identity configuration, selected
+  current Alembic head (`0065_campaign_trigger_guard`), identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -275,7 +275,7 @@ the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
 makes zero external provider calls:
 
-Dataset version 13 schedules the first two companion Interactions near the seed time,
+Base dataset version 18 schedules the first two companion Interactions near the seed time,
 values the open Opportunity at AUD 420,000 and adds two current internal Actions:
 one overdue high-priority review item and one approved-but-not-complete item due
 today. This gives Oryntela Daily useful current Interactions, Actions, methodology
@@ -283,6 +283,16 @@ attention and pipeline without adding a forecast, target or provider request.
 
 ```text
 uv --directory apps/api run revenueos-demo-data seed --organisation-id <UUID> --user-id <UUID>
+```
+
+The local-only owner walkthrough extends that base as dataset version 20. It
+links the same synthetic account, Contact, Task and Opportunity through Company
+& Selling Profile, Business Case, presentation, Deal Room and a prepared
+Closed-Won Handover. Use the guarded root command and follow the
+[owner demo runbook](owner-demo-runbook.md):
+
+```text
+pnpm demo:owner
 ```
 
 With `AI_PROVIDER=mock`, use the existing Generate Meeting Intelligence action

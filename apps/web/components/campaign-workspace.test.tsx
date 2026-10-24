@@ -136,7 +136,9 @@ describe("Campaign workspace", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/No production mailbox provider is enabled/u),
+      screen.getByText(
+        /Connected Microsoft 365 or Google Workspace mailboxes are never used by Campaigns/u,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -218,7 +220,11 @@ describe("Campaign workspace", () => {
       const path = new URL(String(input)).pathname;
       if (path === "/api/v1/engage/campaigns/campaign-1" && !init?.method) {
         return jsonResponse(
-          campaign({ approvalMode: "approved_campaign_auto_send" }),
+          campaign({
+            approvalMode: "approved_campaign_auto_send",
+            launchWarning:
+              "Campaign delivery is limited to Mock Email simulation. No real message will be sent.",
+          }),
         );
       }
       if (path === "/api/v1/engage/campaigns/campaign-1/launch") {
@@ -248,6 +254,9 @@ describe("Campaign workspace", () => {
       screen.getByText(
         /This is not blanket approval and stops on uncertainty/u,
       ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No real message will be sent/u),
     ).toBeInTheDocument();
     const launch = screen.getByRole("button", {
       name: "Launch to 1 eligible Contact",

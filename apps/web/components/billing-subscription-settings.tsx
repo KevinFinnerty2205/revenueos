@@ -101,7 +101,8 @@ export function BillingSubscriptionSettings() {
   const canChangePlan =
     billing?.subscription?.status === "active" &&
     billing.subscription.cancelAtPeriodEnd !== true;
-  const planSelectionAvailable = canStartCheckout || canChangePlan;
+  const checkoutAvailable = canStartCheckout && selfServiceOptions.length > 0;
+  const planSelectionAvailable = checkoutAvailable || canChangePlan;
   const selectionKind = (() => {
     const subscription = billing?.subscription;
     if (!selected || !subscription || canStartCheckout) return "checkout";
@@ -349,13 +350,15 @@ export function BillingSubscriptionSettings() {
             Billing not configured / manually managed
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-700">
-            A trial remains no-card with no automatic conversion or charge.
-            Choose a plan only when you are ready to subscribe explicitly.
+            A trial remains no-card with no automatic conversion or charge.{" "}
+            {checkoutAvailable
+              ? "Choose a plan only when you are ready to subscribe explicitly."
+              : "Customer checkout is disabled, so no subscription or charge can be initiated here."}
           </p>
         </div>
       )}
 
-      {canStartCheckout ? (
+      {checkoutAvailable ? (
         <div className="mt-6">
           <TermsAcceptance
             source="subscription_checkout"
@@ -366,9 +369,10 @@ export function BillingSubscriptionSettings() {
 
       <fieldset
         className="mt-6 min-w-0"
+        hidden={selfServiceOptions.length === 0}
         disabled={
           !planSelectionAvailable ||
-          (canStartCheckout && termsAccepted !== true)
+          (checkoutAvailable && termsAccepted !== true)
         }
       >
         <legend className="text-sm font-bold text-slate-950">
@@ -376,9 +380,9 @@ export function BillingSubscriptionSettings() {
             ? subscription?.paymentNeedsAttention
               ? "Resolve payment attention before changing plan"
               : "Keep the subscription before changing plan"
-            : canStartCheckout && termsAccepted !== true
+            : checkoutAvailable && termsAccepted !== true
               ? "Accept the current Terms before choosing a paid plan"
-              : canStartCheckout
+              : checkoutAvailable
                 ? "Choose a paid plan"
                 : "Change plan"}
         </legend>
@@ -416,6 +420,14 @@ export function BillingSubscriptionSettings() {
           })}
         </div>
       </fieldset>
+
+      {selfServiceOptions.length === 0 ? (
+        <p role="status" className="mt-6 text-sm text-slate-600">
+          {subscription
+            ? "Self-service checkout and plan selection are disabled. Use the subscription controls above for the available billing actions."
+            : "Self-service customer checkout is disabled. No subscription or charge can be initiated from this screen."}
+        </p>
+      ) : null}
 
       {selected && planSelectionAvailable ? (
         <div className="mt-4 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4">
@@ -516,8 +528,9 @@ export function BillingSubscriptionSettings() {
       <p className="mt-5 text-xs leading-5 text-slate-500">
         Enterprise uses a contact and manual commercial process. Production
         Credit packs and purchases are not available; the Credits section below
-        is TEST-only infrastructure. GST presentation and provider tax settings
-        require owner/accounting approval before live billing.
+        is TEST-only infrastructure. Standard plan totals are GST-inclusive
+        under the recorded owner decision; customer billing remains a separate
+        activation gate.
       </p>
     </section>
   );

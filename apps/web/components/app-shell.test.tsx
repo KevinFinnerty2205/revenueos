@@ -34,6 +34,7 @@ describe("application shell", () => {
       "Home",
       "Accounts",
       "People",
+      "Tasks",
       "Pipeline",
       "Insights",
       "Interactions",

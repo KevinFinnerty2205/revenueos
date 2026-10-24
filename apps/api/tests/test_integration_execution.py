@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import uuid
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ from uuid import UUID
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -46,6 +47,27 @@ def _enable_execution(app: FastAPI) -> Settings:
     settings.feature_action_execution_enabled = True
     settings.feature_mock_connectors_enabled = True
     return settings
+
+
+def _enable_salesforce_alongside_mock(app: FastAPI) -> Settings:
+    settings = app.state.settings
+    settings.feature_salesforce_crm_enabled = True
+    settings.connector_credential_master_key = SecretStr(base64.urlsafe_b64encode(b"s" * 32).decode().rstrip("="))
+    return settings
+
+
+def _primary_authenticated_user() -> AuthenticatedUser:
+    return AuthenticatedUser(
+        user_id=PRIMARY_USER_ID,
+        external_auth_id="user_dev_001",
+        display_name="Alex Morgan",
+        email="alex@example.test",
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        organisation_name="Example Revenue Team",
+        organisation_slug="example-revenue-team",
+        role="admin",
+        auth_mode="mock",
+    )
 
 
 def _fingerprint(value: str) -> str:
@@ -486,6 +508,143 @@ def test_worker_fails_closed_when_engage_is_removed_after_confirmation(
         assert result.json()["externalResultId"] is None
     finally:
         set_test_commercial_plan("complete")
+
+
+@pytest.mark.parametrize("disabled_mode", ("mock_flag", "production"))
+def test_mock_execution_service_fails_closed_when_its_provider_is_disabled(
+    app: FastAPI,
+    client: TestClient,
+    disabled_mode: str,
+) -> None:
+    settings = _enable_execution(app)
+    company = create_company(client)
+    contact = create_contact(client, str(company["id"]))
+    opportunity = create_opportunity(client, str(company["id"]))
+    action_id = _seed_approved_action(
+        opportunity_id=str(opportunity["id"]),
+        action_type="follow_up_email",
+        risk_class="external_customer_facing",
+        target_entity_type="contact",
+        target_entity_id=str(contact["id"]),
+        payload={
+            "kind": "follow_up_email",
+            "draftArtifactId": str(uuid.uuid4()),
+            "recipientContactId": str(contact["id"]),
+            "recipientEmail": contact["email"],
+            "recipientConfirmed": True,
+            "subject": "Connector-specific gate",
+            "body": "This synthetic message must stay inside the disabled connector gate.",
+        },
+        title="Recheck the selected connector",
+    )
+    connection = client.post(
+        "/api/v1/integrations/connections",
+        json={"connectorKey": "mock_email"},
+    ).json()
+    preview = client.post(
+        f"/api/v1/actions/{action_id}/execution-preview",
+        json={"connectionId": connection["id"]},
+    )
+    assert preview.status_code == 200, preview.text
+
+    _enable_salesforce_alongside_mock(app)
+    if disabled_mode == "mock_flag":
+        settings.feature_mock_connectors_enabled = False
+    else:
+        settings.environment = "production"
+        app.dependency_overrides[get_current_user] = lambda: _primary_authenticated_user()
+
+    blocked_preview = client.post(
+        f"/api/v1/actions/{action_id}/execution-preview",
+        json={"connectionId": connection["id"]},
+    )
+    assert blocked_preview.status_code == 404, blocked_preview.text
+    assert blocked_preview.json()["code"] == "connector_unavailable"
+    blocked_confirm = client.post(
+        f"/api/v1/actions/{action_id}/execute",
+        json={
+            "previewId": preview.json()["id"],
+            "connectionId": connection["id"],
+            "confirmed": True,
+        },
+    )
+    assert blocked_confirm.status_code == 404, blocked_confirm.text
+    assert blocked_confirm.json()["code"] == "connector_unavailable"
+
+
+@pytest.mark.parametrize("disabled_mode", ("mock_flag", "production"))
+def test_mock_execution_worker_fails_closed_immediately_before_execution(
+    app: FastAPI,
+    client: TestClient,
+    disabled_mode: str,
+) -> None:
+    settings = _enable_execution(app)
+    company = create_company(client)
+    contact = create_contact(client, str(company["id"]))
+    opportunity = create_opportunity(client, str(company["id"]))
+    action_id = _seed_approved_action(
+        opportunity_id=str(opportunity["id"]),
+        action_type="follow_up_email",
+        risk_class="external_customer_facing",
+        target_entity_type="contact",
+        target_entity_id=str(contact["id"]),
+        payload={
+            "kind": "follow_up_email",
+            "draftArtifactId": str(uuid.uuid4()),
+            "recipientContactId": str(contact["id"]),
+            "recipientEmail": contact["email"],
+            "recipientConfirmed": True,
+            "subject": "Worker connector gate",
+            "body": "This synthetic message must never reach the mock executor.",
+        },
+        title="Recheck connector in the worker",
+    )
+    connection = client.post(
+        "/api/v1/integrations/connections",
+        json={"connectorKey": "mock_email"},
+    ).json()
+    preview = client.post(
+        f"/api/v1/actions/{action_id}/execution-preview",
+        json={"connectionId": connection["id"]},
+    ).json()
+    queued = client.post(
+        f"/api/v1/actions/{action_id}/execute",
+        json={
+            "previewId": preview["id"],
+            "connectionId": connection["id"],
+            "confirmed": True,
+        },
+    )
+    assert queued.status_code == 202, queued.text
+
+    _enable_salesforce_alongside_mock(app)
+    if disabled_mode == "mock_flag":
+        settings.feature_mock_connectors_enabled = False
+    else:
+        settings.environment = "production"
+        app.dependency_overrides[get_current_user] = lambda: _primary_authenticated_user()
+    worker = ActionExecutionWorkerService(app.state.session_factory, settings)
+    assert worker._features_enabled() is True
+    _run_execution_worker(app)
+
+    result = client.get(f"/api/v1/executions/{queued.json()['id']}")
+    assert result.status_code == 200, result.text
+    assert result.json()["executionStatus"] == "failed_permanent"
+    assert result.json()["safeFailureCode"] == "connector_unavailable"
+    assert result.json()["externalResultId"] is None
+
+    async def mock_object_count() -> int:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            value = await session.scalar(
+                select(func.count())
+                .select_from(MockConnectorObject)
+                .where(MockConnectorObject.last_execution_id == UUID(queued.json()["id"]))
+            )
+        await engine.dispose()
+        return int(value or 0)
+
+    assert asyncio.run(mock_object_count()) == 0
 
 
 def test_revocation_invalidates_preview_and_crm_stale_state_fails_without_mutation(

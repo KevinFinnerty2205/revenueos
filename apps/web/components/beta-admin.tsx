@@ -1,6 +1,6 @@
 "use client";
 
-import { apiRequest } from "@/lib/api";
+import { apiBlob, apiRequest } from "@/lib/api";
 import { IntegrationSettings } from "@/components/integration-settings";
 import { useEffect, useState } from "react";
 
@@ -39,7 +39,10 @@ interface AdminOverview {
     requestType: "export" | "organisation_deletion";
     status: string;
     requestedAt: string;
+    completedAt: string | null;
+    expiresAt: string | null;
     downloadAvailable: boolean;
+    failureCode: string | null;
   }>;
 }
 
@@ -59,24 +62,73 @@ const retentionLabels: Record<AdminOverview["retention"]["policy"], string> = {
 };
 
 const featureFlagLabels: Record<string, string> = {
+  credits: "Credits",
+  prospectExternalProvider: "External Prospect provider",
   openaiProvider: "External OpenAI processing",
   revenueBrain: "Revenue Brain",
   opportunityWorkspace: "Opportunity Workspace",
+  aiCompanion: "AI Companion",
+  aiDebrief: "AI Debrief",
+  voiceJournal: "Voice Journal",
+  visualEvidence: "Visual evidence",
+  presentationMode: "Presentation mode",
+  recordingCapture: "Recording capture",
+  transcription: "Transcription",
+  autoGenerateIntelligenceAfterTranscription:
+    "Automatic intelligence after transcription",
+  onlineMeetingCapture: "Online meeting capture",
+  onlineMeetingImport: "Online meeting import",
+  onlineMeetingNativeIntegration: "Native online meeting integration",
+  onlineMeetingAutoIngest: "Automatic online meeting ingest",
+  documentEvidence: "Document evidence",
+  emailEvidence: "Email evidence",
+  salesMethodology: "Sales methodology",
+  askRevenueOS: "Ask Oryntela",
+  liveInteractionIntelligence: "Live interaction intelligence",
+  liveInteractionExternalAi: "External AI for live interactions",
+  actionLayer: "Action layer",
+  actionManualCompletion: "Manual action completion",
   integrations: "Integrations foundation",
   actionExecution: "Explicit Action execution",
   mockConnectors: "Mock simulation connectors",
   hubspotCrm: "HubSpot CRM sync",
+  salesforceCrm: "Salesforce CRM sync",
   microsoft365: "Microsoft 365 sales integration",
+  googleWorkspace: "Google Workspace sales integration",
+  nativeCrm: "Native CRM",
+  nativePipeline: "Native pipeline",
+  salesAnalytics: "Sales analytics",
+  salesTargets: "Sales targets",
+  salesForecasting: "Sales forecasting",
+  managerIntelligence: "Manager intelligence",
   dataExport: "Organisation data export",
   organisationDeletion: "Organisation deletion",
+  prospect: "Prospect",
+  engage: "Engage",
+  engageCampaigns: "Engage campaigns",
+  engageEvents: "Engage events",
+  create: "Create",
 };
 
-export function BetaAdmin() {
+function featureFlagLabel(name: string): string {
+  const known = featureFlagLabels[name];
+  if (known) return known;
+  const words = name
+    .replaceAll("_", " ")
+    .replace(/([a-z\d])([A-Z])/gu, "$1 $2")
+    .trim();
+  return words.length
+    ? `${words.charAt(0).toUpperCase()}${words.slice(1)}`
+    : "Capability";
+}
+
+export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
   const [busyMember, setBusyMember] = useState<string | null>(null);
+  const [busyExport, setBusyExport] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -179,6 +231,33 @@ export function BetaAdmin() {
       );
     } finally {
       setBusyMember(null);
+    }
+  }
+
+  async function downloadExport(requestId: string) {
+    setError(null);
+    setStatus(null);
+    setBusyExport(requestId);
+    try {
+      const blob = await apiBlob(
+        `/api/v1/beta/admin/exports/${requestId}/download`,
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `oryntela-export-${requestId}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setStatus("The temporary organisation export was downloaded.");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The temporary export could not be downloaded.",
+      );
+      await load();
+    } finally {
+      setBusyExport(null);
     }
   }
 
@@ -302,24 +381,30 @@ export function BetaAdmin() {
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">
                   {member.role} · {member.status}
                 </span>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busyMember === member.user.id}
-                  aria-label={`${member.status === "active" ? "Disable" : "Enable"} ${member.user.displayName}`}
-                  onClick={() =>
-                    void updateMember(
-                      member.user.id,
-                      member.status === "active" ? "disabled" : "active",
-                    )
-                  }
-                >
-                  {busyMember === member.user.id
-                    ? "Saving…"
-                    : member.status === "active"
-                      ? "Disable"
-                      : "Enable"}
-                </button>
+                {member.user.id === currentUserId ? (
+                  <span className="text-xs font-semibold text-slate-500">
+                    Current user
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busyMember === member.user.id}
+                    aria-label={`${member.status === "active" ? "Disable" : "Enable"} ${member.user.displayName}`}
+                    onClick={() =>
+                      void updateMember(
+                        member.user.id,
+                        member.status === "active" ? "disabled" : "active",
+                      )
+                    }
+                  >
+                    {busyMember === member.user.id
+                      ? "Saving…"
+                      : member.status === "active"
+                        ? "Disable"
+                        : "Enable"}
+                  </button>
+                )}
               </div>
             </li>
           ))}
@@ -334,7 +419,7 @@ export function BetaAdmin() {
           {Object.entries(overview.featureFlags).map(([name, enabled]) => (
             <div key={name} className="rounded-2xl bg-slate-50 p-4">
               <dt className="text-sm font-semibold">
-                {featureFlagLabels[name] ?? "Unrecognised capability"}
+                {featureFlagLabel(name)}
               </dt>
               <dd className="mt-1 text-sm text-slate-600">
                 {enabled ? "Enabled" : "Disabled"}
@@ -362,12 +447,42 @@ export function BetaAdmin() {
           </p>
         )}
         <ul className="mt-4 space-y-2 text-sm text-slate-600">
-          {overview.dataRequests.map((request) => (
-            <li key={request.id}>
-              {request.requestType.replaceAll("_", " ")} · {request.status} ·{" "}
-              {new Date(request.requestedAt).toLocaleString("en-AU")}
-            </li>
-          ))}
+          {overview.dataRequests.map((request) => {
+            const expiry = request.expiresAt
+              ? new Date(request.expiresAt).toLocaleString("en-AU")
+              : null;
+            return (
+              <li
+                key={request.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"
+              >
+                <span>
+                  {request.requestType.replaceAll("_", " ")} · {request.status}{" "}
+                  · {new Date(request.requestedAt).toLocaleString("en-AU")}
+                  {request.downloadAvailable && expiry
+                    ? ` · available until ${expiry}`
+                    : request.status === "completed" && expiry
+                      ? ` · download expired ${expiry}`
+                      : request.status === "failed"
+                        ? ` · ${request.failureCode?.replaceAll("_", " ") ?? "generation failed"}`
+                        : ""}
+                </span>
+                {request.requestType === "export" &&
+                request.downloadAvailable ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={busyExport === request.id}
+                    onClick={() => void downloadExport(request.id)}
+                  >
+                    {busyExport === request.id
+                      ? "Downloading…"
+                      : "Download export"}
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </section>
 

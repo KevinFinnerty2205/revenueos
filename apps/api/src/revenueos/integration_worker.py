@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
-from revenueos.domain import ConnectorCapability, ExecutionStatus
+from revenueos.domain import ConnectorCapability, ConnectorKey, ExecutionStatus
 from revenueos.errors import PublicAPIError
 from revenueos.integration_executors import (
+    CONNECTOR_DEFINITIONS,
     ActionExecutorRegistry,
     ExecutorConnectionContext,
     PermanentExecutionFailure,
@@ -41,6 +42,11 @@ from revenueos.tenant import TenantContext
 logger = logging.getLogger("revenueos.execution_worker")
 DISCOVERY_LIMIT = 1000
 MAILBOX_CONNECTOR_KEYS = frozenset({"microsoft_365", "google_workspace"})
+
+
+def _stale_external_state_message(connector_key: str) -> str:
+    provider_name = CONNECTOR_DEFINITIONS[ConnectorKey(connector_key)].display_name
+    return f"{provider_name} changed since this preview. Review the latest values before updating CRM."
 
 
 @dataclass(frozen=True)
@@ -331,6 +337,7 @@ class ActionExecutionWorkerService:
                 executors=self._executors,
             )
             try:
+                action_service._require_connector_enabled(record.connection.connector_key)
                 await action_service._require_connection_entitlement(record.connection)
                 action_record = await action_service._require_approved_action(
                     execution.action_id,
@@ -390,10 +397,11 @@ class ActionExecutionWorkerService:
                     if current_fingerprint != execution.preview_fingerprint:
                         raise PermanentExecutionFailure(
                             "stale_external_state",
-                            "HubSpot changed since this preview. Review the latest values before updating CRM.",
+                            _stale_external_state_message(record.connection.connector_key),
                         )
                 if execution.execution_mode == "live":
                     mailbox_submission_started = record.connection.connector_key in MAILBOX_CONNECTOR_KEYS
+                    action_service._require_connector_enabled(record.connection.connector_key)
                     result = await executor.execute(
                         action,
                         idempotency_key=execution.idempotency_key,
@@ -401,6 +409,7 @@ class ActionExecutionWorkerService:
                         context=context,
                     )
                 else:
+                    action_service._require_connector_enabled(record.connection.connector_key)
                     result = await executor.execute(
                         action,
                         idempotency_key=execution.idempotency_key,
@@ -676,6 +685,7 @@ class ActionExecutionWorkerService:
             and self._settings.feature_action_layer_enabled
             and (
                 self._settings.feature_hubspot_crm_enabled
+                or self._settings.feature_salesforce_crm_enabled
                 or self._settings.feature_microsoft_365_enabled
                 or self._settings.feature_google_workspace_enabled
                 or (self._settings.environment != "production" and self._settings.feature_mock_connectors_enabled)

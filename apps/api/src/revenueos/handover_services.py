@@ -87,6 +87,11 @@ def _decimal(value: Decimal | None) -> str | None:
     return format(value, "f") if value is not None else None
 
 
+def _parse_utc_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    return parsed.replace(tzinfo=UTC) if parsed.utcoffset() is None else parsed.astimezone(UTC)
+
+
 class HandoverService:
     def __init__(
         self,
@@ -836,7 +841,10 @@ class HandoverService:
                             authority_type=HandoverAuthorityType.SELLER_CONFIRMED,
                             source_ids=[definition.reference_id],
                             confirmed_by_user_id=UUID(reviewer_id),
-                            confirmed_at=datetime.fromisoformat(approved_at),
+                            # SQLite stores timezone-aware columns without an
+                            # offset. Treat those trusted database snapshots as
+                            # UTC, matching the PostgreSQL production contract.
+                            confirmed_at=_parse_utc_datetime(approved_at),
                             due_date=None,
                             action_status="open",
                         )

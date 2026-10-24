@@ -580,20 +580,27 @@ export function SalesInsights() {
   const [retryKey, setRetryKey] = useState(0);
   const [targetsEnabled, setTargetsEnabled] = useState(false);
   const [forecastEnabled, setForecastEnabled] = useState(false);
+  const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false);
   const [timezone, setTimezone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   );
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
+  const checkingGatedDeepLink =
+    deepLinkApplied &&
+    !capabilitiesLoaded &&
+    (activeTab === "targets" || activeTab === "forecast");
+  const effectiveActiveTab: InsightTab =
+    capabilitiesLoaded &&
+    ((activeTab === "targets" && !targetsEnabled) ||
+      (activeTab === "forecast" && !forecastEnabled))
+      ? "overview"
+      : activeTab;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const query = new URLSearchParams(window.location.search);
       const requestedTab = query.get("tab");
-      if (
-        requestedTab &&
-        requestedTab !== "targets" &&
-        tabs.some((tab) => tab.id === requestedTab)
-      ) {
+      if (requestedTab && tabs.some((tab) => tab.id === requestedTab)) {
         setActiveTab(requestedTab as InsightTab);
       }
       const requestedStart = query.get("startDate");
@@ -630,11 +637,13 @@ export function SalesInsights() {
       .then((capabilities) => {
         setTargetsEnabled(capabilities.featureFlags.salesTargets === true);
         setForecastEnabled(capabilities.featureFlags.salesForecasting === true);
+        setCapabilitiesLoaded(true);
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setTargetsEnabled(false);
           setForecastEnabled(false);
+          setCapabilitiesLoaded(true);
         }
       });
     apiRequest<SalesInsightsMetadata>("/api/v1/insights/sales/metadata", {
@@ -655,14 +664,17 @@ export function SalesInsights() {
   const loadData = useCallback(
     async (signal: AbortSignal) => {
       if (!deepLinkApplied) return;
-      if (activeTab === "targets" || activeTab === "forecast") {
+      if (
+        effectiveActiveTab === "targets" ||
+        effectiveActiveTab === "forecast"
+      ) {
         setData(null);
         setDataTab(null);
         setLoading(false);
         setError(null);
         return;
       }
-      if (activeTab === "funnel" && !pipelineId) {
+      if (effectiveActiveTab === "funnel" && !pipelineId) {
         setData(null);
         setDataTab(null);
         setLoading(false);
@@ -676,11 +688,11 @@ export function SalesInsights() {
       if (ownerUserId) query.set("ownerUserId", ownerUserId);
       try {
         const response = await apiRequest<InsightPayload>(
-          `/api/v1/insights/sales/${activeTab}?${query.toString()}`,
+          `/api/v1/insights/sales/${effectiveActiveTab}?${query.toString()}`,
           { signal },
         );
         setData(response);
-        setDataTab(activeTab);
+        setDataTab(effectiveActiveTab);
       } catch (caught) {
         if (!signal.aborted)
           setError(
@@ -693,9 +705,9 @@ export function SalesInsights() {
       }
     },
     [
-      activeTab,
       deepLinkApplied,
       endDate,
+      effectiveActiveTab,
       ownerUserId,
       pipelineId,
       startDate,
@@ -734,7 +746,7 @@ export function SalesInsights() {
         title="Sales insights"
         description="A bounded, deterministic view of pipeline progression, activity patterns and seller-reported outcomes."
       />
-      {activeTab !== "targets" && activeTab !== "forecast" ? (
+      {effectiveActiveTab !== "targets" && effectiveActiveTab !== "forecast" ? (
         <section
           aria-label="Sales insight filters"
           className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -843,15 +855,15 @@ export function SalesInsights() {
               key={tab.id}
               type="button"
               role="tab"
-              aria-selected={activeTab === tab.id}
+              aria-selected={effectiveActiveTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus ${activeTab === tab.id ? "bg-white text-brand-primary shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus ${effectiveActiveTab === tab.id ? "bg-white text-brand-primary shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
               {tab.label}
             </button>
           ))}
       </div>
-      {activeTab === "funnel" && !pipelineId ? (
+      {effectiveActiveTab === "funnel" && !pipelineId ? (
         <section className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
           <h2 className="text-lg font-semibold text-slate-900">
             Choose one pipeline to view its funnel
@@ -862,9 +874,27 @@ export function SalesInsights() {
           </p>
         </section>
       ) : null}
-      {activeTab === "targets" ? <SalesTargets /> : null}
-      {activeTab === "forecast" ? <SalesForecast /> : null}
-      {loading && activeTab !== "forecast" ? (
+      {effectiveActiveTab === "targets" &&
+      capabilitiesLoaded &&
+      targetsEnabled ? (
+        <SalesTargets />
+      ) : null}
+      {effectiveActiveTab === "forecast" &&
+      capabilitiesLoaded &&
+      forecastEnabled ? (
+        <SalesForecast />
+      ) : null}
+      {checkingGatedDeepLink ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center text-sm font-semibold text-slate-600"
+        >
+          Checking access to this sales insight…
+        </div>
+      ) : null}
+      {loading &&
+      !checkingGatedDeepLink &&
+      effectiveActiveTab !== "forecast" ? (
         <div
           role="status"
           className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center text-sm font-semibold text-slate-600"
@@ -872,7 +902,7 @@ export function SalesInsights() {
           Loading sales insights…
         </div>
       ) : null}
-      {error && activeTab !== "forecast" ? (
+      {error && effectiveActiveTab !== "forecast" ? (
         <div
           role="alert"
           className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-950"
@@ -914,7 +944,7 @@ export function SalesInsights() {
           owner or pipeline filter.
         </p>
       ) : null}
-      {activeTab !== "targets" && activeTab !== "forecast" ? (
+      {effectiveActiveTab !== "targets" && effectiveActiveTab !== "forecast" ? (
         <footer className="mt-8 text-xs leading-5 text-slate-500">
           Inclusive local dates: {startDate} to {endDate}.{" "}
           {selectedPipeline

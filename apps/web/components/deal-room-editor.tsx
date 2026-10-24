@@ -8,8 +8,9 @@ import type {
   DealRoomStakeholderDraft,
   DealRoomWorkspace,
 } from "@revenueos/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { onOpportunityChanged } from "@/lib/opportunity-events";
 
 function newId(): string {
   return (
@@ -47,22 +48,83 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   const [reviewed, setReviewed] = useState(false);
   const [expiry, setExpiry] = useState("");
   const [issuedLink, setIssuedLink] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const workspaceRef = useRef(workspace);
+  const draftRef = useRef(draft);
+  const expiryRef = useRef(expiry);
+  const refreshGenerationRef = useRef(0);
+  const pendingStatusRef = useRef<
+    DealRoomWorkspace["opportunityStatus"] | undefined
+  >(undefined);
+  const pendingDirtyRefreshRef = useRef<{
+    generation: number;
+    roomId: string;
+    draft: DealRoomDraftContent;
+    expiry: string;
+  } | null>(null);
+
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    expiryRef.current = expiry;
+  }, [expiry]);
 
   useEffect(() => {
     const controller = new AbortController();
+    const generation = refreshKey;
+    const dirtyRefresh =
+      pendingDirtyRefreshRef.current?.generation === generation
+        ? pendingDirtyRefreshRef.current
+        : null;
     apiRequest<DealRoomWorkspace>(
       `/api/v1/opportunities/${opportunityId}/deal-room`,
       { signal: controller.signal },
     )
       .then((response) => {
+        if (
+          controller.signal.aborted ||
+          generation !== refreshGenerationRef.current
+        )
+          return;
+        const preserveDirtyDraft =
+          dirtyRefresh !== null && dirtyRefresh.roomId === response.room?.id;
+        pendingDirtyRefreshRef.current = null;
+        pendingStatusRef.current = undefined;
         setWorkspace(response);
-        setDraft(response.room?.draft ?? null);
-        setExpiry(toDateTimeLocal(response.room?.link.expiresAt ?? null));
+        setDraft(
+          preserveDirtyDraft
+            ? dirtyRefresh.draft
+            : (response.room?.draft ?? null),
+        );
+        setExpiry(
+          preserveDirtyDraft
+            ? dirtyRefresh.expiry
+            : toDateTimeLocal(response.room?.link.expiresAt ?? null),
+        );
         setError(null);
+        if (preserveDirtyDraft) {
+          setMessage(
+            response.canEdit
+              ? "Opportunity status refreshed. Your unsaved Deal Room edits were preserved; save them before publishing."
+              : "Opportunity status refreshed. Your unsaved Deal Room edits were preserved. This Opportunity is now read-only; reopen it before saving.",
+          );
+        }
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
+        if (
+          controller.signal.aborted ||
+          generation !== refreshGenerationRef.current ||
+          (reason instanceof DOMException && reason.name === "AbortError")
+        )
           return;
+        pendingDirtyRefreshRef.current = null;
+        pendingStatusRef.current = undefined;
         setError(
           reason instanceof Error
             ? reason.message
@@ -70,10 +132,50 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         );
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (
+          !controller.signal.aborted &&
+          generation === refreshGenerationRef.current
+        )
+          setLoading(false);
       });
     return () => controller.abort();
-  }, [opportunityId]);
+  }, [opportunityId, refreshKey]);
+
+  useEffect(
+    () =>
+      onOpportunityChanged(opportunityId, (change) => {
+        const currentStatus =
+          pendingStatusRef.current ?? workspaceRef.current?.opportunityStatus;
+        if (change.status !== undefined && change.status === currentStatus)
+          return;
+        const room = workspaceRef.current?.room;
+        const currentDraft = draftRef.current;
+        const preserveDirtyDraft = Boolean(
+          room &&
+          currentDraft &&
+          (JSON.stringify(currentDraft) !== JSON.stringify(room.draft) ||
+            expiryRef.current !== toDateTimeLocal(room.link.expiresAt)),
+        );
+        const generation = refreshGenerationRef.current + 1;
+        refreshGenerationRef.current = generation;
+        pendingStatusRef.current = change.status;
+        pendingDirtyRefreshRef.current =
+          preserveDirtyDraft && room && currentDraft
+            ? {
+                generation,
+                roomId: room.id,
+                draft: currentDraft,
+                expiry: expiryRef.current,
+              }
+            : null;
+        setLoading(true);
+        setMessage(null);
+        setIssuedLink(null);
+        setReviewed(false);
+        setRefreshKey(generation);
+      }),
+    [opportunityId],
+  );
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -107,6 +209,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   async function createRoom(): Promise<void> {
+    if (!workspace?.canEdit) return;
     setBusy(true);
     setError(null);
     try {
@@ -127,7 +230,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   async function saveDraft(): Promise<void> {
-    if (!workspace?.room || !draft) return;
+    if (!workspace?.canEdit || !workspace.room || !draft) return;
     setBusy(true);
     setError(null);
     try {
@@ -160,7 +263,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   async function publish(): Promise<void> {
-    if (!workspace?.room || !reviewed) return;
+    if (!workspace?.canEdit || !workspace.room || !reviewed) return;
     setBusy(true);
     setError(null);
     try {
@@ -194,7 +297,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   async function lifecycle(action: "pause" | "revoke"): Promise<void> {
-    if (!workspace?.room) return;
+    if (!workspace?.canManageAccess || !workspace.room) return;
     const confirmed = window.confirm(
       action === "pause"
         ? "Pause buyer access now? You can republish this Deal Room later."
@@ -233,7 +336,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   async function rotateLink(): Promise<void> {
-    if (!workspace?.room) return;
+    if (!workspace?.canEdit || !workspace.room) return;
     if (
       !window.confirm(
         "Rotate the secure link now? The old link will stop working immediately.",
@@ -328,6 +431,13 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           approved resources. Internal deal intelligence is never copied
           automatically. Nothing is public yet.
         </p>
+        {!workspace.canEdit ? (
+          <p className="mt-4 rounded-xl bg-white/80 p-4 text-sm font-semibold text-slate-700">
+            Editing is unavailable while this Opportunity is{" "}
+            {workspace.opportunityStatus.replaceAll("_", " ")} or Create write
+            access is unavailable.
+          </p>
+        ) : null}
         {error ? (
           <p role="alert" className="mt-3 text-sm text-rose-800">
             {error}
@@ -336,7 +446,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         <button
           type="button"
           className="primary-button mt-5"
-          disabled={busy}
+          disabled={busy || !workspace.canEdit}
           onClick={() => void createRoom()}
         >
           {busy ? "Creating…" : "Create Deal Room draft"}
@@ -349,6 +459,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   }
 
   const room = workspace.room;
+  const readOnly = !workspace.canEdit;
   const draftHasUnsavedChanges =
     JSON.stringify(draft) !== JSON.stringify(room.draft);
   return (
@@ -382,6 +493,18 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           </span>
         </div>
       </div>
+
+      {readOnly ? (
+        <p
+          role="status"
+          className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950"
+        >
+          The Deal Room is read-only while this Opportunity is{" "}
+          {workspace.opportunityStatus.replaceAll("_", " ")} or Create write
+          access is unavailable. Buyer access remains unavailable unless the
+          Opportunity is active and open.
+        </p>
+      ) : null}
 
       {error ? (
         <p
@@ -436,6 +559,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
               className="min-h-28 rounded-xl border border-slate-300 p-4 text-sm font-normal outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
               maxLength={2000}
               value={draft.overview ?? ""}
+              disabled={readOnly}
               onChange={(event) =>
                 setDraft({ ...draft, overview: event.target.value || null })
               }
@@ -449,6 +573,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             <select
               className="form-control"
               value={draft.businessCaseVersionId ?? ""}
+              disabled={readOnly}
               onChange={(event) =>
                 setDraft({
                   ...draft,
@@ -470,6 +595,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
               className="min-h-24 rounded-xl border border-slate-300 p-4 text-sm font-normal outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
               maxLength={1500}
               value={draft.commercialSummary ?? ""}
+              disabled={readOnly}
               onChange={(event) =>
                 setDraft({
                   ...draft,
@@ -488,6 +614,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
               type="datetime-local"
               className="form-control"
               value={toDateTimeLocal(draft.nextMeetingAt)}
+              disabled={readOnly}
               onChange={(event) =>
                 setDraft({
                   ...draft,
@@ -500,12 +627,21 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           </label>
         </fieldset>
 
-        <StakeholderEditor draft={draft} setDraft={setDraft} />
-        <MilestoneEditor draft={draft} setDraft={setDraft} />
+        <StakeholderEditor
+          draft={draft}
+          setDraft={setDraft}
+          disabled={readOnly}
+        />
+        <MilestoneEditor
+          draft={draft}
+          setDraft={setDraft}
+          disabled={readOnly}
+        />
         <ResourceEditor
           draft={draft}
           setDraft={setDraft}
           workspace={workspace}
+          disabled={readOnly}
         />
       </div>
 
@@ -550,6 +686,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             type="checkbox"
             className="mt-1 size-4"
             checked={reviewed}
+            disabled={readOnly}
             onChange={(event) => setReviewed(event.target.checked)}
           />
           I have reviewed every field and selected resource as appropriate for
@@ -561,6 +698,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             type="datetime-local"
             className="form-control"
             value={expiry}
+            disabled={readOnly}
             onChange={(event) => setExpiry(event.target.value)}
           />
         </label>
@@ -568,7 +706,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           <button
             type="button"
             className="secondary-button"
-            disabled={busy}
+            disabled={busy || readOnly}
             onClick={() => void saveDraft()}
           >
             {busy ? "Working…" : "Save draft"}
@@ -576,7 +714,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           <button
             type="button"
             className="primary-button"
-            disabled={busy || !reviewed || draftHasUnsavedChanges}
+            disabled={busy || readOnly || !reviewed || draftHasUnsavedChanges}
             onClick={() => void publish()}
           >
             {room.publishedRevision
@@ -587,7 +725,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             <button
               type="button"
               className="secondary-button"
-              disabled={busy}
+              disabled={busy || !workspace.canManageAccess}
               onClick={() => void lifecycle("pause")}
             >
               Pause access
@@ -597,7 +735,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             <button
               type="button"
               className="secondary-button"
-              disabled={busy}
+              disabled={busy || readOnly}
               onClick={() => void rotateLink()}
             >
               Rotate link
@@ -607,7 +745,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             <button
               type="button"
               className="secondary-button border-rose-300 text-rose-800"
-              disabled={busy}
+              disabled={busy || !workspace.canManageAccess}
               onClick={() => void lifecycle("revoke")}
             >
               Revoke
@@ -630,9 +768,11 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
 function StakeholderEditor({
   draft,
   setDraft,
+  disabled,
 }: {
   draft: DealRoomDraftContent;
   setDraft: (value: DealRoomDraftContent) => void;
+  disabled: boolean;
 }) {
   function update(id: string, patch: Partial<DealRoomStakeholderDraft>) {
     setDraft({
@@ -664,6 +804,7 @@ function StakeholderEditor({
                 className="form-control"
                 maxLength={120}
                 value={item.name}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { name: event.target.value })
                 }
@@ -676,6 +817,7 @@ function StakeholderEditor({
                 className="form-control"
                 maxLength={120}
                 value={item.role}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { role: event.target.value })
                 }
@@ -688,6 +830,7 @@ function StakeholderEditor({
                 className="form-control"
                 maxLength={200}
                 value={item.company}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { company: event.target.value })
                 }
@@ -700,6 +843,7 @@ function StakeholderEditor({
                   aria-label="Stakeholder party"
                   className="form-control"
                   value={item.party}
+                  disabled={disabled}
                   onChange={(event) =>
                     update(item.id, {
                       party: event.target.value as "seller" | "customer",
@@ -713,6 +857,7 @@ function StakeholderEditor({
               <button
                 type="button"
                 className="text-left text-xs font-bold text-rose-700 underline"
+                disabled={disabled}
                 onClick={() =>
                   setDraft({
                     ...draft,
@@ -731,7 +876,7 @@ function StakeholderEditor({
       <button
         type="button"
         className="secondary-button mt-4"
-        disabled={draft.stakeholders.length >= 12}
+        disabled={disabled || draft.stakeholders.length >= 12}
         onClick={() =>
           setDraft({
             ...draft,
@@ -758,9 +903,11 @@ function StakeholderEditor({
 function MilestoneEditor({
   draft,
   setDraft,
+  disabled,
 }: {
   draft: DealRoomDraftContent;
   setDraft: (value: DealRoomDraftContent) => void;
+  disabled: boolean;
 }) {
   function update(id: string, patch: Partial<DealRoomMilestoneDraft>) {
     setDraft({
@@ -788,6 +935,7 @@ function MilestoneEditor({
                 className="form-control"
                 maxLength={160}
                 value={item.title}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { title: event.target.value })
                 }
@@ -799,6 +947,7 @@ function MilestoneEditor({
                 aria-label="Milestone owner"
                 className="form-control"
                 value={item.ownerParty}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, {
                     ownerParty: event.target
@@ -817,6 +966,7 @@ function MilestoneEditor({
                 aria-label="Milestone status"
                 className="form-control"
                 value={item.status}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, {
                     status: event.target
@@ -837,6 +987,7 @@ function MilestoneEditor({
                 type="date"
                 className="form-control"
                 value={item.targetDate ?? ""}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { targetDate: event.target.value || null })
                 }
@@ -849,6 +1000,7 @@ function MilestoneEditor({
                 className="form-control"
                 maxLength={500}
                 value={item.note ?? ""}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { note: event.target.value || null })
                 }
@@ -857,6 +1009,7 @@ function MilestoneEditor({
             <button
               type="button"
               className="text-left text-xs font-bold text-rose-700 underline"
+              disabled={disabled}
               onClick={() =>
                 setDraft({
                   ...draft,
@@ -874,7 +1027,7 @@ function MilestoneEditor({
       <button
         type="button"
         className="secondary-button mt-4"
-        disabled={draft.milestones.length >= 20}
+        disabled={disabled || draft.milestones.length >= 20}
         onClick={() =>
           setDraft({
             ...draft,
@@ -902,10 +1055,12 @@ function ResourceEditor({
   draft,
   setDraft,
   workspace,
+  disabled,
 }: {
   draft: DealRoomDraftContent;
   setDraft: (value: DealRoomDraftContent) => void;
   workspace: DealRoomWorkspace;
+  disabled: boolean;
 }) {
   function update(id: string, patch: Partial<DealRoomResourceDraft>) {
     setDraft({
@@ -956,6 +1111,7 @@ function ResourceEditor({
                 className="form-control"
                 maxLength={160}
                 value={item.title}
+                disabled={disabled}
                 onChange={(event) =>
                   update(item.id, { title: event.target.value })
                 }
@@ -970,6 +1126,7 @@ function ResourceEditor({
                   inputMode="url"
                   className="form-control"
                   value={item.externalUrl ?? ""}
+                  disabled={disabled}
                   onChange={(event) =>
                     update(item.id, { externalUrl: event.target.value })
                   }
@@ -982,6 +1139,7 @@ function ResourceEditor({
                   aria-label="Approved presentation revision"
                   className="form-control"
                   value={item.presentationVersionId ?? ""}
+                  disabled={disabled}
                   onChange={(event) =>
                     update(item.id, {
                       presentationVersionId: event.target.value || null,
@@ -1003,6 +1161,7 @@ function ResourceEditor({
             <button
               type="button"
               className="text-left text-xs font-bold text-rose-700 underline"
+              disabled={disabled}
               onClick={() =>
                 setDraft({
                   ...draft,
@@ -1021,7 +1180,7 @@ function ResourceEditor({
         <button
           type="button"
           className="secondary-button"
-          disabled={draft.resources.length >= 10}
+          disabled={disabled || draft.resources.length >= 10}
           onClick={() => add("external_link")}
         >
           Add HTTPS link
@@ -1030,7 +1189,9 @@ function ResourceEditor({
           type="button"
           className="secondary-button"
           disabled={
-            draft.resources.length >= 10 || workspace.presentations.length === 0
+            disabled ||
+            draft.resources.length >= 10 ||
+            workspace.presentations.length === 0
           }
           onClick={() => add("presentation")}
         >

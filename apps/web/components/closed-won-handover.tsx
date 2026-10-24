@@ -8,8 +8,9 @@ import type {
   HandoverSource,
   HandoverWorkspace,
 } from "@revenueos/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { onOpportunityChanged } from "@/lib/opportunity-events";
 
 const sections: Array<{
   key: HandoverSectionKey;
@@ -197,27 +198,77 @@ export function ClosedWonHandover({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const workspaceRef = useRef(workspace);
+  const contentRef = useRef(content);
+  const refreshGenerationRef = useRef(0);
+  const pendingStatusRef = useRef<
+    HandoverWorkspace["opportunityStatus"] | undefined
+  >(undefined);
+  const pendingDirtyRefreshRef = useRef<{
+    generation: number;
+    revisionId: string;
+    content: HandoverContent;
+  } | null>(null);
+
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
 
   useEffect(() => {
     const controller = new AbortController();
+    const generation = refreshKey;
+    const dirtyRefresh =
+      pendingDirtyRefreshRef.current?.generation === generation
+        ? pendingDirtyRefreshRef.current
+        : null;
     apiRequest<HandoverWorkspace>(
       `/api/v1/opportunities/${opportunityId}/handover`,
       { signal: controller.signal },
     )
       .then((response) => {
+        if (
+          controller.signal.aborted ||
+          generation !== refreshGenerationRef.current
+        )
+          return;
         if (!Array.isArray(response.history)) {
           throw new Error(
             "The Closed-Won Handover service returned an invalid response.",
           );
         }
+        const preserveDirtyContent =
+          dirtyRefresh !== null &&
+          dirtyRefresh.revisionId === response.activeRevision?.id;
+        pendingDirtyRefreshRef.current = null;
+        pendingStatusRef.current = undefined;
         setWorkspace(response);
-        setContent(response.activeRevision?.content ?? null);
+        setContent(
+          preserveDirtyContent
+            ? dirtyRefresh.content
+            : (response.activeRevision?.content ?? null),
+        );
         setViewing(null);
         setError(null);
+        if (preserveDirtyContent) {
+          setMessage(
+            "Opportunity status refreshed. Your unsaved handover edits were preserved; save them before approval.",
+          );
+        }
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
+        if (
+          controller.signal.aborted ||
+          generation !== refreshGenerationRef.current ||
+          (reason instanceof DOMException && reason.name === "AbortError")
+        )
           return;
+        pendingDirtyRefreshRef.current = null;
+        pendingStatusRef.current = undefined;
         setError(
           reason instanceof Error
             ? reason.message
@@ -225,10 +276,49 @@ export function ClosedWonHandover({
         );
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (
+          !controller.signal.aborted &&
+          generation === refreshGenerationRef.current
+        )
+          setLoading(false);
       });
     return () => controller.abort();
-  }, [opportunityId]);
+  }, [opportunityId, refreshKey]);
+
+  useEffect(
+    () =>
+      onOpportunityChanged(opportunityId, (change) => {
+        const currentStatus =
+          pendingStatusRef.current ?? workspaceRef.current?.opportunityStatus;
+        if (change.status !== undefined && change.status === currentStatus)
+          return;
+        const activeRevision = workspaceRef.current?.activeRevision;
+        const currentContent = contentRef.current;
+        const preserveDirtyContent = Boolean(
+          activeRevision &&
+          currentContent &&
+          JSON.stringify(currentContent) !==
+            JSON.stringify(activeRevision.content),
+        );
+        const generation = refreshGenerationRef.current + 1;
+        refreshGenerationRef.current = generation;
+        pendingStatusRef.current = change.status;
+        pendingDirtyRefreshRef.current =
+          preserveDirtyContent && activeRevision && currentContent
+            ? {
+                generation,
+                revisionId: activeRevision.id,
+                content: currentContent,
+              }
+            : null;
+        setLoading(true);
+        setMessage(null);
+        setConfirmed(false);
+        setViewing(null);
+        setRefreshKey(generation);
+      }),
+    [opportunityId],
+  );
 
   function applyWorkspace(next: HandoverWorkspace, success: string): void {
     setWorkspace(next);
@@ -794,6 +884,7 @@ export function ClosedWonHandover({
                 type="button"
                 disabled={
                   busy ||
+                  dirty ||
                   !confirmed ||
                   active.approvalBlockers.length > 0 ||
                   workspace.opportunityStatus !== "won"

@@ -94,7 +94,10 @@ class ProspectTargetMarketService:
         self.tenant = tenant
         self.settings = settings
         self.repository = ProspectTargetMarketRepository(session)
-        self.provider = provider or create_discovery_provider(settings.prospect_research_provider_name)
+        # Target-market company discovery is a separate capability from the
+        # configured company/person research adapter. Only the explicit
+        # deterministic discovery provider is currently implemented.
+        self.provider = provider or create_discovery_provider("mock")
 
     async def capabilities(self) -> DiscoveryCapabilitiesResponse:
         await self._require_entitled(write=False)

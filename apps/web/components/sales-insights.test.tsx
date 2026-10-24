@@ -300,6 +300,7 @@ describe("sales insights", () => {
   });
 
   it("does not expose Targets when the server capability is off", async () => {
+    window.history.replaceState({}, "", "/insights?tab=targets");
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("/api/v1/beta/capabilities"))
@@ -314,11 +315,66 @@ describe("sales insights", () => {
     expect(
       screen.queryByRole("tab", { name: "Targets" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.queryByText("Active targets")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/targets"),
       expect.anything(),
     );
+  });
+
+  it("opens the Targets tab from an enabled deep link", async () => {
+    window.history.replaceState({}, "", "/insights?tab=targets");
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/api/v1/beta/capabilities"))
+        return json({
+          featureFlags: { salesTargets: true, salesForecasting: true },
+        });
+      if (url.includes("/api/v1/targets/metadata")) return json(targetMetadata);
+      if (url.includes("/api/v1/targets")) return json(emptyTargets);
+      if (url.includes("/metadata")) return json(metadata);
+      return json(overview);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SalesInsights />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Targets" }),
+    ).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Targets" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByLabelText("Sales insight filters"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows an explicit loading state while a gated deep link is checked", async () => {
+    window.history.replaceState({}, "", "/insights?tab=forecast");
+    const pendingCapabilities = new Promise<Response>(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("/api/v1/beta/capabilities")) {
+          return pendingCapabilities;
+        }
+        if (url.includes("/metadata")) return json(metadata);
+        return json(overview);
+      }),
+    );
+
+    render(<SalesInsights />);
+
+    expect(
+      await screen.findByText("Checking access to this sales insight…"),
+    ).toBeVisible();
   });
 
   it("applies the exact date, timezone, Pipeline and owner from a Target deep link", async () => {

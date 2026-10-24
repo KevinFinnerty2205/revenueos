@@ -221,16 +221,20 @@ const createDefaults: Record<BusinessEntityName, Record<string, string>> = {
 export function BusinessEntityForm({
   entity,
   entityId,
+  initialCompanyId,
 }: {
   entity: BusinessEntityName;
   entityId?: string;
+  initialCompanyId?: string;
 }) {
   const router = useRouter();
   const labels = entityLabels[entity];
   const isEditing = Boolean(entityId);
   const formFields = useMemo(() => fields[entity], [entity]);
   const [values, setValues] = useState<Record<string, string>>(
-    createDefaults[entity],
+    initialCompanyId
+      ? { ...createDefaults[entity], companyId: initialCompanyId }
+      : createDefaults[entity],
   );
   const [referenceOptions, setReferenceOptions] = useState<ReferenceOptions>(
     {},
@@ -287,7 +291,9 @@ export function BusinessEntityForm({
           ] as const;
         }),
       );
-      let loadedValues = createDefaults[entity];
+      let loadedValues = initialCompanyId
+        ? { ...createDefaults[entity], companyId: initialCompanyId }
+        : createDefaults[entity];
       let loadedUpdatedAt: string | null = null;
       let loadedReadOnlyFields: ReadonlySet<string> = new Set();
       if (entityId) {
@@ -312,14 +318,46 @@ export function BusinessEntityForm({
             .map(([field]) => camelCaseField(field)),
         );
       }
+      const loadedOptions = Object.fromEntries(
+        optionEntries,
+      ) as ReferenceOptions;
+      const exactOptionEntries = await Promise.all(
+        formFields.map(async (field) => {
+          const reference = field.reference;
+          const selectedId = loadedValues[field.name];
+          if (
+            !reference ||
+            reference === "members" ||
+            !selectedId ||
+            loadedOptions[reference]?.some(
+              (option) => option.value === selectedId,
+            )
+          ) {
+            return null;
+          }
+          const record = await apiRequest<Company | Contact | Opportunity>(
+            `/api/v1/${reference}/${encodeURIComponent(selectedId)}`,
+            { signal },
+          );
+          return [reference, optionFor(reference, record)] as const;
+        }),
+      );
+      for (const entry of exactOptionEntries) {
+        if (!entry) continue;
+        const [reference, option] = entry;
+        const current = loadedOptions[reference] ?? [];
+        if (!current.some((candidate) => candidate.value === option.value)) {
+          loadedOptions[reference] = [...current, option];
+        }
+      }
       return {
-        options: Object.fromEntries(optionEntries) as ReferenceOptions,
+        options: loadedOptions,
         values: loadedValues,
         updatedAt: loadedUpdatedAt,
         readOnlyFields: loadedReadOnlyFields,
       };
     },
-    [entity, entityId, formFields],
+    [entity, entityId, formFields, initialCompanyId],
   );
 
   useEffect(() => {

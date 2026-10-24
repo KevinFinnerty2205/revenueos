@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { DealRoomWorkspace } from "@revenueos/shared";
 
 test.beforeEach(async ({ page }) => {
   await page.route(
@@ -3356,6 +3357,22 @@ test("opportunity workspace persists an associated meeting and composes stored i
     async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
+      if (path.endsWith("/deal-room")) {
+        const dealRoomWorkspace = {
+          opportunityStatus: "open",
+          canEdit: true,
+          canManageAccess: true,
+          room: null,
+          presentations: [],
+          businessCases: [],
+          entitlement: "create",
+          creditsRequired: false,
+        } satisfies DealRoomWorkspace;
+        await route.fulfill({
+          json: dealRoomWorkspace,
+        });
+        return;
+      }
       if (path.endsWith("/workspace")) {
         await route.fulfill({
           json: opportunityWorkspace(associated, reasoningGenerated),

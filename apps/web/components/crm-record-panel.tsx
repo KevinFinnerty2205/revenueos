@@ -348,7 +348,7 @@ export function CRMRecordPanel({
           Relationship activity
         </h2>
         <p className="mt-2 text-sm text-slate-600">
-          A recent, bounded view of existing Interactions, Outreach, Actions,
+          A recent, bounded view of existing Interactions, Outreach, Tasks,
           Events and linked Opportunities.
         </p>
         {record.activity.length ? (

@@ -21,6 +21,7 @@ const desktopGroups = [
       { href: "/companies", label: "Accounts" },
       { href: "/contacts", label: "People" },
       { href: "/interactions", label: "Interactions" },
+      { href: "/tasks", label: "Tasks" },
     ],
   },
   {
@@ -127,6 +128,7 @@ export function CoreNavigation() {
   const mobileMoreItems = [
     { href: "/companies", label: "Accounts" },
     { href: "/contacts", label: "People" },
+    { href: "/tasks", label: "Tasks" },
     { href: "/opportunities", label: "Pipeline" },
     ...(salesAnalyticsEnabled
       ? [{ href: "/insights", label: "Insights" }]

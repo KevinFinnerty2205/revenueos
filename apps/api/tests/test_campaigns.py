@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from revenueos.auth import get_current_user
+from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.beta_maintenance import EXPORT_VERSION, _export_payload
+from revenueos.campaign_services import campaign_simulation_enabled
 from revenueos.campaign_worker import CampaignWorkerService
 from revenueos.integration_worker import ActionExecutionWorkerService
 from revenueos.models import (
@@ -20,10 +24,11 @@ from revenueos.models import (
     EngageCampaignVersion,
     EngageEnrollmentStep,
     Evidence,
+    IntegrationConnection,
     OutreachMessage,
 )
 
-from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL, set_test_commercial_plan
+from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL, set_test_commercial_plan
 from .test_integration_execution import _enable_execution
 from .test_meeting_api import cast_auth_dependency, secondary_user
 from .test_outreach import _configure_policy, _promote_jane
@@ -63,6 +68,20 @@ def _campaign_request(
     }
 
 
+def _primary_authenticated_user() -> AuthenticatedUser:
+    return AuthenticatedUser(
+        user_id=PRIMARY_USER_ID,
+        external_auth_id="user_dev_001",
+        display_name="Alex Morgan",
+        email="alex@example.test",
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        organisation_name="Example Revenue Team",
+        organisation_slug="example-revenue-team",
+        role="admin",
+        auth_mode="mock",
+    )
+
+
 def _run_campaign_worker(app: FastAPI, *, times: int = 1) -> None:
     async def execute() -> None:
         worker = CampaignWorkerService(app.state.session_factory, app.state.settings)
@@ -78,6 +97,67 @@ def _run_execution_worker(app: FastAPI) -> None:
         assert await worker.run_once("campaign-execution-test-worker") is True
 
     asyncio.run(execute())
+
+
+def _add_live_mailbox(app: FastAPI, connector_key: str) -> UUID:
+    connection_id = uuid4()
+    now = datetime.now(UTC)
+    app.state.settings.connector_credential_master_key = SecretStr(
+        base64.urlsafe_b64encode(b"c" * 32).decode().rstrip("=")
+    )
+    if connector_key == "microsoft_365":
+        app.state.settings.feature_microsoft_365_enabled = True
+    else:
+        assert connector_key == "google_workspace"
+        app.state.settings.feature_google_workspace_enabled = True
+
+    async def execute() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            session.add(
+                IntegrationConnection(
+                    id=connection_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    connector_key=connector_key,
+                    connection_status="active",
+                    created_by_user_id=PRIMARY_USER_ID,
+                    connected_at=now,
+                    last_verified_at=now,
+                    revoked_at=None,
+                    credential_reference="encrypted:test",
+                    capability_state_json=["send_email", "reconcile_email", "read_calendar"],
+                    external_account_id=f"{connector_key}-campaign-user",
+                    external_account_name="Campaign Sender",
+                    external_account_email="sender@example.test",
+                    external_tenant_id=f"{connector_key}-campaign-tenant",
+                    granted_scopes_json=[],
+                    metadata_version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(execute())
+    return connection_id
+
+
+def _latest_action_execution() -> ActionExecution:
+    result: ActionExecution | None = None
+
+    async def execute() -> None:
+        nonlocal result
+        engine = create_async_engine(TEST_DB_URL)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            result = await session.scalar(select(ActionExecution).order_by(ActionExecution.created_at.desc()).limit(1))
+        await engine.dispose()
+
+    asyncio.run(execute())
+    assert result is not None
+    return result
 
 
 def _evidence_count() -> int:
@@ -252,6 +332,118 @@ def test_campaign_contract_rejects_unbounded_or_ambiguous_configuration(client: 
     ]
     unsupported_strategy = client.post("/api/v1/engage/campaigns", json=scripted)
     assert unsupported_strategy.status_code == 422, unsupported_strategy.text
+
+
+@pytest.mark.parametrize("connector_key", ["microsoft_365", "google_workspace"])
+def test_campaign_launch_fails_closed_when_only_a_live_mailbox_is_connected(
+    app: FastAPI,
+    client: TestClient,
+    connector_key: str,
+) -> None:
+    _enable_execution(app)
+    contact_id = _promote_jane(client)
+    _configure_policy(client, cooldown_hours=0)
+    _add_live_mailbox(app, connector_key)
+
+    created = client.post("/api/v1/engage/campaigns", json=_campaign_request([contact_id]))
+    assert created.status_code == 201, created.text
+    campaign = created.json()
+    assert campaign["simulationOnly"] is True
+    assert campaign["productionMailboxAvailable"] is True
+    assert campaign["canLaunch"] is False
+    assert "not authorised" in campaign["launchWarning"].lower()
+    assert "simulation" in campaign["launchWarning"].lower()
+
+    launched = client.post(
+        f"/api/v1/engage/campaigns/{campaign['id']}/launch",
+        json={"expectedVersion": 1, "confirmed": True, "autoSendConfirmed": False},
+    )
+    assert launched.status_code == 409, launched.text
+    assert launched.json()["code"] == "campaign_mailbox_unavailable"
+
+
+@pytest.mark.parametrize("connector_key", ["microsoft_365", "google_workspace"])
+def test_campaign_worker_uses_mock_simulation_when_live_and_mock_mailboxes_coexist(
+    app: FastAPI,
+    client: TestClient,
+    connector_key: str,
+) -> None:
+    _enable_execution(app)
+    contact_id = _promote_jane(client)
+    _configure_policy(client, cooldown_hours=0, campaign_auto_send_allowed=True)
+    mock_connection = client.post("/api/v1/integrations/connections", json={"connectorKey": "mock_email"})
+    assert mock_connection.status_code == 201, mock_connection.text
+    _add_live_mailbox(app, connector_key)
+
+    created = client.post(
+        "/api/v1/engage/campaigns",
+        json=_campaign_request([contact_id], approval_mode="approved_campaign_auto_send"),
+    )
+    assert created.status_code == 201, created.text
+    campaign = created.json()
+    assert campaign["simulationOnly"] is True
+    assert campaign["productionMailboxAvailable"] is True
+    assert campaign["canLaunch"] is True
+    assert "simulate" in campaign["launchWarning"].lower()
+    assert "no real message" in campaign["launchWarning"].lower()
+
+    launched = client.post(
+        f"/api/v1/engage/campaigns/{campaign['id']}/launch",
+        json={"expectedVersion": 1, "confirmed": True, "autoSendConfirmed": True},
+    )
+    assert launched.status_code == 200, launched.text
+    _run_campaign_worker(app, times=2)
+
+    execution = _latest_action_execution()
+    assert execution.connection_id == UUID(mock_connection.json()["id"])
+    assert execution.connector_key == "mock_email"
+    assert execution.execution_mode == "simulation"
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "disabled_value"),
+    (
+        ("feature_engage_enabled", False),
+        ("feature_engage_campaigns_enabled", False),
+        ("feature_integrations_enabled", False),
+        ("feature_action_execution_enabled", False),
+        ("feature_action_layer_enabled", False),
+        ("feature_mock_connectors_enabled", False),
+        ("environment", "production"),
+    ),
+)
+def test_campaign_launch_fails_closed_when_any_simulation_gate_is_disabled(
+    app: FastAPI,
+    client: TestClient,
+    setting_name: str,
+    disabled_value: bool | str,
+) -> None:
+    settings = _enable_execution(app)
+    contact_id = _promote_jane(client)
+    _configure_policy(client, cooldown_hours=0)
+    connection = client.post("/api/v1/integrations/connections", json={"connectorKey": "mock_email"})
+    assert connection.status_code == 201, connection.text
+    created = client.post("/api/v1/engage/campaigns", json=_campaign_request([contact_id]))
+    assert created.status_code == 201, created.text
+    campaign = created.json()
+    assert campaign["canLaunch"] is True
+
+    setattr(settings, setting_name, disabled_value)
+    if setting_name == "environment":
+        app.dependency_overrides[get_current_user] = cast_auth_dependency(_primary_authenticated_user())
+    assert campaign_simulation_enabled(settings) is False
+    assert CampaignWorkerService(app.state.session_factory, settings)._features_enabled() is False
+    if setting_name != "feature_engage_campaigns_enabled":
+        response = client.get(f"/api/v1/engage/campaigns/{campaign['id']}")
+        assert response.status_code == 200, response.text
+        assert response.json()["canLaunch"] is False
+
+    launched = client.post(
+        f"/api/v1/engage/campaigns/{campaign['id']}/launch",
+        json={"expectedVersion": 1, "confirmed": True, "autoSendConfirmed": False},
+    )
+    assert launched.status_code in {404, 409}, launched.text
+    assert launched.json()["code"] in {"campaigns_unavailable", "campaign_mailbox_unavailable"}
 
 
 def test_auto_send_requires_org_permission_and_explicit_launch_confirmation(app: FastAPI, client: TestClient) -> None:

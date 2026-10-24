@@ -22,6 +22,7 @@ from revenueos.models import (
     ProspectTargetMarketVersion,
     RevenueBrainSnapshot,
 )
+from revenueos.prospect_discovery_provider import DeterministicMockDiscoveryProvider
 from revenueos.prospect_target_market_contracts import TargetMarketDefinitionRequest
 from revenueos.prospect_target_market_services import ProspectTargetMarketService
 from revenueos.tenant import TenantContext
@@ -87,6 +88,17 @@ def _create_relationship_accounts(client: TestClient) -> tuple[str, str, str]:
     )
     assert opportunity.status_code == 201, opportunity.text
     return bluepeak.json()["id"], atlas.json()["id"], opportunity.json()["id"]
+
+
+def test_company_discovery_stays_separate_from_the_research_adapter() -> None:
+    service = ProspectTargetMarketService(
+        object(),  # type: ignore[arg-type]
+        TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin"),
+        Settings(prospect_research_provider_name="apollo"),
+    )
+
+    assert isinstance(service.provider, DeterministicMockDiscoveryProvider)
+    assert service.provider.capabilities().live_data is False
 
 
 def test_capabilities_create_discover_and_explain_whitespace(client: TestClient) -> None:

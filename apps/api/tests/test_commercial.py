@@ -670,6 +670,31 @@ def test_stale_plan_change_is_rejected_and_provider_availability_stays_separate(
     asyncio.run(with_database(scenario))
 
 
+def test_operational_status_reflects_each_live_adapter_boundary() -> None:
+    async def scenario(factory: async_sessionmaker[AsyncSession], organisation_id: UUID, user_id: UUID) -> None:
+        del organisation_id, user_id
+        async with factory() as session:
+            base = settings()
+            service = CommercialService(session, base, now=lambda: FIXED_NOW)
+            assert service._operational_status("prospect") == "mock_only"
+            assert service._operational_status("engage") == "mock_only"
+            assert service._operational_status("crm") == "unavailable"
+
+            apollo_not_activated = base.model_copy(update={"prospect_research_provider_name": "apollo"})
+            assert CommercialService(session, apollo_not_activated)._operational_status("prospect") == "mock_only"
+            apollo_activated = apollo_not_activated.model_copy(
+                update={"feature_prospect_external_provider_enabled": True}
+            )
+            assert CommercialService(session, apollo_activated)._operational_status("prospect") == "available"
+
+            microsoft_activated = base.model_copy(update={"feature_microsoft_365_enabled": True})
+            assert CommercialService(session, microsoft_activated)._operational_status("engage") == "available"
+            salesforce_activated = base.model_copy(update={"feature_salesforce_crm_enabled": True})
+            assert CommercialService(session, salesforce_activated)._operational_status("crm") == "available"
+
+    asyncio.run(with_database(scenario))
+
+
 def test_commercial_api_is_admin_read_only_and_rejects_client_authority(app: FastAPI, client: TestClient) -> None:
     response = client.get("/api/v1/commercial")
     assert response.status_code == 200

@@ -180,4 +180,149 @@ describe("InteractionForm", () => {
       callDirection: "outbound",
     });
   });
+
+  it("preserves safe relationship context from an in-app create link", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/contacts")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              {
+                id: "contact-1",
+                companyId: "company-1",
+                firstName: "Jordan",
+                lastName: "Lee",
+              },
+            ],
+          }),
+        );
+      }
+      if (path.includes("/companies")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [{ id: "company-1", name: "Acme Australia" }],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <InteractionForm
+        initialContactId="contact-1"
+        initialInteractionType="phone_call"
+      />,
+    );
+
+    expect(await screen.findByLabelText("Contact")).toHaveValue("contact-1");
+    expect(screen.getByLabelText("Company")).toHaveValue("company-1");
+    expect(screen.getByLabelText("Interaction type")).toHaveValue("phone_call");
+  });
+
+  it("loads an exact linked contact and its account beyond the first page", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/api/v1/contacts/contact-101")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "contact-101",
+            companyId: "company-101",
+            firstName: "Taylor",
+            lastName: "Ng",
+          }),
+        );
+      }
+      if (path.endsWith("/api/v1/companies/company-101")) {
+        return Promise.resolve(
+          jsonResponse({ id: "company-101", name: "Beyond Page Account" }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <InteractionForm
+        initialContactId="contact-101"
+        initialInteractionType="phone_call"
+      />,
+    );
+
+    expect(await screen.findByLabelText("Contact")).toHaveValue("contact-101");
+    expect(screen.getByRole("option", { name: "Taylor Ng" })).toBeVisible();
+    expect(screen.getByLabelText("Company")).toHaveValue("company-101");
+    expect(
+      screen.getByRole("option", { name: "Beyond Page Account" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/contacts/contact-101"),
+      expect.any(Object),
+    );
+  });
+
+  it("syncs changed linked props until relationship context becomes dirty", async () => {
+    const companies = ["1", "2", "3"].map((suffix) => ({
+      id: `company-${suffix}`,
+      name: `Account ${suffix}`,
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          jsonResponse(
+            String(input).includes("/companies")
+              ? { ...emptyPage, items: companies }
+              : emptyPage,
+          ),
+        ),
+      ),
+    );
+
+    const { rerender } = render(
+      <InteractionForm initialCompanyId="company-1" />,
+    );
+    expect(await screen.findByLabelText("Company")).toHaveValue("company-1");
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Keep this draft title" },
+    });
+
+    rerender(
+      <InteractionForm
+        initialCompanyId="company-2"
+        initialInteractionType="online_meeting"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveValue("company-2"),
+    );
+    expect(screen.getByLabelText("Interaction type")).toHaveValue(
+      "online_meeting",
+    );
+    expect(screen.getByLabelText("Title")).toHaveValue("Keep this draft title");
+
+    fireEvent.change(screen.getByLabelText("Company"), {
+      target: { value: "company-1" },
+    });
+    rerender(
+      <InteractionForm
+        initialCompanyId="company-3"
+        initialInteractionType="phone_call"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/current selections were kept/i),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Company")).toHaveValue("company-1");
+    expect(screen.getByLabelText("Interaction type")).toHaveValue(
+      "online_meeting",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Use linked context" }));
+    expect(screen.getByLabelText("Company")).toHaveValue("company-3");
+    expect(screen.getByLabelText("Interaction type")).toHaveValue("phone_call");
+  });
 });

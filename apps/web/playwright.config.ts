@@ -12,7 +12,12 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec next dev --port ${webPort}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    env: {
+      // Keep the public SEO contract deterministic even when a developer's
+      // ignored .env.local points browser navigation at localhost.
+      NEXT_PUBLIC_SITE_URL: "https://oryntela.com.au",
+    },
+    reuseExistingServer: false,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

@@ -3,10 +3,12 @@
 - Initial evidence date: 11 September 2026 (Australia/Sydney)
 - Latest Stripe control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
+- Latest owner build-only boundary: 24 October 2026 (Australia/Sydney)
 - Pre-gate main baseline: `4facc04`
-- Migration head: `0064_deauthorisation`
+- Current repository migration head: `0065_campaign_trigger_guard`
+- Deployed pre-build migration head: `0064_deauthorisation`
 - State: downsized synthetic-only production healthy; Stripe live configuration bound and verified;
-  exact legal release owner-approved and bound; OpenAI project funded and its
+  exact legal release owner-approved and published; OpenAI project funded and its
   least-privilege secret bound while execution remains disabled; customer checkout
   and Credits disabled; paid-customer resilience gate pending review and deployment
 - Stripe fixed spend in this activation pass: AUD 0 / USD 0; no transaction fee
@@ -57,24 +59,26 @@ and [RBA exchange rates](https://www.rba.gov.au/statistics/frequency/exchange-ra
 ## Account and provider reconciliation
 
 The initial 11 September pass produced signed-out provider pages and therefore proved
-only that the browser profile had no usable session. The Stripe row below is updated
-from the later authenticated production control-plane evidence; the remaining rows
-retain the initial classification until their own reconciliation record is updated.
+only that the browser profile had no usable session. Stripe and OpenAI reflect later
+authenticated control-plane evidence; DigitalOcean, AWS and Clerk reflect subsequent
+owner-confirmed state and the current build-only boundary. This owner-demo branch does
+not independently re-verify or change any provider control plane.
 
 | Provider | Account/resource evidence | Launch classification |
 | --- | --- | --- |
-| DigitalOcean | owner login required; resources uninspected | not configured |
-| AWS | owner login required; resources uninspected | not configured |
-| Clerk | owner login required; application/plan uninspected | not configured |
+| DigitalOcean | existing Sydney web, API, worker, single-node PostgreSQL and private Spaces resources; owner-confirmed healthy at USD 35.15/month fixed before tax and short-lived jobs; no customer data | active synthetic-only pre-launch profile; unchanged and not approved for first-customer resilience |
+| AWS | existing independent-backup schedule and retention must be preserved; this build-only pass does not create, delete, purchase or re-test AWS resources | existing control retained; current delivery/recovery evidence remains a separate operations gate |
+| Clerk | existing production identity configuration is preserved; this build-only pass neither changes identity settings nor onboards a customer | production activation state unchanged; named-customer/session proof remains a separate gate |
 | Stripe | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled under the separate billing gate |
-| OpenAI API | owner-controlled `Personal` organisation; project `Oryntela Production` (`proj_fb1vGtmPRjlbzlMamBvJbPKf`); USD 5 prepaid balance with auto-reload off; organisation and project hard limits each USD 5/month; only `gpt-5.6-terra` allowed at 10,000 TPM / 1 RPM; 90-day service-account key restricted to Responses write and bound as an encrypted runtime secret to API and worker | configured for one synthetic proof; execution remains fail-closed pending reviewed deployment and the recorded smoke |
+| OpenAI API | owner-controlled `Personal` organisation; project `Oryntela Production` (`proj_fb1vGtmPRjlbzlMamBvJbPKf`); USD 5 prepaid balance with auto-reload off; organisation and project hard limits each USD 5/month; only `gpt-5.6-terra` allowed at 10,000 TPM / 1 RPM; 90-day service-account key restricted to Responses write and bound as an encrypted runtime secret to API and worker | configured but execution remains fail-closed; the current build-only direction authorises no paid request or synthetic production smoke |
 | Zoho Mail | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing |
 | Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised | not configured; must remain disabled |
 
 On 15 September 2026 the owner approved the exact PR #88 Terms and Privacy Policy,
 selected effective date `2026-09-15`, and authorised publication. The legal-release
-commit binds those canonical bytes, versions and fingerprints. Until that commit is
-merged and deployed, the runtime remains on the preceding release.
+commit binds those canonical bytes, versions and fingerprints. The owner-approved
+pages are published; the current repository candidate adds their public index and
+sitemap integration, but this build-only work does not deploy that candidate.
 
 ### Stripe live control-plane evidence — 15 September 2026
 
@@ -135,13 +139,16 @@ database URL. The scheduled backup job alone gets its separate source database/C
 source Spaces credentials, destination AWS credentials and
 `API_BACKUP_ENCRYPTION_KEY`.
 
-**Stripe required only after its gate:** `API_STRIPE_SECRET_KEY`,
-`API_STRIPE_WEBHOOK_SECRET`, account/portal IDs and the six exact live Price IDs.
+**Stripe already bound but use-gated:** `API_STRIPE_SECRET_KEY`,
+`API_STRIPE_WEBHOOK_SECRET`, account/portal IDs and the six exact live Price IDs are
+already present in the production secret/configuration boundary. Billing, checkout,
+Credits and transactions remain disabled and separately gated.
 
-**OpenAI required only after its gate:** `OPENAI_API_KEY` plus ordinary config
-`OPENAI_MODEL=gpt-5.6-terra`, timeout/output limits and the explicit approval/feature
-flags. Core production boots with `AI_PROVIDER=mock` and the OpenAI feature flag
-false, without this secret.
+**OpenAI already bound but execution-gated:** `OPENAI_API_KEY` is already present in
+the production secret boundary, with ordinary config for
+`OPENAI_MODEL=gpt-5.6-terra`, timeout/output limits and explicit approval/feature
+flags. Core production continues to run with `AI_PROVIDER=mock` and the OpenAI feature
+flag false; the bound secret does not authorise or cause a request.
 
 **Optional/disabled:** connector credential master key; Microsoft, Google, HubSpot
 and Salesforce OAuth secrets; and a Prospect provider key. Do not provision or add
@@ -167,9 +174,9 @@ auto-reload is off.
 - Project model usage permits only `gpt-5.6-terra`; the saved project rate limit is
   10,000 tokens/minute and one request/minute.
 - The application stop remains `AI_PROVIDER=mock` together with
-  `API_FEATURE_OPENAI_PROVIDER_ENABLED=false`. Outside the single synthetic smoke
-  window, production must return to that state even though the encrypted key remains
-  bound.
+  `API_FEATURE_OPENAI_PROVIDER_ENABLED=false`. Production must remain in that state
+  even though the encrypted key remains bound. Any future synthetic smoke window
+  requires a new, explicit owner approval.
 - The deployment contract allows at most ten generation jobs and ten OpenAI requests
   per tenant per UTC day, one structured-output attempt, one durable worker attempt,
   a 30-second OpenAI timeout and 2,048 output tokens.
@@ -178,43 +185,40 @@ auto-reload is off.
   authorised, and permanent provider enablement requires a separately approved legal
   and real-data release.
 
-The owner authorised one deliberately supplied synthetic Sales Brain request up to
-USD 0.25 after the reviewed hardening release is deployed and read-only preflight
-passes. That paid proof has not yet run at this ledger revision.
+The earlier authority for one paid synthetic Sales Brain request was superseded on
+24 October 2026. The current build-only direction authorises no OpenAI request, paid
+provider call or production activation. No such proof ran under this work.
 
 ## DNS and continuation boundary
 
-No DNS record changed. The apex and `www` still resolve to the existing site,
-`api.oryntela.com.au` has no target, and existing Zoho MX, SPF, DKIM, DMARC and
-verification records remain authoritative. Exact new apex/`www`/API values cannot be
-prepared until DigitalOcean and Clerk issue their targets. Apply only additive or
-targeted record changes; leave `oryntela.com` unchanged. Enable HSTS only after
-production HTTPS is stable; do not preload.
+No DNS record changes are part of the owner-demo completion work. Preserve the
+existing working production DNS/TLS and Zoho MX, SPF, DKIM, DMARC and verification
+records exactly as they are; this branch does not re-verify or modify the control
+plane. Leave `oryntela.com` unchanged and do not enable HSTS preload as part of this
+work.
 
-After the owner supplies authenticated sessions and explicit purchasing authority,
-resume at the resource-creation section of the launch runbook. Create company-owned
-resources, keep automatic deploy off, place secrets without exposing them, create
-separate migration/runtime roles, migrate through `0064_deauthorisation`, prove RLS
-and synthetic cross-tenant denial, configure backup/monitoring, perform the
-named-cloud synthetic restore, and only then prepare provider facts for the owner's
-later PR 88 publication decision.
+Additional production expansion is paused. Alembic migration
+`0065_campaign_trigger_guard` belongs to the reviewed repository candidate and may
+reach production only through a separately approved deployment. Do not resize
+services, add a standby, create paid
+test/restore resources, activate a provider, enable checkout/Credits, release real
+customer data or begin WO-045 under this build instruction.
 
-## Owner-only blockers
+## Current owner-only boundaries
 
-1. Sign into or create the company-controlled DigitalOcean account, enable MFA and
-   approve the exact USD 95/month fixed resource set plus metered job usage.
-2. Sign into or create the company-controlled AWS account, enable MFA/payment
-   controls and approve the private Sydney S3 usage range above.
-3. Sign into the owner-controlled Clerk workspace, confirm the existing application,
-   enable MFA and approve Pro month-to-month at USD 25/month recurring.
-4. Sign into or create the company-controlled Stripe account and complete the
-   business, identity and Australian bank/payout verification. This starts no fixed
-   subscription and authorises no real charge.
-5. Deploy the reviewed OpenAI hardening release, pass read-only production preflight,
-   run exactly one synthetic request within USD 0.25, capture metadata-only evidence,
-   and immediately return the application provider and feature flag to their disabled
-   values. Do not send customer content or treat the proof as legal authority for
-   continuing production AI use.
+1. Approve a fresh capacity, high-availability, bounded-load and recovery assessment
+   plus the resulting fixed cost before the first paid customer or real customer data.
+2. Separately approve a reviewed production deployment of the eventual merged Git
+   revision containing Alembic head `0065_campaign_trigger_guard`; the owner-demo
+   branch itself must not deploy.
+3. Separately approve the real-data release and named-customer/Clerk session evidence.
+4. Separately approve any OpenAI, Prospect, Microsoft, Google, HubSpot or Salesforce
+   production activation and its bounded synthetic smoke. No paid provider call is
+   authorised here.
+5. Separately approve live checkout, billing and Credits after their current gates;
+   no real charge, refund, subscription or paid-Credit grant is authorised here.
+6. Begin WO-045 only after those applicable launch gates pass and the owner explicitly
+   authorises it.
 
 Completing a login is not permission for Codex to purchase, deploy, create live
 payment objects, create API keys or accept provider terms. Kevin must return with the

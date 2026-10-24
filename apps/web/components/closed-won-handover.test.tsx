@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -13,9 +14,27 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClosedWonHandover } from "@/components/closed-won-handover";
 import { apiRequest } from "@/lib/api";
+import { notifyOpportunityChanged } from "@/lib/opportunity-events";
 
 vi.mock("@/lib/api", () => ({ apiRequest: vi.fn() }));
 const mockedApiRequest = vi.mocked(apiRequest);
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolve) throw new Error("Deferred promise was not initialised.");
+      resolve(value);
+    },
+  };
+}
 
 const emptyContent: HandoverContent = {
   schemaVersion: 1,
@@ -266,6 +285,123 @@ describe("ClosedWonHandover", () => {
     expect(
       screen.getByText(/canonical Opportunity status is Closed Won/i),
     ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /I reviewed the claims/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Approve immutable handover" }),
+    ).toBeDisabled();
+  });
+
+  it("refreshes the approval boundary when the sibling pipeline closes Won", async () => {
+    const review = revision({
+      status: "in_review",
+      submittedAt: "2026-09-08T01:00:00Z",
+      approvalBlockers: [],
+    });
+    mockedApiRequest
+      .mockResolvedValueOnce(workspace({ activeRevision: review }))
+      .mockResolvedValueOnce(
+        workspace({ opportunityStatus: "won", activeRevision: review }),
+      );
+
+    render(<ClosedWonHandover opportunityId="opportunity-1" />);
+
+    expect(
+      await screen.findByRole("button", { name: "Approve immutable handover" }),
+    ).toBeDisabled();
+    act(() => notifyOpportunityChanged("opportunity-1", "won"));
+    await waitFor(() => expect(mockedApiRequest).toHaveBeenCalledTimes(2));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /I reviewed the claims/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Approve immutable handover" }),
+    ).toBeEnabled();
+  });
+
+  it("preserves unsaved handover edits when the Opportunity status refreshes", async () => {
+    const review = revision({
+      status: "in_review",
+      submittedAt: "2026-09-08T01:00:00Z",
+      approvalBlockers: [],
+    });
+    mockedApiRequest
+      .mockResolvedValueOnce(workspace({ activeRevision: review }))
+      .mockResolvedValueOnce(
+        workspace({ opportunityStatus: "won", activeRevision: review }),
+      );
+
+    render(<ClosedWonHandover opportunityId="opportunity-1" />);
+
+    const summary = await screen.findByLabelText("Executive summary item 1");
+    fireEvent.change(summary, {
+      target: { value: "Unsaved seller clarification." },
+    });
+    act(() => notifyOpportunityChanged("opportunity-1", "won"));
+
+    expect(
+      await screen.findByText(/unsaved handover edits were preserved/i),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Executive summary item 1")).toHaveValue(
+      "Unsaved seller clarification.",
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /I reviewed the claims/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Approve immutable handover" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Save reviewed draft" }),
+    ).toBeEnabled();
+  });
+
+  it("ignores an aborted status response without losing the latest dirty handover snapshot", async () => {
+    const review = revision({
+      status: "in_review",
+      submittedAt: "2026-09-08T01:00:00Z",
+      approvalBlockers: [],
+    });
+    const closing = deferred<HandoverWorkspace>();
+    const reopening = deferred<HandoverWorkspace>();
+    mockedApiRequest
+      .mockResolvedValueOnce(workspace({ activeRevision: review }))
+      .mockImplementationOnce(() => closing.promise)
+      .mockImplementationOnce(() => reopening.promise);
+
+    render(<ClosedWonHandover opportunityId="opportunity-1" />);
+
+    fireEvent.change(await screen.findByLabelText("Executive summary item 1"), {
+      target: { value: "Keep this unsaved handover clarification." },
+    });
+    act(() => notifyOpportunityChanged("opportunity-1", "won"));
+    await waitFor(() => expect(mockedApiRequest).toHaveBeenCalledTimes(2));
+
+    act(() => notifyOpportunityChanged("opportunity-1", "open"));
+    await waitFor(() => expect(mockedApiRequest).toHaveBeenCalledTimes(3));
+
+    await act(async () => {
+      closing.resolve(
+        workspace({ opportunityStatus: "won", activeRevision: review }),
+      );
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Loading Closed-Won Handover/i,
+    );
+
+    await act(async () => {
+      reopening.resolve(workspace({ activeRevision: review }));
+      await Promise.resolve();
+    });
+
+    expect(
+      await screen.findByText(/unsaved handover edits were preserved/i),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Executive summary item 1")).toHaveValue(
+      "Keep this unsaved handover clarification.",
+    );
     fireEvent.click(
       screen.getByRole("checkbox", { name: /I reviewed the claims/i }),
     );

@@ -79,7 +79,7 @@ def test_crm_configuration_custom_fields_history_activity_and_archive(app: FastA
             "title": "Confirm mutual action plan",
         },
     )
-    assert task.status_code == 201
+    assert task.status_code == 201, task.text
 
     record = client.get(f"/api/v1/crm/records/account/{company_id}")
     assert record.status_code == 200, record.text
@@ -88,7 +88,11 @@ def test_crm_configuration_custom_fields_history_activity_and_archive(app: FastA
     assert body["ownerName"] == "Alex Morgan"
     assert {field["key"] for field in body["coreFields"]} >= {"website", "location", "status"}
     assert body["customFields"][0]["value"] == "Strategic"
-    assert {item["activityType"] for item in body["activity"]} >= {"action", "opportunity"}
+    assert {item["activityType"] for item in body["activity"]} >= {"task", "opportunity"}
+    task_activity = next(item for item in body["activity"] if item["activityType"] == "task")
+    assert task_activity["id"] == f"task:{task.json()['id']}"
+    assert task_activity["sourceLabel"] == "Task"
+    assert task_activity["href"] == f"/tasks/{task.json()['id']}/edit"
     assert {item["fieldKey"] for item in body["history"]} >= {"name", "custom.customer_tier"}
 
     archived = client.post(f"/api/v1/crm/records/account/{company_id}/archive")

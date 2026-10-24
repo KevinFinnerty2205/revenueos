@@ -3,6 +3,7 @@ import { AccountPublicResearch } from "@/components/account-public-research";
 import { RevenueBrainTimeline } from "@/components/revenue-brain-timeline";
 import Link from "next/link";
 import { CRMRecordPanel } from "@/components/crm-record-panel";
+import { AccountPeoplePanel } from "@/components/account-people-panel";
 
 export default async function CompanyAccountPage({
   params,
@@ -13,6 +14,7 @@ export default async function CompanyAccountPage({
   return (
     <div className="space-y-7">
       <CRMRecordPanel entityType="account" entityId={id} />
+      <AccountPeoplePanel companyId={id} />
       <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
@@ -27,6 +29,18 @@ export default async function CompanyAccountPage({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-3">
+          <Link
+            href={`/opportunities/new?companyId=${id}`}
+            className="primary-button"
+          >
+            Create opportunity
+          </Link>
+          <Link
+            href={`/interactions/new?companyId=${id}`}
+            className="secondary-button"
+          >
+            Plan interaction
+          </Link>
           <Link
             href={`/create/business-cases/new?accountId=${id}`}
             className="secondary-button"

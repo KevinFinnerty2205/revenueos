@@ -383,6 +383,12 @@ describe("OpportunityWorkspace", () => {
       "href",
       "/assistant?mode=ask&scope=opportunity&scopeId=opportunity-1",
     );
+    expect(
+      screen.getByRole("link", { name: "Plan interaction" }),
+    ).toHaveAttribute(
+      "href",
+      "/interactions/new?companyId=company-1&opportunityId=opportunity-1",
+    );
     fireEvent.click(screen.getByText("Account history and change over time"));
     fireEvent.click(screen.getByText("Latest meeting intelligence"));
     fireEvent.click(screen.getByText("Meeting history (1)"));

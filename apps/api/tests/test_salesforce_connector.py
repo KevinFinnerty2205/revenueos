@@ -8,6 +8,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -22,22 +23,31 @@ from revenueos.auth import get_current_user
 from revenueos.config import Settings
 from revenueos.credential_store import ConnectorCredential
 from revenueos.crm_connector_worker import CRMConnectorWorkerService
+from revenueos.domain import ConnectorKey
+from revenueos.integration_contracts import CRMExecutionPreview
 from revenueos.integration_executors import ExecutorConnectionContext
+from revenueos.integration_repositories import ExecutionRecord
+from revenueos.integration_services import ActionExecutionService
+from revenueos.integration_worker import ActionExecutionWorkerService, _stale_external_state_message
 from revenueos.models import (
+    ActionExecution,
     CRMConnectionState,
     CRMSyncCursor,
     CRMSyncJob,
     EncryptedConnectorCredential,
+    ExecutionPreview,
     IntegrationConnection,
 )
 from revenueos.salesforce_connector import (
     SALESFORCE_REQUIRED_SCOPES,
     SalesforceAPIError,
     SalesforceClient,
+    SalesforceCRMExecutor,
     SalesforceIdentity,
     SalesforceOAuthResult,
     validate_salesforce_instance_url,
 )
+from revenueos.tenant import TenantContext
 
 from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
 from .test_meeting_api import secondary_user
@@ -110,6 +120,185 @@ def _context() -> ExecutorConnectionContext:
         execution_mode="live",
         external_tenant_id="00D000000000001",
     )
+
+
+def _salesforce_connection(connection_id: uuid.UUID, now: datetime) -> IntegrationConnection:
+    return IntegrationConnection(
+        id=connection_id,
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        connector_key="salesforce",
+        connection_status="active",
+        created_by_user_id=PRIMARY_USER_ID,
+        connected_at=now,
+        last_verified_at=now,
+        revoked_at=None,
+        credential_reference="credential-ref",
+        capability_state_json=["update_opportunity", "update_contact"],
+        external_account_id="005000000000001",
+        external_account_name="CRM Admin",
+        external_account_email="admin@example.test",
+        external_tenant_id="00D000000000001",
+        granted_scopes_json=list(SALESFORCE_REQUIRED_SCOPES),
+        metadata_version=1,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def test_action_execution_service_registers_salesforce_as_a_live_executor() -> None:
+    service = ActionExecutionService(
+        object(),  # type: ignore[arg-type]
+        TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin"),
+        _settings(),
+        credential_store=_MemoryStore(_credential()),
+    )
+
+    service._require_execution_features()
+    assert isinstance(service.executors.get(ConnectorKey.SALESFORCE), SalesforceCRMExecutor)
+
+
+def test_action_execution_worker_runs_when_salesforce_is_the_only_provider() -> None:
+    worker = ActionExecutionWorkerService(
+        object(),  # type: ignore[arg-type]
+        _settings(),
+    )
+
+    assert worker._features_enabled() is True
+
+
+@pytest.mark.parametrize(
+    ("capability", "target_type", "action", "expected_summary"),
+    (
+        (
+            "update_opportunity",
+            "opportunity",
+            "update_opportunity",
+            "Apply this reviewed field update to the linked Salesforce opportunity.",
+        ),
+        (
+            "update_contact",
+            "contact",
+            "update_contact",
+            "Apply this reviewed field update to the linked Salesforce contact.",
+        ),
+    ),
+)
+def test_salesforce_execution_preview_names_the_selected_provider(
+    capability: str,
+    target_type: Literal["opportunity", "contact"],
+    action: Literal["update_opportunity", "update_contact"],
+    expected_summary: str,
+) -> None:
+    now = datetime.now(UTC)
+    connection_id = uuid.uuid4()
+    preview = ExecutionPreview(
+        id=uuid.uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        action_id=uuid.uuid4(),
+        action_version=1,
+        connection_id=connection_id,
+        capability=capability,
+        risk_class="data_mutation",
+        preview_fingerprint="p" * 64,
+        expires_at=now + timedelta(minutes=5),
+        confirmed_by_user_id=None,
+        confirmed_at=None,
+        invalidated_at=None,
+        created_at=now,
+    )
+    content = CRMExecutionPreview(
+        kind="crm",
+        target_type=target_type,
+        target_id=uuid.uuid4(),
+        field="stage",
+        current_external_value="discovery",
+        expected_external_value="discovery",
+        new_value="proposal",
+        field_authority="review_before_sync",
+        external_updated_at=now,
+        action=action,
+    )
+    service = ActionExecutionService(
+        object(),  # type: ignore[arg-type]
+        TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin"),
+        _settings(),
+        credential_store=_MemoryStore(_credential()),
+    )
+
+    response = service._preview_response(
+        preview,
+        _salesforce_connection(connection_id, now),
+        content,
+    )
+
+    assert response.summary == expected_summary
+    assert "HubSpot" not in response.summary
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_message"),
+    (
+        ("queued", "Salesforce update queued. No external change has occurred yet."),
+        ("executing", "Oryntela is applying the reviewed Salesforce action."),
+        ("succeeded", "The reviewed Salesforce action completed and was verified."),
+        ("failed_retryable", "Salesforce did not apply the action; a bounded retry is safe."),
+        ("failed_permanent", "The Salesforce action stopped safely and will not be retried."),
+        ("cancelled", "The Salesforce action was cancelled before execution."),
+        (
+            "unknown_external_state",
+            "The Salesforce outcome is unknown. Oryntela will not retry without reconciliation.",
+        ),
+    ),
+)
+def test_salesforce_execution_status_names_the_selected_provider(status: str, expected_message: str) -> None:
+    now = datetime.now(UTC)
+    connection_id = uuid.uuid4()
+    execution = ActionExecution(
+        id=uuid.uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        action_id=uuid.uuid4(),
+        action_version=1,
+        connection_id=connection_id,
+        preview_id=uuid.uuid4(),
+        connector_key="salesforce",
+        capability="update_opportunity",
+        risk_class="data_mutation",
+        execution_status=status,
+        execution_mode="live",
+        idempotency_key="i" * 64,
+        preview_fingerprint="p" * 64,
+        confirmed_by_user_id=PRIMARY_USER_ID,
+        confirmed_at=now,
+        next_attempt_at=None,
+        started_at=now,
+        completed_at=now if status == "succeeded" else None,
+        failed_at=now if status in {"failed_retryable", "failed_permanent"} else None,
+        safe_failure_code=None,
+        external_result_id=None,
+        attempt_count=1,
+        max_attempts=3,
+        worker_id=None,
+        lease_expires_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+    response = ActionExecutionService._execution_response(
+        ExecutionRecord(
+            execution=execution,
+            connection=_salesforce_connection(connection_id, now),
+        )
+    )
+
+    assert response.safe_message == expected_message
+    assert "HubSpot" not in response.safe_message
+
+
+def test_stale_salesforce_worker_message_names_the_selected_provider() -> None:
+    message = _stale_external_state_message("salesforce")
+
+    assert message == "Salesforce changed since this preview. Review the latest values before updating CRM."
+    assert "HubSpot" not in message
 
 
 @pytest.mark.parametrize(

@@ -2,22 +2,35 @@
 
 ## Current status
 
-WO-054 proposes DigitalOcean Sydney as the smallest credible production target and
-adds an inert deployment specification, but no hosting resource exists and this
-repository does not deploy automatically. The canonical
-[production launch runbook](production-launch-runbook.md) owns current setup,
-operation and recovery decisions; it is not production-data approval.
+The owner-confirmed current production state is an existing, healthy,
+synthetic-only DigitalOcean Sydney deployment: one 512 MiB web service, one
+512 MiB API service, one 512 MiB worker, one single-node 1 GiB PostgreSQL
+cluster and one private Spaces subscription. Its fixed DigitalOcean run rate is
+USD 35.15/month before tax and short-lived job usage. It contains no customer
+data and is not the approved first-customer resilience profile. The current
+repository's Alembic migration head is `0065_campaign_trigger_guard`; the
+deployed pre-build release remains on its previously reviewed Git and migration
+heads until a separate deployment approval.
+
+This repository does not deploy automatically, and the current owner-demo build
+work must not change that production environment. The canonical
+[production launch runbook](production-launch-runbook.md) and
+[activation boundary ledger](wo-054-production-activation-ledger.md) own current
+setup, operation, cost and recovery evidence; neither is production-data
+approval.
 
 WO-039C adds a conditional supervised real-data path through current Alembic head
-`0064_deauthorisation`; it is not blanket approval. Before any named partner,
+`0065_campaign_trigger_guard`; it is not blanket approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.
 WO-048/WO-054B billing and WO-049 Credits remain disabled in the checked-in production
 template. WO-055 adds only an internal cleared-funds manual Credit grant. The Stripe
 adapter is engineering-capable in explicit live mode, but this does not authorise a
-provider account, live key, webhook, payment, production Credit pack or real sale;
-GST, external configuration, read-only preflight and live smoke remain blocked.
+payment, production Credit pack or real sale. GST presentation, the existing live
+Stripe catalogue/webhook/portal configuration and read-only preflight are recorded in
+the activation ledger. Checkout, billing and Credits remain disabled; no live-money
+smoke or customer transaction is authorised.
 
 ## Process topology
 

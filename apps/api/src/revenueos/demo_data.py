@@ -8,6 +8,7 @@ import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -105,7 +106,7 @@ from revenueos.pre_interaction_contracts import (
 )
 from revenueos.prospect_target_market_contracts import DiscoveryRequest, TargetMarketDefinitionRequest
 from revenueos.prospect_target_market_services import ProspectTargetMarketService
-from revenueos.tenant import TenantContext
+from revenueos.tenant import Role, TenantContext
 from revenueos.visual_storage import create_visual_storage
 
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
@@ -1235,7 +1236,7 @@ def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteraction
         brief_version=1,
         headline=variant["headline"],
         account_context=(
-            "[DEMO] Southern Cross Operations has the Revenue workflow pilot opportunity "
+            "[DEMO] Northstar Facilities Group has the multi-site workflow pilot opportunity "
             "at the evaluation stage with open status. Only linked record context is used."
         ),
         recent_changes=(),
@@ -1265,8 +1266,8 @@ def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteraction
         success_criteria=(variant["success"],),
         interaction_guidance=variant["guidance"],
         confidence=0.55,
-        company_name="[DEMO] Southern Cross Operations",
-        opportunity_name="[DEMO] Revenue workflow pilot",
+        company_name="[DEMO] Northstar Facilities Group",
+        opportunity_name="[DEMO] Northstar multi-site workflow pilot",
         participants=(BriefParticipant(name="[DEMO] Alex Morgan", role="attendee"),),
         next_best_action="Confirm one owned and dated next step.",
     ).as_json()
@@ -1320,6 +1321,9 @@ async def seed_demo_data(
     organisation_id: UUID,
     user_id: UUID,
     settings: Settings | None = None,
+    *,
+    seed_methodology_views: bool = True,
+    preserve_existing_methodology_setting: bool = False,
 ) -> dict[str, object]:
     active_settings = settings or get_settings()
     company_id, opportunity_id, meeting_ids, transcript_ids = demo_ids(organisation_id)
@@ -1335,6 +1339,7 @@ async def seed_demo_data(
         membership = await session.get(OrganisationMembership, (organisation_id, user_id))
         if membership is None or membership.status != "active":
             raise ValueError("Demo data requires an active member of the selected organisation.")
+        tenant_role = cast(Role, membership.role)
         pipeline, pipeline_stages = await ensure_default_pipeline(session, organisation_id)
         demo_stage = initial_stage_for(pipeline_stages, "evaluation", "open")
         company = await session.get(Company, company_id)
@@ -1343,21 +1348,28 @@ async def seed_demo_data(
                 Company(
                     id=company_id,
                     organisation_id=organisation_id,
-                    name="[DEMO] Southern Cross Operations",
-                    website="https://example.test/demo",
-                    industry="Synthetic professional services",
-                    employee_count=75,
+                    name="[DEMO] Northstar Facilities Group",
+                    website="https://northstar-facilities.example/",
+                    normalized_domain="northstar-facilities.example",
+                    industry="Synthetic multi-site facilities",
+                    employee_count=850,
                     status="prospect",
                     owner_user_id=user_id,
                 )
             )
+        else:
+            company.name = "[DEMO] Northstar Facilities Group"
+            company.website = "https://northstar-facilities.example/"
+            company.normalized_domain = "northstar-facilities.example"
+            company.industry = "Synthetic multi-site facilities"
+            company.employee_count = 850
         opportunity = await session.get(Opportunity, opportunity_id)
         if opportunity is None:
             opportunity = Opportunity(
                 id=opportunity_id,
                 organisation_id=organisation_id,
                 company_id=company_id,
-                name="[DEMO] Revenue workflow pilot",
+                name="[DEMO] Northstar multi-site workflow pilot",
                 stage="evaluation",
                 status="open",
                 estimated_value=Decimal("420000.00"),
@@ -1369,6 +1381,8 @@ async def seed_demo_data(
                 pipeline_stage_id=demo_stage.id,
                 stage_entered_at=seeded_at,
                 stage_tracking_started_at=seeded_at,
+                created_at=datetime(2026, 6, 1, 1, 0, tzinfo=UTC),
+                updated_at=seeded_at,
             )
             session.add(opportunity)
             await session.flush()
@@ -1392,6 +1406,8 @@ async def seed_demo_data(
             opportunity.estimated_value = Decimal("420000.00")
             opportunity.currency = "AUD"
             opportunity.expected_close_date = (seeded_at + timedelta(days=14)).date()
+            opportunity.name = "[DEMO] Northstar multi-site workflow pilot"
+            opportunity.created_at = datetime(2026, 6, 1, 1, 0, tzinfo=UTC)
         await session.flush()
         if await session.get(Contact, phone_contact_id) is None:
             session.add(
@@ -2760,24 +2776,35 @@ async def seed_demo_data(
             )
         else:
             event.metadata_json = {"dataset_version": 18}
-    methodology_versions = await _seed_methodology_views(
-        session_factory,
-        organisation_id,
-        user_id,
-        active_settings,
-        opportunity_id,
+    methodology_versions = (
+        await _seed_methodology_views(
+            session_factory,
+            organisation_id,
+            user_id,
+            active_settings,
+            opportunity_id,
+            tenant_role,
+            preserve_existing_setting=preserve_existing_methodology_setting,
+        )
+        if seed_methodology_views
+        else ()
     )
     target_market = await _seed_target_market(
         session_factory,
         organisation_id,
         user_id,
         active_settings,
+        company_id,
+        opportunity_id,
+        tenant_role,
     )
     campaign_id = await _seed_demo_campaign(
         session_factory,
         organisation_id,
         user_id,
         active_settings,
+        company_id,
+        tenant_role,
     )
     return {
         "status": "ready",
@@ -2816,6 +2843,8 @@ async def _seed_demo_campaign(
     organisation_id: UUID,
     user_id: UUID,
     settings: Settings,
+    canonical_company_id: UUID,
+    tenant_role: Role,
 ) -> UUID:
     """Seed a paused, synthetic campaign without any external execution."""
 
@@ -2824,9 +2853,33 @@ async def _seed_demo_campaign(
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         if await session.get(EngageCampaign, ids["campaign"]) is not None:
+            # Published campaign versions and their snapshot audience are immutable.
+            # A fresh v20 seed points them at ``canonical_company_id`` below; repeat
+            # runs must never rewrite an already-published snapshot merely to repair
+            # an older local demo dataset. Reset and reseed is the explicit upgrade
+            # path for those disposable, synthetic datasets.
             version = await session.get(EngageCampaignVersion, ids["version"])
             step = await session.get(EngageEnrollmentStep, ids["enrollment-step-jane"])
             enrollment = await session.get(EngageCampaignEnrollment, ids["enrollment-jane"])
+            audiences = [
+                await session.get(EngageCampaignAudience, ids["audience-jane"]),
+                await session.get(EngageCampaignAudience, ids["audience-sam"]),
+            ]
+            contacts = [
+                await session.get(Contact, ids["contact-jane"]),
+                await session.get(Contact, ids["contact-sam"]),
+            ]
+            if (
+                version is None
+                or enrollment is None
+                or enrollment.company_id != canonical_company_id
+                or any(item is None or item.company_id != canonical_company_id for item in audiences)
+                or any(item is None or item.company_id != canonical_company_id for item in contacts)
+            ):
+                raise ValueError(
+                    "Owner demo dataset upgrade required: the published campaign audience belongs to a legacy "
+                    "Account. Run pnpm demo:reset, then pnpm demo:owner."
+                )
             if version is not None and step is not None:
                 scheduled_at = (
                     step.scheduled_at.replace(tzinfo=UTC)
@@ -2842,7 +2895,7 @@ async def _seed_demo_campaign(
                 if not valid:
                     scheduled = CampaignService(
                         session,
-                        TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin"),
+                        TenantContext(organisation_id=organisation_id, user_id=user_id, role=tenant_role),
                         settings,
                     )._next_send_time(now + timedelta(days=1), version)
                     step.scheduled_at = scheduled
@@ -2855,24 +2908,12 @@ async def _seed_demo_campaign(
                         enrollment.next_scheduled_at = scheduled
                         enrollment.updated_at = now
             return ids["campaign"]
-        session.add(
-            Company(
-                id=ids["company"],
-                organisation_id=organisation_id,
-                name="[DEMO] Northstar Facilities Group",
-                website="https://northstar.example.test",
-                industry="Synthetic multi-site facilities",
-                employee_count=850,
-                status="prospect",
-                owner_user_id=user_id,
-            )
-        )
         session.add_all(
             (
                 Contact(
                     id=ids["contact-jane"],
                     organisation_id=organisation_id,
-                    company_id=ids["company"],
+                    company_id=canonical_company_id,
                     first_name="[DEMO] Jane",
                     last_name="Smith",
                     email="jane.smith@northstar.example.test",
@@ -2883,7 +2924,7 @@ async def _seed_demo_campaign(
                 Contact(
                     id=ids["contact-sam"],
                     organisation_id=organisation_id,
-                    company_id=ids["company"],
+                    company_id=canonical_company_id,
                     first_name="[DEMO] Sam",
                     last_name="Rivera",
                     email=None,
@@ -2934,7 +2975,7 @@ async def _seed_demo_campaign(
         await session.flush()
         scheduled = CampaignService(
             session,
-            TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin"),
+            TenantContext(organisation_id=organisation_id, user_id=user_id, role=tenant_role),
             settings,
         )._next_send_time(now + timedelta(days=1), version)
         sequence_definitions = (
@@ -2964,7 +3005,7 @@ async def _seed_demo_campaign(
                     organisation_id=organisation_id,
                     campaign_version_id=ids["version"],
                     contact_id=ids["contact-jane"],
-                    company_id=ids["company"],
+                    company_id=canonical_company_id,
                     recipient_name="[DEMO] Jane Smith",
                     recipient_email="jane.smith@northstar.example.test",
                     recipient_trust="verified",
@@ -2978,7 +3019,7 @@ async def _seed_demo_campaign(
                     organisation_id=organisation_id,
                     campaign_version_id=ids["version"],
                     contact_id=ids["contact-sam"],
-                    company_id=ids["company"],
+                    company_id=canonical_company_id,
                     recipient_name="[DEMO] Sam Rivera",
                     recipient_email=None,
                     recipient_trust="unknown",
@@ -2995,7 +3036,7 @@ async def _seed_demo_campaign(
             campaign_id=ids["campaign"],
             campaign_version_id=ids["version"],
             contact_id=ids["contact-jane"],
-            company_id=ids["company"],
+            company_id=canonical_company_id,
             sender_user_id=user_id,
             recipient_name="[DEMO] Jane Smith",
             recipient_email="jane.smith@northstar.example.test",
@@ -3036,10 +3077,13 @@ async def _seed_target_market(
     organisation_id: UUID,
     user_id: UUID,
     settings: Settings,
+    canonical_company_id: UUID,
+    canonical_opportunity_id: UUID,
+    tenant_role: Role,
 ) -> dict[str, UUID | int]:
     """Seed the bounded synthetic WO-028 flagship journey without external calls."""
 
-    tenant = TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin")
+    tenant = TenantContext(organisation_id=organisation_id, user_id=user_id, role=tenant_role)
     async with session_factory() as session:
         await set_tenant_database_context(session, organisation_id)
         service = ProspectTargetMarketService(session, tenant, settings)
@@ -3066,9 +3110,20 @@ async def _seed_target_market(
         if not discovery.candidates:
             raise ValueError("The deterministic Target Market demo returned no candidate accounts.")
         candidate = next(
-            (item for item in discovery.candidates if item.priority.value == "high"),
-            discovery.candidates[0],
+            (item for item in discovery.candidates if item.provider_candidate_id == "northstar-facilities-group"),
+            None,
         )
+        if candidate is None:
+            raise ValueError("The deterministic Target Market demo did not return Northstar.")
+        if (
+            candidate.matched_company_id != canonical_company_id
+            or candidate.active_opportunity_id != canonical_opportunity_id
+            or candidate.relationship_state.value != "active_opportunity"
+        ):
+            raise ValueError(
+                "Owner demo dataset upgrade required: Northstar Find results do not match the canonical "
+                "Account and active Opportunity. Run pnpm demo:reset, then pnpm demo:owner."
+            )
         await service.save_candidate(candidate.id)
         return {
             "target_market_id": market.id,
@@ -3083,12 +3138,27 @@ async def _seed_methodology_views(
     user_id: UUID,
     settings: Settings,
     opportunity_id: UUID,
+    tenant_role: Role,
+    *,
+    preserve_existing_setting: bool = False,
 ) -> tuple[int, ...]:
     """Seed a BANT-to-MEDDPICC switch using only deterministic final evidence."""
 
-    tenant = TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin")
+    tenant = TenantContext(organisation_id=organisation_id, user_id=user_id, role=tenant_role)
     async with session_factory() as session:
         await set_tenant_database_context(session, organisation_id)
+        original_setting = await session.get(OrganisationMethodologySetting, organisation_id)
+        original_setting_values = (
+            (
+                original_setting.selection,
+                original_setting.custom_definition_id,
+                original_setting.updated_by_user_id,
+                original_setting.created_at,
+                original_setting.updated_at,
+            )
+            if preserve_existing_setting and original_setting is not None
+            else None
+        )
         existing_keys = set(
             await session.scalars(
                 select(MethodologyProjection.definition_key).where(
@@ -3097,38 +3167,61 @@ async def _seed_methodology_views(
                 )
             )
         )
-        service = SalesMethodologyProjectionService(session, tenant, settings)
-        if "bant" not in existing_keys:
-            await service.select_methodology(MethodologySelectionUpdate(selection="bant"))
-            await service.generate(opportunity_id)
-        if "meddpicc" not in existing_keys:
-            await service.select_methodology(MethodologySelectionUpdate(selection="meddpicc"))
-            await service.generate(opportunity_id)
-        else:
-            setting = await session.get(OrganisationMethodologySetting, organisation_id)
-            if setting is None:
-                session.add(
-                    OrganisationMethodologySetting(
-                        organisation_id=organisation_id,
-                        selection="meddpicc",
-                        updated_by_user_id=user_id,
+        try:
+            service = SalesMethodologyProjectionService(session, tenant, settings)
+            if "bant" not in existing_keys:
+                await service.select_methodology(MethodologySelectionUpdate(selection="bant"))
+                await service.generate(opportunity_id)
+            if "meddpicc" not in existing_keys:
+                await service.select_methodology(MethodologySelectionUpdate(selection="meddpicc"))
+                await service.generate(opportunity_id)
+            else:
+                setting = await session.get(OrganisationMethodologySetting, organisation_id)
+                if setting is None:
+                    session.add(
+                        OrganisationMethodologySetting(
+                            organisation_id=organisation_id,
+                            selection="meddpicc",
+                            updated_by_user_id=user_id,
+                        )
                     )
+                elif setting.selection != "meddpicc" or setting.custom_definition_id is not None:
+                    setting.selection = "meddpicc"
+                    setting.custom_definition_id = None
+                    setting.updated_by_user_id = user_id
+                    setting.updated_at = datetime.now(UTC)
+                await session.commit()
+            versions = await session.scalars(
+                select(MethodologyProjection.projection_version)
+                .where(
+                    MethodologyProjection.organisation_id == organisation_id,
+                    MethodologyProjection.opportunity_id == opportunity_id,
                 )
-            elif setting.selection != "meddpicc" or setting.custom_definition_id is not None:
-                setting.selection = "meddpicc"
-                setting.custom_definition_id = None
-                setting.updated_by_user_id = user_id
-                setting.updated_at = datetime.now(UTC)
-            await session.commit()
-        versions = await session.scalars(
-            select(MethodologyProjection.projection_version)
-            .where(
-                MethodologyProjection.organisation_id == organisation_id,
-                MethodologyProjection.opportunity_id == opportunity_id,
+                .order_by(MethodologyProjection.projection_version)
             )
-            .order_by(MethodologyProjection.projection_version)
-        )
-        return tuple(versions)
+            return tuple(versions)
+        finally:
+            if original_setting_values is not None:
+                await session.rollback()
+                await set_tenant_database_context(session, organisation_id)
+                setting = await session.get(OrganisationMethodologySetting, organisation_id)
+                if setting is None:
+                    setting = OrganisationMethodologySetting(
+                        organisation_id=organisation_id,
+                        selection=original_setting_values[0],
+                        custom_definition_id=original_setting_values[1],
+                        updated_by_user_id=original_setting_values[2],
+                        created_at=original_setting_values[3],
+                        updated_at=original_setting_values[4],
+                    )
+                    session.add(setting)
+                else:
+                    setting.selection = original_setting_values[0]
+                    setting.custom_definition_id = original_setting_values[1]
+                    setting.updated_by_user_id = original_setting_values[2]
+                    setting.created_at = original_setting_values[3]
+                    setting.updated_at = original_setting_values[4]
+                await session.commit()
 
 
 async def reset_demo_data(
@@ -3137,6 +3230,17 @@ async def reset_demo_data(
     settings: Settings | None = None,
 ) -> dict[str, object]:
     active_settings = settings or get_settings()
+    # Owner-demo extensions hold restrictive references to the canonical demo
+    # opportunity. Remove only their labelled rows and local objects first.
+    from revenueos.owner_demo_data import (
+        _assert_private_demo_settings,
+        _reset_owner_methodology_setting,
+        owner_demo_base_manifest_id,
+        reset_owner_demo_extensions,
+    )
+
+    _assert_private_demo_settings(active_settings)
+    await reset_owner_demo_extensions(session_factory, organisation_id, active_settings)
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     campaign_ids = demo_campaign_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
@@ -3154,6 +3258,14 @@ async def reset_demo_data(
         await set_tenant_database_context(session, organisation_id)
         if session.get_bind().dialect.name == "postgresql":
             await session.execute(text("SELECT set_config('app.beta_maintenance', 'approved', true)"))
+        owner_manifest = await session.scalar(
+            select(BetaSystemEvent).where(
+                BetaSystemEvent.organisation_id == organisation_id,
+                BetaSystemEvent.id == owner_demo_base_manifest_id(organisation_id),
+            )
+        )
+        if owner_manifest is not None:
+            await _reset_owner_methodology_setting(session, owner_manifest, organisation_id)
         await session.execute(
             update(BetaFeedback)
             .where(
@@ -3188,11 +3300,6 @@ async def reset_demo_data(
             delete(MethodologyProjection).where(
                 MethodologyProjection.organisation_id == organisation_id,
                 MethodologyProjection.opportunity_id == opportunity_id,
-            )
-        )
-        await session.execute(
-            delete(OrganisationMethodologySetting).where(
-                OrganisationMethodologySetting.organisation_id == organisation_id,
             )
         )
         demo_market_ids = select(ProspectTargetMarket.id).where(
@@ -3348,6 +3455,12 @@ async def reset_demo_data(
                 BetaSystemEvent.subject_id == opportunity_id,
             )
         )
+        await session.execute(
+            delete(BetaSystemEvent).where(
+                BetaSystemEvent.organisation_id == organisation_id,
+                BetaSystemEvent.id == owner_demo_base_manifest_id(organisation_id),
+            )
+        )
     return {"status": "reset", "provider_calls": 0}
 
 
@@ -3360,6 +3473,15 @@ async def _run_cli(arguments: argparse.Namespace) -> None:
     try:
         if arguments.command == "seed":
             result = await seed_demo_data(
+                session_factory,
+                UUID(arguments.organisation_id),
+                UUID(arguments.user_id),
+                settings,
+            )
+        elif arguments.command == "owner-demo":
+            from revenueos.owner_demo_data import seed_owner_demo_data
+
+            result = await seed_owner_demo_data(
                 session_factory,
                 UUID(arguments.organisation_id),
                 UUID(arguments.user_id),
@@ -3378,6 +3500,9 @@ def main() -> None:
     seed = subparsers.add_parser("seed")
     seed.add_argument("--organisation-id", required=True)
     seed.add_argument("--user-id", required=True)
+    owner_demo = subparsers.add_parser("owner-demo")
+    owner_demo.add_argument("--organisation-id", required=True)
+    owner_demo.add_argument("--user-id", required=True)
     reset = subparsers.add_parser("reset")
     reset.add_argument("--organisation-id", required=True)
     asyncio.run(_run_cli(parser.parse_args()))

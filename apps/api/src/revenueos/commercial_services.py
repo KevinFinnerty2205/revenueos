@@ -809,14 +809,23 @@ class CommercialService:
             "prospect": self.settings.feature_prospect_enabled,
             "engage": self.settings.feature_engage_enabled,
             "create": self.settings.feature_create_enabled,
-            "crm": self.settings.feature_hubspot_crm_enabled,
+            "crm": (self.settings.feature_hubspot_crm_enabled or self.settings.feature_salesforce_crm_enabled),
         }
         if not flags[module]:
             return "unavailable"
-        if module == "prospect" and self.settings.prospect_research_provider_name == "mock":
-            return "mock_only"
+        if module == "prospect":
+            return (
+                "available"
+                if self.settings.prospect_research_provider_name != "mock"
+                and self.settings.feature_prospect_external_provider_enabled
+                else "mock_only"
+            )
         if module == "engage":
-            return "mock_only"
+            return (
+                "available"
+                if self.settings.feature_microsoft_365_enabled or self.settings.feature_google_workspace_enabled
+                else "mock_only"
+            )
         return "available"
 
     @staticmethod

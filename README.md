@@ -16,7 +16,9 @@ Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
 Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer, WO-022
 Integrations & Execution Foundation, WO-024 Sales Methodology Engine, WO-025
 Oryntela Daily, WO-025A Core Experience readiness, WO-025B Ask Oryntela and
-WO-025C Focused CRM Sync. Interactions, Meetings,
+WO-025C Focused CRM Sync, plus the approved product work through WO-044 and
+WO-046–050 recorded in the canonical
+[documentation index](docs/README.md#current-delivery-boundary). Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -114,23 +116,30 @@ scoring, forecasting, privileged browser database access, background recording
 guarantees, general media ingestion beyond the reviewed visual/audio paths,
 general live sending, billing or integration marketplace is implemented.
 
-Synthetic demo dataset v13 makes Home useful without provider calls: it includes
+Synthetic demo dataset v18 makes Home useful without provider calls: it includes
 near-term prepared Interactions, two current Action Layer items (one overdue), an
 important methodology gap and an AUD 420,000 open Opportunity. Demo content remains
 explicitly synthetic; Daily still presents no forecast or invented target.
+
+For the coherent private owner walkthrough, `pnpm demo:owner` adds the v20
+Company & Selling Profile, linked Task, approved Business Case, reviewed
+presentation, published Deal Room and prepared Closed-Won Handover to the same
+synthetic account and Opportunity. It refuses production, live AI/Prospect
+providers, real-data release, non-local object storage and non-deterministic
+billing. See the [owner demo runbook](docs/03-engineering/owner-demo-runbook.md).
 
 ## Product blueprint
 
 The [Oryntela master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-The proposed direction beyond the current WO-025C baseline is defined by the
+The broader product direction is defined by the
 [End-to-End Sales Platform vision](docs/01-product/end-to-end-sales-platform-vision.md),
 [commercial packaging](docs/01-product/revenueos-commercial-packaging.md),
 [simplicity-first information architecture](docs/02-design/revenueos-information-architecture.md)
 and [conditional WO-024–045 roadmap](docs/06-roadmap/end-to-end-sales-platform-roadmap.md).
-WO-024 implements Sales Methodology, WO-025 implements Oryntela Daily, WO-025B
-implements bounded Ask Oryntela and WO-025C implements the first reviewed HubSpot
-CRM path; later roadmap items remain unauthorised.
+The [documentation index](docs/README.md#current-delivery-boundary) is the
+canonical current-delivery ledger; individual work-order records distinguish
+implemented software, inactive production-capable adapters and future scope.
 
 WO-010 defines the approved direction in the
 [Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
@@ -148,22 +157,21 @@ WO-017 implements the browser-first phone-call path and compliant recording impo
 WO-018 implements the provider-neutral online-meeting import path, WO-019
 implements first-party document/email evidence without an external connector, and
 WO-020 implements bounded provisional processing over an authorised progressive
-source, WO-021 implements reviewed Actions, WO-022 implements simulation-first
-connector/execution foundations, WO-024 implements evidence-backed Sales
-Methodology, WO-025B implements bounded evidence-backed Ask and WO-025C implements
-one production-capable HubSpot CRM connector. Production progressive transcription,
-external live AI, native/background capture, mobile client, meeting bot, telephony
-provider, second CRM connector and autonomous CRM writes remain unimplemented.
+source, WO-021 implements reviewed Actions and WO-022 implements simulation-first
+connector/execution foundations. The approved Sales OS work then adds Sales
+Methodology, Daily, bounded Ask, Prospect, Engage, Create, Native CRM, Pipeline,
+Insights, Targets, Forecast, Manager Intelligence, production-capable provider
+adapters, Deal Rooms and Closed-Won Handover. Production progressive transcription,
+native/background capture, a mobile client, meeting bots, telephony providers and
+autonomous external writes remain outside the implemented boundary.
 
 Target documents distinguish future direction from shipped functionality and do
-not authorise another sprint. The current implementation boundary is Sprints 1–3
-plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
-WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021, WO-022,
-WO-024, WO-025, WO-025A, WO-025B and WO-025C.
-WO-010 remains the Interaction Intelligence blueprint. WO-023 adds the broader
-end-to-end Sales OS blueprint; all work beyond the implemented WO-025C boundary
-remains unauthorised.
+not authorise another sprint. Sprints 1–3 and the implemented work through WO-044,
+including WO-039A/B/C and WO-046–050, form the current software boundary where each
+individual record says so. WO-010 and WO-023 are completed blueprints rather than
+runtime scope. WO-040, WO-041, WO-042 and WO-050 provide production-capable adapters
+that remain inactive; WO-045 and every unchecked production/customer activation gate
+remain separate owner decisions.
 
 ## Prerequisites
 
@@ -190,7 +198,7 @@ The example files contain local-only values and empty credential placeholders. N
 
 ## Start PostgreSQL and migrate
 
-Docker Compose provides one local PostgreSQL service because PostgreSQL locking and forced RLS cannot be represented faithfully by a browser-side store.
+Docker Compose provides one local PostgreSQL service because PostgreSQL locking and forced RLS cannot be represented faithfully by a browser-side store. Its host port is bound only to `127.0.0.1`, so the development database is not exposed to the local network.
 
 ```bash
 docker compose -f infra/docker/compose.yml up -d
@@ -223,7 +231,7 @@ Open:
 - API readiness: [http://localhost:8000/ready](http://localhost:8000/ready)
 - OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-Local development defaults to a clearly labelled mock identity and example organisation. Mock authentication is rejected by API configuration and route policy in production.
+Local development defaults to a clearly labelled mock identity and example organisation. `pnpm dev:web` binds the development server only to `127.0.0.1`; use `http://localhost:3000` from the same computer. Mock authentication is rejected by API configuration and route policy in production.
 
 ## Available routes
 
@@ -233,6 +241,14 @@ Public web routes:
 - `/sign-in`
 - `/sign-up`
 - `/sign-out`
+- `/platform`
+- `/pricing`
+- `/integrations`
+- `/security`
+- `/contact`
+- `/privacy`
+- `/terms`
+- `/deal-room` — token-fragment buyer view
 
 Protected routes:
 
@@ -241,9 +257,11 @@ Protected routes:
 - `/select-organisation`
 - `/companies`
 - `/companies/new`
+- `/companies/{id}`
 - `/companies/{id}/edit`
 - `/contacts`
 - `/contacts/new`
+- `/contacts/{id}`
 - `/contacts/{id}/edit`
 - `/opportunities`
 - `/opportunities/new`
@@ -260,12 +278,22 @@ Protected routes:
 - `/tasks`
 - `/tasks/new`
 - `/tasks/{id}/edit`
+- `/find`
+- `/campaigns`
+- `/campaigns/new`
+- `/events`
+- `/events/new`
+- `/create`
+- `/create/value-models`
+- `/insights`
 - `/assistant`
 - `/feedback`
 - `/settings`
 
-Assistant remains an honest placeholder. Company, contact and task pages use
-the versioned API and provide list/create/edit states. Opportunities add an
+Assistant provides deterministic Search plus bounded, evidence-backed Ask
+Oryntela; it cannot browse the public web, generate SQL or execute Actions.
+Company, contact and task pages use the versioned API and provide list/create/edit
+states. Opportunities add an
 enriched list, create/edit flows, audited meeting association and a latest-
 meeting workspace. Meeting pages
 provide list/search/filter/pagination, create/edit, participant management,

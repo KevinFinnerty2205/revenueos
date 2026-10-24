@@ -63,6 +63,19 @@ _ACTIVE_ENROLLMENT_STATES = frozenset(("ready", "active", "paused", "needs_atten
 _UNSENT_STEP_STATES = frozenset(("pending", "processing", "ready_for_review", "prepared", "queued", "deferred"))
 
 
+def campaign_simulation_enabled(settings: Settings) -> bool:
+    """Return whether the complete fail-closed Campaign simulation gate is open."""
+    return (
+        settings.environment != "production"
+        and settings.feature_engage_enabled
+        and settings.feature_engage_campaigns_enabled
+        and settings.feature_integrations_enabled
+        and settings.feature_action_execution_enabled
+        and settings.feature_action_layer_enabled
+        and settings.feature_mock_connectors_enabled
+    )
+
+
 class CampaignService:
     def __init__(self, session: AsyncSession, tenant: TenantContext, settings: Settings) -> None:
         self.session = session
@@ -73,7 +86,7 @@ class CampaignService:
 
     async def list_campaigns(self) -> CampaignListResponse:
         self._require_feature()
-        mailbox = await self.repository.active_email_connection_for_user(
+        preferred_mailbox = await self.repository.active_email_connection_for_user(
             self.tenant.organisation_id,
             self.tenant.user_id,
             microsoft_enabled=self.settings.feature_microsoft_365_enabled,
@@ -104,9 +117,10 @@ class CampaignService:
             items=items,
             total=len(items),
             can_create=await self._entitled(),
-            simulation_only=mailbox is None or mailbox.connector_key == "mock_email",
+            simulation_only=True,
             production_mailbox_available=bool(
-                mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
+                preferred_mailbox is not None
+                and preferred_mailbox.connector_key in {"microsoft_365", "google_workspace"}
             ),
         )
 
@@ -239,12 +253,18 @@ class CampaignService:
                     409,
                 )
         connection = await self.repository.active_email_connection_for_user(
-            self.tenant.organisation_id, version.sender_user_id
+            self.tenant.organisation_id,
+            version.sender_user_id,
+            simulation_only=True,
         )
-        if self.settings.environment == "production" or connection is None:
+        if (
+            not campaign_simulation_enabled(self.settings)
+            or connection is None
+            or connection.connector_key != "mock_email"
+        ):
             raise PublicAPIError(
                 "campaign_mailbox_unavailable",
-                "Campaign launch is unavailable until the sender has a supported production mailbox connection.",
+                "Campaign launch is limited to a sender-bound Mock Email connection in a non-production environment.",
                 409,
             )
         owner_count, organisation_count = await self.repository.active_campaign_counts(
@@ -635,11 +655,24 @@ class CampaignService:
         can_manage = self.tenant.can_manage() or campaign.owner_user_id == self.tenant.user_id
         auto = version.approval_mode == CampaignApprovalMode.APPROVED_CAMPAIGN_AUTO_SEND.value
         event_link = await self.repository.event_campaign_link(self.tenant.organisation_id, campaign.id)
-        mailbox = await self.repository.active_email_connection_for_user(
+        simulation_mailbox = await self.repository.active_email_connection_for_user(
+            self.tenant.organisation_id,
+            version.sender_user_id,
+            simulation_only=True,
+        )
+        preferred_mailbox = await self.repository.active_email_connection_for_user(
             self.tenant.organisation_id,
             version.sender_user_id,
             microsoft_enabled=self.settings.feature_microsoft_365_enabled,
             google_enabled=self.settings.feature_google_workspace_enabled,
+        )
+        simulation_delivery_available = bool(
+            campaign_simulation_enabled(self.settings)
+            and simulation_mailbox is not None
+            and simulation_mailbox.connector_key == "mock_email"
+        )
+        production_mailbox_available = bool(
+            preferred_mailbox is not None and preferred_mailbox.connector_key in {"microsoft_365", "google_workspace"}
         )
         return CampaignResponse(
             id=campaign.id,
@@ -697,22 +730,27 @@ class CampaignService:
                 and campaign.state in {CampaignState.DRAFT.value, CampaignState.READY.value}
                 and version.status == "draft"
                 and any(item.eligible for item in audience)
+                and simulation_delivery_available
             ),
             campaign_auto_send_allowed=bool(policy and policy.campaign_auto_send_allowed),
-            simulation_only=mailbox is None or mailbox.connector_key == "mock_email",
-            production_mailbox_available=bool(
-                mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
-            ),
+            simulation_only=True,
+            production_mailbox_available=production_mailbox_available,
             launch_warning=(
-                (
-                    "Oryntela will prepare and send future approved sequence steps through the connected "
-                    "work mailbox when every safety check passes."
-                    if mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
-                    else "Oryntela will prepare and simulate future approved sequence steps automatically "
-                    "when all safety checks pass."
+                "Oryntela will prepare and simulate future approved sequence steps automatically when all safety "
+                "checks pass. No real message will be sent."
+                if simulation_delivery_available and auto
+                else (
+                    "Campaign delivery is limited to Mock Email simulation in this release. No real message will "
+                    "be sent."
+                    if simulation_delivery_available
+                    else (
+                        "A live work mailbox is connected, but Campaign delivery is not authorised to use it. "
+                        "Connect Mock Email in a non-production environment to run a simulation."
+                        if production_mailbox_available
+                        else "Campaign launch requires a sender-bound Mock Email connection in a non-production "
+                        "environment. No real message will be sent."
+                    )
                 )
-                if auto
-                else None
             ),
             needs_attention_reason=campaign.needs_attention_reason,
             launched_at=campaign.launched_at,
