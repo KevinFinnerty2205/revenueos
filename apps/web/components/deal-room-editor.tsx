@@ -275,19 +275,20 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         assertDealRoomWorkspace(response);
         const preserveDirtyDraft =
           dirtyRefresh !== null && dirtyRefresh.roomId === response.room?.id;
+        const nextDraft = preserveDirtyDraft
+          ? dirtyRefresh.draft
+          : (response.room?.draft ?? null);
+        const nextExpiry = preserveDirtyDraft
+          ? dirtyRefresh.expiry
+          : toDateTimeLocal(response.room?.link.expiresAt ?? null);
+        workspaceRef.current = response;
+        draftRef.current = nextDraft;
+        expiryRef.current = nextExpiry;
         pendingDirtyRefreshRef.current = null;
         pendingStatusRef.current = undefined;
         setWorkspace(response);
-        setDraft(
-          preserveDirtyDraft
-            ? dirtyRefresh.draft
-            : (response.room?.draft ?? null),
-        );
-        setExpiry(
-          preserveDirtyDraft
-            ? dirtyRefresh.expiry
-            : toDateTimeLocal(response.room?.link.expiresAt ?? null),
-        );
+        setDraft(nextDraft);
+        setExpiry(nextExpiry);
         setError(null);
         if (preserveDirtyDraft) {
           setMessage(
@@ -365,9 +366,14 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         `/api/v1/opportunities/${opportunityId}/deal-room`,
       );
       assertDealRoomWorkspace(response);
+      const nextDraft = response.room?.draft ?? null;
+      const nextExpiry = toDateTimeLocal(response.room?.link.expiresAt ?? null);
+      workspaceRef.current = response;
+      draftRef.current = nextDraft;
+      expiryRef.current = nextExpiry;
       setWorkspace(response);
-      setDraft(response.room?.draft ?? null);
-      setExpiry(toDateTimeLocal(response.room?.link.expiresAt ?? null));
+      setDraft(nextDraft);
+      setExpiry(nextExpiry);
       setError(null);
     } catch (reason: unknown) {
       setError(
@@ -382,9 +388,16 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
 
   function applyMutation(result: DealRoomMutation, success: string): void {
     assertDealRoomWorkspace(result.workspace);
+    const nextDraft = result.workspace.room?.draft ?? null;
+    const nextExpiry = toDateTimeLocal(
+      result.workspace.room?.link.expiresAt ?? null,
+    );
+    workspaceRef.current = result.workspace;
+    draftRef.current = nextDraft;
+    expiryRef.current = nextExpiry;
     setWorkspace(result.workspace);
-    setDraft(result.workspace.room?.draft ?? null);
-    setExpiry(toDateTimeLocal(result.workspace.room?.link.expiresAt ?? null));
+    setDraft(nextDraft);
+    setExpiry(nextExpiry);
     setReviewed(false);
     setMessage(success);
     setError(null);
