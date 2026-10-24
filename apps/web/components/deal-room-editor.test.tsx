@@ -94,6 +94,44 @@ describe("DealRoomEditor", () => {
     vi.unstubAllGlobals();
   });
 
+  it("contains a malformed Deal Room response without crashing the Opportunity page", async () => {
+    mockedApiRequest.mockResolvedValueOnce({ items: [] });
+
+    render(<DealRoomEditor opportunityId="opportunity-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Customer Deal Room" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/service returned an invalid response/i),
+    ).toBeVisible();
+  });
+
+  it("rejects a partial nested Deal Room before storing crashable state", async () => {
+    mockedApiRequest.mockResolvedValueOnce({
+      opportunityStatus: "open",
+      canEdit: true,
+      canManageAccess: true,
+      room: { draft: {}, link: undefined },
+      businessCases: [],
+      presentations: [],
+      entitlement: "create",
+      creditsRequired: false,
+    });
+
+    render(<DealRoomEditor opportunityId="opportunity-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Customer Deal Room" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/service returned an invalid response/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Opportunity Deal Room" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("creates an explicitly private draft from the Opportunity Workspace", async () => {
     const missing = workspace({ room: null });
     const created = workspace();

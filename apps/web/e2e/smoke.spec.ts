@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { DealRoomWorkspace } from "@revenueos/shared";
+import type { DealRoomWorkspace, HandoverWorkspace } from "@revenueos/shared";
 
 test.beforeEach(async ({ page }) => {
   await page.route(
@@ -2659,6 +2659,44 @@ test("mobile Companion recording path persists a consented transcript into exist
     "http://localhost:8000/api/v1/opportunities/opportunity-1**",
     async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/deal-room")) {
+        const dealRoomWorkspace = {
+          opportunityStatus: "open",
+          canEdit: true,
+          canManageAccess: true,
+          room: null,
+          presentations: [],
+          businessCases: [],
+          entitlement: "create",
+          creditsRequired: false,
+        } satisfies DealRoomWorkspace;
+        await route.fulfill({ json: dealRoomWorkspace });
+        return;
+      }
+      if (path.endsWith("/handover")) {
+        const handoverWorkspace = {
+          handoverId: null,
+          opportunityId: "opportunity-1",
+          opportunityStatus: "open",
+          handoverLockVersion: null,
+          activeRevision: null,
+          currentApprovedRevision: null,
+          history: [],
+          canManage: true,
+          canApprove: true,
+          entitlement: "create",
+          creditsRequired: false,
+          aiDrafting: "not_used",
+        } satisfies HandoverWorkspace;
+        await route.fulfill({ json: handoverWorkspace });
+        return;
+      }
+      if (path.endsWith("/actions")) {
+        await route.fulfill({
+          json: { items: [], page: 1, pageSize: 20, total: 0, pages: 0 },
+        });
+        return;
+      }
       await route.fulfill({
         json: path.endsWith("/workspace")
           ? opportunityWorkspace(true, true)
