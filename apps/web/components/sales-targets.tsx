@@ -70,11 +70,14 @@ function formatNumber(value: string): string {
 function formatValue(target: SalesTarget, value: string | null): string {
   if (value === null) return "Unavailable";
   if (target.metric.unit === "currency" && target.currency) {
-    return new Intl.NumberFormat("en-AU", {
+    const currencyCode = target.currency.toUpperCase();
+    const amount = new Intl.NumberFormat("en-AU", {
       style: "currency",
-      currency: target.currency,
+      currency: currencyCode,
+      currencyDisplay: "narrowSymbol",
       maximumFractionDigits: 2,
     }).format(Number(value));
+    return `${currencyCode} ${amount}`;
   }
   return formatNumber(value);
 }
@@ -391,8 +394,8 @@ export function SalesTargetsOverview({ onViewAll }: { onViewAll: () => void }) {
             Active targets
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Your personal and shared organisation goals, using canonical Sales
-            Insights actuals.
+            Your personal and shared organisation goals, with progress from
+            Sales Insights.
           </p>
         </div>
         <button
@@ -667,8 +670,8 @@ export function SalesTargets() {
         <div>
           <h2 className="text-xl font-semibold text-slate-950">Targets</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-            Compare a human-set goal with the exact canonical metrics used in
-            Sales Insights. Targets do not predict outcomes or rank people.
+            Track human-set goals against Sales Insights. Targets show progress;
+            they do not predict outcomes or rank people.
           </p>
         </div>
         <button
@@ -704,8 +707,8 @@ export function SalesTargets() {
         >
           <h3 className="text-lg font-semibold text-slate-950">Set target</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Choose a supported metric, calendar period and goal. Oryntela
-            supplies the actual.
+            Choose what to measure, the period and the goal. Oryntela updates
+            the progress for you.
           </p>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <label className="text-sm font-semibold text-slate-700">
@@ -873,7 +876,7 @@ export function SalesTargets() {
             {selectedMetric?.description} Period boundaries use{" "}
             {metadata.organisationTimezone}.{" "}
             {selectedMetric?.category === "activity"
-              ? "This is an activity target; more activity does not by itself mean better sales performance."
+              ? "Activity measures effort, not sales quality or outcomes."
               : ""}
           </div>
           <button
@@ -975,7 +978,7 @@ export function SalesTargets() {
       ) : null}
 
       <div
-        role="tablist"
+        role="group"
         aria-label="Target periods"
         className="flex w-fit gap-1 rounded-xl bg-slate-100 p-1"
       >
@@ -983,8 +986,7 @@ export function SalesTargets() {
           <button
             key={item}
             type="button"
-            role="tab"
-            aria-selected={view === item}
+            aria-pressed={view === item}
             onClick={() => setView(item)}
             className={`min-h-11 rounded-lg px-4 text-sm font-semibold capitalize focus:outline-none focus:ring-2 focus:ring-brand-focus ${view === item ? "bg-white text-brand-primary shadow-sm" : "text-slate-600"}`}
           >

@@ -57,7 +57,16 @@ it("saves approved seller context and conservative outreach controls", async () 
   expect(
     await screen.findByDisplayValue("Multi-site Access Management"),
   ).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Contact cooldown (hours)"), {
+  expect(screen.getByText("Sending boundary")).toBeInTheDocument();
+  expect(
+    screen.getByText(/Saving this policy does not send email/u),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByLabelText(
+      "Allow outbound execution after connection and approval",
+    ),
+  ).toBeChecked();
+  fireEvent.change(screen.getByLabelText("Outreach cooldown (hours)"), {
     target: { value: "96" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Save Engage policy" }));

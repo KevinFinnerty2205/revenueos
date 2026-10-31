@@ -2731,7 +2731,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :engage_campaign_version_id, :contact_id,
                                  :company_id, 'RLS Recipient', :contact_email,
                                  'provider_supplied', true, 'eligible',
-                                 'Eligible RLS Contact')
+                                 'Eligible RLS Person')
                             """
                         ),
                         {

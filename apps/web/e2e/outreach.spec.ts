@@ -514,7 +514,7 @@ test("suppression blocks approval and the mobile workflow remains usable", async
                   ...contactability,
                   state: "suppressed",
                   allowed: false,
-                  reason: "This Contact was marked Do not contact.",
+                  reason: "This Person was marked Do not contact.",
                 },
               }
             : {},
@@ -546,7 +546,7 @@ test("suppression blocks approval and the mobile workflow remains usable", async
             ...contactability,
             state: "suppressed",
             allowed: false,
-            reason: "This Contact was marked Do not contact.",
+            reason: "This Person was marked Do not contact.",
           },
         }),
       });
@@ -569,7 +569,7 @@ test("suppression blocks approval and the mobile workflow remains usable", async
   await page.getByRole("button", { name: "Mark Do not contact" }).click();
   await expect(page.getByText("Suppressed", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("This Contact was marked Do not contact."),
+    page.getByText("This Person was marked Do not contact."),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Approve current version" }),
@@ -608,7 +608,7 @@ test("shows no-email and existing-relationship safeguards", async ({
                   ...contactability,
                   state: "no_business_email",
                   allowed: false,
-                  reason: "This Contact has no business email address.",
+                  reason: "This Person has no business email address.",
                   trustState: "unknown",
                 },
               })
@@ -637,7 +637,7 @@ test("shows no-email and existing-relationship safeguards", async ({
 
   await page.goto(`/contacts/${contactId}`);
   await expect(
-    page.getByText("This Contact has no business email address."),
+    page.getByText("This Person has no business email address."),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Create outreach draft" }),

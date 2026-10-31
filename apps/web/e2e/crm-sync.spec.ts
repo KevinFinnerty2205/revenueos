@@ -746,15 +746,15 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     integrations.getByText("Live — explicit review required").first(),
   ).toBeVisible();
   await expect(integrations.getByText(/Oryntela test account/)).toBeVisible();
-  await integrations.getByText("CRM sync, ownership and mappings").click();
+  await integrations.getByText("CRM data sync and field matching").click();
   await integrations
-    .getByRole("button", { name: "Load HubSpot configuration" })
+    .getByRole("button", { name: "Load HubSpot settings" })
     .click();
   await integrations
     .getByRole("combobox", { name: "Estimated Value" })
     .selectOption("amount");
   await expect(
-    integrations.getByText(/field authority and mapping saved/i),
+    integrations.getByText(/field match and update rule saved/i),
   ).toBeVisible();
   await integrations
     .getByRole("combobox", { name: "Qualification" })
@@ -776,7 +776,7 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     await integrations.screenshot({
       path: "../../docs/07-sprints/assets/wo-042/hubspot-settings-desktop.png",
     });
-    await page.getByRole("region", { name: "CRM foundation" }).screenshot({
+    await page.getByRole("region", { name: "CRM setup" }).screenshot({
       path: "../../docs/07-sprints/assets/wo-042/native-crm-choice-desktop.png",
     });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -790,7 +790,7 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     await integrations.screenshot({
       path: "../../docs/07-sprints/assets/wo-042/hubspot-settings-mobile.png",
     });
-    await page.getByRole("region", { name: "CRM foundation" }).screenshot({
+    await page.getByRole("region", { name: "CRM setup" }).screenshot({
       path: "../../docs/07-sprints/assets/wo-042/native-crm-choice-mobile.png",
     });
   }
@@ -810,7 +810,7 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     .click();
   await expect(integrations.getByText("Not connected").first()).toBeVisible();
   await expect(
-    integrations.getByText(/Provider revocation was attempted/i),
+    integrations.getByText(/asked the service to revoke access/i),
   ).toBeVisible();
 
   await integrations
@@ -826,9 +826,9 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
   await expect(
     integrations.getByText(/Oryntela synthetic developer org/),
   ).toBeVisible();
-  await integrations.getByText("CRM sync, ownership and mappings").click();
+  await integrations.getByText("CRM data sync and field matching").click();
   await integrations
-    .getByRole("button", { name: "Load Salesforce configuration" })
+    .getByRole("button", { name: "Load Salesforce settings" })
     .click();
   await expect(integrations.getByText("Needs attention")).toBeVisible();
   await expect(integrations.getByText("Taylor Chen")).toBeVisible();
@@ -1186,6 +1186,9 @@ test("salesperson links and confirms an exact CRM update after stale-state revie
   );
 
   await page.goto(`/opportunities/${opportunityId}`);
+  await page
+    .getByText("Meeting and CRM administration", { exact: true })
+    .click();
   const crmLink = page.getByRole("region", { name: "CRM record link" });
   await crmLink.getByRole("button", { name: "Connect to CRM record" }).click();
   await expect(

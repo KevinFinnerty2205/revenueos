@@ -1442,7 +1442,7 @@ class ActionService:
             ):
                 raise PublicAPIError(
                     "unsupported_recipient",
-                    "Choose a validated Contact and its stored email address.",
+                    "Choose a validated Person and their stored email address.",
                     422,
                 )
         if isinstance(payload, CreateTaskPayload) and payload.linked_opportunity_id != opportunity_id:
@@ -1467,7 +1467,7 @@ class ActionService:
                     ) from exc
         if isinstance(payload, ContactUpdatePayload) and payload.contact_id is not None:
             if await self.repository.contact(self.tenant.organisation_id, payload.contact_id) is None:
-                raise PublicAPIError("unsupported_contact", "The selected Contact is unavailable.", 422)
+                raise PublicAPIError("unsupported_contact", "The selected Person is unavailable.", 422)
 
     async def _commit(self, message: str) -> None:
         try:

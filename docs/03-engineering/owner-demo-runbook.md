@@ -66,13 +66,15 @@ pnpm dev:web
 
 The command is tenant-scoped and idempotent while the fixture remains in its
 exact seeded state. Success returns `"status": "ready"`,
-`"dataset_version": 20` and `"provider_calls": 0`. It creates only clearly
+`"dataset_version": 21` and `"provider_calls": 0`. It creates only clearly
 labelled synthetic records for the fixed local development organisation and
-user. Version 20 includes a real Northstar-linked Task; it is not merely an
+user. Version 21 includes a real Northstar-linked Task; it is not merely an
 Action proposal. It also generates deterministic BANT then MEDDPICC projections
 for the Northstar Opportunity. A clean owner environment finishes with MEDDPICC
 selected; if a methodology setting already existed, the seed restores that
 setting unchanged after building the two synthetic projections.
+The approved presentation and each of its slides report **Ready** after the
+human review is complete.
 
 The seed owns its PowerPoint template by a tenant-scoped deterministic UUID and
 an exact checksum. It refuses a name, identity or checksum collision instead of
@@ -213,12 +215,27 @@ pnpm demo:reset
 
 The reset applies the same environment, database binding, active-administrator,
 mock-provider, connector, real-data and billing guards as the seed. It refuses
-non-local object storage and any identity/content collision. Exact tenant-scoped
-database deletions commit before captured local demo blobs are removed, so a
-failed transaction cannot leave live rows pointing at deleted files. A durable
-exact-key cleanup marker preserves any failed post-commit blob deletion; rerun
-`pnpm demo:reset` to retry only those captured keys. No broad storage-prefix
-deletion is used.
+non-local object storage and any identity/content collision. Owner-extension and
+base-fixture database deletions now share one transaction. Any restrictive local
+Task, interaction or other dependent that still references a manifest-owned demo
+Account, Person or Opportunity rolls the whole transaction back; the ownership
+manifest, every owner extension and every captured owner-demo blob remain intact.
+This database-constraint guard covers new restrictive relationships as they are
+added, rather than relying on a fixed list of dependent models. Exact
+tenant-scoped database deletions commit before captured owner-demo blobs are
+removed. The durable exact-key cleanup marker covers the owner template and
+presentation plus the base fixture's document and visual objects. It preserves
+any failed post-commit deletion; rerun `pnpm demo:reset` to retry only those
+captured keys. No broad storage-prefix deletion is used.
+
+Reset also gives an earlier, resource-specific refusal when a Business Case or
+presentation that is not owned by the manifest is linked to a manifest-owned
+demo Account, Opportunity or Business Case. The presentation check includes
+standalone presentations with no Business Case whenever they reference the demo
+Account or Opportunity. Inspect any blocking record and remove it only when its
+synthetic owner-demo origin and exact scope are independently proven; otherwise
+preserve it and use a fresh isolated demo database. Never bypass the dependency
+check or adopt the record into the manifest.
 
 Reset restores a pre-existing organisation-wide methodology setting unchanged;
 on a clean owner environment it removes only the exact MEDDPICC setting that

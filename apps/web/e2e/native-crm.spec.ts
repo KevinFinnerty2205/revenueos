@@ -99,11 +99,13 @@ test("admin deliberately selects Oryntela as the CRM system of record", async ({
   });
   await expect(nativeButton).toBeDisabled();
   await page
-    .getByLabel(/changing the system of record affects which mapped fields/i)
+    .getByLabel(
+      /changing where records are managed affects which connected fields/i,
+    )
     .check();
   await nativeButton.click();
   await expect(
-    page.getByText(/now the native CRM system of record/i),
+    page.getByText(/now where your CRM records are managed/i),
   ).toBeVisible();
 });
 
@@ -227,6 +229,10 @@ test("member can review a simple mobile account, edit a custom field and inspect
   ).toBeVisible();
   await expect(page.getByText(/Owned by Alex Morgan/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Archive" })).toHaveCount(0);
+  await page
+    .locator("summary")
+    .filter({ hasText: "Relationship activity" })
+    .click();
   await expect(
     page.getByRole("link", { name: "Discovery with Jane Smith" }),
   ).toBeVisible();

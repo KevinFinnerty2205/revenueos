@@ -35,7 +35,7 @@ const sections: Array<{
   {
     key: "commercialScope",
     label: "Commercial scope",
-    help: "Canonical commercial records and reviewed customer-facing scope only.",
+    help: "Recorded commercial details and reviewed customer-facing scope only.",
   },
   {
     key: "keyStakeholders",
@@ -70,7 +70,7 @@ const sections: Array<{
   {
     key: "timeline",
     label: "Timeline",
-    help: "Pinned milestones and canonical close dates.",
+    help: "Pinned milestones and the recorded opportunity close date.",
   },
   {
     key: "nextActions",
@@ -119,6 +119,43 @@ function sourceLabel(source: HandoverSource): string {
     ? ` · revision ${source.sourceVersion}`
     : "";
   return `${source.label}${revision}`;
+}
+
+function ownerLabel(owner: string | null): string {
+  if (!owner) return "Not assigned";
+  const known: Record<string, string> = {
+    our_team: "Our team",
+    customer: "Customer",
+    joint: "Joint",
+  };
+  if (known[owner]) return known[owner];
+  const readable = owner.replaceAll("_", " ");
+  return `${readable.charAt(0).toUpperCase()}${readable.slice(1)}`;
+}
+
+function HandoverReadinessNote({
+  status,
+}: {
+  status: HandoverWorkspace["opportunityStatus"];
+}) {
+  const closedWon = status === "won";
+  return (
+    <p
+      role="status"
+      className={`mt-5 rounded-xl border p-4 text-sm leading-6 ${
+        closedWon
+          ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+          : "border-amber-200 bg-amber-50 text-amber-950"
+      }`}
+    >
+      <strong>{closedWon ? "Closed Won" : "Handover readiness"}:</strong>{" "}
+      {closedWon
+        ? "The opportunity is Closed Won. Complete the source and approval review before relying on this handover."
+        : status === "open"
+          ? "Prepare and review the handover now. Final approval remains unavailable until the opportunity is Closed Won."
+          : `This opportunity is ${ownerLabel(status)}. A new handover cannot be approved in this state.`}
+    </p>
+  );
 }
 
 function StatusBadge({ status }: { status: HandoverRevision["status"] }) {
@@ -339,7 +376,7 @@ export function ClosedWonHandover({
       );
       applyWorkspace(
         next,
-        "Handover draft prepared from the bounded, pinned source pack. No AI drafting was used.",
+        "Handover draft prepared from the reviewed, pinned source pack. No AI drafting was used.",
       );
     } catch (reason: unknown) {
       setError(
@@ -504,7 +541,11 @@ export function ClosedWonHandover({
 
   if (loading) {
     return (
-      <section className="form-card" role="status">
+      <section
+        id="closed-won-handover"
+        className="form-card scroll-mt-6"
+        role="status"
+      >
         Loading Closed-Won Handover…
       </section>
     );
@@ -512,7 +553,11 @@ export function ClosedWonHandover({
 
   if (!workspace) {
     return (
-      <section className="form-card" aria-labelledby="handover-title">
+      <section
+        id="closed-won-handover"
+        className="form-card scroll-mt-6"
+        aria-labelledby="handover-title"
+      >
         <h2 id="handover-title" className="form-legend">
           Closed-Won Handover
         </h2>
@@ -528,7 +573,7 @@ export function ClosedWonHandover({
       <section
         id="closed-won-handover"
         aria-labelledby="handover-title"
-        className="rounded-3xl border border-indigo-200 bg-indigo-50 p-6 shadow-sm sm:p-8"
+        className="scroll-mt-6 rounded-3xl border border-indigo-200 bg-indigo-50 p-6 shadow-sm sm:p-8"
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">
           Reviewed transition
@@ -540,11 +585,12 @@ export function ClosedWonHandover({
           Prepare a Closed-Won Handover
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-indigo-950">
-          Build an internal, source-pinned handover while the Opportunity is
-          open or Closed Won. Oryntela uses deterministic extraction only: it
-          does not call an AI provider or treat inferred intelligence as
+          Build an internal, source-pinned handover while the opportunity is
+          open or Closed Won. Oryntela uses only the selected source records: it
+          does not call an AI provider or treat inferred intelligence as a
           customer fact.
         </p>
+        <HandoverReadinessNote status={workspace.opportunityStatus} />
         {workspace.currentApprovedRevision ? (
           <p className="mt-3 text-sm font-semibold text-slate-700">
             Revision {workspace.currentApprovedRevision.revision} is retained as{" "}
@@ -618,14 +664,15 @@ export function ClosedWonHandover({
             Closed-Won Handover · revision {displayed.revision}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
-            Internal handover assembled from exact, pinned source versions. An
-            authority badge on each claim shows whether it is customer evidence,
-            a commercial record, approved customer context, seller confirmation,
-            system-derived context or unresolved inference.
+            Oryntela assembled this draft from the reviewed opportunity,
+            evidence and approved customer materials. Each item shows where it
+            came from and whether it still needs confirmation.
           </p>
         </div>
         <StatusBadge status={displayed.status} />
       </div>
+
+      <HandoverReadinessNote status={workspace.opportunityStatus} />
 
       {message ? (
         <p
@@ -753,6 +800,28 @@ export function ClosedWonHandover({
                             </select>
                           </label>
                         </div>
+                      ) : null}
+                      {section.key === "nextActions" && !editable ? (
+                        <dl className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+                          <div>
+                            <dt className="font-semibold text-slate-800">
+                              Owner
+                            </dt>
+                            <dd>{ownerLabel(item.owner)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-semibold text-slate-800">
+                              Due date
+                            </dt>
+                            <dd>{item.dueDate ?? "Not recorded"}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-semibold text-slate-800">
+                              Status
+                            </dt>
+                            <dd>{ownerLabel(item.actionStatus)}</dd>
+                          </div>
+                        </dl>
                       ) : null}
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <AuthorityBadge item={item} />
@@ -919,8 +988,7 @@ export function ClosedWonHandover({
           </div>
           {isReview && workspace.opportunityStatus !== "won" ? (
             <p className="mt-3 text-sm font-semibold text-amber-900">
-              Approval is unavailable until the canonical Opportunity status is
-              Closed Won.
+              Approval is unavailable until the opportunity is Closed Won.
             </p>
           ) : null}
           {isReview && !workspace.canApprove ? (
@@ -933,8 +1001,8 @@ export function ClosedWonHandover({
       ) : null}
 
       <p className="mt-4 text-xs font-semibold text-slate-600">
-        Included with Create · No Credits required · Server-built source pack ·
-        No AI provider call
+        Included with Create · No Credits required · Sources fixed to this
+        revision · No AI provider call
       </p>
       <History
         history={workspace.history}

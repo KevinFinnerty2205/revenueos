@@ -74,8 +74,8 @@ export function CRMSettings() {
       setConfirmed(false);
       setMessage(
         mode === "native"
-          ? "Oryntela is now the native CRM system of record."
-          : `${providerName(next.externalProvider)} remains the external CRM system of record.`,
+          ? "Oryntela is now where your CRM records are managed."
+          : `${providerName(next.externalProvider)} remains where your CRM records are managed.`,
       );
     } catch (reason) {
       setMessage(
@@ -151,17 +151,17 @@ export function CRMSettings() {
   return (
     <section className="form-card" aria-labelledby="crm-settings-title">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-        Native CRM
+        CRM settings
       </p>
       <div className="mt-2 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 id="crm-settings-title" className="form-legend">
-            CRM foundation
+            CRM setup
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Accounts, Contacts and Opportunities are always canonical Oryntela
-            records. This add-on unlocks system-of-record controls and
-            organisation custom fields.
+            Accounts, People and Opportunities are the records your team works
+            with in Oryntela. Choose where they are managed and add fields for
+            your organisation.
           </p>
           <p className="mt-2 text-sm font-semibold text-slate-700">
             {availability?.message ?? "Loading CRM settings…"}
@@ -182,10 +182,10 @@ export function CRMSettings() {
         <div className="mt-6 space-y-6 border-t border-slate-200 pt-6">
           <fieldset>
             <legend className="font-semibold text-slate-950">
-              System of record
+              Where records are managed
             </legend>
             <p className="mt-1 text-sm text-slate-600">
-              Current mode: <strong>{humanise(availability.mode)}</strong>
+              Current choice: <strong>{crmModeName(availability)}</strong>
               {availability.externalConnected
                 ? ` · ${providerName(availability.externalProvider)} connected`
                 : " · No external CRM connected"}
@@ -197,8 +197,8 @@ export function CRMSettings() {
                 onChange={(event) => setConfirmed(event.target.checked)}
                 className="mt-1 h-4 w-4 accent-brand-secondary"
               />
-              I understand that changing the system of record affects which
-              mapped fields can be edited.
+              I understand that changing where records are managed affects which
+              connected fields can be edited.
             </label>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -280,7 +280,7 @@ export function CRMSettings() {
                 }
               >
                 <option value="account">Account</option>
-                <option value="contact">Contact</option>
+                <option value="contact">Person</option>
                 <option value="opportunity">Opportunity</option>
               </select>
             </label>
@@ -357,4 +357,12 @@ function providerName(provider: CRMAvailability["externalProvider"]): string {
   if (provider === "salesforce") return "Salesforce";
   if (provider === "hubspot") return "HubSpot";
   return "External CRM";
+}
+
+function crmModeName(availability: CRMAvailability): string {
+  if (availability.mode === "native") return "Oryntela CRM";
+  if (availability.mode === "external") {
+    return providerName(availability.externalProvider);
+  }
+  return "Not chosen";
 }

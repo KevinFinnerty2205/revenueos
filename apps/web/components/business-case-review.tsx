@@ -233,6 +233,25 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
         </Link>{" "}
         <span aria-hidden="true">/</span> Business Case
       </nav>
+      <nav
+        aria-label="Related customer records"
+        className="flex flex-wrap gap-3"
+      >
+        <Link
+          href={`/companies/${businessCase.accountId}`}
+          className="secondary-button"
+        >
+          Return to Account
+        </Link>
+        {businessCase.opportunityId ? (
+          <Link
+            href={`/opportunities/${businessCase.opportunityId}`}
+            className="secondary-button"
+          >
+            Return to Opportunity
+          </Link>
+        ) : null}
+      </nav>
 
       {businessCase.state === "needs_review" ? (
         <section
@@ -260,7 +279,7 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
               id="results-title"
               className="mt-1 text-2xl font-semibold text-slate-950"
             >
-              Deterministic results
+              Modelled results
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               These are modelled estimates, not guaranteed outcomes. Negative
@@ -385,8 +404,8 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
             Conservative, base and upside
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Each scenario uses the explicit overrides shown. There is no random
-            simulation or hidden optimism.
+            Each scenario uses only the changes shown below. The approved base
+            case and every assumption remain visible.
           </p>
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
             {version.scenarios.map((scenario) => (
@@ -400,7 +419,10 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
                 <p className="mt-1 text-xs text-slate-500">
                   {scenario.overrides.length
                     ? scenario.overrides
-                        .map((item) => `${humanise(item.key)} = ${item.value}`)
+                        .map(
+                          (item) =>
+                            `${humanise(item.key).toLowerCase()} = ${item.value}`,
+                        )
                         .join(" · ")
                     : "Approved base inputs"}
                 </p>
@@ -431,11 +453,11 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
       {version?.sensitivity ? (
         <section className="form-card" aria-labelledby="sensitivity-title">
           <h2 id="sensitivity-title" className="form-legend">
-            One-variable sensitivity
+            How one input changes the result
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Changing {humanise(version.sensitivity.inputKey)} does not mutate
-            the approved base.
+            Changing {humanise(version.sensitivity.inputKey).toLowerCase()}
+            leaves the approved base case unchanged.
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {version.sensitivity.rows.map((row) => {
@@ -744,13 +766,29 @@ function CalculationDisclosure({
 
 function formatValue(value: string | null, unit: string, currency: string) {
   if (value === null) return "Not achieved under these assumptions";
-  if (unit.startsWith("currency"))
-    return value.startsWith("-")
-      ? `−${currency} ${value.slice(1)}`
-      : `${currency} ${value}`;
-  if (unit === "percentage") return `${value}%`;
-  if (unit === "dimensionless" || unit === "count") return value;
-  return `${value} ${humanise(unit)}`;
+  const parsed = Number(value);
+  const displayValue = Number.isFinite(parsed)
+    ? new Intl.NumberFormat("en-AU", {
+        maximumFractionDigits: 2,
+      }).format(Math.abs(parsed))
+    : value.replace(/^-/, "");
+  const sign = Number.isFinite(parsed) ? parsed < 0 : value.startsWith("-");
+  if (unit.startsWith("currency")) {
+    const currencyCode = currency.toUpperCase();
+    const amount = Number.isFinite(parsed)
+      ? new Intl.NumberFormat("en-AU", {
+          style: "currency",
+          currency: currencyCode,
+          currencyDisplay: "narrowSymbol",
+          maximumFractionDigits: 2,
+        }).format(Math.abs(parsed))
+      : displayValue;
+    return `${sign ? "−" : ""}${currencyCode} ${amount}`;
+  }
+  if (unit === "percentage") return `${sign ? "−" : ""}${displayValue}%`;
+  if (unit === "dimensionless" || unit === "count")
+    return `${sign ? "−" : ""}${displayValue}`;
+  return `${sign ? "−" : ""}${displayValue} ${humanise(unit).toLowerCase()}`;
 }
 
 function unitLabel(unit: string, currency: string) {

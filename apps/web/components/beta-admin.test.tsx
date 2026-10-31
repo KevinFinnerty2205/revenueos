@@ -120,6 +120,11 @@ describe("BetaAdmin", () => {
 
     render(<BetaAdmin currentUserId="user-1" />);
 
+    const diagnosticsSummary = await screen.findByText("Technical diagnostics");
+    const diagnostics = diagnosticsSummary.closest("details");
+    expect(diagnostics).not.toHaveAttribute("open");
+    fireEvent.click(diagnosticsSummary.closest("summary")!);
+    expect(diagnostics).toHaveAttribute("open");
     expect(await screen.findByText("Salesforce CRM sync")).toBeVisible();
     expect(screen.getByText("Future Safe Capability")).toBeVisible();
     expect(

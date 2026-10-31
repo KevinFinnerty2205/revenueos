@@ -391,6 +391,10 @@ describe("DealRoomEditor", () => {
       /\/deal-room#access=secure_token_with_enough_entropy_1234567890$/u,
     );
     expect(String((issued as HTMLInputElement).value)).not.toContain("?");
+    expect(
+      screen.getAllByText(/cannot be retrieved later/i).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/use Rotate link/i)).toBeVisible();
     await waitFor(() =>
       expect(mockedApiRequest).toHaveBeenLastCalledWith(
         "/api/v1/opportunities/opportunity-1/deal-room/publish",

@@ -240,6 +240,25 @@ export function CreatePresentationReview({
         </Link>{" "}
         <span aria-hidden="true">/</span> Presentation
       </nav>
+      <nav
+        aria-label="Related customer records"
+        className="flex flex-wrap gap-3"
+      >
+        <Link
+          href={`/companies/${presentation.accountId}`}
+          className="secondary-button"
+        >
+          Return to Account
+        </Link>
+        {presentation.opportunityId ? (
+          <Link
+            href={`/opportunities/${presentation.opportunityId}`}
+            className="secondary-button"
+          >
+            Return to Opportunity
+          </Link>
+        ) : null}
+      </nav>
 
       <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-3">
         <Detail label="Template">

@@ -16,7 +16,7 @@ export function ManagerHomeAttention({
   useEffect(() => {
     const controller = new AbortController();
     apiRequest<ManagerDealAttentionList>(
-      "/api/v1/manager/deal-attention?pageSize=5",
+      "/api/v1/manager/deal-attention?pageSize=2",
       {
         signal: controller.signal,
       },
@@ -64,7 +64,7 @@ export function ManagerHomeAttention({
           </h2>
           <p className="mt-1 text-sm text-slate-600">
             {data.total === 0
-              ? "Nothing currently matches the deal-attention conditions."
+              ? "No deals need your attention right now."
               : `${data.total} open ${data.total === 1 ? "deal matches" : "deals match"} explainable conditions.`}
           </p>
         </div>

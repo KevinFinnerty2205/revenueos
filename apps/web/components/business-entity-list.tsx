@@ -306,7 +306,7 @@ function EntityRows({
               {entity === "opportunities"
                 ? "Open workspace"
                 : entity === "contacts"
-                  ? "Open Contact"
+                  ? "Open Person"
                   : `Edit ${entityLabels[entity].singular}`}
             </Link>
           </article>

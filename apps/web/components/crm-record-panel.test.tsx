@@ -110,6 +110,7 @@ describe("CRMRecordPanel", () => {
     expect(screen.getByText(/Owned by Alex Morgan/)).toBeVisible();
     expect(screen.getByText("Software")).toBeVisible();
     fireEvent.click(screen.getByText("CRM details"));
+    fireEvent.click(screen.getAllByText("Relationship activity")[0]!);
     fireEvent.click(screen.getByText("Record history"));
     expect(screen.getByLabelText("Customer tier")).toHaveValue("Strategic");
     expect(
@@ -123,6 +124,49 @@ describe("CRMRecordPanel", () => {
     expect(screen.getByText("Owner")).toBeVisible();
     expect(screen.getByText(/Unassigned → Alex Morgan/)).toBeVisible();
     expect(screen.queryByText("user-1")).not.toBeInTheDocument();
+  });
+
+  it("renders Account journey content directly after the record summary", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(record)));
+    render(
+      <CRMRecordPanel entityType="account" entityId="account-1">
+        <section aria-label="Account journey">People and Opportunities</section>
+      </CRMRecordPanel>,
+    );
+
+    const accountHeading = await screen.findByRole("heading", {
+      name: "Acme Australia",
+    });
+    const journey = screen.getByRole("region", { name: "Account journey" });
+    const details = screen.getByText("CRM details").closest("details");
+
+    expect(accountHeading.closest("section")?.nextElementSibling).toBe(journey);
+    expect(
+      journey.compareDocumentPosition(details as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps Account journey content available when the summary cannot load", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("Summary unavailable")),
+    );
+    render(
+      <CRMRecordPanel entityType="account" entityId="account-1">
+        <section aria-label="Account journey">People and Opportunities</section>
+      </CRMRecordPanel>,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Account journey" }),
+    ).toBeVisible();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Oryntela could not reach the service",
+    );
+    expect(
+      screen.getByRole("region", { name: "Account journey" }),
+    ).toBeVisible();
   });
 
   it("previews, confirms and safely reconciles an unknown external CRM update", async () => {

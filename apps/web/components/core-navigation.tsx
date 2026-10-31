@@ -37,7 +37,7 @@ const mobileItems = [
   { href: "/dashboard", label: "Today" },
   { href: "/interactions", label: "Interactions" },
   { href: "/dashboard#daily-actions", label: "Actions" },
-  { href: "/assistant", label: "Search" },
+  { href: "/assistant", label: "Search & Ask" },
 ] as const;
 
 interface BetaCapabilities {
@@ -138,6 +138,7 @@ export function CoreNavigation() {
     ...(engageEnabled ? [{ href: "/campaigns", label: "Campaigns" }] : []),
     ...(eventsEnabled ? [{ href: "/events", label: "Events" }] : []),
     { href: "/settings", label: "Settings" },
+    { href: "/sign-out", label: "Sign out" },
   ];
 
   return (
@@ -205,7 +206,7 @@ export function CoreNavigation() {
             Workspace
           </p>
           {[
-            { href: "/assistant", label: "Search" },
+            { href: "/assistant", label: "Search & Ask" },
             { href: "/settings", label: "Settings" },
           ].map((item) => {
             const active = isActive(pathname, item.href);

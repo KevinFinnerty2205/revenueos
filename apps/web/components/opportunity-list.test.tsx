@@ -161,11 +161,11 @@ describe("OpportunityList", () => {
     expect(
       screen.getByText(
         (content) =>
-          content.includes("$125,001") &&
-          content.includes("USD") &&
-          content.includes("50,000"),
+          content.includes("AUD $125,001") && content.includes("USD $50,000"),
       ),
     ).toBeVisible();
+    expect(screen.getAllByText("AUD $125,001")).not.toHaveLength(0);
+    expect(screen.getAllByText("USD $50,000")).not.toHaveLength(0);
     expect(
       screen.getAllByText("Overdue high-priority Action"),
     ).not.toHaveLength(0);
@@ -348,7 +348,7 @@ describe("OpportunityList", () => {
               code: "close_date_passed",
               label: "Close date passed",
               explanation:
-                "The canonical expected close date is in the past while the Opportunity remains open.",
+                "The expected close date has passed while the Opportunity remains open.",
               detectedAt: "2026-08-30T00:00:00Z",
               sources: [
                 {
@@ -392,6 +392,7 @@ describe("OpportunityList", () => {
     ).toBeVisible();
     expect(screen.getByText("Seller view")).toBeVisible();
     expect(screen.getByText("Manager view", { selector: "dt" })).toBeVisible();
+    expect(screen.getByText("AUD $125,001")).toBeVisible();
     expect(screen.queryByText(/leaderboard/i)).not.toBeInTheDocument();
   });
 });

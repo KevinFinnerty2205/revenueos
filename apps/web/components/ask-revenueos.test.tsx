@@ -102,6 +102,36 @@ describe("AskRevenueOS", () => {
     ).toBeVisible();
   });
 
+  it("fails closed with a data-notice recovery path while keeping Search available", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            code: "data_notice_acknowledgement_required",
+            message: "A data notice acknowledgement is required.",
+          },
+          403,
+        ),
+      ),
+    );
+
+    render(<AskRevenueOS scopeType="workspace" />);
+
+    expect(
+      await screen.findByText(
+        "Review the data notice before using Ask Oryntela.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Review data notice" }),
+    ).toHaveAttribute("href", "/onboarding");
+    expect(
+      screen.getByRole("link", { name: "Search records" }),
+    ).toHaveAttribute("href", "/assistant?mode=search");
+    expect(screen.queryByLabelText("Ask Oryntela")).not.toBeInTheDocument();
+  });
+
   it("renders a scoped, cited answer with progressive source disclosure and follow-ups", async () => {
     const fetchMock = vi
       .fn()

@@ -28,8 +28,8 @@ export const entityLabels: Record<
       "Keep the organisations your team works with in one clear view.",
   },
   contacts: {
-    singular: "contact",
-    plural: "Contacts",
+    singular: "person",
+    plural: "People",
     eyebrow: "People",
     description: "Manage the people connected to your customer relationships.",
   },

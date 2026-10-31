@@ -297,7 +297,7 @@ class MockEmailExecutor(_MockExecutor):
         if not payload.recipient_confirmed or payload.recipient_email is None:
             raise PermanentExecutionFailure(
                 "recipient_not_confirmed",
-                "Confirm a validated Contact recipient in the Action before execution preview.",
+                "Confirm a validated Person recipient in the Action before execution preview.",
             )
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", payload.recipient_email):
             raise PermanentExecutionFailure("invalid_recipient", "The approved recipient address is invalid.")
@@ -381,7 +381,7 @@ class MockCalendarExecutor(_MockExecutor):
         if not action.payload.participant_contact_ids:
             raise PermanentExecutionFailure(
                 "calendar_attendees_missing",
-                "Select at least one validated Contact participant before execution preview.",
+                "Select at least one validated Person participant before execution preview.",
             )
         if tuple(item.contact_id for item in action.participant_contacts) != action.payload.participant_contact_ids:
             raise PermanentExecutionFailure(

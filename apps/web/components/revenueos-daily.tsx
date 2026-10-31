@@ -120,7 +120,7 @@ export function RevenueOSDaily() {
         </div>
         <div className="flex items-center gap-3">
           <Link className="secondary-button" href="/assistant">
-            Search
+            Search &amp; Ask
           </Link>
           <p className="hidden text-xs text-slate-500 sm:block">
             Updated {formatUpdated(daily.generatedAt)}
@@ -145,8 +145,6 @@ export function RevenueOSDaily() {
       ) : null}
 
       {!daily.hasOpportunities ? <NewUserWelcome /> : null}
-
-      <ManagerHomeAttention refreshKey={refreshKey} />
 
       {activeEvent ? (
         <Link
@@ -237,6 +235,10 @@ export function RevenueOSDaily() {
           </aside>
         </div>
       ) : null}
+
+      <div className="mt-6">
+        <ManagerHomeAttention refreshKey={refreshKey} />
+      </div>
     </section>
   );
 }

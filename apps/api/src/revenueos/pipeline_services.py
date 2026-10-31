@@ -778,7 +778,7 @@ class PipelineService:
         if opportunity.expected_close_date is not None and opportunity.expected_close_date < now.date():
             reasons.append("Close date passed")
         if not tasks:
-            reasons.append("No next Action")
+            reasons.append("No next action")
         return PipelineCardResponse(
             opportunity_id=opportunity.id,
             opportunity_name=opportunity.name,

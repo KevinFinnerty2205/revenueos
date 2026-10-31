@@ -245,8 +245,8 @@ export function CreateStudio() {
               No approved Value Models available
             </h3>
             <p className="mt-2 text-sm leading-6 text-amber-900">
-              An administrator must define and approve the typed inputs, bounded
-              formulas and visible assumptions first.
+              An administrator must define and approve the inputs, calculations
+              and visible assumptions first.
             </p>
           </div>
         ) : businessCases?.items.length ? (
@@ -299,8 +299,8 @@ export function CreateStudio() {
               Build a credible customer business case
             </h3>
             <p className="mt-2 text-sm text-slate-600">
-              Use explicit inputs and your organisation’s approved deterministic
-              model—never invented benchmarks.
+              Use clear inputs and your organisation’s approved Value
+              Model—never invented benchmarks.
             </p>
             <Link
               href="/create/business-cases/new"
@@ -530,8 +530,24 @@ function formatBusinessOutput(
   currency: string,
 ) {
   if (value === null) return "Not achieved under these assumptions";
-  if (unit === "currency" || unit === "currency_per_year")
-    return `${currency} ${value}`;
-  if (unit === "percentage") return `${value}%`;
-  return `${value} ${humanise(unit)}`;
+  const parsed = Number(value);
+  const displayValue = Number.isFinite(parsed)
+    ? new Intl.NumberFormat("en-AU", {
+        maximumFractionDigits: 2,
+      }).format(parsed)
+    : value;
+  if (unit === "currency" || unit === "currency_per_year") {
+    const currencyCode = currency.toUpperCase();
+    if (Number.isFinite(parsed)) {
+      return `${currencyCode} ${new Intl.NumberFormat("en-AU", {
+        style: "currency",
+        currency: currencyCode,
+        currencyDisplay: "narrowSymbol",
+        maximumFractionDigits: 2,
+      }).format(parsed)}`;
+    }
+    return `${currencyCode} ${value}`;
+  }
+  if (unit === "percentage") return `${displayValue}%`;
+  return `${displayValue} ${humanise(unit).toLowerCase()}`;
 }

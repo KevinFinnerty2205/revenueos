@@ -76,7 +76,7 @@ function projection(): CreditsProjection {
 describe("CreditsSettings", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("shows a responsive, customer-safe balance and immutable activity view", async () => {
+  it("shows a responsive, customer-safe balance and activity view", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
@@ -107,6 +107,10 @@ describe("CreditsSettings", () => {
       screen.getByRole("button", { name: "Purchase unavailable" }),
     ).toBeDisabled();
     expect(screen.getByText("TEST ONLY / NOT CUSTOMER PRICING")).toBeVisible();
+    expect(
+      screen.getByText(/check purchasing and Credit balance updates safely/i),
+    ).toBeVisible();
+    expect(screen.queryByText(/deterministic/i)).not.toBeInTheDocument();
     expect(
       container.querySelector("section.min-w-0.overflow-hidden"),
     ).not.toBeNull();

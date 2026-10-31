@@ -59,9 +59,7 @@ describe("BetaOnboarding", () => {
         name: "Create the customer context",
       }),
     ).toBeVisible();
-    expect(
-      screen.getByText(/Account, add the people as Contacts/i),
-    ).toBeVisible();
+    expect(screen.getByText(/Account, add the people involved/i)).toBeVisible();
     expect(screen.getByText(/create the Opportunity/i)).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Create an Account" }),

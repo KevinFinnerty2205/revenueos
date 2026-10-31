@@ -138,9 +138,9 @@ export function PipelineSettings() {
         Pipelines
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-        Configure a bounded sales workflow. Stage names and order guide the
-        team; they do not create probabilities, gates, automation or customer
-        Evidence.
+        Set up the stages your team uses to move opportunities forward. Changing
+        these stages does not set win probabilities, block work, trigger actions
+        or create customer evidence.
       </p>
       {error ? (
         <p
@@ -153,10 +153,10 @@ export function PipelineSettings() {
       {!manageable ? (
         <p className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
           {availability?.mode === "external"
-            ? "Pipeline stages are managed in HubSpot. Native definitions remain historical and read-only."
+            ? "Pipeline stages are managed in HubSpot. Earlier Oryntela pipeline details remain available as read-only history."
             : availability?.enabled && availability.mode === "native"
-              ? "An organisation administrator manages native pipeline definitions."
-              : "Enable Oryntela CRM and choose Oryntela as the system of record to configure native pipelines."}
+              ? "Only an organisation administrator can change these pipelines."
+              : "Enable Oryntela CRM and choose it as the place where records are managed to set up pipelines."}
         </p>
       ) : (
         <>

@@ -249,13 +249,11 @@ describe("sales forecast", () => {
     render(<SalesForecast />);
 
     expect(await screen.findByText("Actual won")).toBeVisible();
-    expect(screen.getByText("$54,000")).toBeVisible();
-    expect(screen.getByText("$400,000")).toBeVisible();
-    expect(screen.getAllByText("$180,000").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("$273,333").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/not a seller forecast and is not a range/i),
-    ).toBeVisible();
+    expect(screen.getByText("AUD $54,000")).toBeVisible();
+    expect(screen.getByText("AUD $400,000")).toBeVisible();
+    expect(screen.getAllByText("AUD $180,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AUD $273,333").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Not a seller forecast\.$/i)).toBeVisible();
     expect(screen.getByText(/no probability is applied/i)).toBeVisible();
     expect(
       screen.getByText("Independent manager forecast range"),
@@ -263,8 +261,25 @@ describe("sales forecast", () => {
     expect(
       screen.getByText(/not blended with the seller forecast/i),
     ).toBeVisible();
-    expect(screen.getByText(/missing expected close date/i)).toBeVisible();
+    expect(screen.getByText(/without a close date/i)).toBeVisible();
     expect(screen.getByText("Needs review")).toBeVisible();
+    expect(screen.getByText("Earlier forecast outcomes")).toBeVisible();
+    expect(
+      screen.getAllByText(
+        /at least 5 are needed before a percentage is shown/i,
+      ),
+    ).toHaveLength(2);
+    const calculation = screen
+      .getByText("How this is calculated")
+      .closest("details");
+    expect(calculation).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("How this is calculated"));
+    expect(calculation).toHaveAttribute("open");
+    expect(calculation).toHaveTextContent(
+      "forecast_historical_stage_outcome_v1",
+    );
+    expect(calculation).toHaveTextContent("Sales Brain confidence");
+    expect(calculation).not.toHaveTextContent("Revenue Brain");
 
     fireEvent.click(
       screen.getByRole("button", { name: "View review history" }),

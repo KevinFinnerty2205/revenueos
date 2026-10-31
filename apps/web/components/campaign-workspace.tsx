@@ -162,9 +162,8 @@ export function CampaignListWorkspace() {
             Campaigns
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            Run small, explicit sequences for canonical Contacts. Every message
-            remains source-backed and every recipient keeps an inspectable
-            status.
+            Run focused outreach sequences for the right people. Review every
+            message and see who is ready, blocked or already contacted.
           </p>
         </div>
         {result?.canCreate !== false ? (
@@ -175,9 +174,9 @@ export function CampaignListWorkspace() {
       </header>
 
       <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-        <strong>Private-beta sending:</strong> campaign execution uses the
-        sender-bound Mock Email simulation in this release. Connected Microsoft
-        365 or Google Workspace mailboxes are never used by Campaigns.
+        <strong>Private-beta sending:</strong> campaigns use only the Mock Email
+        simulation in this release. Connected Microsoft 365 or Google Workspace
+        mailboxes are never used.
       </div>
       <Notice error={error} />
       {loading ? (
@@ -194,9 +193,9 @@ export function CampaignListWorkspace() {
             Start with a small, exact audience
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-600">
-            Choose up to 50 existing Contacts, review every eligibility
-            decision, and use one to four ordered steps. CSV upload and
-            automatic audience expansion are not supported.
+            Choose up to 50 existing people, review every eligibility decision,
+            and use one to four ordered steps. CSV upload and automatic audience
+            expansion are not supported.
           </p>
           <Link href="/campaigns/new" className="primary-button mt-6">
             Create campaign
@@ -263,10 +262,8 @@ export function CampaignBuilder() {
   } | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [policy, setPolicy] = useState<OutreachPolicy | null>(null);
-  const [name, setName] = useState("Australian Multi-Site CIO Outreach");
-  const [purpose, setPurpose] = useState(
-    "Book respectful introductory meetings",
-  );
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [approvalMode, setApprovalMode] =
     useState<CampaignApprovalMode>("review_each_send");
   const [selected, setSelected] = useState<string[]>([]);
@@ -358,7 +355,7 @@ export function CampaignBuilder() {
     event.preventDefault();
     setError(null);
     if (!selected.length) {
-      setError("Select at least one canonical Contact.");
+      setError("Select at least one person.");
       return;
     }
     if (!policy?.configured || !policy.outboundEnabled) {
@@ -420,21 +417,28 @@ export function CampaignBuilder() {
           A clear sequence, not an automation maze
         </h1>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-          Choose existing Contacts and one to four ordered steps. Oryntela
+          Choose existing people and one to four ordered steps. Oryntela
           evaluates every recipient before launch and again before every send.
         </p>
+        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">
+          <p className="font-bold">Mock Email simulation</p>
+          <p className="mt-1">
+            This demo reviews the audience and campaign flow without sending a
+            real message or contacting an external mail provider.
+          </p>
+        </div>
         {eventContext ? (
           <p className="mt-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm text-brand-primary">
-            Event audience · {humanise(eventContext.eventStage)}. Only canonical
-            Contacts linked to the Event are accepted, and normal Engage policy
-            checks still apply.
+            Event audience · {humanise(eventContext.eventStage)}. Only people
+            linked to the Event are included, and normal Engage policy checks
+            still apply.
           </p>
         ) : null}
       </div>
       <Notice error={error} />
       {loading ? (
         <p role="status" className="mt-6 text-sm text-slate-600">
-          Loading approved context and Contacts…
+          Loading approved context and people…
         </p>
       ) : null}
       {!loading ? (
@@ -480,8 +484,8 @@ export function CampaignBuilder() {
           <fieldset className="form-card">
             <legend className="form-legend">2. Audience</legend>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Select up to 50 canonical Contacts. Email addresses cannot be
-              pasted or uploaded here.
+              Select up to 50 existing people. Email addresses cannot be pasted
+              or uploaded here.
             </p>
             <div className="mt-5 max-h-80 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 p-2">
               {visibleContacts.length ? (
@@ -519,20 +523,21 @@ export function CampaignBuilder() {
                 })
               ) : (
                 <p className="p-4 text-sm text-slate-600">
-                  Create or promote a Contact before building a campaign.
+                  Add a person before building a campaign.
                 </p>
               )}
             </div>
             <p className="mt-3 text-sm font-bold text-brand-secondary">
-              {selected.length} of 50 Contacts selected
+              {selected.length} of 50 people selected
             </p>
           </fieldset>
 
           <fieldset className="form-card">
             <legend className="form-legend">3. Sequence</legend>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Ordered follow-ups are scheduled only after the prior step
-              succeeds. There is no branching or overdue backlog burst.
+              A suggested sequence is ready for you to review and change.
+              Follow-ups are scheduled only after the prior step succeeds. There
+              is no branching or overdue backlog burst.
             </p>
             <ol className="mt-5 space-y-3">
               {steps.map((step, index) => (
@@ -659,9 +664,9 @@ export function CampaignBuilder() {
                       Approved campaign auto-send
                     </strong>
                     <span className="mt-1 block text-sm leading-6 text-slate-600">
-                      Future source-backed drafts may be submitted automatically
-                      only under explicit organisation policy and a second
-                      launch confirmation. Every send is still revalidated.
+                      Future approved drafts may be submitted automatically only
+                      under your organisation&apos;s rules and a second launch
+                      confirmation. Every send is checked again first.
                     </span>
                     {!policy?.campaignAutoSendAllowed ? (
                       <span className="mt-2 block text-xs font-bold text-amber-900">
@@ -675,8 +680,8 @@ export function CampaignBuilder() {
             <ul className="mt-5 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
               <li>✓ Weekdays, 08:30–17:00 Australia/Sydney</li>
               <li>✓ Stop when an active Opportunity exists</li>
-              <li>✓ Suppression and Contact changes checked before send</li>
-              <li>✓ Global cooldown and daily quotas apply</li>
+              <li>✓ Suppression and person changes checked before send</li>
+              <li>✓ Sending pace and daily limits apply</li>
             </ul>
           </fieldset>
 
@@ -687,7 +692,13 @@ export function CampaignBuilder() {
             <button
               type="submit"
               className="primary-button"
-              disabled={busy || !selected.length || !steps.length}
+              disabled={
+                busy ||
+                !name.trim() ||
+                !purpose.trim() ||
+                !selected.length ||
+                !steps.length
+              }
             >
               {busy ? "Reviewing audience…" : "Review audience"}
             </button>
@@ -714,7 +725,7 @@ export function CampaignShortcut() {
     <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm text-brand-primary">
         <strong>Planning bounded outreach?</strong> Build a Campaign from
-        existing Contacts and review eligibility before launch.
+        existing people and review eligibility before launch.
       </p>
       <Link href="/campaigns" className="secondary-button shrink-0">
         Open Campaigns
@@ -788,6 +799,14 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
   async function transition(action: "launch" | "pause" | "resume" | "stop") {
     if (!campaign) return;
+    if (
+      action === "stop" &&
+      !window.confirm(
+        "Stop this campaign permanently? It cannot be resumed. Existing history will be preserved and no further campaign steps will run.",
+      )
+    ) {
+      return;
+    }
     setBusy(action);
     setError(null);
     setNotice(null);
@@ -955,7 +974,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                   Audience review
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Exact launch snapshot from canonical Contacts.
+                  People selected for this launch.
                 </p>
               </div>
               <p className="text-sm font-bold">
@@ -986,13 +1005,13 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                   <dl className="mt-4 space-y-3 text-sm">
                     <div>
                       <dt className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
-                        Address trust
+                        Email confidence
                       </dt>
                       <dd className="mt-1">{humanise(item.recipientTrust)}</dd>
                     </div>
                     <div>
                       <dt className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
-                        Eligibility reason
+                        Why
                       </dt>
                       <dd className="mt-1 leading-6 text-slate-600">
                         {item.eligibilityReason}
@@ -1012,9 +1031,9 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 </colgroup>
                 <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.1em] text-slate-500">
                   <tr>
-                    <th className="pb-3 pr-4">Contact</th>
-                    <th className="pb-3 pr-4">Trust</th>
-                    <th className="pb-3 pr-4">Decision</th>
+                    <th className="pb-3 pr-4">Person</th>
+                    <th className="pb-3 pr-4">Email confidence</th>
+                    <th className="pb-3 pr-4">Status</th>
                     <th className="pb-3">Why</th>
                   </tr>
                 </thead>
@@ -1148,7 +1167,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Launch freezes the exact sequence, audience decisions, approval mode
-            and organisation policy version. Blocked Contacts will not be
+            and organisation policy version. Blocked people will not be
             enrolled.
           </p>
           {campaign.approvalMode === "approved_campaign_auto_send" ? (
@@ -1194,7 +1213,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           >
             {busy === "launch"
               ? "Launching…"
-              : `Launch to ${campaign.eligibleCount} eligible Contact${campaign.eligibleCount === 1 ? "" : "s"}`}
+              : `Launch to ${campaign.eligibleCount} eligible ${campaign.eligibleCount === 1 ? "person" : "people"}`}
           </button>
         </section>
       ) : null}
@@ -1518,7 +1537,7 @@ export function CampaignEnrollmentDetail({
               <h2 className="text-xl font-semibold">Message preparation</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {enrollment.state === "active"
-                  ? `Step ${enrollment.currentStepOrder} is scheduled for ${dateTime(enrollment.nextScheduledAt)}. A source-backed draft is prepared inside the campaign preparation window.`
+                  ? `Step ${enrollment.currentStepOrder} is scheduled for ${dateTime(enrollment.nextScheduledAt)}. Oryntela prepares the draft shortly before it is due.`
                   : "No message is waiting for review."}
               </p>
             </div>

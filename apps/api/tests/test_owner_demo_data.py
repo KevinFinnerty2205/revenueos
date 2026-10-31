@@ -8,7 +8,9 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import event, func, select, update
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 import revenueos.demo_data as demo_data_module
 from revenueos.config import Settings
@@ -24,6 +26,7 @@ from revenueos.deal_room_services import DealRoomService
 from revenueos.demo_data import (
     demo_campaign_ids,
     demo_ids,
+    demo_phone_contact_id,
     demo_sales_analytics_ids,
     demo_sales_forecast_ids,
     demo_sales_target_ids,
@@ -42,6 +45,7 @@ from revenueos.models import (
     Company,
     Contact,
     CreateBusinessCase,
+    CreateBusinessCaseVersion,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
@@ -49,6 +53,7 @@ from revenueos.models import (
     CreateValueModel,
     DealRoom,
     DealRoomRevision,
+    DocumentSource,
     EngageCampaignAudience,
     EngageCampaignEnrollment,
     Interaction,
@@ -63,6 +68,7 @@ from revenueos.models import (
     SalesTarget,
     SellingProfileRevision,
     Task,
+    VisualAsset,
 )
 from revenueos.owner_demo_data import (
     OWNER_BASE_MANIFEST_EVENT,
@@ -281,6 +287,10 @@ def test_owner_demo_seed_is_linked_idempotent_and_resettable() -> None:
             profile = await session.get(SellingProfileRevision, first["selling_profile_revision_id"])
             business_case = await session.get(CreateBusinessCase, first["business_case_id"])
             presentation = await session.get(CreatePresentation, first["presentation_id"])
+            presentation_version = await session.get(
+                CreatePresentationVersion,
+                first["presentation_version_id"],
+            )
             deal_room = await session.get(DealRoom, first["deal_room_id"])
             handover = await session.get(ClosedWonHandover, first["handover_id"])
             handover_revision = await session.get(
@@ -324,6 +334,11 @@ def test_owner_demo_seed_is_linked_idempotent_and_resettable() -> None:
             assert presentation.account_id == company.id
             assert presentation.opportunity_id == opportunity.id
             assert presentation.business_case_id == business_case.id
+            assert presentation_version is not None
+            assert all(
+                isinstance(slide, dict) and slide.get("reviewState") == "ready"
+                for slide in presentation_version.generated_content_json
+            )
             assert deal_room is not None
             assert deal_room.status == "published"
             assert deal_room.opportunity_id == opportunity.id
@@ -490,6 +505,395 @@ def test_owner_demo_seed_is_linked_idempotent_and_resettable() -> None:
             assert queued.processing_attempts == 0
         assert not (TEST_VISUAL_STORAGE / template_storage_key).exists()
         assert not (TEST_VISUAL_STORAGE / presentation_storage_key).exists()
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_owner_demo_reset_refuses_an_unowned_presentation_linked_to_its_business_case() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        settings = owner_demo_settings()
+        seeded = await seed_owner_demo_data(
+            factory,
+            PRIMARY_ORGANISATION_ID,
+            PRIMARY_USER_ID,
+            settings,
+        )
+        presentation_id = uuid4()
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            session.add(
+                CreatePresentation(
+                    id=presentation_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    account_id=seeded["company_id"],
+                    opportunity_id=seeded["opportunity_id"],
+                    template_id=owner_demo_template_id(PRIMARY_ORGANISATION_ID),
+                    template_version_id=seeded["template_version_id"],
+                    business_case_id=seeded["business_case_id"],
+                    business_case_version_id=seeded["business_case_version_id"],
+                    business_case_scenario="all",
+                    created_by_user_id=PRIMARY_USER_ID,
+                    title="Legitimate local presentation",
+                    objective="business_case",
+                    audience_json=[],
+                    focus_instruction=None,
+                    state="draft_plan",
+                    review_state="pending",
+                    plan_json=[],
+                    source_context_fingerprint="f" * 64,
+                    idempotency_key="legitimate-dependent-presentation",
+                )
+            )
+            await session.commit()
+
+        with pytest.raises(
+            ValueError,
+            match="another Presentation references a manifest-owned demo Account, Opportunity or Business Case",
+        ):
+            await reset_owner_demo_extensions(factory, PRIMARY_ORGANISATION_ID, settings)
+
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            preserved = await session.get(CreatePresentation, presentation_id)
+            assert preserved is not None
+            assert preserved.title == "Legitimate local presentation"
+            assert await session.get(CreatePresentation, seeded["presentation_id"]) is not None
+            assert await session.get(CreateBusinessCase, seeded["business_case_id"]) is not None
+            assert (
+                await session.get(
+                    BetaSystemEvent,
+                    owner_demo_cleanup_event_id(PRIMARY_ORGANISATION_ID),
+                )
+                is None
+            )
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_owner_demo_reset_refuses_a_standalone_presentation_linked_to_demo_parents() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        settings = owner_demo_settings()
+        seeded = await seed_owner_demo_data(
+            factory,
+            PRIMARY_ORGANISATION_ID,
+            PRIMARY_USER_ID,
+            settings,
+        )
+        presentation_id = uuid4()
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            manifest = await session.get(
+                BetaSystemEvent,
+                owner_demo_base_manifest_id(PRIMARY_ORGANISATION_ID),
+            )
+            template_version = await session.get(
+                CreateTemplateVersion,
+                seeded["template_version_id"],
+            )
+            presentation_version = await session.get(
+                CreatePresentationVersion,
+                seeded["presentation_version_id"],
+            )
+            assert manifest is not None
+            assert template_version is not None
+            assert presentation_version is not None
+            assert presentation_version.pptx_storage_key is not None
+            manifest_metadata = copy.deepcopy(manifest.metadata_json)
+            template_storage_key = template_version.storage_key
+            presentation_storage_key = presentation_version.pptx_storage_key
+            session.add(
+                CreatePresentation(
+                    id=presentation_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    account_id=seeded["company_id"],
+                    opportunity_id=seeded["opportunity_id"],
+                    template_id=owner_demo_template_id(PRIMARY_ORGANISATION_ID),
+                    template_version_id=seeded["template_version_id"],
+                    business_case_id=None,
+                    business_case_version_id=None,
+                    business_case_scenario=None,
+                    created_by_user_id=PRIMARY_USER_ID,
+                    title="Legitimate standalone local presentation",
+                    objective="solution_overview",
+                    audience_json=[],
+                    focus_instruction=None,
+                    state="draft_plan",
+                    review_state="pending",
+                    plan_json=[],
+                    source_context_fingerprint="f" * 64,
+                    idempotency_key="legitimate-standalone-presentation",
+                )
+            )
+            await session.commit()
+
+        assert (TEST_VISUAL_STORAGE / template_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / presentation_storage_key).is_file()
+        with pytest.raises(
+            ValueError,
+            match="another Presentation references a manifest-owned demo Account, Opportunity or Business Case",
+        ):
+            await reset_owner_demo_extensions(factory, PRIMARY_ORGANISATION_ID, settings)
+
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            preserved = await session.get(CreatePresentation, presentation_id)
+            assert preserved is not None
+            assert preserved.business_case_id is None
+            assert preserved.title == "Legitimate standalone local presentation"
+            assert (
+                await session.get(
+                    SellingProfileRevision,
+                    seeded["selling_profile_revision_id"],
+                )
+                is not None
+            )
+            assert await session.get(CreateValueModel, seeded["value_model_id"]) is not None
+            assert await session.get(CreateBusinessCase, seeded["business_case_id"]) is not None
+            assert await session.get(CreateTemplateVersion, seeded["template_version_id"]) is not None
+            assert await session.get(CreatePresentation, seeded["presentation_id"]) is not None
+            assert (
+                await session.get(
+                    CreatePresentationVersion,
+                    seeded["presentation_version_id"],
+                )
+                is not None
+            )
+            assert await session.get(DealRoom, seeded["deal_room_id"]) is not None
+            assert await session.get(ClosedWonHandover, seeded["handover_id"]) is not None
+            assert await session.get(Task, seeded["task_id"]) is not None
+            preserved_manifest = await session.get(
+                BetaSystemEvent,
+                owner_demo_base_manifest_id(PRIMARY_ORGANISATION_ID),
+            )
+            assert preserved_manifest is not None
+            assert preserved_manifest.metadata_json == manifest_metadata
+            assert (
+                await session.get(
+                    BetaSystemEvent,
+                    owner_demo_cleanup_event_id(PRIMARY_ORGANISATION_ID),
+                )
+                is None
+            )
+        assert (TEST_VISUAL_STORAGE / template_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / presentation_storage_key).is_file()
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_owner_demo_reset_refuses_an_unowned_business_case_linked_to_demo_parents() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        settings = owner_demo_settings()
+        seeded = await seed_owner_demo_data(
+            factory,
+            PRIMARY_ORGANISATION_ID,
+            PRIMARY_USER_ID,
+            settings,
+        )
+        business_case_id = uuid4()
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            owner_case = await session.get(CreateBusinessCase, seeded["business_case_id"])
+            assert owner_case is not None
+            session.add(
+                CreateBusinessCase(
+                    id=business_case_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    account_id=seeded["company_id"],
+                    opportunity_id=seeded["opportunity_id"],
+                    model_id=seeded["value_model_id"],
+                    model_version_id=owner_case.model_version_id,
+                    created_by_user_id=PRIMARY_USER_ID,
+                    title="Legitimate local Business Case",
+                    currency="AUD",
+                    state="draft",
+                    idempotency_key="legitimate-dependent-business-case",
+                )
+            )
+            await session.commit()
+
+        with pytest.raises(
+            ValueError,
+            match="another Business Case references a manifest-owned demo parent",
+        ):
+            await reset_owner_demo_extensions(factory, PRIMARY_ORGANISATION_ID, settings)
+
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            preserved = await session.get(CreateBusinessCase, business_case_id)
+            assert preserved is not None
+            assert preserved.title == "Legitimate local Business Case"
+            assert await session.get(CreateBusinessCase, seeded["business_case_id"]) is not None
+            assert await session.get(CreateValueModel, seeded["value_model_id"]) is not None
+            assert await session.get(CreatePresentation, seeded["presentation_id"]) is not None
+            presentation_version = await session.get(
+                CreatePresentationVersion,
+                seeded["presentation_version_id"],
+            )
+            assert presentation_version is not None
+            assert presentation_version.pptx_storage_key is not None
+            assert (
+                await session.get(
+                    BetaSystemEvent,
+                    owner_demo_cleanup_event_id(PRIMARY_ORGANISATION_ID),
+                )
+                is None
+            )
+        assert (TEST_VISUAL_STORAGE / presentation_version.pptx_storage_key).is_file()
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("dependent_kind", ("task", "interaction"))
+def test_full_owner_demo_reset_rolls_back_before_removing_extensions_for_unowned_base_dependants(
+    dependent_kind: str,
+) -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+
+        def enable_foreign_keys(
+            connection: DBAPIConnection,
+            connection_record: ConnectionPoolEntry,
+        ) -> None:
+            del connection_record
+            cursor = connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        event.listen(engine.sync_engine, "connect", enable_foreign_keys)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        settings = owner_demo_settings()
+        seeded = await seed_owner_demo_data(
+            factory,
+            PRIMARY_ORGANISATION_ID,
+            PRIMARY_USER_ID,
+            settings,
+        )
+        dependent_id = uuid4()
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            manifest = await session.get(
+                BetaSystemEvent,
+                owner_demo_base_manifest_id(PRIMARY_ORGANISATION_ID),
+            )
+            template_version = await session.get(
+                CreateTemplateVersion,
+                seeded["template_version_id"],
+            )
+            presentation_version = await session.get(
+                CreatePresentationVersion,
+                seeded["presentation_version_id"],
+            )
+            base_visual_storage_key = await session.scalar(
+                select(VisualAsset.storage_key).where(
+                    VisualAsset.organisation_id == PRIMARY_ORGANISATION_ID,
+                )
+            )
+            base_document_storage_key = await session.scalar(
+                select(DocumentSource.storage_key).where(
+                    DocumentSource.organisation_id == PRIMARY_ORGANISATION_ID,
+                )
+            )
+            assert manifest is not None
+            assert template_version is not None
+            assert presentation_version is not None
+            assert presentation_version.pptx_storage_key is not None
+            assert base_visual_storage_key is not None
+            assert base_document_storage_key is not None
+            manifest_metadata = copy.deepcopy(manifest.metadata_json)
+            template_storage_key = template_version.storage_key
+            presentation_storage_key = presentation_version.pptx_storage_key
+            if dependent_kind == "task":
+                session.add(
+                    Task(
+                        id=dependent_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        company_id=seeded["company_id"],
+                        contact_id=demo_phone_contact_id(PRIMARY_ORGANISATION_ID),
+                        opportunity_id=None,
+                        title="Legitimate local Task",
+                        description="Must survive a refused owner-demo reset.",
+                        status="open",
+                        priority="medium",
+                        created_by_user_id=PRIMARY_USER_ID,
+                    )
+                )
+            else:
+                session.add(
+                    Interaction(
+                        id=dependent_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        company_id=seeded["company_id"],
+                        contact_id=demo_phone_contact_id(PRIMARY_ORGANISATION_ID),
+                        opportunity_id=None,
+                        interaction_type="phone_call",
+                        lifecycle_status="planned",
+                        title="Legitimate local interaction",
+                        creation_origin="manual",
+                        call_direction="outbound",
+                        created_by_user_id=PRIMARY_USER_ID,
+                    )
+                )
+            await session.commit()
+
+        assert (TEST_VISUAL_STORAGE / template_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / presentation_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / base_visual_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / base_document_storage_key).is_file()
+        with pytest.raises(
+            ValueError,
+            match="another local record references a manifest-owned demo Account, Person or Opportunity",
+        ):
+            await reset_demo_data(factory, PRIMARY_ORGANISATION_ID, settings)
+
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            dependent_model = Task if dependent_kind == "task" else Interaction
+            assert await session.get(dependent_model, dependent_id) is not None
+            assert await session.get(Company, seeded["company_id"]) is not None
+            assert await session.get(Contact, demo_phone_contact_id(PRIMARY_ORGANISATION_ID)) is not None
+            assert await session.get(Opportunity, seeded["opportunity_id"]) is not None
+            for model, row_id in (
+                (SellingProfileRevision, seeded["selling_profile_revision_id"]),
+                (CreateValueModel, seeded["value_model_id"]),
+                (CreateBusinessCase, seeded["business_case_id"]),
+                (CreateBusinessCaseVersion, seeded["business_case_version_id"]),
+                (CreateTemplate, owner_demo_template_id(PRIMARY_ORGANISATION_ID)),
+                (CreateTemplateVersion, seeded["template_version_id"]),
+                (CreatePresentation, seeded["presentation_id"]),
+                (CreatePresentationVersion, seeded["presentation_version_id"]),
+                (DealRoom, seeded["deal_room_id"]),
+                (ClosedWonHandover, seeded["handover_id"]),
+                (ClosedWonHandoverRevision, seeded["handover_revision_id"]),
+                (Task, seeded["task_id"]),
+            ):
+                assert await session.get(model, row_id) is not None
+            preserved_manifest = await session.get(
+                BetaSystemEvent,
+                owner_demo_base_manifest_id(PRIMARY_ORGANISATION_ID),
+            )
+            assert preserved_manifest is not None
+            assert preserved_manifest.metadata_json == manifest_metadata
+            assert (
+                await session.get(
+                    BetaSystemEvent,
+                    owner_demo_cleanup_event_id(PRIMARY_ORGANISATION_ID),
+                )
+                is None
+            )
+        assert (TEST_VISUAL_STORAGE / template_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / presentation_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / base_visual_storage_key).is_file()
+        assert (TEST_VISUAL_STORAGE / base_document_storage_key).is_file()
         await engine.dispose()
 
     asyncio.run(scenario())
@@ -1856,6 +2260,89 @@ def test_owner_demo_reset_surfaces_post_commit_blob_cleanup_failure(monkeypatch:
                 is None
             )
         assert not (TEST_VISUAL_STORAGE / storage_key).exists()
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_full_owner_demo_reset_retries_a_failed_base_blob_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+
+        def enable_foreign_keys(
+            connection: DBAPIConnection,
+            connection_record: ConnectionPoolEntry,
+        ) -> None:
+            del connection_record
+            cursor = connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        event.listen(engine.sync_engine, "connect", enable_foreign_keys)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        settings = owner_demo_settings()
+        seeded = await seed_owner_demo_data(
+            factory,
+            PRIMARY_ORGANISATION_ID,
+            PRIMARY_USER_ID,
+            settings,
+        )
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            base_document_storage_key = await session.scalar(
+                select(DocumentSource.storage_key).where(
+                    DocumentSource.organisation_id == PRIMARY_ORGANISATION_ID,
+                )
+            )
+        assert base_document_storage_key is not None
+        storage = LocalVisualStorage(str(TEST_VISUAL_STORAGE))
+        assert (TEST_VISUAL_STORAGE / base_document_storage_key).is_file()
+
+        class FailSelectedDeleteStorage:
+            failed = False
+
+            async def read(self, selected_storage_key: str) -> bytes:
+                return await storage.read(selected_storage_key)
+
+            async def delete(self, selected_storage_key: str) -> None:
+                if selected_storage_key == base_document_storage_key and not self.failed:
+                    self.failed = True
+                    raise VisualStorageError("synthetic base-object cleanup failure")
+                await storage.delete(selected_storage_key)
+
+        failing_storage = FailSelectedDeleteStorage()
+        monkeypatch.setattr(
+            "revenueos.owner_demo_data.create_visual_storage",
+            lambda _settings: failing_storage,
+        )
+        with pytest.raises(VisualStorageError, match="database reset committed"):
+            await reset_demo_data(factory, PRIMARY_ORGANISATION_ID, settings)
+
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            assert await session.get(Company, seeded["company_id"]) is None
+            cleanup_event = await session.get(
+                BetaSystemEvent,
+                owner_demo_cleanup_event_id(PRIMARY_ORGANISATION_ID),
+            )
+            assert cleanup_event is not None
+            cleanup_keys = cleanup_event.metadata_json["storageKeys"]
+            assert isinstance(cleanup_keys, list)
+            assert base_document_storage_key in cleanup_keys
+        assert (TEST_VISUAL_STORAGE / base_document_storage_key).is_file()
+
+        reset = await reset_demo_data(factory, PRIMARY_ORGANISATION_ID, settings)
+        assert reset == {"status": "reset", "provider_calls": 0}
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            assert (
+                await session.get(
+                    BetaSystemEvent,
+                    owner_demo_cleanup_event_id(PRIMARY_ORGANISATION_ID),
+                )
+                is None
+            )
+        assert not (TEST_VISUAL_STORAGE / base_document_storage_key).exists()
         await engine.dispose()
 
     asyncio.run(scenario())

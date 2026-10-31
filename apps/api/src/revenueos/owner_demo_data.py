@@ -8,7 +8,7 @@ import json
 import re
 import uuid
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -70,6 +70,7 @@ from revenueos.deal_room_contracts import (
 )
 from revenueos.deal_room_services import DealRoomService
 from revenueos.demo_data import (
+    DEMO_DOCUMENTS,
     DEMO_NAMESPACE,
     DEMO_TARGET_MARKET_NAME,
     demo_campaign_ids,
@@ -149,7 +150,7 @@ from revenueos.selling_profile_services import SellingProfileService
 from revenueos.tenant import Role, TenantContext
 from revenueos.visual_storage import VisualStorage, VisualStorageError, create_visual_storage
 
-OWNER_DEMO_DATASET_VERSION = 20
+OWNER_DEMO_DATASET_VERSION = 21
 OWNER_PROFILE_KEY = "owner-demo-selling-profile-v1"
 OWNER_VALUE_MODEL_KEY = "owner-demo-value-model-v1"
 OWNER_BUSINESS_CASE_KEY = "owner-demo-business-case-v1"
@@ -165,7 +166,7 @@ OWNER_PRESENTATION_TITLE = "[DEMO] Northstar workflow pilot presentation"
 OWNER_PRESENTATION_FOCUS = "Keep the synthetic security, implementation and customer-owned next steps concise."
 OWNER_RESET_CLEANUP_EVENT = "owner_demo_reset_cleanup_pending"
 OWNER_RESET_CLEANUP_SCHEMA_VERSION = 1
-OWNER_RESET_CLEANUP_MAX_KEYS = 8
+OWNER_RESET_CLEANUP_MAX_KEYS = 16
 OWNER_BASE_RESERVATION_EVENT = "owner_demo_base_reservation"
 OWNER_BASE_MANIFEST_EVENT = "owner_demo_base_manifest"
 OWNER_BASE_MANIFEST_SCHEMA_VERSION = 1
@@ -2159,6 +2160,31 @@ def _claims_match_deterministic_output(
     return True
 
 
+def _slides_match_deterministic_output(
+    actual_slides: list[object],
+    expected_slides: list[dict[str, object]],
+    *,
+    approved: bool,
+) -> bool:
+    if len(actual_slides) != len(expected_slides):
+        return False
+    for raw_actual, raw_expected in zip(actual_slides, expected_slides, strict=True):
+        if not isinstance(raw_actual, dict):
+            return False
+        actual = dict(raw_actual)
+        expected = dict(raw_expected)
+        expected_review = expected.pop("reviewState", None)
+        actual_review = actual.pop("reviewState", None)
+        if approved and expected_review == "needs_review":
+            if actual_review != "ready":
+                return False
+        elif actual_review != expected_review:
+            return False
+        if actual != expected:
+            return False
+    return True
+
+
 async def _validated_owner_presentation(
     session: AsyncSession,
     tenant: TenantContext,
@@ -2313,7 +2339,11 @@ async def _validated_owner_presentation(
     content_map = {item.slide_id: item for item in content_rows}
     expected_generated, expected_claims = _compose(presentation, version, slide_map, content_map)
     _validate_claim_manifest(expected_generated, expected_claims)
-    if version.generated_content_json != expected_generated or not _claims_match_deterministic_output(
+    if not _slides_match_deterministic_output(
+        version.generated_content_json,
+        expected_generated,
+        approved=presentation.state == "ready",
+    ) or not _claims_match_deterministic_output(
         version.claim_manifest_json,
         expected_claims,
         approved=presentation.state == "ready",
@@ -2369,9 +2399,17 @@ def _validated_cleanup_storage_keys(organisation_id: UUID, raw_keys: object) -> 
     if not isinstance(raw_keys, list) or len(raw_keys) > OWNER_RESET_CLEANUP_MAX_KEYS:
         raise ValueError("Owner demo reset refused an invalid local object cleanup marker.")
     keys: list[str] = []
+    source_ids = demo_source_evidence_ids(organisation_id)
+    allowed_base_keys = {
+        f"{organisation_id}/documents/{source_ids[f'{label}:source'].hex}.txt" for label in DEMO_DOCUMENTS
+    }
+    allowed_base_keys.add(f"{organisation_id}/{demo_debrief_ids(organisation_id)[1]}/demo-whiteboard.png")
     for raw_key in raw_keys:
         if not isinstance(raw_key, str) or raw_key in keys:
             raise ValueError("Owner demo reset refused an invalid local object cleanup marker.")
+        if raw_key in allowed_base_keys:
+            keys.append(raw_key)
+            continue
         parts = raw_key.split("/")
         if (
             len(parts) != 5
@@ -3744,6 +3782,8 @@ async def reset_owner_demo_extensions(
     session_factory: async_sessionmaker[AsyncSession],
     organisation_id: UUID,
     settings: Settings | None = None,
+    *,
+    database_finalize: Callable[[AsyncSession], Awaitable[Sequence[str]]] | None = None,
 ) -> None:
     active_settings = settings or get_settings()
     _assert_private_demo_settings(active_settings)
@@ -3951,6 +3991,25 @@ async def reset_owner_demo_extensions(
                 )
             ):
                 raise _owner_collision("Business Case")
+
+            demo_parent_links = [
+                CreateBusinessCase.account_id == company_id,
+                CreateBusinessCase.opportunity_id == opportunity_id,
+            ]
+            if value_model is not None:
+                demo_parent_links.append(CreateBusinessCase.model_id == value_model.id)
+            dependent_business_cases = select(CreateBusinessCase.id).where(
+                CreateBusinessCase.organisation_id == organisation_id,
+                or_(*demo_parent_links),
+            )
+            if business_case is not None:
+                dependent_business_cases = dependent_business_cases.where(CreateBusinessCase.id != business_case.id)
+            if await session.scalar(dependent_business_cases) is not None:
+                raise ValueError(
+                    "Owner demo reset refused because another Business Case references a "
+                    "manifest-owned demo parent. Remove or relink that local record before resetting."
+                )
+
             if business_case is not None and business_case_version is not None:
                 presentation = await _validated_owner_presentation(
                     session,
@@ -3972,6 +4031,25 @@ async def reset_owner_demo_extensions(
                 )
             ):
                 raise _owner_collision("Presentation")
+
+            presentation_parent_links = [
+                CreatePresentation.account_id == company_id,
+                CreatePresentation.opportunity_id == opportunity_id,
+            ]
+            if business_case is not None:
+                presentation_parent_links.append(CreatePresentation.business_case_id == business_case.id)
+            dependent_presentations = select(CreatePresentation.id).where(
+                CreatePresentation.organisation_id == organisation_id,
+                or_(*presentation_parent_links),
+            )
+            if presentation is not None:
+                dependent_presentations = dependent_presentations.where(CreatePresentation.id != presentation.id)
+            if await session.scalar(dependent_presentations) is not None:
+                raise ValueError(
+                    "Owner demo reset refused because another Presentation references a "
+                    "manifest-owned demo Account, Opportunity or Business Case. Remove or relink "
+                    "that local record before resetting."
+                )
 
             if presentation is not None and business_case_version is not None:
                 presentation_version_id = await session.scalar(
@@ -4130,24 +4208,6 @@ async def reset_owner_demo_extensions(
         captured_keys = tuple(sorted({*template_storage_keys, *presentation_storage_keys}))
         _validated_cleanup_storage_keys(organisation_id, list(captured_keys))
         cleanup_keys = tuple(sorted({*pending_cleanup_keys, *captured_keys}))
-        if cleanup_keys:
-            metadata: dict[str, object] = {
-                "schemaVersion": OWNER_RESET_CLEANUP_SCHEMA_VERSION,
-                "storageKeys": list(cleanup_keys),
-            }
-            if cleanup_event is None:
-                session.add(
-                    BetaSystemEvent(
-                        id=cleanup_event_id,
-                        organisation_id=organisation_id,
-                        actor_user_id=tenant.user_id if tenant is not None else None,
-                        event_type=OWNER_RESET_CLEANUP_EVENT,
-                        subject_id=cleanup_event_id,
-                        metadata_json=metadata,
-                    )
-                )
-            else:
-                cleanup_event.metadata_json = metadata
         await session.execute(
             delete(ClosedWonHandover).where(
                 ClosedWonHandover.organisation_id == organisation_id,
@@ -4216,6 +4276,33 @@ async def reset_owner_demo_extensions(
                         SellingProfile.id == profile_id,
                     )
                 )
+        base_cleanup_keys: Sequence[str] = ()
+        if database_finalize is not None:
+            # The full demo reset supplies its base-row deletion here so every
+            # database mutation shares this transaction. A restrictive local
+            # dependent therefore rolls back the owner extensions and cleanup
+            # marker before any captured owner-demo object is removed.
+            base_cleanup_keys = await database_finalize(session)
+            _validated_cleanup_storage_keys(organisation_id, list(base_cleanup_keys))
+        cleanup_keys = tuple(sorted({*cleanup_keys, *base_cleanup_keys}))
+        if cleanup_keys:
+            metadata: dict[str, object] = {
+                "schemaVersion": OWNER_RESET_CLEANUP_SCHEMA_VERSION,
+                "storageKeys": list(cleanup_keys),
+            }
+            if cleanup_event is None:
+                session.add(
+                    BetaSystemEvent(
+                        id=cleanup_event_id,
+                        organisation_id=organisation_id,
+                        actor_user_id=tenant.user_id if tenant is not None else None,
+                        event_type=OWNER_RESET_CLEANUP_EVENT,
+                        subject_id=cleanup_event_id,
+                        metadata_json=metadata,
+                    )
+                )
+            else:
+                cleanup_event.metadata_json = metadata
 
     cleanup_errors: list[Exception] = []
     for storage_key in cleanup_keys:

@@ -49,11 +49,14 @@ describe("CRMSettings", () => {
       ).toBe(true),
     );
     expect(
-      await screen.findByText(/now the native CRM system of record/i),
+      await screen.findByText(/now where your CRM records are managed/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Accounts, People and Opportunities/i),
     ).toBeVisible();
   });
 
-  it("creates a bounded custom field", async () => {
+  it("creates a custom field", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST")
         return Promise.resolve(

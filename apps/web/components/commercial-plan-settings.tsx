@@ -6,7 +6,7 @@ import { apiRequest } from "@/lib/api";
 
 const statusLabels: Record<CommercialProjection["status"], string> = {
   trial_active: "Trial active",
-  active: "Active",
+  active: "Access active",
   grace: "Viewing and export grace",
   expired: "Expired",
   inactive: "Inactive",
@@ -68,7 +68,7 @@ export function CommercialPlanSettings() {
     return (
       <section className="form-card" aria-labelledby="commercial-plan-title">
         <h2 id="commercial-plan-title" className="form-legend">
-          Billing &amp; plan
+          Plan access
         </h2>
         <p role="alert" className="mt-3 text-sm text-rose-800">
           {error}
@@ -91,7 +91,7 @@ export function CommercialPlanSettings() {
     return (
       <section className="form-card" aria-labelledby="commercial-plan-title">
         <h2 id="commercial-plan-title" className="form-legend">
-          Billing &amp; plan
+          Plan access
         </h2>
         <p role="status" className="mt-3 text-sm text-slate-600">
           Loading plan information…
@@ -120,13 +120,18 @@ export function CommercialPlanSettings() {
             className="form-legend mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-secondary"
             tabIndex={-1}
           >
-            Billing &amp; plan
+            Plan access
           </h2>
         </div>
         <span className="max-w-full rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
           {statusLabels[commercial.status]}
         </span>
       </div>
+
+      <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
+        Plan access and provider billing are separate. Active access does not by
+        itself mean that customer billing or Credit purchases are enabled.
+      </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <Metric label="Current plan" value={commercial.plan.displayName} />
@@ -215,9 +220,8 @@ export function CommercialPlanSettings() {
       </div>
 
       <p className="mt-5 text-xs leading-5 text-slate-500">
-        This is Oryntela&apos;s server-authoritative plan and entitlement view.
-        Verified test billing may feed it, while manual commercial assignments
-        remain clearly separate.
+        This view comes from Oryntela&apos;s current plan records. Test billing
+        and manual plan assignments remain clearly identified.
       </p>
     </section>
   );

@@ -58,7 +58,8 @@ export function ManagerInsightsOverview() {
             {data.periodLabel} · {data.currency}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Five separate references—there is no blended final forecast.
+            Compare actual wins and targets with the seller, manager and
+            Oryntela views.
           </p>
         </div>
         <div className="flex gap-2">
@@ -77,7 +78,7 @@ export function ManagerInsightsOverview() {
         <Position
           label="Actual won"
           value={money(data.actual.amount, data.currency)}
-          detail="Canonical sales metric"
+          detail="Closed Won value"
         />
         <Position
           label="Organisation target"
@@ -88,7 +89,7 @@ export function ManagerInsightsOverview() {
                 ? `${data.organisationTargets.length} matching targets`
                 : "Not set"
           }
-          detail="Organisation scope only"
+          detail="Shared team goal"
         />
         <Position
           label="Seller Likely"
@@ -106,13 +107,15 @@ export function ManagerInsightsOverview() {
             data.revenueosBaseline.expectedContribution,
             data.currency,
           )}
-          detail="Historical stage outcomes"
+          detail="Based on past stage outcomes"
         />
       </div>
       <p className="mt-4 text-sm text-amber-950">
         <strong>{data.dealsNeedingAttention}</strong> open{" "}
-        {data.dealsNeedingAttention === 1 ? "deal matches" : "deals match"}{" "}
-        current attention conditions.
+        {data.dealsNeedingAttention === 1
+          ? "deal needs attention"
+          : "deals need attention"}{" "}
+        now.
       </p>
     </section>
   );

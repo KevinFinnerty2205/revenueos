@@ -160,7 +160,7 @@ describe("InteractionForm", () => {
     fireEvent.change(screen.getByLabelText("Call direction"), {
       target: { value: "outbound" },
     });
-    fireEvent.change(screen.getByLabelText("Contact"), {
+    fireEvent.change(screen.getByLabelText("Person"), {
       target: { value: "contact-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create interaction" }));
@@ -218,7 +218,7 @@ describe("InteractionForm", () => {
       />,
     );
 
-    expect(await screen.findByLabelText("Contact")).toHaveValue("contact-1");
+    expect(await screen.findByLabelText("Person")).toHaveValue("contact-1");
     expect(screen.getByLabelText("Company")).toHaveValue("company-1");
     expect(screen.getByLabelText("Interaction type")).toHaveValue("phone_call");
   });
@@ -252,7 +252,7 @@ describe("InteractionForm", () => {
       />,
     );
 
-    expect(await screen.findByLabelText("Contact")).toHaveValue("contact-101");
+    expect(await screen.findByLabelText("Person")).toHaveValue("contact-101");
     expect(screen.getByRole("option", { name: "Taylor Ng" })).toBeVisible();
     expect(screen.getByLabelText("Company")).toHaveValue("company-101");
     expect(

@@ -152,7 +152,7 @@ class EmailCreateRequest(SourceAssociation):
         if expected is not None and self.direction != expected:
             raise ValueError(f"{self.source_type} email evidence must use {expected} direction.")
         if self.direction != "inbound" and self.sender_contact_id is not None:
-            raise ValueError("A customer sender Contact can be selected only for inbound email.")
+            raise ValueError("A customer sender Person can be selected only for inbound email.")
         return self
 
 

@@ -34,7 +34,7 @@ def test_owner_demo_runbook_bootstraps_identity_before_seed_and_keeps_boundaries
     assert api_start < readiness < seed < worker_start < web_start
 
     for expected in (
-        '"dataset_version": 20',
+        '"dataset_version": 21',
         "real Northstar-linked Task",
         "**Members**",
         "Do not queue deletion",

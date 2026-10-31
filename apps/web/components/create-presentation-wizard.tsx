@@ -320,7 +320,7 @@ export function CreatePresentationWizard() {
               </select>
             </label>
             <label className="field-label">
-              Known Contact (optional)
+              Known Person (optional)
               <select
                 name="contactId"
                 disabled={!accountId}

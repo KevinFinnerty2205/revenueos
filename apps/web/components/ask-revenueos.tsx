@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, ApiClientError } from "@/lib/api";
 
 const suggestedQuestions: Record<AskScopeType, string[]> = {
   opportunity: [
@@ -56,6 +56,7 @@ export function AskRevenueOS({
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
   const answerRef = useRef<HTMLElement>(null);
   const answerTitleId = useId();
@@ -71,6 +72,7 @@ export function AskRevenueOS({
       .then((loaded) => {
         setCapabilities(loaded);
         setError(null);
+        setErrorCode(null);
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError")
@@ -80,6 +82,7 @@ export function AskRevenueOS({
             ? reason.message
             : "Ask Oryntela is unavailable right now.",
         );
+        setErrorCode(reason instanceof ApiClientError ? reason.code : null);
       })
       .finally(() => {
         if (!controller.signal.aborted) setChecking(false);
@@ -95,6 +98,7 @@ export function AskRevenueOS({
     }
     setLoading(true);
     setError(null);
+    setErrorCode(null);
     setRetryQuestion(trimmed);
     try {
       const loaded = await apiRequest<AskAnswer>("/api/v1/ask", {
@@ -107,6 +111,7 @@ export function AskRevenueOS({
         }),
       });
       setAnswer(loaded);
+      setErrorCode(null);
       window.requestAnimationFrame(() => answerRef.current?.focus());
     } catch (reason: unknown) {
       setError(
@@ -114,6 +119,7 @@ export function AskRevenueOS({
           ? reason.message
           : "Oryntela couldn’t answer that right now.",
       );
+      setErrorCode(reason instanceof ApiClientError ? reason.code : null);
     } finally {
       setLoading(false);
     }
@@ -133,14 +139,29 @@ export function AskRevenueOS({
   }
 
   if (!capabilities) {
+    const noticeRequired = errorCode === "data_notice_acknowledgement_required";
     return (
       <div role="alert" className="form-card border-rose-200 bg-rose-50">
         <p className="font-semibold text-rose-950">
-          {error ?? "Ask Oryntela is unavailable right now."}
+          {noticeRequired
+            ? "Review the data notice before using Ask Oryntela."
+            : (error ?? "Ask Oryntela is unavailable right now.")}
         </p>
         <p className="mt-2 text-sm text-rose-800">
-          Normal record Search is still available.
+          {noticeRequired
+            ? "Ask stays unavailable until this requirement is complete. Normal record Search is still available."
+            : "Normal record Search is still available."}
         </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {noticeRequired ? (
+            <Link href="/onboarding" className="secondary-button">
+              Review data notice
+            </Link>
+          ) : null}
+          <Link href="/assistant?mode=search" className="secondary-button">
+            Search records
+          </Link>
+        </div>
       </div>
     );
   }
@@ -192,6 +213,14 @@ export function AskRevenueOS({
             className="mt-4 rounded-xl bg-rose-50 p-4 text-sm text-rose-900"
           >
             <p>{error}</p>
+            {errorCode === "data_notice_acknowledgement_required" ? (
+              <Link
+                href="/onboarding"
+                className="mt-3 inline-flex font-bold underline underline-offset-4"
+              >
+                Review data notice
+              </Link>
+            ) : null}
             {retryQuestion ? (
               <button
                 type="button"
@@ -202,6 +231,12 @@ export function AskRevenueOS({
                 Retry
               </button>
             ) : null}
+            <Link
+              href="/assistant?mode=search"
+              className="mt-3 block font-bold underline underline-offset-4"
+            >
+              Search records
+            </Link>
           </div>
         ) : null}
       </form>

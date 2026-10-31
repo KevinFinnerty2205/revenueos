@@ -175,11 +175,11 @@ export function CoreSearch({
             ) : (
               <div className="grid gap-4">
                 <ResultGroup
-                  title="Contacts"
+                  title="People"
                   items={results.contacts.map((contact) => ({
                     href: `/contacts/${contact.id}`,
                     title: `${contact.firstName} ${contact.lastName}`,
-                    detail: contact.email ?? contact.jobTitle ?? "Contact",
+                    detail: contact.email ?? contact.jobTitle ?? "Person",
                   }))}
                 />
                 <ResultGroup

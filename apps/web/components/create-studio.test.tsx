@@ -202,14 +202,53 @@ describe("Create", () => {
         }
         if (url.endsWith("/api/v1/create/business-cases")) {
           return jsonResponse({
-            items: [],
+            items: [
+              {
+                id: "business-case-1",
+                title: "European expansion case",
+                accountName: "Example Europe",
+                opportunityName: "Regional rollout",
+                state: "approved",
+                modelName: "Expansion value model",
+                modelVersion: 1,
+                currency: "EUR",
+                currentVersion: {
+                  scenarios: [
+                    {
+                      name: "base",
+                      outputs: [
+                        {
+                          label: "Annual value",
+                          displayValue: "2700.00",
+                          unit: "currency_per_year",
+                          highlight: true,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
             canCreate: true,
             maxActiveCasesPerAccount: 20,
           });
         }
         if (url.endsWith("/api/v1/create/value-models")) {
           return jsonResponse({
-            items: [],
+            items: [
+              {
+                id: "model-1",
+                name: "Expansion value model",
+                description: "A bounded value model.",
+                latestVersion: {
+                  id: "model-version-1",
+                  version: 1,
+                  state: "approved",
+                  definition: { inputs: [], outputs: [] },
+                  formulaEngineVersion: "bounded_decimal_v1",
+                },
+              },
+            ],
             canManage: true,
             maxActiveModels: 50,
           });
@@ -226,6 +265,9 @@ describe("Create", () => {
       screen.getByRole("link", { name: "New presentation" }),
     ).toHaveAttribute("href", "/create/presentations/new");
     expect(screen.getByText("Northstar solution overview")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /European expansion case/i }),
+    ).toHaveTextContent("Base case · Annual value: EUR €2,700.00");
     expect(screen.getByText("Approved company story")).toBeVisible();
     expect(
       screen.getByText(/authorised to upload this company content/i),
@@ -359,6 +401,12 @@ describe("Create", () => {
         name: "Review the deterministic slide plan",
       }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Return to Account" }),
+    ).toHaveAttribute("href", "/companies/company-1");
+    expect(
+      screen.getByRole("link", { name: "Return to Opportunity" }),
+    ).toHaveAttribute("href", "/opportunities/opportunity-1");
     const requiredSlide = screen
       .getByText(/1 · Title · required/i)
       .closest("li");

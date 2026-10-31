@@ -86,10 +86,10 @@ describe("BusinessEntityList", () => {
 
     render(<BusinessEntityList entity="contacts" />);
     expect(
-      await screen.findByRole("heading", { name: "No contacts found" }),
+      await screen.findByRole("heading", { name: "No people found" }),
     ).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText("Search contacts"), {
+    fireEvent.change(screen.getByLabelText("Search people"), {
       target: { value: "Jordan Lee" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));

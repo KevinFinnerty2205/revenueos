@@ -668,9 +668,10 @@ test("Sales Insights reconciles exact funnel, activity and Win/Loss fixtures", a
     fullPage: true,
   });
 
-  await page.getByRole("tab", { name: "Funnel" }).click();
-  await expect(page.getByText(/choose one pipeline/i)).toBeVisible();
-  await page.getByLabel("Pipeline").selectOption(pipelineId);
+  await page.getByRole("button", { name: "Funnel", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Pipeline", exact: true }),
+  ).toHaveValue(pipelineId);
   await expect(
     page.getByText("Oryntela Sales Pipeline progression"),
   ).toBeVisible();
@@ -687,18 +688,18 @@ test("Sales Insights reconciles exact funnel, activity and Win/Loss fixtures", a
     fullPage: true,
   });
 
-  await page.getByRole("tab", { name: "Activity" }).click();
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
   await expect(page.getByText("Completed phone calls")).toBeVisible();
   await expect(page.getByText("Calls followed by a meeting")).toBeVisible();
   await expect(
-    page.getByText(/not attribution or proof of causation/i),
+    page.getByText(/do not prove that one activity caused another/i),
   ).toBeVisible();
   await page.screenshot({
     path: `${assets}/wo-036-insights-activity.png`,
     fullPage: true,
   });
 
-  await page.getByRole("tab", { name: "Win / loss" }).click();
+  await page.getByRole("button", { name: "Win / loss", exact: true }).click();
   await expect(page.getByText("Why we won", { exact: true })).toBeVisible();
   await expect(
     page.getByText(/seller-reported structured fields/i),
@@ -711,7 +712,7 @@ test("Sales Insights reconciles exact funnel, activity and Win/Loss fixtures", a
     fullPage: true,
   });
 
-  await page.getByRole("tab", { name: "Overview" }).click();
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
   await page.getByLabel("Owner").selectOption("user-empty");
   await expect(
     page.getByText(/no opportunities matched this period/i),
@@ -734,13 +735,12 @@ test("Sales Insights remains usable at a 390-pixel viewport", async ({
     fullPage: true,
   });
 
-  await page.getByLabel("Pipeline").selectOption(pipelineId);
   for (const [tabName, fileName, expectedText] of [
     ["Funnel", "funnel", "Oryntela Sales Pipeline progression"],
     ["Activity", "activity", "Calls followed by a meeting"],
     ["Win / loss", "win-loss", "Why we won"],
   ] as const) {
-    await page.getByRole("tab", { name: tabName }).click();
+    await page.getByRole("button", { name: tabName, exact: true }).click();
     await expect(page.getByText(expectedText, { exact: true })).toBeVisible();
     await page.screenshot({
       path: `${assets}/wo-036-insights-mobile-${fileName}.png`,
@@ -758,7 +758,7 @@ test("Targets show canonical progress, detail and history without ranking", asyn
 }) => {
   await routeInsights(page);
   await page.goto("/insights");
-  await page.getByRole("tab", { name: "Targets" }).click();
+  await page.getByRole("button", { name: "Targets", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "My targets" })).toBeVisible();
   await expect(page.getByText("72.5%", { exact: true })).toBeVisible();
@@ -777,10 +777,9 @@ test("Targets show canonical progress, detail and history without ranking", asyn
   await page
     .getByRole("link", { name: "View this metric in Insights" })
     .click();
-  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Overview", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/metric=won_value.*ownerUserId=user-1/u);
 });
 
@@ -788,7 +787,7 @@ test("Targets remain usable at a 390-pixel viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routeInsights(page);
   await page.goto("/insights");
-  await page.getByRole("tab", { name: "Targets" }).click();
+  await page.getByRole("button", { name: "Targets", exact: true }).click();
   await expect(page.getByText("72.5%", { exact: true })).toBeVisible();
   await page.screenshot({
     path: `${assets}/wo-037-targets-mobile.png`,
@@ -806,17 +805,18 @@ test("Forecast keeps seller ranges and the historical baseline transparent", asy
   await routeInsights(page);
   await page.goto("/insights?tab=forecast");
 
-  await expect(page.getByRole("tab", { name: "Forecast" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Forecast", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Actual won")).toBeVisible();
   await expect(page.getByText("Seller forecast range")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Separate historical baseline" }),
   ).toBeVisible();
   await expect(page.getByText(/No probability is applied/i)).toBeVisible();
-  await expect(page.getByText(/no fallback rate/i)).toBeVisible();
+  await expect(
+    page.getByText(/Deals without enough history are left out/i),
+  ).toBeVisible();
   await page.getByText("Historical baseline details").click();
   await expect(page.getByText(/7 of 12 reliably tracked/i)).toBeVisible();
   await page.getByRole("button", { name: "View review history" }).click();

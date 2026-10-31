@@ -433,7 +433,7 @@ class ProspectPeopleService:
         if target.promoted_company_id is None:
             raise PublicAPIError(
                 "company_not_in_sales",
-                "Add the company to Sales before adding this person as a Contact.",
+                "Add the company to Sales before saving this Person.",
                 409,
             )
         if person.promoted_contact_id is not None:
@@ -442,14 +442,14 @@ class ProspectPeopleService:
                 person.promoted_contact_id,
             )
             if promoted_contact is None:
-                raise PublicAPIError("promotion_inconsistent", "The promoted Contact could not be found.", 409)
+                raise PublicAPIError("promotion_inconsistent", "The saved Person could not be found.", 409)
             await self.repository.commit()
             return PersonPromotionResponse(
                 status="already_promoted",
                 contact_id=promoted_contact.id,
                 company_id=promoted_contact.company_id,
                 prospect_person_id=person.id,
-                message="This public professional research is already linked to an Oryntela Contact.",
+                message="This public professional research is already linked to a Person in Oryntela.",
             )
         current = await self.repository.current_person_run(self.tenant.organisation_id, person.id)
         if current is None:
@@ -470,7 +470,7 @@ class ProspectPeopleService:
         if matches and request.duplicate_action is None:
             raise PublicAPIError(
                 "existing_contact_match",
-                "This person may already exist in Oryntela. Review the possible Contact before continuing.",
+                "This person may already exist in Oryntela. Review the possible match before continuing.",
                 409,
             )
 
@@ -479,16 +479,16 @@ class ProspectPeopleService:
         if request.duplicate_action == "attach_research":
             match = next((item for item in matches if item.id == request.existing_contact_id), None)
             if match is None:
-                raise PublicAPIError("invalid_contact_match", "Choose a matching Contact from the review.", 422)
+                raise PublicAPIError("invalid_contact_match", "Choose a matching Person from the review.", 422)
             existing = await self.repository.get_contact(self.tenant.organisation_id, match.id)
             if existing is None or existing.company_id != target.promoted_company_id:
-                raise PublicAPIError("invalid_contact_match", "The selected Contact does not match this account.", 422)
+                raise PublicAPIError("invalid_contact_match", "The selected Person does not match this account.", 422)
             contact = existing
             promotion_status = "attached"
         else:
             if request.duplicate_action == "create_separate" and request.existing_contact_id is not None:
                 raise PublicAPIError(
-                    "invalid_contact_match", "A separate Contact does not use an existing Contact ID.", 422
+                    "invalid_contact_match", "A separate Person does not use an existing Person ID.", 422
                 )
             email_point = next((point for point in points if point.point_type == "business_email"), None)
             profile_point = next(
@@ -554,9 +554,9 @@ class ProspectPeopleService:
             company_id=contact.company_id,
             prospect_person_id=person.id,
             message=(
-                "Public professional research was linked to the existing Contact. No canonical fields were overwritten."
+                "Public professional research was linked to the existing Person. No saved fields were overwritten."
                 if promotion_status == "attached"
-                else "The Contact was added to Sales. No Opportunity, stakeholder, Methodology field or outreach was created."
+                else "The Person was added to Sales. No Opportunity, stakeholder, Methodology field or outreach was created."
             ),
         )
 
@@ -580,12 +580,12 @@ class ProspectPeopleService:
         await self._require_entitled(write=False)
         contact = await self.repository.get_contact(self.tenant.organisation_id, contact_id)
         if contact is None:
-            raise PublicAPIError("contact_not_found", "The requested Contact was not found.", 404)
+            raise PublicAPIError("contact_not_found", "The requested Person was not found.", 404)
         person = await self.repository.person_for_contact(self.tenant.organisation_id, contact_id)
         if person is None:
             raise PublicAPIError(
                 "prospect_person_research_not_found",
-                "No public professional research is linked to this Contact.",
+                "No public professional research is linked to this Person.",
                 404,
             )
         return ContactProspectResearchLinkResponse(

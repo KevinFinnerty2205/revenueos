@@ -262,12 +262,16 @@ export function BusinessCaseNew() {
               disabled={saving || !accountId || !modelVersionId}
               className="primary-button"
             >
-              {saving ? "Creating…" : "Review inputs"}
+              {saving ? "Creating draft…" : "Create draft and review inputs"}
             </button>
             <Link href="/create" className="secondary-button">
               Cancel
             </Link>
           </div>
+          <p className="text-sm leading-6 text-slate-600">
+            This saves a private draft, then opens the input review. It does not
+            calculate, approve or share a Business Case.
+          </p>
         </form>
       )}
     </div>

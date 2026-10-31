@@ -597,7 +597,7 @@ class ProspectService:
             message=(
                 "Public research was attached to the existing account."
                 if promotion_status == "attached"
-                else "The account was added to Sales. No opportunity or contact was created."
+                else "The account was added to Sales. No opportunity or Person was created."
             ),
         )
 

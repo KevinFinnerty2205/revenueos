@@ -53,7 +53,7 @@ const sources = [
     sourceVersionId: null,
     sourceVersion: null,
     authorityType: "commercial_record",
-    label: "Canonical Opportunity record",
+    label: "Opportunity record",
     sourceFingerprint: "a".repeat(64),
     pinnedAt: "2026-09-08T00:00:00Z",
   },
@@ -106,7 +106,7 @@ function revision(
       commercialScope: [
         item(
           `scope-${revisionNumber}`,
-          "Canonical Opportunity value: AUD 125000.00. This is an Opportunity record, not a contract.",
+          "Recorded Opportunity value: AUD 125,000.00. This is an Opportunity record, not a contract.",
           "commercial_record",
           ["source-opportunity"],
         ),
@@ -389,7 +389,10 @@ for (const viewport of [
     ).toBeVisible();
     await expect(page.getByText("Inference — review required")).toBeVisible();
     await expect(
-      page.getByText(/canonical Opportunity status is Closed Won/i),
+      page.getByText(
+        "Approval is unavailable until the opportunity is Closed Won.",
+        { exact: true },
+      ),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Approve immutable handover" }),

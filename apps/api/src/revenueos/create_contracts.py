@@ -234,7 +234,7 @@ class PresentationAudienceInput(APIModel):
     @model_validator(mode="after")
     def named_or_role_based(self) -> Self:
         if self.contact_id is None and self.name is None and self.role is None:
-            raise ValueError("Provide a Contact, name or role for each audience entry.")
+            raise ValueError("Provide a Person, name or role for each audience entry.")
         return self
 
 

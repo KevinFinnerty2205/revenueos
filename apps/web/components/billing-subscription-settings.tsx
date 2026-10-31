@@ -156,7 +156,7 @@ export function BillingSubscriptionSettings() {
         );
         setHostedUrl(result.checkoutUrl);
         setActionMessage(
-          "Secure hosted checkout is ready. Payment is not confirmed until the provider webhook is reconciled.",
+          "Secure hosted checkout is ready. Payment remains unconfirmed until Oryntela receives confirmation from the payment service.",
         );
       }
     } catch (reason: unknown) {
@@ -247,8 +247,8 @@ export function BillingSubscriptionSettings() {
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             {billing.mode === "test"
-              ? "Test billing operations"
-              : "Billing operations"}
+              ? "Test billing — no real charges"
+              : "Billing"}
           </p>
           <h2
             ref={titleRef}
@@ -259,7 +259,9 @@ export function BillingSubscriptionSettings() {
           </h2>
         </div>
         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-950">
-          {billing.provider} · {billing.mode} mode
+          {billing.mode === "test"
+            ? "Test mode · no real charges"
+            : `${billing.provider === "stripe" ? "Stripe" : "Payment service"} · live mode`}
         </span>
       </div>
 
@@ -300,10 +302,10 @@ export function BillingSubscriptionSettings() {
               className="mt-3 text-sm font-semibold text-amber-900"
             >
               {subscription.status === "unpaid"
-                ? "Provider payment recovery has ended. Paid functionality is inactive, but your data is preserved. Open hosted billing management to resolve it."
+                ? "Payment recovery has ended. Paid functionality is inactive, but your data is preserved. Open secure billing management to resolve it."
                 : subscription.status === "past_due"
-                  ? "Payment recovery is in progress. Access and your data are preserved while the provider runs its bounded retry policy. Open hosted billing management to resolve it."
-                  : "Payment is not confirmed. No new paid entitlement has been granted, and your data is preserved. Open hosted billing management to resolve it."}
+                  ? "Payment recovery is in progress. Access and your data are preserved while the payment service retries securely. Open secure billing management to resolve it."
+                  : "Payment is not confirmed. No new paid access has been granted, and your data is preserved. Open secure billing management to resolve it."}
             </p>
           ) : null}
           {subscription.pendingPlanCode ? (
@@ -440,7 +442,7 @@ export function BillingSubscriptionSettings() {
             {canStartCheckout
               ? "You will continue in hosted checkout."
               : selectionKind === "upgrade"
-                ? "This higher-tier change takes effect immediately only after provider payment confirmation. The provider calculates and invoices the proration; Oryntela does not estimate it here."
+                ? "This higher-tier change takes effect immediately only after the payment service confirms payment. The payment service calculates and charges any prorated amount; Oryntela does not estimate it here."
                 : selectionKind === "keep-current"
                   ? "This keeps the current plan and cancels the scheduled renewal change."
                   : selectionKind === "unchanged"
@@ -488,7 +490,7 @@ export function BillingSubscriptionSettings() {
         <h3 className="text-sm font-bold text-slate-950">Invoice history</h3>
         {billing.invoices.length === 0 ? (
           <p role="status" className="mt-3 text-sm text-slate-600">
-            No provider invoices have been reconciled.
+            No invoices have been received from the payment service.
           </p>
         ) : (
           <ul className="mt-3 grid min-w-0 gap-3" aria-label="Invoice history">
@@ -506,7 +508,7 @@ export function BillingSubscriptionSettings() {
                   </span>
                   {invoice.taxAmount ? (
                     <span className="mt-1 block">
-                      Provider-reported tax: AUD ${invoice.taxAmount}
+                      Tax shown on invoice: AUD ${invoice.taxAmount}
                     </span>
                   ) : null}
                 </span>
@@ -516,7 +518,7 @@ export function BillingSubscriptionSettings() {
                     href={invoice.hostedInvoiceUrl}
                     rel="noreferrer"
                   >
-                    View provider invoice
+                    View invoice
                   </a>
                 ) : null}
               </li>
@@ -526,11 +528,19 @@ export function BillingSubscriptionSettings() {
       </div>
 
       <p className="mt-5 text-xs leading-5 text-slate-500">
-        Enterprise uses a contact and manual commercial process. Production
-        Credit packs and purchases are not available; the Credits section below
-        is TEST-only infrastructure. Standard plan totals are GST-inclusive
-        under the recorded owner decision; customer billing remains a separate
-        activation gate.
+        Enterprise plans are arranged directly with Oryntela. Standard plan
+        totals include GST.{" "}
+        {billing.mode === "live" ? (
+          <>
+            Billing actions are available only to authorised organisation
+            administrators.
+          </>
+        ) : (
+          <>
+            The Credit packs below are for testing and cannot be purchased.
+            Customer billing is currently disabled.
+          </>
+        )}
       </p>
     </section>
   );

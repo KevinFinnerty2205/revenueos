@@ -307,11 +307,11 @@ class SourceEvidenceService:
         if request.sender_contact_id is not None:
             contact = await self.repository.get_contact(self.tenant.organisation_id, request.sender_contact_id)
             if contact is None:
-                raise PublicAPIError("contact_not_found", "The selected sender Contact was not found.", 404)
+                raise PublicAPIError("contact_not_found", "The selected sender Person was not found.", 404)
             if company_id is not None and contact.company_id != company_id:
                 raise PublicAPIError(
                     "contact_company_mismatch",
-                    "The selected sender Contact does not belong to the associated account.",
+                    "The selected sender Person does not belong to the associated account.",
                     422,
                 )
             sender_identity_state = "verified_contact"

@@ -29,7 +29,7 @@ const steps = [
   },
   {
     title: "Create the customer context",
-    body: "Start with an Account, add the people as Contacts, then create the Opportunity you want to progress. These records keep the customer journey connected.",
+    body: "Start with an Account, add the people involved, then create the Opportunity you want to progress. These records keep the customer journey connected.",
     href: "/companies/new",
     linkLabel: "Create an Account",
     action: "I have customer context",

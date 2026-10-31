@@ -12,7 +12,14 @@ import type {
   RevenueBrainReasoningRequestResponse,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActionItemsView,
   BuyingSignalsView,
@@ -58,6 +65,7 @@ export function OpportunityWorkspace({
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [reasoningRequesting, setReasoningRequesting] = useState(false);
   const [reasoningError, setReasoningError] = useState<string | null>(null);
+  const lastScrolledHash = useRef<string | null>(null);
 
   const loadWorkspace = useCallback(
     async (signal: AbortSignal) => {
@@ -137,6 +145,45 @@ export function OpportunityWorkspace({
       }),
     [opportunityId],
   );
+
+  useEffect(() => {
+    if (!workspace) return;
+    let retryTimer: number | undefined;
+
+    function scrollToDeferredHash(attempt = 0): void {
+      const hash = window.location.hash;
+      if (!hash || lastScrolledHash.current === hash) return;
+      let id: string;
+      try {
+        id = decodeURIComponent(hash.slice(1));
+      } catch {
+        return;
+      }
+      const target = document.getElementById(id);
+      if (target) {
+        lastScrolledHash.current = hash;
+        target.scrollIntoView({ block: "start" });
+        return;
+      }
+      if (attempt < 10) {
+        retryTimer = window.setTimeout(
+          () => scrollToDeferredHash(attempt + 1),
+          50,
+        );
+      }
+    }
+
+    const onHashChange = () => {
+      lastScrolledHash.current = null;
+      scrollToDeferredHash();
+    };
+    window.requestAnimationFrame(() => scrollToDeferredHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      window.removeEventListener("hashchange", onHashChange);
+    };
+  }, [workspace]);
 
   const availableMeetings = useMemo(
     () =>
@@ -282,7 +329,10 @@ export function OpportunityWorkspace({
         </nav>
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap gap-2">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
+              Opportunity workspace
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
               <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-xs font-bold text-brand-secondary">
                 {humanise(opportunity.stage)}
               </span>
@@ -290,22 +340,25 @@ export function OpportunityWorkspace({
                 {humanise(opportunity.status)}
               </span>
             </div>
-            <h2
+            <h1
               id="opportunity-title"
               className="mt-4 text-3xl font-semibold tracking-tight text-slate-950"
             >
-              Deal workspace
-            </h2>
+              {opportunity.name}
+            </h1>
             <p className="mt-3 text-base text-slate-600">
-              {opportunity.companyName ?? "No company"}
+              {opportunity.companyName ?? "No company"} · Deal workspace
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link href="#recommended-actions" className="primary-button">
+              Review next action
+            </Link>
             {opportunity.companyId ? (
               <>
                 <Link
                   href={`/create/business-cases/new?accountId=${opportunity.companyId}&opportunityId=${opportunity.id}`}
-                  className="primary-button"
+                  className="secondary-button"
                 >
                   Create Business Case
                 </Link>
@@ -323,9 +376,6 @@ export function OpportunityWorkspace({
                 </Link>
               </>
             ) : null}
-            <Link href="#recommended-actions" className="primary-button">
-              Review next actions
-            </Link>
             <Link
               href={`/assistant?mode=ask&scope=opportunity&scopeId=${opportunity.id}`}
               className="secondary-button"
@@ -374,52 +424,35 @@ export function OpportunityWorkspace({
         ) : null}
       </header>
 
-      <CRMRecordLink opportunityId={opportunity.id} />
-
-      <DealRoomEditor opportunityId={opportunity.id} />
-
-      <ClosedWonHandover opportunityId={opportunity.id} />
-
-      <section
-        id="forecast"
-        aria-labelledby="opportunity-forecast-title"
-        className="rounded-2xl border border-sky-200 bg-sky-50 p-5 shadow-sm"
+      <nav
+        aria-label="Deal workspace sections"
+        className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
-              Transparent forecasting
-            </p>
-            <h2
-              id="opportunity-forecast-title"
-              className="mt-2 text-xl font-semibold text-sky-950"
-            >
-              Review this deal in Forecast
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-sky-900">
-              Set an explicit Commit, Likely, Possible or Not this period
-              judgment and inspect its immutable history. The seller judgment
-              remains separate from Oryntela&apos;s historical stage baseline.
-            </p>
-            {!opportunity.expectedCloseDate ? (
-              <p className="mt-2 text-sm font-semibold text-amber-900">
-                Add an expected close date before this deal can enter a forecast
-                period.
-              </p>
-            ) : null}
-          </div>
+        {[
+          ["#deal-focus", "Next step"],
+          ["#deal-methodology", "Methodology"],
+          ["#customer-evidence", "Evidence"],
+          ["#recommended-actions", "Actions"],
+          ["#deal-room", "Deal Room"],
+          ["#closed-won-handover", "Handover"],
+          ["#forecast", "Forecast"],
+          ["#deal-workflow", "Stage"],
+          ["#deal-administration", "Administration"],
+        ].map(([href, label]) => (
           <Link
-            href="/insights?tab=forecast"
-            className="secondary-button inline-flex min-h-11 shrink-0 items-center justify-center"
+            key={href}
+            href={href}
+            className="shrink-0 rounded-full border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:border-brand-secondary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus"
           >
-            Open Forecast
+            {label}
           </Link>
-        </div>
-      </section>
+        ))}
+      </nav>
 
       <section
+        id="deal-focus"
         aria-labelledby="deal-focus-title"
-        className="rounded-3xl border border-brand-secondary/25 bg-brand-primary p-6 text-white shadow-sm sm:p-8"
+        className="scroll-mt-6 rounded-3xl border border-brand-secondary/25 bg-brand-primary p-6 text-white shadow-sm sm:p-8"
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
           How to move this deal forward
@@ -502,27 +535,12 @@ export function OpportunityWorkspace({
         </section>
       ) : null}
 
-      <details className="rounded-2xl border border-slate-200 bg-white p-5">
-        <summary className="cursor-pointer text-sm font-bold text-slate-700">
-          Meeting and record administration
-        </summary>
-        <div className="mt-5">
-          <AssociationPanel
-            meetings={availableMeetings}
-            selectedMeetingId={selectedMeetingId}
-            saving={savingMeetingId !== null}
-            error={associationError}
-            message={associationMessage}
-            onSelect={setSelectedMeetingId}
-            onAssociate={() => void associateSelected()}
-          />
-        </div>
-      </details>
-
-      <CustomerEvidencePanel
-        opportunityId={opportunity.id}
-        companyId={opportunity.companyId}
-      />
+      <div id="customer-evidence" className="scroll-mt-6">
+        <CustomerEvidencePanel
+          opportunityId={opportunity.id}
+          companyId={opportunity.companyId}
+        />
+      </div>
 
       <RecommendedActions
         key={`${opportunity.id}-${refreshKey}`}
@@ -800,11 +818,65 @@ export function OpportunityWorkspace({
         </div>
       </details>
 
-      <details className="rounded-2xl border border-slate-200 bg-white p-5">
+      <DealRoomEditor opportunityId={opportunity.id} />
+
+      <ClosedWonHandover opportunityId={opportunity.id} />
+
+      <section
+        id="forecast"
+        aria-labelledby="opportunity-forecast-title"
+        className="scroll-mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-5 shadow-sm"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+              Transparent forecasting
+            </p>
+            <h2
+              id="opportunity-forecast-title"
+              className="mt-2 text-xl font-semibold text-sky-950"
+            >
+              Review this deal in Forecast
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-sky-900">
+              Set an explicit Commit, Likely, Possible or Not this period
+              judgment and inspect its history. The seller judgment remains
+              separate from Oryntela&apos;s historical stage baseline.
+            </p>
+            {!opportunity.expectedCloseDate ? (
+              <p className="mt-2 text-sm font-semibold text-amber-900">
+                Add an expected close date before this deal can enter a forecast
+                period.
+              </p>
+            ) : null}
+          </div>
+          <Link
+            href="/insights?tab=forecast"
+            className="secondary-button inline-flex min-h-11 shrink-0 items-center justify-center"
+          >
+            Open Forecast
+          </Link>
+        </div>
+      </section>
+
+      <details
+        id="deal-administration"
+        className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5"
+      >
         <summary className="cursor-pointer text-sm font-bold text-slate-700">
-          Meeting history ({workspace.recentMeetings.length})
+          Meeting and CRM administration
         </summary>
-        <div className="mt-5">
+        <div className="mt-5 space-y-6">
+          <CRMRecordLink opportunityId={opportunity.id} />
+          <AssociationPanel
+            meetings={availableMeetings}
+            selectedMeetingId={selectedMeetingId}
+            saving={savingMeetingId !== null}
+            error={associationError}
+            message={associationMessage}
+            onSelect={setSelectedMeetingId}
+            onAssociate={() => void associateSelected()}
+          />
           <RecentMeetings
             meetings={workspace.recentMeetings}
             savingMeetingId={savingMeetingId}
@@ -1112,10 +1184,11 @@ function readinessLabel(meeting: OpportunityMeetingSummary) {
 
 function formatCurrency(value: string | null, currency: string | null) {
   if (!value || !currency) return "Not set";
-  return new Intl.NumberFormat("en-AU", {
+  const formatted = new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency,
   }).format(Number(value));
+  return `${currency} ${formatted}`;
 }
 
 function formatDate(value: string | null) {

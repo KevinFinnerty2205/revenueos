@@ -133,7 +133,7 @@ function campaign() {
         recipientTrust: "unknown",
         eligible: false,
         eligibilityCode: "no_business_email",
-        eligibilityReason: "This Contact has no supported business email.",
+        eligibilityReason: "This Person has no supported business email.",
       },
     ],
     metrics: {
@@ -484,6 +484,12 @@ test("builds, reviews, launches and sends a bounded flagship campaign", async ({
   ).toBeVisible();
   await capture(page, "campaign-first-use-desktop");
   await page.getByRole("link", { name: "Create campaign" }).first().click();
+  await page
+    .getByLabel("Name", { exact: true })
+    .fill("Australian Multi-Site CIO Outreach");
+  await page
+    .getByLabel("Purpose")
+    .fill("Book respectful introductory meetings");
   await page.getByLabel(/Jane Smith/u).check();
   await page.getByLabel(/Sam Rivera/u).check();
   await capture(page, "campaign-builder-desktop");
@@ -496,13 +502,13 @@ test("builds, reviews, launches and sends a bounded flagship campaign", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("cell", {
-      name: "This Contact has no supported business email.",
+      name: "This Person has no supported business email.",
     }),
   ).toBeVisible();
   await capture(page, "campaign-audience-review-desktop");
   await page.getByLabel(/reviewed the exact audience/u).check();
   await page
-    .getByRole("button", { name: "Launch to 1 eligible Contact" })
+    .getByRole("button", { name: "Launch to 1 eligible person" })
     .click();
   await expect(
     page.getByText(

@@ -458,8 +458,11 @@ describe("Prospect experience", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Northstar Facilities Group",
+        name: "[DEMO] Northstar Facilities Group",
       }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Simulation — no external provider call"),
     ).toBeVisible();
     for (const label of [
       "Verified",
@@ -486,7 +489,9 @@ describe("Prospect experience", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add to Sales" }));
     const dialog = screen.getByRole("dialog");
     expect(
-      within(dialog).getByText(/will not create an Opportunity or Contact/i),
+      within(dialog).getByText(
+        /will not create an Opportunity or add any people automatically/i,
+      ),
     ).toBeVisible();
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Add account" }),
@@ -497,6 +502,197 @@ describe("Prospect experience", () => {
     expect(
       screen.getByText(/No opportunity or contact was created/i),
     ).toBeVisible();
+  });
+
+  it("labels research as synthetic only when the server reports demo mode", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse({ ...availability, executionMode: "credits" });
+      if (url.endsWith("/research/target-1/people"))
+        return jsonResponse({
+          companyTargetId: "target-1",
+          functions: [],
+          people: [],
+          gaps: [],
+          resultLimit: 15,
+          message: "Find relevant people when you are ready.",
+        });
+      if (url.endsWith("/research/target-1") && !init?.method)
+        return jsonResponse(researchBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectResearchBriefView targetId="target-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Northstar Facilities Group",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Simulation — no external provider call"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("withholds research results and actions while execution mode is loading", async () => {
+    const pendingAvailability = new Promise<Response>(() => undefined);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability")) return pendingAvailability;
+      if (url.endsWith("/research/target-1"))
+        return jsonResponse(researchBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectResearchBriefView targetId="target-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Checking research mode…" }),
+    ).toBeVisible();
+    expect(screen.getByText(/results and actions stay hidden/i)).toBeVisible();
+    expect(
+      screen.queryByText("Northstar Facilities Group"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Simulation — no external provider call"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Refresh research|Add to Sales/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("fails closed when the execution-mode check fails", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return Promise.reject(new Error("Availability check failed."));
+      if (url.endsWith("/research/target-1"))
+        return jsonResponse(researchBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectResearchBriefView targetId="target-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Research mode unavailable",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/no provider request or Credit action is available/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Northstar Facilities Group"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Simulation — no external provider call"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Research|Refresh|Add/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/credits/quotes"),
+      ),
+    ).toBe(false);
+  });
+
+  it("withholds research when the server reports execution is unavailable", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse({
+          ...availability,
+          state: "temporarily_unavailable",
+          enabled: false,
+          executionMode: "unavailable",
+        });
+      if (url.endsWith("/research/target-1"))
+        return jsonResponse(researchBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectResearchBriefView targetId="target-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Company research unavailable",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /server reports that research execution is unavailable/i,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Northstar Facilities Group"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("keeps authorised historical research visible in read-only mode without mutation controls", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse({
+          ...availability,
+          state: "read_only",
+          enabled: false,
+          canManage: false,
+          executionMode: "unavailable",
+          message:
+            "Historical Prospect records remain available to view and export. New research is blocked.",
+        });
+      if (url.endsWith("/research/target-1/people"))
+        return jsonResponse({
+          companyTargetId: "target-1",
+          functions: [],
+          people: [],
+          gaps: [],
+          resultLimit: 15,
+          message: "Historical people remain available.",
+        });
+      if (url.endsWith("/research/target-1"))
+        return jsonResponse(researchBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectResearchBriefView targetId="target-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Northstar Facilities Group",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Northstar manages facilities operations across 18 Australian sites.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/Historical research — read only/i)).toBeVisible();
+    expect(
+      screen.getByText(/remain available to view and export/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add to Sales" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh research" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Find relevant people" }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/credits/quotes"),
+      ),
+    ).toBe(false);
   });
 
   it("quotes and confirms a metered company action before the server reserves it", async () => {
@@ -719,8 +915,11 @@ describe("Prospect experience", () => {
       };
       vi.stubGlobal(
         "fetch",
-        vi.fn((input: RequestInfo | URL) =>
-          String(input).endsWith("/research/target-1/people")
+        vi.fn((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith("/prospect/availability"))
+            return jsonResponse(availability);
+          return url.endsWith("/research/target-1/people")
             ? jsonResponse({
                 companyTargetId: "target-1",
                 functions: [],
@@ -729,8 +928,8 @@ describe("Prospect experience", () => {
                 resultLimit: 15,
                 message: "No people research available.",
               })
-            : jsonResponse(body),
-        ),
+            : jsonResponse(body);
+        }),
       );
 
       render(<ProspectResearchBriefView targetId="target-1" />);
@@ -785,7 +984,9 @@ describe("Prospect experience", () => {
     const { container } = render(<ProspectPeopleSection targetId="target-1" />);
 
     expect(
-      await screen.findByText(/not Contacts until you explicitly add them/i),
+      await screen.findByText(
+        /not added to Sales until you explicitly save them/i,
+      ),
     ).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", { name: "Find relevant people" }),
@@ -808,6 +1009,8 @@ describe("Prospect experience", () => {
     };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse(availability);
       if (url.includes("/buying-roles/role-1") && init?.method === "PATCH")
         return jsonResponse(reviewedRole);
       if (url.endsWith("/people/person-1/promote"))
@@ -817,7 +1020,7 @@ describe("Prospect experience", () => {
           companyId: "company-1",
           prospectPersonId: "person-1",
           message:
-            "Public professional research was linked to the existing Contact. No canonical fields were overwritten.",
+            "Public professional research was linked to the existing Person. No saved fields were overwritten.",
         });
       if (url.endsWith("/people/person-1")) return jsonResponse(personBrief());
       throw new Error(`Unexpected request: ${url}`);
@@ -843,7 +1046,7 @@ describe("Prospect experience", () => {
     expect(await screen.findByText("Hypothesis — Relevant")).toBeVisible();
 
     const promotionTrigger = screen.getByRole("button", {
-      name: "Add to Sales as Contact",
+      name: "Add to Sales as Person",
     });
     fireEvent.click(promotionTrigger);
     expect(
@@ -854,7 +1057,7 @@ describe("Prospect experience", () => {
     expect(promotionTrigger).toHaveFocus();
     fireEvent.click(promotionTrigger);
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Possible existing Contact")).toBeVisible();
+    expect(within(dialog).getByText("Possible existing Person")).toBeVisible();
     expect(
       within(dialog).getByText(
         /will not create an Opportunity, stakeholder role/i,
@@ -864,7 +1067,7 @@ describe("Prospect experience", () => {
       within(dialog).getByRole("button", { name: "Attach research" }),
     );
     expect(
-      await screen.findByRole("link", { name: "Open Contact" }),
+      await screen.findByRole("link", { name: "Open Person" }),
     ).toHaveAttribute("href", "/contacts/contact-1");
     const promotionBody = JSON.parse(
       String(fetchMock.mock.calls.at(-1)?.[1]?.body),
@@ -874,6 +1077,78 @@ describe("Prospect experience", () => {
       duplicateAction: "attach_research",
       existingContactId: "contact-1",
     });
+  });
+
+  it("keeps authorised historical person research visible in read-only mode without mutation controls", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse({
+          ...availability,
+          state: "read_only",
+          enabled: false,
+          canManage: false,
+          executionMode: "unavailable",
+          message:
+            "Historical Prospect records remain available to view and export. New research is blocked.",
+        });
+      if (url.endsWith("/people/person-1") && !init?.method)
+        return jsonResponse(personBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectPersonResearchView personId="person-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Jane Smith" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Northstar lists Jane Smith as Chief Technology Officer.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/Historical research — read only/i)).toBeVisible();
+    expect(
+      screen.getByText(/remain available to view and export/i),
+    ).toBeVisible();
+    for (const name of [
+      "Refresh research",
+      "Research person",
+      "Add to Sales as Person",
+      "Mark relevant",
+      "Not relevant",
+      "Delete professional research",
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, request]) =>
+          String(input).endsWith("/credits/quotes") ||
+          ["POST", "PATCH", "DELETE"].includes(request?.method ?? ""),
+      ),
+    ).toBe(false);
+  });
+
+  it("fails closed when person research availability cannot be verified", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return Promise.reject(new Error("Availability check failed."));
+      if (url.endsWith("/people/person-1")) return jsonResponse(personBrief());
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectPersonResearchView personId="person-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Research mode unavailable" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Jane Smith")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it.each(["unknown", "no_result"] as const)(
@@ -888,8 +1163,11 @@ describe("Prospect experience", () => {
       };
       vi.stubGlobal(
         "fetch",
-        vi.fn(() =>
-          jsonResponse({
+        vi.fn((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith("/prospect/availability"))
+            return jsonResponse(availability);
+          return jsonResponse({
             ...ready,
             person: { ...ready.person, researchStatus: status },
             status,
@@ -899,8 +1177,8 @@ describe("Prospect experience", () => {
                 : "No reliable professional result was returned.",
             latestRun,
             history: [latestRun, ready.currentRun],
-          }),
-        ),
+          });
+        }),
       );
 
       render(<ProspectPersonResearchView personId="person-1" />);
@@ -909,7 +1187,7 @@ describe("Prospect experience", () => {
         await screen.findByText(status === "unknown" ? "Unknown" : "No result"),
       ).toBeVisible();
       expect(
-        screen.queryByRole("button", { name: "Add to Sales as Contact" }),
+        screen.queryByRole("button", { name: "Add to Sales as Person" }),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("heading", { name: "Why this person may matter" }),
@@ -975,7 +1253,12 @@ describe("Prospect experience", () => {
     cautiousBrief.existingContactMatches = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => jsonResponse(cautiousBrief)),
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        return url.endsWith("/prospect/availability")
+          ? jsonResponse(availability)
+          : jsonResponse(cautiousBrief);
+      }),
     );
 
     render(<ProspectPersonResearchView personId="person-1" />);

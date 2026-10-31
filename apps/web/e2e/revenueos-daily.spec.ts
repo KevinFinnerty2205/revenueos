@@ -272,6 +272,13 @@ test("Oryntela Daily keeps the complete review journey one click away", async ({
   await expect(
     page.getByRole("heading", { name: "Manager review" }),
   ).toBeVisible();
+  const priorityBox = await page.getByText("Top priority").boundingBox();
+  const managerBox = await page
+    .getByRole("heading", { name: "Manager review" })
+    .boundingBox();
+  expect(priorityBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+    managerBox?.y ?? Number.NEGATIVE_INFINITY,
+  );
   const dealsSection = page
     .getByRole("heading", { name: "Deals needing attention" })
     .locator("xpath=ancestor::section[1]");
@@ -395,7 +402,7 @@ test("Oryntela Daily puts the next interaction first on mobile", async ({
     name: "Mobile navigation",
   });
   await expect(mobileNavigation.getByRole("link")).toHaveCount(4);
-  for (const label of ["Today", "Interactions", "Actions", "Search"]) {
+  for (const label of ["Today", "Interactions", "Actions", "Search & Ask"]) {
     await expect(
       mobileNavigation.getByRole("link", { name: label, exact: true }),
     ).toBeVisible();
@@ -476,7 +483,7 @@ test("mobile Search finds bounded Core records without an AI answer", async ({
   await page.goto("/dashboard");
   await page
     .getByRole("navigation", { name: "Mobile navigation" })
-    .getByRole("link", { name: "Search" })
+    .getByRole("link", { name: "Search & Ask" })
     .click();
   await page
     .getByRole("searchbox", { name: "Search your workspace" })

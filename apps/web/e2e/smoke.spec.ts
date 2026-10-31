@@ -666,7 +666,18 @@ test("interaction timeline supports deliberate creation and completion without i
     async (route) => {
       await route.fulfill({
         json: {
-          items: [{ id: "opportunity-1", name: "Expansion" }],
+          items: [
+            {
+              ...opportunity(),
+              name: "Expansion",
+              companyName: "Acme Australia",
+              ownerName: "Alex Morgan",
+              latestMeetingId: null,
+              latestMeetingDate: null,
+              latestMeetingMomentum: null,
+              latestNextBestAction: null,
+            },
+          ],
           page: 1,
           pageSize: 100,
           total: 1,
@@ -3533,7 +3544,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
   await expect(
     page.getByRole("heading", { name: "Platform expansion" }),
   ).toBeVisible();
-  await page.getByText("Meeting and record administration").click();
+  await page.getByText("Meeting and CRM administration").click();
   await page.getByText("Latest meeting intelligence").click();
   await expect(
     page.getByRole("heading", { name: "No meetings associated" }),

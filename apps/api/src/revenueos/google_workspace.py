@@ -560,7 +560,7 @@ class GoogleEmailExecutor(ActionExecutor):
             raise PermanentExecutionFailure("unsupported_action", "Google Workspace cannot execute this Action.")
         payload = action.payload
         if not payload.recipient_confirmed or payload.recipient_email is None:
-            raise PermanentExecutionFailure("recipient_not_confirmed", "Confirm the exact Contact recipient first.")
+            raise PermanentExecutionFailure("recipient_not_confirmed", "Confirm the exact Person recipient first.")
         if not _EMAIL.fullmatch(payload.recipient_email):
             raise PermanentExecutionFailure("invalid_recipient", "The approved recipient address is invalid.")
         if not payload.subject.strip() or not payload.body.strip():

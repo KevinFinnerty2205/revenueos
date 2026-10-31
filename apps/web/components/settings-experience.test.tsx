@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsExperience } from "@/components/settings-experience";
 
@@ -90,6 +90,21 @@ describe("SettingsExperience", () => {
     );
     render(<SettingsExperience />);
     expect(await screen.findByText("Methodology controls")).toBeVisible();
+    const settingsNavigation = screen.getByRole("navigation", {
+      name: "Settings sections",
+    });
+    for (const label of [
+      "Company profile",
+      "Plan & billing",
+      "Sales setup",
+      "Team & safety",
+    ]) {
+      expect(
+        within(settingsNavigation).getByRole("link", {
+          name: new RegExp(label, "i"),
+        }),
+      ).toBeVisible();
+    }
     expect(
       screen.getByText("Company and selling profile controls"),
     ).toBeVisible();

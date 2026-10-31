@@ -108,7 +108,7 @@ export function CustomerEvidencePanel({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Customer Contacts could not be loaded.",
+          : "Customer people could not be loaded.",
       );
     }
   }

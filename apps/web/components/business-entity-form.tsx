@@ -183,7 +183,7 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
     },
     {
       name: "contactId",
-      label: "Contact",
+      label: "Person",
       kind: "reference",
       reference: "contacts",
     },

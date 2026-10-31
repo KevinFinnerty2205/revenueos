@@ -359,7 +359,20 @@ function evidenceCapabilities() {
 }
 
 describe("OpportunityWorkspace", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, "", "/");
+    if (originalScrollIntoView) {
+      Object.defineProperty(Element.prototype, "scrollIntoView", {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
 
   it("renders the opportunity hierarchy and all latest-meeting evidence without infrastructure controls", async () => {
     vi.stubGlobal(
@@ -375,8 +388,21 @@ describe("OpportunityWorkspace", () => {
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
     expect(
-      await screen.findByRole("heading", { name: "Deal workspace" }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Platform expansion",
+      }),
     ).toBeVisible();
+    expect(screen.getByText("AUD $125,000.50")).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Deal workspace sections" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Review next action" }),
+    ).toHaveClass("primary-button");
+    expect(
+      screen.getByRole("link", { name: "Create Business Case" }),
+    ).toHaveClass("secondary-button");
     expect(
       screen.getByRole("link", { name: "Ask about this deal" }),
     ).toHaveAttribute(
@@ -391,7 +417,7 @@ describe("OpportunityWorkspace", () => {
     );
     fireEvent.click(screen.getByText("Account history and change over time"));
     fireEvent.click(screen.getByText("Latest meeting intelligence"));
-    fireEvent.click(screen.getByText("Meeting history (1)"));
+    fireEvent.click(screen.getByText("Meeting and CRM administration"));
     expect(
       screen.getByRole("heading", { name: "Latest Next Best Action" }),
     ).toBeVisible();
@@ -444,6 +470,35 @@ describe("OpportunityWorkspace", () => {
     );
   });
 
+  it("scrolls an initial section hash after the async workspace has loaded", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    window.history.replaceState(null, "", "/#recommended-actions");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(response(workspace()))
+        .mockResolvedValueOnce(response(meetingPage()))
+        .mockResolvedValueOnce(response(actionPage()))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
+    );
+
+    render(<OpportunityWorkspace opportunityId="opportunity-1" />);
+
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Platform expansion",
+    });
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }),
+    );
+  });
+
   it("keeps metadata useful with no associated meetings", async () => {
     vi.stubGlobal(
       "fetch",
@@ -467,13 +522,16 @@ describe("OpportunityWorkspace", () => {
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
     expect(
-      await screen.findByRole("heading", { name: "Deal workspace" }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Platform expansion",
+      }),
     ).toBeVisible();
     fireEvent.click(screen.getByText("Latest meeting intelligence"));
     expect(
       screen.getByRole("heading", { name: "No meetings associated" }),
     ).toBeVisible();
-    expect(screen.getByText("Acme Australia")).toBeVisible();
+    expect(screen.getByText(/Acme Australia · Deal workspace/)).toBeVisible();
     expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
   });
 
@@ -649,9 +707,7 @@ describe("OpportunityWorkspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
-    fireEvent.click(
-      await screen.findByText("Meeting and record administration"),
-    );
+    fireEvent.click(await screen.findByText("Meeting and CRM administration"));
     fireEvent.change(await screen.findByLabelText("Meeting"), {
       target: { value: "meeting-1" },
     });
