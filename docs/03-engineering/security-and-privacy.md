@@ -72,6 +72,18 @@ one deterministic example membership.
 
 Every request derives its user and organisation from the auth adapter. Client-supplied organisation identifiers do not select a tenant and are forbidden from create/update contracts. Tenant dependencies recheck that the trusted user has an active local membership before setting the database tenant context. Private-beta roles are limited to `admin` and `member`; administration and destructive-request routes enforce `admin` server-side, while active members retain the existing product access.
 
+An active organisation administrator may review and change another member between
+the `admin` and `member` roles through the existing authenticated member-management
+route. The local membership role remains authoritative after provisioning; a stale
+Clerk role claim cannot overwrite a reviewed change. Each effective role change
+advances the membership authority version and authentication watermark, so every
+previously issued session token fails closed and the member must authenticate again.
+No-op requests do not advance authority or add an audit event. Self-demotion is
+prohibited. Disable and demotion commands use one organisation-first lock order, and
+an active-membership/active-user count prevents either command from removing the last
+active administrator. Audits contain only controlled role enums, the authority
+version and tenant-scoped identifiers—never identity content.
+
 WO-025 Daily reuses that boundary and then narrows the projection to the current
 user's created Interactions, created Actions attached to owned Opportunities and
 owned open Opportunities/pipeline. Admin does not imply team visibility. Daily never

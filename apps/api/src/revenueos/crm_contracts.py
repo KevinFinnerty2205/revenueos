@@ -70,6 +70,7 @@ class CRMMemberResponse(APIModel):
     user_id: UUID
     display_name: str
     active: bool
+    can_assign: bool
 
 
 class CRMCustomFieldCreate(APIModel):

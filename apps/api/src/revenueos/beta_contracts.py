@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 from revenueos.contracts import APIModel, OrganisationSummary, UserSummary
 
@@ -80,7 +80,14 @@ class MemberResponse(APIModel):
 
 
 class MemberStatusUpdate(APIModel):
-    status: Literal["active", "disabled"]
+    status: Literal["active", "disabled"] | None = None
+    role: Literal["admin", "member"] | None = None
+
+    @model_validator(mode="after")
+    def validate_exact_command(self) -> "MemberStatusUpdate":
+        if (self.status is None) == (self.role is None):
+            raise ValueError("Supply exactly one member status or role change.")
+        return self
 
 
 class SessionRevocationResponse(APIModel):

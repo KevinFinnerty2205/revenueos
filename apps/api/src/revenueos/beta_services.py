@@ -481,6 +481,66 @@ class BetaService:
                 "Member re-enablement is blocked until capacity, resilience and production cost are approved.",
                 503,
             )
+        organisation, membership, user = await self._lock_member_authority_context(user_id)
+        if user_id == self.tenant.user_id and status == "disabled":
+            raise PublicAPIError("cannot_disable_self", "An administrator cannot disable their own membership.", 409)
+        if status == "active":
+            return await self._reenable_member(membership, user, organisation.external_auth_id)
+        await self._require_active_admin_remains(membership, user)
+        return await self._disable_member(membership, user, organisation.external_auth_id)
+
+    async def update_member_role(
+        self,
+        user_id: UUID,
+        role: Literal["admin", "member"],
+    ) -> MemberStatusUpdateResponse:
+        self.require_admin()
+        _, membership, user = await self._lock_member_authority_context(user_id)
+        if membership.role == role:
+            result = SessionRevocationResult(outcome="not_required", revoked_session_count=0)
+            return MemberStatusUpdateResponse(
+                member=self._member_response(membership, user),
+                session_revocation=self._session_revocation_response(result),
+            )
+
+        if membership.role == "admin" and role == "member":
+            await self._require_active_admin_remains(membership, user)
+            if user_id == self.tenant.user_id:
+                raise PublicAPIError(
+                    "cannot_demote_self",
+                    "An administrator cannot change their own administrator role.",
+                    409,
+                )
+
+        previous_role = membership.role
+        membership.role = role
+        membership.authority_version += 1
+        membership.authentication_valid_after = datetime.now(UTC)
+        self._add_event(
+            "member_role_changed",
+            subject_id=user.id,
+            metadata={
+                "previousRole": previous_role,
+                "role": role,
+                "authorityVersion": membership.authority_version,
+            },
+        )
+        await self._commit("The member role could not be changed.")
+        result = SessionRevocationResult(outcome="not_required", revoked_session_count=0)
+        return MemberStatusUpdateResponse(
+            member=self._member_response(membership, user),
+            session_revocation=self._session_revocation_response(result),
+        )
+
+    async def _lock_member_authority_context(
+        self,
+        user_id: UUID,
+    ) -> tuple[Organisation, OrganisationMembership, User]:
+        organisation = await self.session.scalar(
+            select(Organisation).where(Organisation.id == self.tenant.organisation_id).with_for_update()
+        )
+        if organisation is None:
+            raise PublicAPIError("organisation_not_found", "The organisation was not found.", 404)
         membership = await self.session.scalar(
             select(OrganisationMembership)
             .where(
@@ -494,14 +554,32 @@ class BetaService:
         user = await self.session.get(User, user_id)
         if user is None:
             raise PublicAPIError("member_not_found", "The organisation member was not found.", 404)
-        organisation = await self.session.get(Organisation, self.tenant.organisation_id)
-        if organisation is None:
-            raise PublicAPIError("organisation_not_found", "The organisation was not found.", 404)
-        if user_id == self.tenant.user_id and status == "disabled":
-            raise PublicAPIError("cannot_disable_self", "An administrator cannot disable their own membership.", 409)
-        if status == "active":
-            return await self._reenable_member(membership, user, organisation.external_auth_id)
-        return await self._disable_member(membership, user, organisation.external_auth_id)
+        return organisation, membership, user
+
+    async def _require_active_admin_remains(
+        self,
+        membership: OrganisationMembership,
+        user: User,
+    ) -> None:
+        if membership.role != "admin" or membership.status != "active" or user.status != "active":
+            return
+        active_admin_count = await self.session.scalar(
+            select(func.count())
+            .select_from(OrganisationMembership)
+            .join(User, User.id == OrganisationMembership.user_id)
+            .where(
+                OrganisationMembership.organisation_id == self.tenant.organisation_id,
+                OrganisationMembership.role == "admin",
+                OrganisationMembership.status == "active",
+                User.status == "active",
+            )
+        )
+        if (active_admin_count or 0) <= 1:
+            raise PublicAPIError(
+                "last_active_admin_required",
+                "The organisation must keep at least one active administrator.",
+                409,
+            )
 
     async def _disable_member(
         self,
@@ -571,17 +649,7 @@ class BetaService:
 
         result = await self._revoke_member_sessions(user.external_auth_id, external_organisation_id)
         await set_tenant_database_context(self.session, self.tenant.organisation_id)
-        refreshed_membership = await self.session.scalar(
-            select(OrganisationMembership)
-            .where(
-                OrganisationMembership.organisation_id == self.tenant.organisation_id,
-                OrganisationMembership.user_id == user.id,
-            )
-            .with_for_update()
-        )
-        if refreshed_membership is None:
-            await self.session.rollback()
-            raise PublicAPIError("member_not_found", "The organisation member was not found.", 404)
+        _, refreshed_membership, refreshed_user = await self._lock_member_authority_context(user.id)
         self._add_session_revocation_result_event(
             user.id,
             result,
@@ -622,7 +690,7 @@ class BetaService:
         )
         await self._commit("The member status could not be changed.")
         return MemberStatusUpdateResponse(
-            member=self._member_response(refreshed_membership, user),
+            member=self._member_response(refreshed_membership, refreshed_user),
             session_revocation=self._session_revocation_response(result),
         )
 

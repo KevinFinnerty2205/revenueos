@@ -90,6 +90,9 @@ async def update_member_status(
     request: MemberStatusUpdate,
     service: Beta,
 ) -> MemberStatusUpdateResponse:
+    if request.role is not None:
+        return await service.update_member_role(user_id, request.role)
+    assert request.status is not None
     return await service.update_member_status(user_id, request.status)
 
 

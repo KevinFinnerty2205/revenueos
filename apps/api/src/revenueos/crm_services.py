@@ -188,7 +188,12 @@ class CRMService:
 
     async def members(self) -> list[CRMMemberResponse]:
         return [
-            CRMMemberResponse(user_id=item.user_id, display_name=item.display_name, active=item.active)
+            CRMMemberResponse(
+                user_id=item.user_id,
+                display_name=item.display_name,
+                active=item.active,
+                can_assign=item.active and (self.tenant.can_manage() or item.user_id == self.tenant.user_id),
+            )
             for item in await self.repository.members(self.tenant.organisation_id)
         ]
 

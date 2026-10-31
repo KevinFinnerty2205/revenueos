@@ -15,6 +15,7 @@ from revenueos.models import (
     Opportunity,
     OrganisationMembership,
     Task,
+    User,
 )
 
 
@@ -32,10 +33,13 @@ class BusinessRepository:
 
     async def membership_exists(self, organisation_id: UUID, user_id: UUID) -> bool:
         result = await self.session.scalar(
-            select(OrganisationMembership.user_id).where(
+            select(OrganisationMembership.user_id)
+            .join(User, User.id == OrganisationMembership.user_id)
+            .where(
                 OrganisationMembership.organisation_id == organisation_id,
                 OrganisationMembership.user_id == user_id,
                 OrganisationMembership.status == "active",
+                User.status == "active",
             )
         )
         return result is not None

@@ -1006,6 +1006,7 @@ export interface CRMMember {
   userId: string;
   displayName: string;
   active: boolean;
+  canAssign: boolean;
 }
 
 export interface CRMCustomFieldDefinition {

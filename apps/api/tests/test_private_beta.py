@@ -359,6 +359,13 @@ def test_member_cannot_open_admin_or_change_settings(app: FastAPI, client: TestC
     assert client.get("/api/v1/beta/admin").status_code == 403
     assert client.patch("/api/v1/beta/admin/retention", json={"policy": "days_30"}).status_code == 403
     assert client.get("/api/v1/beta/admin/feedback").status_code == 403
+    assert (
+        client.patch(
+            f"/api/v1/beta/admin/members/{SECONDARY_USER_ID}",
+            json={"role": "admin"},
+        ).status_code
+        == 403
+    )
     assert client.post("/api/v1/beta/admin/exports").status_code == 403
     assert (
         client.post(

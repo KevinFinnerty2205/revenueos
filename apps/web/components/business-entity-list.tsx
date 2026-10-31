@@ -24,6 +24,11 @@ interface DisplayCell {
   value: ReactNode;
 }
 
+interface MemberDisplay {
+  displayName: string;
+  active: boolean;
+}
+
 const filterOptions: Partial<
   Record<
     BusinessEntityName,
@@ -68,7 +73,9 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
-  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
+  const [membersById, setMembersById] = useState<Record<string, MemberDisplay>>(
+    {},
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -88,7 +95,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
         `/api/v1/${entity}?${parameters.toString()}`,
         { signal: controller.signal },
       ),
-      entity === "companies" || entity === "contacts"
+      entity === "companies" || entity === "contacts" || entity === "tasks"
         ? apiRequest<CRMMember[]>("/api/v1/crm/members", {
             signal: controller.signal,
           })
@@ -96,9 +103,12 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
     ])
       .then(([nextResult, members]) => {
         setResult(nextResult);
-        setOwnerNames(
+        setMembersById(
           Object.fromEntries(
-            members.map((member) => [member.userId, member.displayName]),
+            members.map((member) => [
+              member.userId,
+              { displayName: member.displayName, active: member.active },
+            ]),
           ),
         );
       })
@@ -224,7 +234,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
           <EntityRows
             entity={entity}
             items={result.items}
-            ownerNames={ownerNames}
+            membersById={membersById}
           />
           <nav
             aria-label={`${labels.plural} pagination`}
@@ -261,15 +271,15 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
 function EntityRows({
   entity,
   items,
-  ownerNames,
+  membersById,
 }: {
   entity: BusinessEntityName;
   items: BusinessEntity[];
-  ownerNames: Record<string, string>;
+  membersById: Record<string, MemberDisplay>;
 }) {
   const rows = items.map((item) => ({
     id: item.id,
-    cells: displayCells(entity, item, ownerNames),
+    cells: displayCells(entity, item, membersById),
   }));
   const labels = rows[0]?.cells.map((cell) => cell.label) ?? [];
 
@@ -367,7 +377,7 @@ function EntityRows({
 function displayCells(
   entity: BusinessEntityName,
   item: BusinessEntity,
-  ownerNames: Record<string, string>,
+  membersById: Record<string, MemberDisplay>,
 ): DisplayCell[] {
   if (entity === "companies") {
     const company = item as Company;
@@ -387,7 +397,8 @@ function displayCells(
       { label: "Status", value: humanise(company.status) },
       {
         label: "Owner",
-        value: ownerNames[company.ownerUserId] ?? "Inactive member",
+        value:
+          membersById[company.ownerUserId]?.displayName ?? "Inactive member",
       },
       {
         label: "Employees",
@@ -414,7 +425,8 @@ function displayCells(
       { label: "Status", value: humanise(contact.status) },
       {
         label: "Owner",
-        value: ownerNames[contact.ownerUserId] ?? "Inactive member",
+        value:
+          membersById[contact.ownerUserId]?.displayName ?? "Inactive member",
       },
     ];
   }
@@ -436,10 +448,27 @@ function displayCells(
   const task = item as Task;
   return [
     { label: "Title", value: task.title },
+    {
+      label: "Assignee",
+      value: task.assignedUserId
+        ? taskAssigneeLabel(membersById, task.assignedUserId)
+        : "Unassigned",
+    },
     { label: "Status", value: humanise(task.status) },
     { label: "Priority", value: humanise(task.priority) },
     { label: "Due", value: formatDate(task.dueAt) },
   ];
+}
+
+function taskAssigneeLabel(
+  membersById: Record<string, MemberDisplay>,
+  userId: string,
+): string {
+  const member = membersById[userId];
+  if (!member) return "Inactive or unavailable member";
+  return member.active
+    ? member.displayName
+    : `${member.displayName} (inactive)`;
 }
 
 function formatCurrency(value: string, currency: string): string {
