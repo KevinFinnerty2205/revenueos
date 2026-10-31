@@ -215,6 +215,7 @@ export function ConversationDeliveryPreferences() {
           Timezone
           <input
             className="form-control mt-2"
+            disabled={working || !server}
             value={preference.timezone}
             onChange={(event) =>
               setPreference((current) => ({
@@ -228,6 +229,7 @@ export function ConversationDeliveryPreferences() {
           Morning digest time
           <input
             className="form-control mt-2"
+            disabled={working || !server}
             type="time"
             value={preference.morningDigestTime}
             onChange={(event) =>
@@ -240,6 +242,7 @@ export function ConversationDeliveryPreferences() {
         </label>
         <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-4 text-sm font-semibold text-slate-800">
           <input
+            disabled={working || !server}
             type="checkbox"
             checked={preference.morningDigestEnabled}
             onChange={(event) =>
@@ -253,6 +256,7 @@ export function ConversationDeliveryPreferences() {
         </label>
         <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-4 text-sm font-semibold text-slate-800">
           <input
+            disabled={working || !server}
             type="checkbox"
             checked={preference.preMeetingEnabled}
             onChange={(event) =>
@@ -268,6 +272,7 @@ export function ConversationDeliveryPreferences() {
           Briefing lead time (minutes)
           <input
             className="form-control mt-2"
+            disabled={working || !server}
             type="number"
             min={5}
             max={1440}

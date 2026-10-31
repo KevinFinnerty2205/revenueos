@@ -72,6 +72,38 @@ describe("ConversationDeliveryPreferences", () => {
     expect(screen.getByText(/Nothing was sent/i)).toBeVisible();
   });
 
+  it("does not allow an edit to race and be overwritten by the initial preference load", async () => {
+    let resolveInitial!: (value: Response) => void;
+    const initialResponse = new Promise<Response>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(initialResponse)
+      .mockResolvedValueOnce(
+        response({
+          ...preferences,
+          lockVersion: 1,
+          preMeetingMinutes: 75,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ConversationDeliveryPreferences />);
+
+    const leadTime = screen.getByLabelText("Briefing lead time (minutes)");
+    expect(leadTime).toBeDisabled();
+    resolveInitial(response({ ...preferences, lockVersion: 0 }));
+    await waitFor(() => expect(leadTime).toBeEnabled());
+
+    fireEvent.change(leadTime, { target: { value: "75" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
+      expectedLockVersion: 0,
+      preMeetingMinutes: 75,
+    });
+  });
+
   it("imports earlier browser preferences only after an explicit owner action", async () => {
     window.localStorage.setItem(
       "revenueos:conversation-delivery-preferences",
