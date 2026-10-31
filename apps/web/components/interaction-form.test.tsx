@@ -51,13 +51,13 @@ describe("InteractionForm", () => {
 
     render(<InteractionForm />);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading interaction options",
+      "Loading conversation options",
     );
-    await screen.findByRole("heading", { name: "Create interaction" });
+    await screen.findByRole("heading", { name: "Add conversation" });
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Executive planning lunch" },
     });
-    fireEvent.change(screen.getByLabelText("Interaction type"), {
+    fireEvent.change(screen.getByLabelText("Conversation type"), {
       target: { value: "executive_lunch" },
     });
     fireEvent.change(screen.getByLabelText("Company"), {
@@ -66,10 +66,10 @@ describe("InteractionForm", () => {
     fireEvent.change(screen.getByLabelText("Opportunity"), {
       target: { value: "opportunity-1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create interaction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
 
     await waitFor(() =>
-      expect(router.push).toHaveBeenCalledWith("/interactions/interaction-1"),
+      expect(router.push).toHaveBeenCalledWith("/conversations/interaction-1"),
     );
     const createCall = fetchMock.mock.calls.find(
       ([input, init]) =>
@@ -107,7 +107,7 @@ describe("InteractionForm", () => {
       "Interaction options are temporarily unavailable.",
     );
     expect(
-      screen.queryByRole("button", { name: "Create interaction" }),
+      screen.queryByRole("button", { name: "Add conversation" }),
     ).not.toBeInTheDocument();
   });
 
@@ -146,11 +146,11 @@ describe("InteractionForm", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<InteractionForm />);
-    await screen.findByRole("heading", { name: "Create interaction" });
+    await screen.findByRole("heading", { name: "Add conversation" });
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Commercial check-in" },
     });
-    fireEvent.change(screen.getByLabelText("Interaction type"), {
+    fireEvent.change(screen.getByLabelText("Conversation type"), {
       target: { value: "phone_call" },
     });
     expect(screen.getByText(/does not intercept or record/i)).toBeVisible();
@@ -163,10 +163,10 @@ describe("InteractionForm", () => {
     fireEvent.change(screen.getByLabelText("Person"), {
       target: { value: "contact-1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create interaction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
 
     await waitFor(() =>
-      expect(router.push).toHaveBeenCalledWith("/interactions/phone-call-1"),
+      expect(router.push).toHaveBeenCalledWith("/conversations/phone-call-1"),
     );
     const createCall = fetchMock.mock.calls.find(
       ([input, init]) =>
@@ -220,7 +220,9 @@ describe("InteractionForm", () => {
 
     expect(await screen.findByLabelText("Person")).toHaveValue("contact-1");
     expect(screen.getByLabelText("Company")).toHaveValue("company-1");
-    expect(screen.getByLabelText("Interaction type")).toHaveValue("phone_call");
+    expect(screen.getByLabelText("Conversation type")).toHaveValue(
+      "phone_call",
+    );
   });
 
   it("loads an exact linked contact and its account beyond the first page", async () => {
@@ -299,7 +301,7 @@ describe("InteractionForm", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("Company")).toHaveValue("company-2"),
     );
-    expect(screen.getByLabelText("Interaction type")).toHaveValue(
+    expect(screen.getByLabelText("Conversation type")).toHaveValue(
       "online_meeting",
     );
     expect(screen.getByLabelText("Title")).toHaveValue("Keep this draft title");
@@ -318,11 +320,13 @@ describe("InteractionForm", () => {
       await screen.findByText(/current selections were kept/i),
     ).toBeVisible();
     expect(screen.getByLabelText("Company")).toHaveValue("company-1");
-    expect(screen.getByLabelText("Interaction type")).toHaveValue(
+    expect(screen.getByLabelText("Conversation type")).toHaveValue(
       "online_meeting",
     );
     fireEvent.click(screen.getByRole("button", { name: "Use linked context" }));
     expect(screen.getByLabelText("Company")).toHaveValue("company-3");
-    expect(screen.getByLabelText("Interaction type")).toHaveValue("phone_call");
+    expect(screen.getByLabelText("Conversation type")).toHaveValue(
+      "phone_call",
+    );
   });
 });

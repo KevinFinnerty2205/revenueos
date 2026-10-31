@@ -226,7 +226,7 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
     },
   );
 
-  await page.goto(`/interactions/${interactionId}/companion`);
+  await page.goto(`/conversations/${interactionId}/workspace`);
   await expect(page.getByText("Live Intelligence is available")).toBeVisible();
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page

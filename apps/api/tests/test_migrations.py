@@ -14,7 +14,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-MIGRATION_HEAD = "0065_campaign_trigger_guard"
+MIGRATION_HEAD = "0066_conversation_core"
 MIGRATION_HEAD_ROW = (MIGRATION_HEAD,)
 POSTGRES_IDENTIFIER_MAX_BYTES = 63
 MIGRATION_NAMED_OBJECT_ARGUMENTS = {
@@ -3202,8 +3202,9 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:33] == [
+    assert [revision.revision for revision in script.walk_revisions()][:34] == [
         MIGRATION_HEAD,
+        "0065_campaign_trigger_guard",
         "0064_deauthorisation",
         "0063_terms_acceptance",
         "0062_live_stripe_billing",
@@ -4443,6 +4444,56 @@ def test_commercial_migration_seeds_versions_backfills_add_ons_and_is_reversible
             ("create", 1, "manual_private_beta"),
             ("crm", 1, "manual_private_beta"),
         ]
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+
+
+def test_conversation_core_migration_preserves_meddicc_setting_on_rollback(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "conversation-core-migration.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0065_campaign_trigger_guard")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Conversation core', ?)",
+            (organisation_id, f"conversation-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Owner')",
+            (user_id, f"user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        connection.execute(
+            "INSERT INTO organisation_methodology_settings "
+            "(organisation_id, selection, updated_by_user_id) VALUES (?, 'meddicc', ?)",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+
+    command.downgrade(configuration, "0065_campaign_trigger_guard")
+    with connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("meddic",)
+        assert "company_knowledge_sources" not in {
+            row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:

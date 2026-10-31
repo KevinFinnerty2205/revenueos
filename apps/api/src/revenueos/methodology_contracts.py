@@ -10,8 +10,8 @@ from pydantic import ConfigDict, Field, StringConstraints, field_validator, mode
 from revenueos.contracts import APIModel, to_camel
 from revenueos.domain import OpportunityStage
 
-StandardMethodologyKey = Literal["meddic", "meddpicc", "bant", "spiced"]
-MethodologySelection = Literal["none", "meddic", "meddpicc", "bant", "spiced", "custom"]
+StandardMethodologyKey = Literal["meddic", "meddicc", "meddpicc", "bant", "spiced"]
+MethodologySelection = Literal["none", "meddic", "meddicc", "meddpicc", "bant", "spiced", "custom"]
 MethodologyState = Literal[
     "confirmed",
     "partially_supported",

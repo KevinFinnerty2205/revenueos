@@ -1,169 +1,80 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const opportunityId = "opportunity-daily";
 const interactionId = "interaction-daily";
 
 function dailyResponse(overrides: Record<string, unknown> = {}) {
+  const next = {
+    id: interactionId,
+    title: "Northstar technical review",
+    companyId: "company-daily",
+    companyName: "Northstar Facilities",
+    opportunityId: null,
+    opportunityName: null,
+    interactionType: "online_meeting",
+    lifecycleStatus: "planned",
+    startsAt: "2026-11-02T00:00:00Z",
+    preparationState: "not_prepared",
+    context:
+      "Clarify the security review and the unresolved implementation questions.",
+    ctaLabel: "Prepare",
+    href: `/conversations/${interactionId}#preparation`,
+  };
   return {
-    generatedAt: new Date().toISOString(),
-    localDate: "2026-08-17",
+    generatedAt: "2026-10-31T00:00:00Z",
+    localDate: "2026-10-31",
     timezone: "Australia/Sydney",
     userDisplayName: "Alex Morgan",
-    topPriority: {
-      kind: "interaction",
-      reasonCode: "interaction_needs_preparation",
-      title: "Qantas technical review",
-      context: "Economic Buyer is still unknown.",
-      reason:
-        "This customer interaction starts within four hours and has no completed brief.",
-      ctaLabel: "Prepare for meeting",
-      href: `/interactions/${interactionId}#preparation`,
-      sourceId: interactionId,
-      startsAt: "2026-08-17T00:00:00Z",
-      dueAt: null,
-    },
-    nextInteraction: {
-      id: interactionId,
-      title: "Qantas technical review",
-      companyId: "company-daily",
-      companyName: "Qantas",
-      opportunityId,
-      opportunityName: "Network modernisation",
-      interactionType: "workshop",
-      lifecycleStatus: "planned",
-      startsAt: "2026-08-17T00:00:00Z",
-      preparationState: "not_prepared",
-      context: "Economic Buyer is still unknown.",
-      ctaLabel: "Prepare for meeting",
-      href: `/interactions/${interactionId}#preparation`,
-    },
+    topPriority: null,
+    nextInteraction: next,
     todayInteractions: [
+      next,
       {
-        id: interactionId,
-        title: "Qantas technical review",
-        companyId: "company-daily",
-        companyName: "Qantas",
-        opportunityId,
-        opportunityName: "Network modernisation",
-        interactionType: "workshop",
-        lifecycleStatus: "planned",
-        startsAt: "2026-08-17T00:00:00Z",
-        preparationState: "not_prepared",
-        context: "Economic Buyer is still unknown.",
-        ctaLabel: "Prepare for meeting",
-        href: `/interactions/${interactionId}#preparation`,
-      },
-      {
+        ...next,
         id: "interaction-later",
-        title: "Commercial follow-up",
-        companyId: "company-daily",
-        companyName: "Qantas",
-        opportunityId,
-        opportunityName: "Network modernisation",
+        title: "Commercial follow-up call",
         interactionType: "phone_call",
-        lifecycleStatus: "planned",
-        startsAt: "2026-08-17T05:00:00Z",
+        startsAt: "2026-11-02T03:00:00Z",
         preparationState: "prepared",
-        context: "Network modernisation",
-        ctaLabel: "Prepare",
-        href: "/interactions/interaction-later#preparation",
+        context: "Return to the agreed pilot scope.",
+        href: "/conversations/interaction-later#preparation",
       },
     ],
     totalTodayInteractions: 2,
     actions: {
-      attentionCount: 2,
+      attentionCount: 1,
       overdueCount: 1,
-      dueTodayCount: 1,
+      dueTodayCount: 0,
       pendingReviewCount: 1,
-      approvedOpenCount: 1,
+      approvedOpenCount: 0,
       truncated: false,
       items: [
         {
           id: "action-daily",
-          title: "Send security documentation",
-          opportunityId,
-          opportunityName: "Network modernisation",
-          companyName: "Qantas",
+          title: "Send the agreed security summary",
+          opportunityId: "opportunity-daily",
+          opportunityName: "Synthetic evaluation",
+          companyName: "Northstar Facilities",
           priority: "high",
           reviewStatus: "proposed",
           timing: "overdue",
-          dueAt: "2026-08-16T01:00:00Z",
+          dueAt: "2026-10-30T01:00:00Z",
           state: "needs_review",
           stateLabel: "Needs review",
           ctaLabel: "Review",
-          href: `/opportunities/${opportunityId}#recommended-actions`,
-        },
-        {
-          id: "action-approved",
-          title: "Confirm the pilot scope",
-          opportunityId,
-          opportunityName: "Network modernisation",
-          companyName: "Qantas",
-          priority: "normal",
-          reviewStatus: "approved",
-          timing: "due_today",
-          dueAt: "2026-08-17T06:00:00Z",
-          state: "approved_not_complete",
-          stateLabel: "Approved — not complete",
-          ctaLabel: "Complete",
-          href: `/opportunities/${opportunityId}#recommended-actions`,
+          href: "/opportunities/opportunity-daily#recommended-actions",
         },
       ],
     },
-    dealAttention: {
-      attentionCount: 1,
-      truncated: false,
-      items: [
-        {
-          opportunityId,
-          opportunityName: "Network modernisation",
-          companyName: "Qantas",
-          estimatedValue: "420000.00",
-          currency: "AUD",
-          expectedCloseDate: "2026-08-25",
-          priority: "urgent",
-          reasons: [
-            {
-              code: "upcoming_close_with_blocker",
-              text: "The expected close date is approaching with an unresolved gap.",
-            },
-            {
-              code: "methodology_gap",
-              text: "Economic Buyer is still unknown.",
-            },
-          ],
-          href: `/opportunities/${opportunityId}`,
-        },
-      ],
-    },
+    dealAttention: { attentionCount: 0, items: [], truncated: false },
     pipeline: {
-      state: "single_currency",
-      openOpportunityCount: 1,
+      state: "empty",
+      openOpportunityCount: 0,
       unvaluedOpportunityCount: 0,
-      currencyCount: 1,
-      currencies: [
-        {
-          currency: "AUD",
-          openValue: "420000.00",
-          closingThisMonthValue: "420000.00",
-          openOpportunityCount: 1,
-          closingThisMonthCount: 1,
-        },
-      ],
-      safeMessage: "Open pipeline and opportunities closing this month.",
+      currencyCount: 0,
+      currencies: [],
+      safeMessage: "No pipeline context is required for conversations.",
     },
-    recommendations: [
-      {
-        sourceId: "recommendation-daily",
-        opportunityId,
-        opportunityName: "Network modernisation",
-        recommendation: "Confirm access to the economic buyer.",
-        priority: "high",
-        reason: "Existing Next Best Action from final validated intelligence.",
-        ctaLabel: "Review",
-        href: `/opportunities/${opportunityId}#latest-next-best-action`,
-      },
-    ],
+    recommendations: [],
     availability: {
       interactions: true,
       actions: true,
@@ -175,322 +86,186 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
       targets: false,
       forecast: false,
     },
-    hasOpportunities: true,
+    hasOpportunities: false,
     caughtUp: false,
     ...overrides,
   };
 }
 
-async function routeDaily(page: Page, response = dailyResponse()) {
-  let requests = 0;
-  page.on("requestfinished", (request) => {
-    if (request.url().startsWith("http://localhost:8000/api/v1/daily")) {
-      requests += 1;
-    }
-  });
-  await page.route(
-    "http://localhost:8000/api/v1/manager/deal-attention**",
-    async (route) => {
-      await route.fulfill({
-        json: {
-          total: 1,
-          summaries: [
-            {
-              code: "methodology_gap",
-              label: "Methodology gap",
-              dealCount: 1,
-            },
-          ],
-          items: [
-            {
-              opportunityId,
-              opportunityName: "Network modernisation",
-              companyName: "Qantas",
-              ownerUserId: "user-1",
-              ownerDisplayName: "Alex Morgan",
-              pipelineId: "pipeline-daily",
-              pipelineName: "Oryntela Sales Pipeline",
-              stageId: "stage-discovery",
-              stageName: "Discovery",
-              amount: "420000.00",
-              currency: "AUD",
-              expectedCloseDate: "2026-08-25",
-              sellerForecast: null,
-              managerForecast: null,
-              reasons: [
-                {
-                  id: `methodology_gap:${opportunityId}`,
-                  code: "methodology_gap",
-                  label: "Economic Buyer is still unknown.",
-                  explanation:
-                    "The current methodology projection does not identify an economic buyer.",
-                  detectedAt: "2026-08-17T00:00:00Z",
-                  sources: [
-                    {
-                      sourceType: "methodology_projection",
-                      sourceId: opportunityId,
-                      label: "Current methodology projection",
-                      href: `/opportunities/${opportunityId}#methodology`,
-                    },
-                  ],
-                },
-              ],
-              href: `/opportunities/${opportunityId}`,
-            },
-          ],
-          page: 1,
-          pageSize: 5,
-          generatedAt: "2026-08-17T00:00:00Z",
-        },
-      });
-    },
-  );
-  await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
-    await route.fulfill({ json: response });
-  });
-  return () => requests;
+function recentPage() {
+  return {
+    items: [
+      {
+        id: "interaction-recent",
+        organisationId: "organisation-1",
+        companyId: "company-daily",
+        opportunityId: null,
+        contactId: null,
+        meetingId: null,
+        eventId: null,
+        interactionType: "manual_interaction",
+        lifecycleStatus: "completed",
+        title: "Founder coffee notes",
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        actualStartAt: "2026-10-29T00:00:00Z",
+        actualEndAt: "2026-10-29T00:30:00Z",
+        timezone: "Australia/Sydney",
+        creationOrigin: "manual",
+        callDirection: null,
+        callOutcome: null,
+        meetingPlatform: null,
+        meetingUrl: null,
+        externalMeetingId: null,
+        captureSource: null,
+        ingestionState: null,
+        durationSeconds: 1800,
+        captureMethods: ["debrief"],
+        intelligenceState: "ready",
+        recordingAvailable: false,
+        createdByUserId: "user-1",
+        briefState: "unavailable",
+        briefGeneratedAt: null,
+        createdAt: "2026-10-29T00:00:00Z",
+        updatedAt: "2026-10-29T00:30:00Z",
+      },
+    ],
+    page: 1,
+    pageSize: 6,
+    total: 1,
+    pages: 1,
+  };
 }
 
-test("Oryntela Daily keeps the complete review journey one click away", async ({
+async function routeHome(page: Page, day = dailyResponse()) {
+  await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
+    await route.fulfill({ json: day });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/interactions**",
+    async (route) => {
+      await route.fulfill({ json: recentPage() });
+    },
+  );
+}
+
+test("Home keeps the next conversation, follow-up and memory central", async ({
   page,
 }) => {
-  const requestCount = await routeDaily(page);
-
+  await routeHome(page);
   await page.goto("/dashboard");
 
   await expect(
     page.getByRole("heading", { name: /Good .*Alex/i }),
   ).toBeVisible();
-  await expect(page.getByText("Top priority")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Today’s interactions" }),
+    page.getByRole("heading", { name: "Northstar technical review" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Actions", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Approved — not complete")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Manager review" }),
-  ).toBeVisible();
-  const priorityBox = await page.getByText("Top priority").boundingBox();
-  const managerBox = await page
-    .getByRole("heading", { name: "Manager review" })
-    .boundingBox();
-  expect(priorityBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
-    managerBox?.y ?? Number.NEGATIVE_INFINITY,
+  await expect(page.getByRole("link", { name: "Prepare now" })).toHaveAttribute(
+    "href",
+    `/conversations/${interactionId}#preparation`,
   );
-  const dealsSection = page
-    .getByRole("heading", { name: "Deals needing attention" })
-    .locator("xpath=ancestor::section[1]");
   await expect(
-    dealsSection.getByText("Economic Buyer is still unknown."),
+    page.getByRole("heading", { name: "Follow-ups needing attention" }),
   ).toBeVisible();
-  await expect(page.getByText("AUD 420,000.00").first()).toBeVisible();
   await expect(
-    page.getByText("Confirm access to the economic buyer."),
+    page.getByText("Send the agreed security summary"),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Daily" })).toHaveCount(0);
-  await expect(page.getByText(/deal health/i)).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: /forecast/i })).toHaveCount(0);
-  await expect(page.getByText(/synthetic demo transcript/i)).toHaveCount(0);
-  expect(requestCount()).toBe(1);
+  await expect(
+    page.getByRole("link", { name: /Founder coffee notes/ }),
+  ).toHaveAttribute("href", "/conversations/interaction-recent");
 
-  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+  const navigation = page.getByRole("navigation", {
+    name: "Main navigation",
+  });
+  await expect(navigation.getByRole("link")).toHaveCount(6);
+  for (const label of ["Home", "Conversations", "Knowledge", "Frameworks"]) {
+    await expect(navigation.getByRole("link", { name: label })).toBeVisible();
+  }
+  await expect(navigation.getByRole("link", { name: "Accounts" })).toHaveCount(
+    0,
+  );
+  await expect(navigation.getByRole("link", { name: "Pipeline" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("heading", { name: /forecast|pipeline/i }),
+  ).toHaveCount(0);
+
+  if (process.env.CAPTURE_CONVERSATION_INTELLIGENCE_SCREENSHOTS === "1") {
     await page.screenshot({
-      path: "../../docs/07-sprints/assets/wo-025a-home-desktop.png",
+      path: "../../docs/07-sprints/assets/conversation-intelligence-home-desktop.png",
       fullPage: true,
     });
   }
 
-  await page.getByRole("link", { name: "Prepare for meeting" }).last().click();
-  await expect(page).toHaveURL(new RegExp(`/interactions/${interactionId}`));
-  await page.goto("/dashboard");
-
-  const actions = page
-    .getByRole("heading", { name: "Actions", exact: true })
-    .locator("xpath=ancestor::section[1]");
-  await actions.getByRole("link", { name: "Review", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/opportunities/${opportunityId}`));
-  await page.goto("/dashboard");
-
-  const deals = page
-    .getByRole("heading", { name: "Deals needing attention" })
-    .locator("xpath=ancestor::section[1]");
-  await deals.getByRole("link", { name: "Review opportunity" }).click();
-  await expect(page).toHaveURL(new RegExp(`/opportunities/${opportunityId}`));
-
-  if (process.env.CAPTURE_WO_025_SCREENSHOT === "1") {
-    await page.goto("/dashboard");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = page.getByRole("navigation", {
+    name: "Mobile navigation",
+  });
+  await expect(mobile.getByRole("link")).toHaveCount(4);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  if (process.env.CAPTURE_CONVERSATION_INTELLIGENCE_SCREENSHOTS === "1") {
     await page.screenshot({
-      path: "../../docs/07-sprints/assets/wo-025-revenueos-daily-desktop.png",
+      path: "../../docs/07-sprints/assets/conversation-intelligence-home-mobile.png",
       fullPage: true,
     });
   }
 });
 
-test("Oryntela Daily teaches a useful first step to a new user", async ({
+test("Home starts with knowledge or a conversation without CRM setup", async ({
   page,
 }) => {
   const base = dailyResponse();
-  await routeDaily(
+  await routeHome(
     page,
     dailyResponse({
-      topPriority: null,
       nextInteraction: null,
       todayInteractions: [],
       totalTodayInteractions: 0,
       actions: { ...base.actions, attentionCount: 0, items: [] },
-      dealAttention: { attentionCount: 0, items: [], truncated: false },
-      recommendations: [],
-      pipeline: {
-        state: "empty",
-        openOpportunityCount: 0,
-        unvaluedOpportunityCount: 0,
-        currencyCount: 0,
-        currencies: [],
-        safeMessage:
-          "Open pipeline will appear here when you add an opportunity.",
-      },
-      hasOpportunities: false,
       caughtUp: true,
     }),
   );
-
   await page.goto("/dashboard");
 
   await expect(
-    page.getByRole("heading", {
-      name: "Let’s get your first deal into Oryntela.",
-    }),
+    page.getByRole("heading", { name: "Nothing is scheduled yet." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Add an opportunity" }),
-  ).toHaveAttribute("href", "/opportunities/new");
+    page.getByRole("link", { name: "Add conversation" }),
+  ).toHaveAttribute("href", "/conversations/new");
   await expect(
-    page.getByRole("heading", { name: "Open pipeline" }),
-  ).toHaveCount(0);
+    page.getByRole("link", { name: "Set up company knowledge" }),
+  ).toHaveAttribute("href", "/knowledge");
+  await expect(page.getByText(/create an opportunity/i)).toHaveCount(0);
 });
 
-test("Oryntela Daily puts the next interaction first on mobile", async ({
+test("Home presents a safe retry state when persisted data is unavailable", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await routeDaily(page);
-
-  await page.goto("/dashboard");
-
-  const nextLabel = page.getByText("Next", { exact: true });
-  const actionsHeading = page.getByRole("heading", {
-    name: "Actions",
-    exact: true,
-  });
-  await expect(nextLabel).toBeVisible();
-  await expect(actionsHeading).toBeVisible();
-  const nextBox = await nextLabel.boundingBox();
-  const actionsBox = await actionsHeading.boundingBox();
-  expect(nextBox).not.toBeNull();
-  expect(actionsBox).not.toBeNull();
-  expect(nextBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
-    actionsBox?.y ?? Number.NEGATIVE_INFINITY,
-  );
-  const prepareBox = await page
-    .getByRole("link", { name: "Prepare for meeting" })
-    .boundingBox();
-  expect(prepareBox?.height ?? 0).toBeGreaterThanOrEqual(44);
-  await expect(page.getByText("2 currencies", { exact: true })).toHaveCount(0);
-  const mobileNavigation = page.getByRole("navigation", {
-    name: "Mobile navigation",
-  });
-  await expect(mobileNavigation.getByRole("link")).toHaveCount(4);
-  for (const label of ["Today", "Interactions", "Actions", "Search & Ask"]) {
-    await expect(
-      mobileNavigation.getByRole("link", { name: label, exact: true }),
-    ).toBeVisible();
-  }
-  expect(
-    await page.evaluate(
-      () =>
-        document.documentElement.scrollWidth >
-        document.documentElement.clientWidth,
-    ),
-  ).toBe(false);
-
-  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
-    await page.screenshot({
-      path: "../../docs/07-sprints/assets/wo-025a-home-mobile.png",
-      fullPage: true,
-    });
-  }
-
-  if (process.env.CAPTURE_WO_025_SCREENSHOT === "1") {
-    await page.screenshot({
-      path: "../../docs/07-sprints/assets/wo-025-revenueos-daily-mobile.png",
-      fullPage: true,
-    });
-  }
-});
-
-test("mobile Search finds bounded Core records without an AI answer", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await routeDaily(page);
-  for (const entity of [
-    "companies",
-    "contacts",
-    "opportunities",
-    "interactions",
-  ]) {
-    await page.route(
-      `http://localhost:8000/api/v1/${entity}**`,
-      async (route) => {
-        const item =
-          entity === "companies"
-            ? { id: "company-search", name: "Qantas", industry: "Aviation" }
-            : entity === "contacts"
-              ? {
-                  id: "contact-search",
-                  firstName: "Taylor",
-                  lastName: "Nguyen",
-                  email: "taylor@qantas.example",
-                }
-              : entity === "opportunities"
-                ? {
-                    id: "opportunity-search",
-                    name: "Network modernisation",
-                    companyName: "Qantas",
-                    stage: "proposal",
-                  }
-                : {
-                    id: "interaction-search",
-                    title: "Qantas technical review",
-                    interactionType: "workshop",
-                    lifecycleStatus: "planned",
-                  };
-        await route.fulfill({
-          json: {
-            items: [item],
-            page: 1,
-            pageSize: 6,
-            total: 1,
-            pages: 1,
-          },
-        });
+  await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
+    await route.fulfill({
+      status: 503,
+      json: {
+        code: "persistence_unavailable",
+        message: "Conversation history is temporarily unavailable.",
+        requestId: "request-home-error",
       },
-    );
-  }
-
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/interactions**",
+    async (route) => {
+      await route.fulfill({ json: recentPage() });
+    },
+  );
   await page.goto("/dashboard");
-  await page
-    .getByRole("navigation", { name: "Mobile navigation" })
-    .getByRole("link", { name: "Search & Ask" })
-    .click();
-  await page
-    .getByRole("searchbox", { name: "Search your workspace" })
-    .fill("Qantas");
-  await page.getByRole("button", { name: "Search" }).click();
-  await expect(
-    page.getByRole("link", { name: /Network modernisation/i }),
-  ).toBeVisible();
-  await expect(page.getByText(/does not generate an AI answer/i)).toBeVisible();
+
+  await expect(page.locator('section[role="alert"]')).toContainText(
+    "Conversation history is temporarily unavailable.",
+  );
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });

@@ -165,6 +165,14 @@ class DebriefService:
     async def get(self, interaction_id: UUID, session_id: UUID) -> DebriefSessionResponse:
         return await self._response(await self._require_session(interaction_id, session_id))
 
+    async def latest(self, interaction_id: UUID) -> DebriefSessionResponse | None:
+        record = await self.repository.latest_session(
+            self.tenant.organisation_id,
+            interaction_id,
+            self.tenant.user_id,
+        )
+        return await self._response(record) if record is not None else None
+
     async def answer(
         self,
         interaction_id: UUID,

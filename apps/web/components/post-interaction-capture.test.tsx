@@ -55,11 +55,11 @@ describe("PostInteractionCapture", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Capture this call while it’s fresh",
+        name: "Write what you noticed on this call",
       }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Capture what happened" }),
+      screen.getByRole("button", { name: "Start personal notes" }),
     ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Start AI Debrief" }),
@@ -224,14 +224,14 @@ describe("PostInteractionCapture", () => {
         interactionType="presentation"
       />,
     );
-    await screen.findByRole("button", { name: "Capture what happened" });
+    await screen.findByRole("button", { name: "Start personal notes" });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /safely stopped/i,
       }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Capture what happened" }),
+      screen.getByRole("button", { name: "Start personal notes" }),
     );
     await screen.findByText("How did it go?");
     fireEvent.change(screen.getByLabelText("Your answer"), {

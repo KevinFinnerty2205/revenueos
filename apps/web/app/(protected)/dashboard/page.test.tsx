@@ -1,4 +1,4 @@
-import type { DailyResponse } from "@revenueos/shared";
+import type { DailyResponse, EntityPage, Interaction } from "@revenueos/shared";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "@/app/(protected)/dashboard/page";
@@ -14,51 +14,23 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
     localDate: "2026-08-17",
     timezone: "Australia/Sydney",
     userDisplayName: "Alex Morgan",
-    topPriority: {
-      kind: "interaction",
-      reasonCode: "interaction_needs_preparation",
-      title: "Qantas technical review",
-      context: "Economic Buyer is still unknown.",
-      reason:
-        "This customer interaction starts within four hours and has no completed brief.",
-      ctaLabel: "Prepare for meeting",
-      href: "/interactions/interaction-1#preparation",
-      sourceId: "interaction-1",
-      startsAt: "2026-08-17T00:00:00Z",
-      dueAt: null,
-    },
+    topPriority: null,
     nextInteraction: {
       id: "interaction-1",
-      title: "Qantas technical review",
+      title: "Northstar discovery",
       companyId: "company-1",
-      companyName: "Qantas",
-      opportunityId: "opportunity-1",
-      opportunityName: "Network modernisation",
-      interactionType: "workshop",
+      companyName: "Northstar Labs",
+      opportunityId: null,
+      opportunityName: null,
+      interactionType: "online_meeting",
       lifecycleStatus: "planned",
       startsAt: "2026-08-17T00:00:00Z",
       preparationState: "not_prepared",
-      context: "Economic Buyer is still unknown.",
-      ctaLabel: "Prepare for meeting",
-      href: "/interactions/interaction-1#preparation",
+      context: "Prepare the objective and unresolved questions.",
+      ctaLabel: "Prepare",
+      href: "/conversations/interaction-1#preparation",
     },
-    todayInteractions: [
-      {
-        id: "interaction-1",
-        title: "Qantas technical review",
-        companyId: "company-1",
-        companyName: "Qantas",
-        opportunityId: "opportunity-1",
-        opportunityName: "Network modernisation",
-        interactionType: "workshop",
-        lifecycleStatus: "planned",
-        startsAt: "2026-08-17T00:00:00Z",
-        preparationState: "not_prepared",
-        context: "Economic Buyer is still unknown.",
-        ctaLabel: "Prepare for meeting",
-        href: "/interactions/interaction-1#preparation",
-      },
-    ],
+    todayInteractions: [],
     totalTodayInteractions: 1,
     actions: {
       attentionCount: 1,
@@ -70,10 +42,11 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
       items: [
         {
           id: "action-1",
-          title: "Send security documentation",
+          title: "Send the agreed security summary",
           opportunityId: "opportunity-1",
-          opportunityName: "Network modernisation",
-          companyName: "Qantas",
+          interactionId: "interaction-2",
+          opportunityName: "Synthetic evaluation",
+          companyName: "Northstar Labs",
           priority: "high",
           reviewStatus: "proposed",
           timing: "overdue",
@@ -81,64 +54,20 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
           state: "needs_review",
           stateLabel: "Needs review",
           ctaLabel: "Review",
-          href: "/opportunities/opportunity-1#recommended-actions",
+          href: "/conversations/interaction-2#follow-up",
         },
       ],
     },
-    dealAttention: {
-      attentionCount: 1,
-      truncated: false,
-      items: [
-        {
-          opportunityId: "opportunity-1",
-          opportunityName: "Network modernisation",
-          companyName: "Qantas",
-          estimatedValue: "420000.00",
-          currency: "AUD",
-          expectedCloseDate: "2026-08-25",
-          priority: "urgent",
-          reasons: [
-            {
-              code: "upcoming_close_with_blocker",
-              text: "The expected close date is approaching with an unresolved gap.",
-            },
-            {
-              code: "methodology_gap",
-              text: "Economic Buyer is still unknown.",
-            },
-          ],
-          href: "/opportunities/opportunity-1",
-        },
-      ],
-    },
+    dealAttention: { attentionCount: 0, items: [], truncated: false },
     pipeline: {
-      state: "single_currency",
-      openOpportunityCount: 1,
+      state: "empty",
+      openOpportunityCount: 0,
       unvaluedOpportunityCount: 0,
-      currencyCount: 1,
-      safeMessage: "Open pipeline and opportunities closing this month.",
-      currencies: [
-        {
-          currency: "AUD",
-          openValue: "420000.00",
-          closingThisMonthValue: "420000.00",
-          openOpportunityCount: 1,
-          closingThisMonthCount: 1,
-        },
-      ],
+      currencyCount: 0,
+      currencies: [],
+      safeMessage: "No pipeline context is required for conversations.",
     },
-    recommendations: [
-      {
-        sourceId: "nba-1",
-        opportunityId: "opportunity-1",
-        opportunityName: "Network modernisation",
-        recommendation: "Confirm access to the economic buyer.",
-        priority: "high",
-        reason: "Existing Next Best Action from final validated intelligence.",
-        ctaLabel: "Review",
-        href: "/opportunities/opportunity-1#latest-next-best-action",
-      },
-    ],
+    recommendations: [],
     availability: {
       interactions: true,
       actions: true,
@@ -150,67 +79,103 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
       targets: false,
       forecast: false,
     },
-    hasOpportunities: true,
+    hasOpportunities: false,
     caughtUp: false,
     ...overrides,
   };
 }
 
-describe("Oryntela Daily Home", () => {
+const recent: Interaction = {
+  id: "interaction-2",
+  organisationId: "organisation-1",
+  companyId: "company-1",
+  opportunityId: null,
+  contactId: null,
+  meetingId: null,
+  eventId: null,
+  interactionType: "manual_interaction",
+  lifecycleStatus: "completed",
+  title: "Founder coffee notes",
+  scheduledStartAt: null,
+  scheduledEndAt: null,
+  actualStartAt: "2026-08-16T00:00:00Z",
+  actualEndAt: "2026-08-16T00:30:00Z",
+  timezone: "Australia/Sydney",
+  creationOrigin: "manual",
+  callDirection: null,
+  callOutcome: null,
+  meetingPlatform: null,
+  meetingUrl: null,
+  externalMeetingId: null,
+  captureSource: null,
+  ingestionState: null,
+  durationSeconds: 1800,
+  captureMethods: ["debrief"],
+  intelligenceState: "ready",
+  recordingAvailable: false,
+  createdByUserId: "user-1",
+  briefState: "unavailable",
+  briefGeneratedAt: null,
+  createdAt: "2026-08-16T00:00:00Z",
+  updatedAt: "2026-08-16T00:30:00Z",
+};
+
+function mockHome(day: DailyResponse = dailyFixture()) {
+  mockedApiRequest.mockImplementation((path) => {
+    if (String(path).startsWith("/api/v1/daily")) return Promise.resolve(day);
+    return Promise.resolve({ items: [recent] } as EntityPage<Interaction>);
+  });
+}
+
+describe("conversation-first Home", () => {
   beforeEach(() => {
     mockedApiRequest.mockReset();
   });
 
-  it("makes one next action obvious and keeps source workflows available", async () => {
-    mockedApiRequest.mockResolvedValue(dailyFixture());
-
+  it("prioritises the next conversation, follow-up and searchable memory", async () => {
+    mockHome();
     render(<DashboardPage />);
 
     expect(
       await screen.findByRole("heading", { name: /good .*alex/i }),
     ).toBeVisible();
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByText("Top priority")).toBeVisible();
     expect(
-      screen.getAllByRole("link", { name: /prepare/i })[0],
-    ).toHaveAttribute("href", "/interactions/interaction-1#preparation");
-    expect(
-      screen.getAllByRole("heading", { name: "Today’s interactions" }),
-    ).toHaveLength(2);
-    expect(screen.getByRole("heading", { name: "Actions" })).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Deals needing attention" }),
+      screen.getByRole("heading", { name: "Northstar discovery" }),
     ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Prepare now" })).toHaveAttribute(
+      "href",
+      "/conversations/interaction-1#preparation",
+    );
     expect(
-      screen.getByRole("heading", { name: "Open pipeline" }),
+      screen.getByRole("heading", { name: "Follow-ups needing attention" }),
     ).toBeVisible();
-    expect(screen.getByText("AUD 420,000.00")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute(
+      "href",
+      "/conversations/interaction-2#follow-up",
+    );
     expect(
-      screen.queryByText("Approved — not complete"),
+      screen.getByRole("link", { name: /Founder coffee notes/ }),
+    ).toHaveAttribute("href", "/conversations/interaction-2");
+    expect(
+      screen.queryByRole("heading", { name: /pipeline/i }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/deal health/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /forecast/i })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: /forecast/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("announces a restrained loading state", () => {
     mockedApiRequest.mockReturnValue(new Promise(() => undefined));
-
     render(<DashboardPage />);
-
-    expect(
-      screen.getByRole("heading", { name: "Loading your day…" }),
-    ).toBeVisible();
-    expect(
-      screen
-        .getByRole("heading", { name: "Loading your day…" })
-        .closest("section"),
-    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByLabelText("Loading conversation home")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
   });
 
-  it("teaches a new user one first step without empty analytics", async () => {
-    mockedApiRequest.mockResolvedValue(
+  it("starts with knowledge or a conversation instead of CRM setup", async () => {
+    mockHome(
       dailyFixture({
-        topPriority: null,
         nextInteraction: null,
         todayInteractions: [],
         totalTodayInteractions: 0,
@@ -223,100 +188,19 @@ describe("Oryntela Daily Home", () => {
           items: [],
           truncated: false,
         },
-        dealAttention: { attentionCount: 0, items: [], truncated: false },
-        recommendations: [],
-        pipeline: {
-          state: "empty",
-          openOpportunityCount: 0,
-          unvaluedOpportunityCount: 0,
-          currencyCount: 0,
-          currencies: [],
-          safeMessage:
-            "Open pipeline will appear here when you add an opportunity.",
-        },
-        hasOpportunities: false,
-        caughtUp: true,
       }),
     );
-
     render(<DashboardPage />);
 
     expect(
-      await screen.findByRole("heading", {
-        name: /let’s get your first deal into oryntela/i,
-      }),
+      await screen.findByRole("heading", { name: "Nothing is scheduled yet." }),
     ).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Add an opportunity" }),
-    ).toHaveAttribute("href", "/opportunities/new");
-    expect(screen.queryByRole("heading", { name: "Open pipeline" })).toBeNull();
-  });
-
-  it("calmly handles an existing user with no interactions or Actions", async () => {
-    const fixture = dailyFixture();
-    mockedApiRequest.mockResolvedValue({
-      ...fixture,
-      topPriority: null,
-      nextInteraction: null,
-      todayInteractions: [],
-      totalTodayInteractions: 0,
-      actions: {
-        ...fixture.actions,
-        attentionCount: 0,
-        overdueCount: 0,
-        dueTodayCount: 0,
-        pendingReviewCount: 0,
-        approvedOpenCount: 0,
-        items: [],
-      },
-      dealAttention: { attentionCount: 0, items: [], truncated: false },
-      recommendations: [],
-      caughtUp: true,
-    });
-
-    render(<DashboardPage />);
-
+      screen.getByRole("link", { name: "Add conversation" }),
+    ).toHaveAttribute("href", "/conversations/new");
     expect(
-      await screen.findByRole("heading", { name: "You’re caught up." }),
-    ).toBeVisible();
-    expect(
-      screen.getAllByText("No customer interactions scheduled today."),
-    ).toHaveLength(2);
-    expect(
-      screen.getByText("No current Actions need your attention."),
-    ).toBeVisible();
-  });
-
-  it("degrades one unavailable section without failing Home", async () => {
-    const fixture = dailyFixture();
-    mockedApiRequest.mockResolvedValue({
-      ...fixture,
-      actions: { ...fixture.actions, items: [] },
-      availability: { ...fixture.availability, actions: false },
-    });
-
-    render(<DashboardPage />);
-
-    expect(
-      await screen.findByText("Actions temporarily unavailable."),
-    ).toBeVisible();
-    expect(screen.getAllByText("Qantas technical review")).toHaveLength(2);
-    expect(screen.getByText("AUD 420,000.00")).toBeVisible();
-  });
-
-  it("offers recovery and normal navigation after a total failure", async () => {
-    mockedApiRequest.mockRejectedValue(new Error("safe failure"));
-
-    render(<DashboardPage />);
-
-    expect(
-      await screen.findByRole("heading", {
-        name: "Oryntela couldn’t load your day.",
-      }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: "Open interactions" }),
-    ).toHaveAttribute("href", "/interactions");
+      screen.getByRole("link", { name: "Set up company knowledge" }),
+    ).toHaveAttribute("href", "/knowledge");
+    expect(screen.queryByText(/add an opportunity/i)).not.toBeInTheDocument();
   });
 });

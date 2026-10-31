@@ -1217,6 +1217,7 @@ export interface DailyAction {
   id: string;
   title: string;
   opportunityId: string;
+  interactionId: string | null;
   opportunityName: string;
   companyName: string | null;
   priority: "high" | "normal" | "low";
@@ -2842,7 +2843,8 @@ export interface OnlineMeetingTranscriptImport {
   safeMessage: string;
 }
 
-export type MethodologyKey = "meddic" | "meddpicc" | "bant" | "spiced";
+export type MethodologyKey =
+  "meddic" | "meddicc" | "meddpicc" | "bant" | "spiced";
 export type MethodologySelection = "none" | MethodologyKey | "custom";
 export type MethodologyState =
   "confirmed" | "partially_supported" | "unknown" | "conflicting" | "stale";
@@ -5757,6 +5759,7 @@ export interface SellingOffering {
   intendedOutcomes: string[];
   differentiators: string[];
   competitorsAlternatives: string[];
+  commonObjections: string[];
   approvedProof: string[];
   approvedClaims: string[];
 }
@@ -5804,4 +5807,26 @@ export interface SellingProfileContext {
   content: SellingProfileContent | null;
   approvedAt: string | null;
   message: string;
+}
+
+export type CompanyKnowledgeSourceKind =
+  "website" | "supporting_text" | "text_file";
+
+export type CompanyKnowledgeSourceStatus =
+  "saved_unprocessed" | "ready_for_review" | "failed";
+
+export interface CompanyKnowledgeSource {
+  id: string;
+  sourceKind: CompanyKnowledgeSourceKind;
+  label: string;
+  websiteUrl: string | null;
+  sourceText: string | null;
+  characterCount: number;
+  contentFingerprint: string;
+  processingStatus: CompanyKnowledgeSourceStatus;
+  failureCode: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  safeMessage: string;
 }

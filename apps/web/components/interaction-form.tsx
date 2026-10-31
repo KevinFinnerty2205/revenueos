@@ -177,7 +177,7 @@ export function InteractionForm({
         setLoadError(
           requestError instanceof Error
             ? requestError.message
-            : "Interaction options could not be loaded.",
+            : "Conversation options could not be loaded.",
         );
       })
       .finally(() => {
@@ -239,12 +239,12 @@ export function InteractionForm({
           }),
         },
       );
-      router.push(`/interactions/${interaction.id}`);
+      router.push(`/conversations/${interaction.id}`);
     } catch (requestError: unknown) {
       setSubmitError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be created.",
+          : "The conversation could not be created.",
       );
     } finally {
       setSubmitting(false);
@@ -255,24 +255,25 @@ export function InteractionForm({
     <section aria-labelledby="interaction-form-title" className="form-card">
       <div className="max-w-2xl">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
-          Customer activity
+          Conversation memory
         </p>
         <h1
           id="interaction-form-title"
           className="mt-3 text-3xl font-semibold text-slate-950"
         >
-          Create interaction
+          Add conversation
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Add a customer event and choose how to capture it after it happens.
-          Online meeting links are stored only as safe, query-free navigation
-          links; Oryntela does not join or fetch them.
+          Plan a meeting, outbound call or in-person conversation, or add a
+          simple note. Company and opportunity context are optional. Online
+          meeting links are stored only as safe, query-free navigation links;
+          Oryntela does not join or fetch them.
         </p>
       </div>
 
       {loading ? (
         <p role="status" className="mt-6 text-sm text-slate-600">
-          Loading interaction options…
+          Loading conversation options…
         </p>
       ) : null}
       {!loading && loadError ? (
@@ -314,7 +315,7 @@ export function InteractionForm({
             />
           </label>
           <label className="grid gap-2 text-sm font-bold text-slate-800">
-            Interaction type
+            Conversation type
             <select
               className="form-control"
               value={interactionType}
@@ -508,9 +509,9 @@ export function InteractionForm({
               className="primary-button"
               disabled={submitting}
             >
-              {submitting ? "Creating…" : "Create interaction"}
+              {submitting ? "Creating…" : "Add conversation"}
             </button>
-            <Link className="secondary-button" href="/interactions">
+            <Link className="secondary-button" href="/conversations">
               Cancel
             </Link>
           </div>

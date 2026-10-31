@@ -213,6 +213,13 @@ def test_interaction_crud_filters_completion_and_terminal_lifecycle(client: Test
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["id"] == interaction_id
 
+    relationship_search = client.get(
+        "/api/v1/interactions",
+        params={"search": "Acme Australia"},
+    )
+    assert relationship_search.status_code == 200, relationship_search.text
+    assert interaction_id in {item["id"] for item in relationship_search.json()["items"]}
+
     started = client.patch(
         f"/api/v1/interactions/{interaction_id}",
         json={

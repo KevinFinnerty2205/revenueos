@@ -39,6 +39,7 @@ def content(label: str = "Revenue operating support") -> dict[str, object]:
                 "intendedOutcomes": ["Clearer seller follow-through"],
                 "differentiators": ["Evidence-aware human review"],
                 "competitorsAlternatives": ["Manual notes and CRM-only workflows"],
+                "commonObjections": [],
                 "approvedProof": ["Approved internal product demonstration"],
                 "approvedClaims": ["Keeps approved selling context available to authorised members"],
             }
@@ -186,6 +187,114 @@ def test_profile_is_tenant_scoped_and_requires_active_membership(app: FastAPI, c
 
     asyncio.run(disable_membership())
     assert client.get("/api/v1/selling-profile/context").status_code == 403
+
+
+def test_company_knowledge_sources_are_persisted_honestly_and_tenant_scoped(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    website = client.post(
+        "/api/v1/selling-profile/knowledge-sources",
+        json={
+            "sourceKind": "website",
+            "label": "Synthetic company website",
+            "websiteUrl": "https://Example.test/product?preview=owner#details",
+            "sourceText": None,
+            "authorityConfirmed": True,
+            "idempotencyKey": "knowledge-website-0001",
+        },
+    )
+    assert website.status_code == 201, website.text
+    assert website.json()["websiteUrl"] == "https://example.test/product"
+    assert website.json()["processingStatus"] == "saved_unprocessed"
+    assert "has not fetched or learned" in website.json()["safeMessage"]
+
+    supporting_text = client.post(
+        "/api/v1/selling-profile/knowledge-sources",
+        json={
+            "sourceKind": "supporting_text",
+            "label": "Synthetic product notes",
+            "websiteUrl": None,
+            "sourceText": "We help synthetic GTM teams prepare for important conversations.",
+            "authorityConfirmed": True,
+            "idempotencyKey": "knowledge-text-0001",
+        },
+    )
+    assert supporting_text.status_code == 201, supporting_text.text
+    assert supporting_text.json()["processingStatus"] == "ready_for_review"
+    assert supporting_text.json()["characterCount"] > 0
+    assert supporting_text.json()["sourceText"] == ("We help synthetic GTM teams prepare for important conversations.")
+
+    repeated = client.post(
+        "/api/v1/selling-profile/knowledge-sources",
+        json={
+            "sourceKind": "supporting_text",
+            "label": "Synthetic product notes",
+            "websiteUrl": None,
+            "sourceText": "We help synthetic GTM teams prepare for important conversations.",
+            "authorityConfirmed": True,
+            "idempotencyKey": "knowledge-text-0001",
+        },
+    )
+    assert repeated.status_code == 201
+    assert repeated.json()["id"] == supporting_text.json()["id"]
+
+    conflicting_retry = client.post(
+        "/api/v1/selling-profile/knowledge-sources",
+        json={
+            "sourceKind": "supporting_text",
+            "label": "Different source",
+            "websiteUrl": None,
+            "sourceText": "Different approved text.",
+            "authorityConfirmed": True,
+            "idempotencyKey": "knowledge-text-0001",
+        },
+    )
+    assert conflicting_retry.status_code == 409
+    assert conflicting_retry.json()["code"] == "knowledge_source_idempotency_conflict"
+
+    malformed = client.post(
+        "/api/v1/selling-profile/knowledge-sources",
+        json={
+            "sourceKind": "website",
+            "label": "Malformed website",
+            "websiteUrl": "https://example.test:not-a-port",
+            "sourceText": None,
+            "authorityConfirmed": True,
+            "idempotencyKey": "knowledge-malformed-0001",
+        },
+    )
+    assert malformed.status_code == 422
+    assert malformed.json()["code"] == "knowledge_website_invalid"
+
+    app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
+    other_sources = client.get("/api/v1/selling-profile/knowledge-sources")
+    assert other_sources.status_code == 200
+    assert other_sources.json() == []
+    app.dependency_overrides.pop(get_current_user, None)
+
+    deleted = client.delete(f"/api/v1/selling-profile/knowledge-sources/{supporting_text.json()['id']}")
+    assert deleted.status_code == 204
+    remaining = client.get("/api/v1/selling-profile/knowledge-sources")
+    assert remaining.status_code == 200
+    assert [item["id"] for item in remaining.json()] == [website.json()["id"]]
+
+
+def test_company_knowledge_sources_require_admin_authority(app: FastAPI, client: TestClient) -> None:
+    member = AuthenticatedUser(
+        user_id=PRIMARY_USER_ID,
+        external_auth_id="user_dev_001",
+        display_name="Alex Morgan",
+        email="alex@example.test",
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        organisation_name="Example Revenue Team",
+        organisation_slug="example-revenue-team",
+        role="member",
+        auth_mode="mock",
+    )
+    app.dependency_overrides[get_current_user] = cast_auth_dependency(member)
+    assert client.get("/api/v1/selling-profile/knowledge-sources").status_code == 403
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_untrusted_profile_text_is_preserved_as_data_and_excluded_from_audit_content(client: TestClient) -> None:

@@ -138,7 +138,7 @@ describe("OpportunityMethodology", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Sales Methodology" }),
+      screen.getByRole("heading", { name: "Framework assessment" }),
     ).toBeVisible();
     expect(
       screen.getByText(/without scoring or blocking deal stages/i),

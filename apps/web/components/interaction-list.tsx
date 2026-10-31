@@ -72,7 +72,7 @@ export function InteractionList() {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Interactions could not be loaded.",
+            : "Conversations could not be loaded.",
         );
       })
       .finally(() => {
@@ -112,22 +112,22 @@ export function InteractionList() {
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
-            Customer activity
+            Relationship memory
           </p>
           <h1
             id="interactions-title"
             className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl"
           >
-            Interactions
+            Conversations
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            Keep phone calls, customer meetings, workshops, presentations and
-            field activity in one timeline. Existing Meeting Intelligence
-            remains available from each linked meeting.
+            Prepare, capture and follow through across meetings, phone calls,
+            general conversations and in-person notes. A company or opportunity
+            can add context, but neither is required.
           </p>
         </div>
-        <Link className="primary-button" href="/interactions/new">
-          Create interaction
+        <Link className="primary-button" href="/conversations/new">
+          Add conversation
         </Link>
       </header>
 
@@ -141,14 +141,14 @@ export function InteractionList() {
         className="mb-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
       >
         <label className="sr-only" htmlFor="interaction-search">
-          Search interactions
+          Search conversations
         </label>
         <input
           id="interaction-search"
           className="form-control"
           value={searchDraft}
           onChange={(event) => setSearchDraft(event.target.value)}
-          placeholder="Search interactions"
+          placeholder="Search conversations"
         />
         <label className="sr-only" htmlFor="interaction-type-filter">
           Filter by type
@@ -197,7 +197,7 @@ export function InteractionList() {
 
       {loading ? (
         <p role="status" className="rounded-2xl bg-white p-6 text-slate-600">
-          Loading interactions…
+          Loading conversations…
         </p>
       ) : null}
       {!loading && error ? (
@@ -221,13 +221,13 @@ export function InteractionList() {
       {!loading && !error && result?.items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
           <h2 className="text-xl font-semibold text-slate-950">
-            No interactions found
+            No conversations found
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Create an interaction or adjust the current filters.
+            Add a conversation or adjust the current filters.
           </p>
-          <Link className="primary-button mt-5" href="/interactions/new">
-            Create interaction
+          <Link className="primary-button mt-5" href="/conversations/new">
+            Add conversation
           </Link>
         </div>
       ) : null}
@@ -269,7 +269,7 @@ export function InteractionList() {
               <h2 className="mt-4 text-xl font-semibold text-slate-950">
                 <Link
                   className="rounded focus:outline-none focus:ring-2 focus:ring-brand-focus"
-                  href={`/interactions/${interaction.id}`}
+                  href={`/conversations/${interaction.id}`}
                 >
                   {interaction.title}
                 </Link>
@@ -328,7 +328,7 @@ export function InteractionList() {
               {interaction.briefState !== "unavailable" ? (
                 <Link
                   className="mt-4 ml-4 inline-block text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-                  href={`/interactions/${interaction.id}#preparation`}
+                  href={`/conversations/${interaction.id}#preparation`}
                 >
                   {interaction.briefState === "completed"
                     ? "Open brief"

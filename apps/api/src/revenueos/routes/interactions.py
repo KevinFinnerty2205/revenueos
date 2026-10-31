@@ -449,6 +449,17 @@ async def start_debrief(
 
 
 @router.get(
+    "/{interaction_id}/debrief/latest",
+    response_model=DebriefSessionResponse | None,
+)
+async def get_latest_debrief(
+    interaction_id: UUID,
+    service: Debriefs,
+) -> DebriefSessionResponse | None:
+    return await service.latest(interaction_id)
+
+
+@router.get(
     "/{interaction_id}/debrief/{session_id}",
     response_model=DebriefSessionResponse,
 )

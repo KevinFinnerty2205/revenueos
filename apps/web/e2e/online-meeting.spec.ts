@@ -202,7 +202,7 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
     },
   );
 
-  await page.goto("/interactions/interaction-online");
+  await page.goto("/conversations/interaction-online");
   const openMeeting = page.getByRole("link", {
     name: "Open meeting",
     exact: true,

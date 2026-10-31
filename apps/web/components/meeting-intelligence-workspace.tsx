@@ -233,10 +233,10 @@ export function MeetingIntelligenceWorkspace({
     }
   }
 
-  async function copyEmail(content: FollowUpEmailContent) {
+  async function copyEmail(content: string) {
     setCopyStatus(null);
     try {
-      await navigator.clipboard.writeText(renderFollowUpEmail(content));
+      await navigator.clipboard.writeText(content);
       setCopyStatus("Email copied to clipboard.");
     } catch {
       setCopyStatus(
@@ -299,7 +299,7 @@ export function MeetingIntelligenceWorkspace({
               Turn the current meeting transcript into a clear summary, buying
               signals, objections, competitive context, decisions, actions,
               stakeholder context, risks, open questions, a recommended next
-              move and a customer-ready follow-up.
+              move and a review-only follow-up draft.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <p role="status" aria-live="polite" className="font-bold">
@@ -460,6 +460,7 @@ export function MeetingIntelligenceWorkspace({
         onRequest={() => void requestCapability("follow_up_email")}
       >
         <FollowUpEmailView
+          meetingId={meetingId}
           content={workspace.followUpEmail.content}
           tone={tone}
           busy={capabilityBusy === "follow_up_email"}
@@ -1165,6 +1166,7 @@ export function OpenQuestionsView({
 }
 
 function FollowUpEmailView({
+  meetingId,
   content,
   tone,
   busy,
@@ -1173,33 +1175,112 @@ function FollowUpEmailView({
   onCopy,
   onRegenerate,
 }: {
+  meetingId: string;
   content: FollowUpEmailContent | null;
   tone: FollowUpEmailTone;
   busy: boolean;
   copyStatus: string | null;
   onToneChange: (tone: FollowUpEmailTone) => void;
-  onCopy: (content: FollowUpEmailContent) => Promise<void>;
+  onCopy: (content: string) => Promise<void>;
   onRegenerate: () => void;
 }) {
+  const generatedDraft = content ? renderFollowUpEmail(content) : "";
+  const [draft, setDraft] = useState(generatedDraft);
+  const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const draftKey = `revenueos:follow-up-draft:${meetingId}`;
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(draftKey);
+    let active = true;
+    window.queueMicrotask(() => {
+      if (!active) return;
+      if (stored) {
+        try {
+          const value = JSON.parse(stored) as {
+            draft?: unknown;
+            approved?: unknown;
+          };
+          if (typeof value.draft === "string") {
+            setDraft(value.draft);
+            setApproved(value.approved === true);
+            setSaved(true);
+            setDirty(false);
+            return;
+          }
+        } catch {
+          window.localStorage.removeItem(draftKey);
+        }
+      }
+      setDraft("");
+      setApproved(false);
+      setSaved(false);
+      setDirty(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!saved && !dirty) {
+      window.queueMicrotask(() => setDraft(generatedDraft));
+    }
+  }, [dirty, generatedDraft, saved]);
+
   if (!content) return <MissingContent />;
+
+  function saveDraft(nextApproved = approved) {
+    window.localStorage.setItem(
+      draftKey,
+      JSON.stringify({ draft, approved: nextApproved }),
+    );
+    setApproved(nextApproved);
+    setSaved(true);
+    setDirty(false);
+  }
+
+  function exportDraft() {
+    const url = URL.createObjectURL(new Blob([draft], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "oryntela-follow-up-draft.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="mt-5">
       <p className="text-xs font-medium text-slate-500">
         {humanise(content.tone)} tone · {formatConfidence(content.confidence)}{" "}
         confidence
       </p>
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-800 sm:p-6">
-        <p>
-          <span className="font-bold text-slate-950">Subject: </span>
-          {content.subject}
-        </p>
-        <p className="mt-5">{content.greeting}</p>
-        <p className="mt-4 whitespace-pre-wrap">{content.summary}</p>
-        <EmailList title="Decisions" items={content.decisions} />
-        <EmailList title="Action Items" items={content.actionItems} />
-        <EmailList title="Open Questions" items={content.openQuestions} />
-        <p className="mt-5 whitespace-pre-wrap">{content.closing}</p>
-      </div>
+      <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+        Advisory draft only. Review every statement before customer use. Saving
+        keeps this edited draft in this browser; it does not send an email.
+      </p>
+      <label className="mt-4 block text-sm font-bold text-slate-800">
+        Editable follow-up draft
+        <textarea
+          className="form-control mt-2 min-h-80 py-3 font-mono text-sm leading-6"
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setDirty(true);
+            setApproved(false);
+          }}
+        />
+      </label>
+      <p className="mt-3 text-xs font-semibold text-slate-500">
+        {dirty
+          ? "Unsaved edits"
+          : approved
+            ? "Reviewed and saved locally"
+            : saved
+              ? "Draft saved locally — review still required"
+              : "Generated draft — not yet saved or reviewed"}
+      </p>
       {copyStatus ? (
         <p role="status" className="mt-4 text-sm text-slate-700">
           {copyStatus}
@@ -1226,9 +1307,30 @@ function FollowUpEmailView({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => void onCopy(content)}
+            onClick={() => void onCopy(draft)}
           >
             Copy
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => saveDraft(false)}
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => saveDraft(true)}
+          >
+            Mark reviewed
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={exportDraft}
+          >
+            Export .txt
           </button>
           <button
             type="button"

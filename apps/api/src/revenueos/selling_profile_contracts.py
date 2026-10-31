@@ -10,12 +10,17 @@ from revenueos.contracts import APIModel, to_camel
 
 SellingProfileState = Literal["draft", "approved", "superseded", "retired"]
 SellingProfileStatus = Literal["empty", "draft", "current", "retired"]
+KnowledgeSourceKind = Literal["website", "supporting_text", "text_file"]
+KnowledgeSourceStatus = Literal["saved_unprocessed", "ready_for_review", "failed"]
 
 CompanyDescription = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2_000)]
 OfferingName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 OfferingDescription = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=800)]
 OfferingPoint = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 IdempotencyKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=200)]
+KnowledgeLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+KnowledgeWebsite = Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=2_000)]
+KnowledgeText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40_000)]
 
 
 class StrictSellingProfileModel(APIModel):
@@ -36,6 +41,7 @@ class SellingOffering(StrictSellingProfileModel):
     intended_outcomes: tuple[OfferingPoint, ...] = Field(default=(), max_length=8)
     differentiators: tuple[OfferingPoint, ...] = Field(default=(), max_length=8)
     competitors_alternatives: tuple[OfferingPoint, ...] = Field(default=(), max_length=8)
+    common_objections: tuple[OfferingPoint, ...] = Field(default=(), max_length=8)
     approved_proof: tuple[OfferingPoint, ...] = Field(default=(), max_length=8)
     approved_claims: tuple[OfferingPoint, ...] = Field(default=(), max_length=8)
 
@@ -45,6 +51,7 @@ class SellingOffering(StrictSellingProfileModel):
         "intended_outcomes",
         "differentiators",
         "competitors_alternatives",
+        "common_objections",
         "approved_proof",
         "approved_claims",
     )
@@ -121,3 +128,37 @@ class SellingProfileDraftUpdate(StrictSellingProfileModel):
 
 class SellingProfileApproveRequest(StrictSellingProfileModel):
     expected_lock_version: int = Field(ge=1)
+
+
+class CompanyKnowledgeSourceCreate(StrictSellingProfileModel):
+    source_kind: KnowledgeSourceKind
+    label: KnowledgeLabel
+    website_url: KnowledgeWebsite | None = None
+    source_text: KnowledgeText | None = None
+    authority_confirmed: Literal[True]
+    idempotency_key: IdempotencyKey
+
+    @model_validator(mode="after")
+    def content_matches_kind(self) -> CompanyKnowledgeSourceCreate:
+        if self.source_kind == "website":
+            if self.website_url is None or self.source_text is not None:
+                raise ValueError("Website sources require a websiteUrl and no sourceText.")
+        elif self.source_text is None or self.website_url is not None:
+            raise ValueError("Text sources require sourceText and no websiteUrl.")
+        return self
+
+
+class CompanyKnowledgeSourceResponse(StrictSellingProfileModel):
+    id: UUID
+    source_kind: KnowledgeSourceKind
+    label: str
+    website_url: str | None
+    source_text: str | None
+    character_count: int
+    content_fingerprint: str
+    processing_status: KnowledgeSourceStatus
+    failure_code: str | None
+    created_by_user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    safe_message: str

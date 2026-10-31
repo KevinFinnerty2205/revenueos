@@ -1,212 +1,60 @@
 "use client";
 
-import type {
-  EngageAvailability,
-  CreateAvailability,
-  ProspectAvailability,
-} from "@revenueos/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { apiRequest } from "@/lib/api";
 
-const desktopGroups = [
-  {
-    label: null,
-    items: [{ href: "/dashboard", label: "Home" }],
-  },
-  {
-    label: "Sell",
-    items: [
-      { href: "/companies", label: "Accounts" },
-      { href: "/contacts", label: "People" },
-      { href: "/interactions", label: "Interactions" },
-      { href: "/tasks", label: "Tasks" },
-    ],
-  },
-  {
-    label: null,
-    items: [
-      { href: "/opportunities", label: "Pipeline" },
-      { href: "/insights", label: "Insights" },
-    ],
-  },
+const primaryItems = [
+  { href: "/dashboard", label: "Home" },
+  { href: "/conversations", label: "Conversations" },
+  { href: "/knowledge", label: "Knowledge" },
+  { href: "/frameworks", label: "Frameworks" },
 ] as const;
-
-const mobileItems = [
-  { href: "/dashboard", label: "Today" },
-  { href: "/interactions", label: "Interactions" },
-  { href: "/dashboard#daily-actions", label: "Actions" },
-  { href: "/assistant", label: "Search & Ask" },
-] as const;
-
-interface BetaCapabilities {
-  featureFlags: Record<string, boolean>;
-}
 
 function isActive(pathname: string | null, href: string) {
-  if (href.includes("#")) return false;
-  const path = href.split("#", 1)[0];
   if (!pathname) return false;
   return (
-    pathname === path ||
-    (path !== "/dashboard" && pathname.startsWith(`${path}/`))
+    pathname === href ||
+    (href !== "/dashboard" && pathname.startsWith(`${href}/`))
   );
 }
 
 export function CoreNavigation() {
   const pathname = usePathname();
-  const [prospectEnabled, setProspectEnabled] = useState(true);
-  const [engageEnabled, setEngageEnabled] = useState(true);
-  const [eventsEnabled, setEventsEnabled] = useState(true);
-  const [createEnabled, setCreateEnabled] = useState(true);
-  const [salesAnalyticsEnabled, setSalesAnalyticsEnabled] = useState(true);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    apiRequest<ProspectAvailability>("/api/v1/prospect/availability", {
-      signal: controller.signal,
-    })
-      .then((availability) => setProspectEnabled(availability.enabled))
-      .catch(() => setProspectEnabled(true));
-    apiRequest<EngageAvailability>("/api/v1/engage/availability", {
-      signal: controller.signal,
-    })
-      .then((availability) => setEngageEnabled(availability.enabled))
-      .catch(() => setEngageEnabled(true));
-    apiRequest<BetaCapabilities>("/api/v1/beta/capabilities", {
-      signal: controller.signal,
-    })
-      .then((capabilities) => {
-        setEventsEnabled(capabilities.featureFlags.engageEvents === true);
-        setSalesAnalyticsEnabled(
-          capabilities.featureFlags.salesAnalytics !== false,
-        );
-      })
-      .catch(() => {
-        setEventsEnabled(true);
-        setSalesAnalyticsEnabled(true);
-      });
-    apiRequest<CreateAvailability>("/api/v1/create/availability", {
-      signal: controller.signal,
-    })
-      .then((availability) => setCreateEnabled(availability.enabled))
-      .catch(() => setCreateEnabled(true));
-    return () => controller.abort();
-  }, []);
-
-  const sellGroup = {
-    ...desktopGroups[1],
-    items: engageEnabled
-      ? [
-          ...desktopGroups[1].items,
-          { href: "/campaigns", label: "Campaigns" },
-          ...(eventsEnabled ? [{ href: "/events", label: "Events" }] : []),
-        ]
-      : desktopGroups[1].items,
-  };
-  const pipelineGroup = {
-    ...desktopGroups[2],
-    items: salesAnalyticsEnabled
-      ? desktopGroups[2].items
-      : desktopGroups[2].items.filter((item) => item.href !== "/insights"),
-  };
-  const baseGroups = [desktopGroups[0], sellGroup, pipelineGroup];
-  const moduleGroups = prospectEnabled
-    ? [
-        baseGroups[0],
-        { label: "Prospect", items: [{ href: "/find", label: "Find" }] },
-        ...baseGroups.slice(1),
-      ]
-    : baseGroups;
-  const navigationGroups = createEnabled
-    ? [
-        ...moduleGroups,
-        { label: "Create", items: [{ href: "/create", label: "Studio" }] },
-      ]
-    : moduleGroups;
-  const mobileMoreItems = [
-    { href: "/companies", label: "Accounts" },
-    { href: "/contacts", label: "People" },
-    { href: "/tasks", label: "Tasks" },
-    { href: "/opportunities", label: "Pipeline" },
-    ...(salesAnalyticsEnabled
-      ? [{ href: "/insights", label: "Insights" }]
-      : []),
-    ...(prospectEnabled ? [{ href: "/find", label: "Find" }] : []),
-    ...(createEnabled ? [{ href: "/create", label: "Create" }] : []),
-    ...(engageEnabled ? [{ href: "/campaigns", label: "Campaigns" }] : []),
-    ...(eventsEnabled ? [{ href: "/events", label: "Events" }] : []),
-    { href: "/settings", label: "Settings" },
-    { href: "/sign-out", label: "Sign out" },
-  ];
 
   return (
     <>
-      <details className="relative mt-3 lg:hidden">
-        <summary className="ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus">
-          More destinations
-        </summary>
-        <nav
-          aria-label="More mobile destinations"
-          className="absolute right-0 z-50 mt-2 grid w-64 grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
-        >
-          {mobileMoreItems.map((item) => {
+      <nav aria-label="Main navigation" className="mt-10 hidden lg:block">
+        <div className="space-y-1">
+          {primaryItems.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
+                className={`group flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
                   active
                     ? "bg-brand-secondary/10 text-brand-primary"
-                    : "text-slate-700 hover:bg-slate-50"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-brand-primary"
                 }`}
               >
                 {item.label}
+                {active ? (
+                  <span
+                    className="size-1.5 rounded-full bg-brand-secondary"
+                    aria-hidden="true"
+                  />
+                ) : null}
               </Link>
             );
           })}
-        </nav>
-      </details>
-      <nav aria-label="Main navigation" className="mt-10 hidden lg:block">
-        <div className="space-y-7">
-          {navigationGroups.map((group, index) => (
-            <div key={group.label ?? `group-${index}`}>
-              {group.label ? (
-                <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                  {group.label}
-                </p>
-              ) : null}
-              <div className="space-y-1">
-                {group.items.map((item) => {
-                  const active = isActive(pathname, item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
-                        active
-                          ? "bg-brand-secondary/10 text-brand-primary"
-                          : "text-slate-600 hover:bg-brand-secondary/10 hover:text-brand-secondary"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
         </div>
         <div className="mt-8 border-t border-slate-200 pt-5">
-          <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
             Workspace
           </p>
           {[
-            { href: "/assistant", label: "Search & Ask" },
+            { href: "/assistant", label: "Search / Ask Oryntela" },
             { href: "/settings", label: "Settings" },
           ].map((item) => {
             const active = isActive(pathname, item.href);
@@ -215,10 +63,10 @@ export function CoreNavigation() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
+                className={`block min-h-11 rounded-xl px-3 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
                   active
                     ? "bg-brand-secondary/10 text-brand-primary"
-                    : "text-slate-600 hover:bg-brand-secondary/10 hover:text-brand-secondary"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-brand-primary"
                 }`}
               >
                 {item.label}
@@ -230,19 +78,19 @@ export function CoreNavigation() {
 
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(7,24,38,0.06)] backdrop-blur lg:hidden"
       >
-        {mobileItems.map((item) => {
+        {primaryItems.map((item) => {
           const active = isActive(pathname, item.href);
           return (
             <Link
-              key={item.label}
+              key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-12 items-center justify-center rounded-xl px-1 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
+              className={`flex min-h-12 items-center justify-center rounded-xl px-1 text-center text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
                 active
                   ? "bg-brand-secondary/10 text-brand-primary"
-                  : "text-slate-600"
+                  : "text-slate-500"
               }`}
             >
               {item.label}

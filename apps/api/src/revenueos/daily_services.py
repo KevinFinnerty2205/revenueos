@@ -311,23 +311,23 @@ class RevenueOSDailyService:
             if interaction.lifecycle_status == "in_progress":
                 state = "active"
                 cta_label = "Open Companion"
-                href = f"/interactions/{interaction.id}/companion"
+                href = f"/conversations/{interaction.id}/workspace"
             elif interaction.lifecycle_status == "completed" and not record.intelligence_exists:
                 state = "capture_needed"
                 cta_label = "Capture what happened"
-                href = f"/interactions/{interaction.id}#debrief"
+                href = f"/conversations/{interaction.id}#debrief"
             elif interaction.lifecycle_status == "completed":
                 state = "complete"
                 cta_label = "Open interaction"
-                href = f"/interactions/{interaction.id}"
+                href = f"/conversations/{interaction.id}"
             elif record.brief_generated_at is not None:
                 state = "prepared"
                 cta_label = "Prepare"
-                href = f"/interactions/{interaction.id}#preparation"
+                href = f"/conversations/{interaction.id}#preparation"
             else:
                 state = "not_prepared"
                 cta_label = "Prepare for meeting"
-                href = f"/interactions/{interaction.id}#preparation"
+                href = f"/conversations/{interaction.id}#preparation"
             context = (
                 methodology_gaps[interaction.opportunity_id].text
                 if interaction.opportunity_id in methodology_gaps and starts_at < end_at
@@ -393,6 +393,7 @@ class RevenueOSDailyService:
                     id=record.proposal.id,
                     title=record.version.title,
                     opportunity_id=record.proposal.opportunity_id,
+                    interaction_id=record.proposal.interaction_id,
                     opportunity_name=record.opportunity_name,
                     company_name=record.company_name,
                     priority=cast(Literal["high", "normal", "low"], record.proposal.priority),
@@ -402,7 +403,11 @@ class RevenueOSDailyService:
                     state=state,
                     state_label=state_label,
                     cta_label=cta_label,
-                    href=f"/opportunities/{record.proposal.opportunity_id}#recommended-actions",
+                    href=(
+                        f"/conversations/{record.proposal.interaction_id}#follow-up"
+                        if record.proposal.interaction_id is not None
+                        else "/conversations"
+                    ),
                 )
             )
         return DailyActionSection(

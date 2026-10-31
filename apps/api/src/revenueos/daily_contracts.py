@@ -75,6 +75,7 @@ class DailyAction(APIModel):
     id: UUID
     title: SafeText
     opportunity_id: UUID
+    interaction_id: UUID | None = None
     opportunity_name: SafeText
     company_name: SafeText | None
     priority: Literal["high", "normal", "low"]

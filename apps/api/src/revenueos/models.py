@@ -1333,6 +1333,58 @@ class SellingProfile(TimestampMixin, Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
 
 
+class CompanyKnowledgeSource(TimestampMixin, Base):
+    __tablename__ = "company_knowledge_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "source_kind IN ('website', 'supporting_text', 'text_file')",
+            name="ck_company_knowledge_sources_kind",
+        ),
+        CheckConstraint(
+            "processing_status IN ('saved_unprocessed', 'ready_for_review', 'failed')",
+            name="ck_company_knowledge_sources_status",
+        ),
+        CheckConstraint(
+            "(source_kind = 'website' AND website_url IS NOT NULL AND source_text IS NULL) OR "
+            "(source_kind IN ('supporting_text', 'text_file') AND website_url IS NULL "
+            "AND source_text IS NOT NULL)",
+            name="ck_company_knowledge_sources_content",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_company_knowledge_sources_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_company_knowledge_sources_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "created_by_user_id",
+            "idempotency_key",
+            name="uq_company_knowledge_sources_idempotency",
+        ),
+        Index(
+            "ix_company_knowledge_sources_org_created",
+            "organisation_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    website_url: Mapped[str | None] = mapped_column(String(2_000))
+    source_text: Mapped[str | None] = mapped_column(Text)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    processing_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
 class SellingProfileRevision(TimestampMixin, Base):
     __tablename__ = "selling_profile_revisions"
     __table_args__ = (
@@ -3687,7 +3739,7 @@ class OrganisationMethodologySetting(TimestampMixin, Base):
     __tablename__ = "organisation_methodology_settings"
     __table_args__ = (
         CheckConstraint(
-            "selection IN ('none', 'meddic', 'meddpicc', 'bant', 'spiced', 'custom')",
+            "selection IN ('none', 'meddic', 'meddicc', 'meddpicc', 'bant', 'spiced', 'custom')",
             name="ck_methodology_settings_selection",
         ),
         CheckConstraint(

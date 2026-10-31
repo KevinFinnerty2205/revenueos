@@ -49,6 +49,7 @@ from revenueos.models import (
     CommercialPlanVersion,
     CommercialStateEvent,
     Company,
+    CompanyKnowledgeSource,
     Contact,
     ContactFieldSource,
     ContactSuppression,
@@ -1415,6 +1416,9 @@ async def _delete_organisation_records(
         await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
         await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
         await session.execute(delete(Company).where(Company.organisation_id == organisation_id))
+        await session.execute(
+            delete(CompanyKnowledgeSource).where(CompanyKnowledgeSource.organisation_id == organisation_id)
+        )
         await session.execute(
             delete(DataNoticeAcknowledgement).where(DataNoticeAcknowledgement.organisation_id == organisation_id)
         )
@@ -3477,6 +3481,11 @@ async def _export_payload(
         select(SellingProfileRevision)
         .where(SellingProfileRevision.organisation_id == organisation_id)
         .order_by(SellingProfileRevision.profile_id, SellingProfileRevision.revision_number)
+    )
+    company_knowledge_sources = await rows(
+        select(CompanyKnowledgeSource)
+        .where(CompanyKnowledgeSource.organisation_id == organisation_id)
+        .order_by(CompanyKnowledgeSource.created_at, CompanyKnowledgeSource.id)
     )
     action_proposals = await rows(
         select(ActionProposal)
@@ -5656,6 +5665,25 @@ async def _export_payload(
                 ),
             )
             for item in selling_profile_revisions
+        ],
+        "companyKnowledgeSources": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "source_kind",
+                    "label",
+                    "website_url",
+                    "source_text",
+                    "content_fingerprint",
+                    "processing_status",
+                    "failure_code",
+                    "created_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in company_knowledge_sources
         ],
         "actionProposals": [
             _columns(

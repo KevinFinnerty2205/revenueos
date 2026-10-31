@@ -354,7 +354,7 @@ test("commercial settings are clear, keyboard reachable and responsive", async (
   page,
 }) => {
   await routeSettings(page);
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
 
   const plan = page.getByRole("region", { name: "Plan access" });
   await expect(plan).toBeVisible();
@@ -387,7 +387,7 @@ test("test billing checkout preparation is keyboard reachable and responsive", a
   page,
 }) => {
   await routeSettings(page);
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
 
   const billing = page.getByRole("region", { name: "Subscription & invoices" });
   await expect(billing).toBeVisible();
@@ -418,7 +418,7 @@ test("test billing checkout preparation is keyboard reachable and responsive", a
 
 test("Credits settings are clear, bounded and responsive", async ({ page }) => {
   await routeSettings(page);
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
 
   const credits = page.getByRole("region", { name: "Oryntela Credits" });
   await expect(credits).toBeVisible();
@@ -455,7 +455,7 @@ test("Prospect live-provider readiness is clear and responsive", async ({
   page,
 }) => {
   await routeSettings(page);
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
 
   const prospect = page.getByRole("region", { name: "Prospect" });
   await expect(prospect).toBeVisible();
@@ -511,7 +511,7 @@ test("commercial settings recovery is keyboard operable and restores focus", asy
           },
     );
   });
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
 
   const plan = page.getByRole("region", { name: "Plan access" });
   const retry = plan.getByRole("button", { name: "Try again" });

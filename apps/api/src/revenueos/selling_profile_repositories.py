@@ -6,7 +6,12 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from revenueos.models import OrganisationMembership, SellingProfile, SellingProfileRevision
+from revenueos.models import (
+    CompanyKnowledgeSource,
+    OrganisationMembership,
+    SellingProfile,
+    SellingProfileRevision,
+)
 
 
 class SellingProfileRepository:
@@ -102,3 +107,50 @@ class SellingProfileRepository:
 
     def add(self, row: SellingProfile | SellingProfileRevision) -> None:
         self.session.add(row)
+
+    async def knowledge_sources(self, organisation_id: UUID) -> list[CompanyKnowledgeSource]:
+        values = await self.session.scalars(
+            select(CompanyKnowledgeSource)
+            .where(CompanyKnowledgeSource.organisation_id == organisation_id)
+            .order_by(CompanyKnowledgeSource.created_at.desc(), CompanyKnowledgeSource.id.desc())
+            .limit(100)
+        )
+        return list(values.all())
+
+    async def knowledge_source_by_idempotency(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        idempotency_key: str,
+    ) -> CompanyKnowledgeSource | None:
+        return cast(
+            CompanyKnowledgeSource | None,
+            await self.session.scalar(
+                select(CompanyKnowledgeSource).where(
+                    CompanyKnowledgeSource.organisation_id == organisation_id,
+                    CompanyKnowledgeSource.created_by_user_id == user_id,
+                    CompanyKnowledgeSource.idempotency_key == idempotency_key,
+                )
+            ),
+        )
+
+    async def knowledge_source(
+        self,
+        organisation_id: UUID,
+        source_id: UUID,
+    ) -> CompanyKnowledgeSource | None:
+        return cast(
+            CompanyKnowledgeSource | None,
+            await self.session.scalar(
+                select(CompanyKnowledgeSource).where(
+                    CompanyKnowledgeSource.organisation_id == organisation_id,
+                    CompanyKnowledgeSource.id == source_id,
+                )
+            ),
+        )
+
+    def add_knowledge_source(self, row: CompanyKnowledgeSource) -> None:
+        self.session.add(row)
+
+    async def delete_knowledge_source(self, row: CompanyKnowledgeSource) -> None:
+        await self.session.delete(row)

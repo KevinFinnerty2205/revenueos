@@ -105,6 +105,7 @@ from revenueos.models import (
     ClosedWonHandoverRevision,
     ClosedWonHandoverSource,
     Company,
+    CompanyKnowledgeSource,
     Contact,
     CreateApprovedContentItem,
     CreateBusinessCase,
@@ -142,6 +143,7 @@ from revenueos.models import (
     Task,
 )
 from revenueos.selling_profile_contracts import (
+    CompanyKnowledgeSourceCreate,
     SellingProfileApproveRequest,
     SellingProfileContent,
     SellingProfileDraftCreate,
@@ -150,8 +152,10 @@ from revenueos.selling_profile_services import SellingProfileService
 from revenueos.tenant import Role, TenantContext
 from revenueos.visual_storage import VisualStorage, VisualStorageError, create_visual_storage
 
-OWNER_DEMO_DATASET_VERSION = 21
+OWNER_DEMO_DATASET_VERSION = 22
 OWNER_PROFILE_KEY = "owner-demo-selling-profile-v1"
+OWNER_KNOWLEDGE_WEBSITE_KEY = "owner-demo-knowledge-website-v1"
+OWNER_KNOWLEDGE_TEXT_KEY = "owner-demo-knowledge-text-v1"
 OWNER_VALUE_MODEL_KEY = "owner-demo-value-model-v1"
 OWNER_BUSINESS_CASE_KEY = "owner-demo-business-case-v1"
 OWNER_BUSINESS_CASE_CALCULATION_KEY = "owner-demo-business-case-calculation-v1"
@@ -174,6 +178,8 @@ BASE_DEMO_DATASET_VERSION = 18
 OWNER_EXTENSION_MANIFEST_KEYS = frozenset(
     {
         "selling_profile_revision_id",
+        "knowledge_website_source_id",
+        "knowledge_text_source_id",
         "value_model_id",
         "business_case_id",
         "business_case_version_id",
@@ -1195,7 +1201,7 @@ def _validated_base_reservation(
     created_at_raw = raw_original.get("createdAt")
     updated_at_raw = raw_original.get("updatedAt")
     if (
-        selection not in {"none", "meddic", "meddpicc", "bant", "spiced", "custom"}
+        selection not in {"none", "meddic", "meddicc", "meddpicc", "bant", "spiced", "custom"}
         or (selection == "custom") != (custom_definition_id_raw is not None)
         or (custom_definition_id_raw is not None and not isinstance(custom_definition_id_raw, str))
         or not isinstance(updated_by_user_id_raw, str)
@@ -1566,42 +1572,110 @@ def _selling_profile_content() -> SellingProfileContent:
     return SellingProfileContent.model_validate(
         {
             "companyDescription": (
-                "Oryntela helps relationship-led revenue teams preserve customer context, review evidence and "
-                "coordinate responsible follow-through."
+                "Oryntela helps GTM teams prepare for customer conversations, preserve trustworthy notes and "
+                "follow through with evidence-backed context across long relationships."
             ),
             "offerings": [
                 {
-                    "name": "Oryntela Sales Brain",
+                    "name": "Oryntela Conversation Intelligence",
                     "description": (
-                        "A source-aware workspace for account research, interactions, deal review and "
-                        "seller-approved next actions."
+                        "A calm, source-aware workspace for preparation, meetings, phone calls, notes, "
+                        "framework review and seller-approved follow-up."
                     ),
                     "whoNormallyBuys": ["Founders", "Revenue leaders", "Relationship-led sales teams"],
                     "problemsSolved": [
-                        "Scattered relationship context",
-                        "Inconsistent deal follow-through",
-                        "Unclear handover from sales to delivery",
+                        "Scattered conversation context",
+                        "Important commitments lost between meetings",
+                        "Generic preparation that ignores prior conversations",
                     ],
                     "intendedOutcomes": [
-                        "More consistent deal review",
-                        "Clearer customer-owned next steps",
-                        "A reviewed Closed-Won Handover",
+                        "Better prepared customer conversations",
+                        "Personal notes that remain intact",
+                        "Clearer reviewed follow-up and unresolved questions",
                     ],
                     "differentiators": [
                         "Evidence-aware human review",
-                        "Source-labelled seller and customer context",
-                        "Provider-neutral controls and kill switches",
+                        "Source-labelled conversation memory",
+                        "Meetings, calls and in-person notes in one restrained workflow",
                     ],
                     "competitorsAlternatives": ["Manual notes", "CRM-only workflows", "Disconnected AI tools"],
+                    "commonObjections": [
+                        "We already take notes — Oryntela keeps the original notes separate and makes prior context usable.",
+                        "We do not want another CRM — Opportunities are optional in the conversation workflow.",
+                    ],
                     "approvedProof": ["Approved synthetic owner demonstration"],
                     "approvedClaims": [
-                        "Keeps approved selling context available to authorised organisation members",
-                        "Requires explicit review before customer-facing use",
+                        "Keeps approved conversation context available to authorised organisation members",
+                        "Preserves personal notes when later processing is unavailable",
                     ],
                 }
             ],
         }
     )
+
+
+OWNER_KNOWLEDGE_URL = "https://northstar-facilities.example/"
+OWNER_KNOWLEDGE_TEXT = (
+    "Synthetic approved context: Oryntela supports preparation, personal notes, evidence review and follow-up "
+    "for meetings, phone calls and in-person conversations. It does not replace a CRM, fabricate buyer facts "
+    "or send follow-up without an authorised user action."
+)
+
+
+async def _seed_company_knowledge_sources(
+    service: SellingProfileService,
+) -> tuple[UUID, UUID]:
+    requests = (
+        CompanyKnowledgeSourceCreate(
+            source_kind="website",
+            label="[DEMO] Oryntela website address",
+            website_url=OWNER_KNOWLEDGE_URL,
+            source_text=None,
+            authority_confirmed=True,
+            idempotency_key=OWNER_KNOWLEDGE_WEBSITE_KEY,
+        ),
+        CompanyKnowledgeSourceCreate(
+            source_kind="text_file",
+            label="[DEMO] Approved conversation product brief.txt",
+            website_url=None,
+            source_text=OWNER_KNOWLEDGE_TEXT,
+            authority_confirmed=True,
+            idempotency_key=OWNER_KNOWLEDGE_TEXT_KEY,
+        ),
+    )
+    saved = (
+        await service.create_knowledge_source(requests[0]),
+        await service.create_knowledge_source(requests[1]),
+    )
+    expected = (
+        (
+            "website",
+            "[DEMO] Oryntela website address",
+            OWNER_KNOWLEDGE_URL,
+            0,
+            hashlib.sha256(OWNER_KNOWLEDGE_URL.encode()).hexdigest(),
+            "saved_unprocessed",
+        ),
+        (
+            "text_file",
+            "[DEMO] Approved conversation product brief.txt",
+            None,
+            len(OWNER_KNOWLEDGE_TEXT),
+            hashlib.sha256(OWNER_KNOWLEDGE_TEXT.encode()).hexdigest(),
+            "ready_for_review",
+        ),
+    )
+    for source, values in zip(saved, expected, strict=True):
+        if (
+            source.source_kind,
+            source.label,
+            source.website_url,
+            source.character_count,
+            source.content_fingerprint,
+            source.processing_status,
+        ) != values:
+            raise _owner_collision("Company Knowledge source")
+    return saved[0].id, saved[1].id
 
 
 def _value_model_definition() -> ValueModelDefinition:
@@ -2521,7 +2595,7 @@ def _template_bytes() -> bytes:
 async def _seed_selling_profile(
     session_factory: async_sessionmaker[AsyncSession],
     tenant: TenantContext,
-) -> UUID:
+) -> tuple[UUID, UUID, UUID]:
     async with session_factory() as session:
         await set_tenant_database_context(session, tenant.organisation_id)
         owner_revision = await _validated_owner_profile(session, tenant)
@@ -2548,10 +2622,12 @@ async def _seed_selling_profile(
             owner_revision = await _validated_owner_profile(session, tenant)
             if owner_revision is None:
                 raise ValueError("Owner demo Company & Selling Profile could not be reloaded.")
-            return owner_revision.id
+            website_source_id, text_source_id = await _seed_company_knowledge_sources(service)
+            return owner_revision.id, website_source_id, text_source_id
         if owner_revision.state != "approved":
             raise ValueError("Owner demo Company & Selling Profile is not in an approved state.")
-        return owner_revision.id
+        website_source_id, text_source_id = await _seed_company_knowledge_sources(service)
+        return owner_revision.id, website_source_id, text_source_id
 
 
 async def _seed_business_case(
@@ -3717,7 +3793,11 @@ async def seed_owner_demo_data(
     base = await _owner_base_fixture(session_factory, tenant, active_settings)
     company_id, opportunity_id, _, _ = demo_ids(organisation_id)
     contact_id = demo_phone_contact_id(organisation_id)
-    selling_profile_revision_id = await _seed_selling_profile(session_factory, tenant)
+    (
+        selling_profile_revision_id,
+        knowledge_website_source_id,
+        knowledge_text_source_id,
+    ) = await _seed_selling_profile(session_factory, tenant)
     value_model_id, business_case_id, business_case_version_id = await _seed_business_case(
         session_factory,
         tenant,
@@ -3758,6 +3838,8 @@ async def seed_owner_demo_data(
     )
     extensions = {
         "selling_profile_revision_id": selling_profile_revision_id,
+        "knowledge_website_source_id": knowledge_website_source_id,
+        "knowledge_text_source_id": knowledge_text_source_id,
         "value_model_id": value_model_id,
         "business_case_id": business_case_id,
         "business_case_version_id": business_case_version_id,
@@ -3918,6 +4000,12 @@ async def reset_owner_demo_extensions(
                     CreatePresentation.idempotency_key == OWNER_PRESENTATION_KEY,
                 )
             ),
+            await session.scalar(
+                select(CompanyKnowledgeSource.id).where(
+                    CompanyKnowledgeSource.organisation_id == organisation_id,
+                    CompanyKnowledgeSource.idempotency_key.in_((OWNER_KNOWLEDGE_WEBSITE_KEY, OWNER_KNOWLEDGE_TEXT_KEY)),
+                )
+            ),
         )
         reserved_rows_exist = any(row is not None for row in reserved_rows)
         deterministic_template = await session.scalar(
@@ -3960,6 +4048,7 @@ async def reset_owner_demo_extensions(
         if company is not None and (tenant is None or company.owner_user_id != tenant.user_id):
             raise ValueError("Owner demo reset refused: the exact synthetic Account owner could not be verified.")
         owner_revision: SellingProfileRevision | None = None
+        owner_knowledge_sources: list[CompanyKnowledgeSource] = []
         value_model: CreateValueModel | None = None
         value_model_version: CreateValueModelVersion | None = None
         business_case: CreateBusinessCase | None = None
@@ -3969,6 +4058,51 @@ async def reset_owner_demo_extensions(
         validated_handover: ClosedWonHandover | None = None
         if tenant is not None:
             owner_revision = await _validated_owner_profile(session, tenant)
+            owner_knowledge_sources = list(
+                (
+                    await session.scalars(
+                        select(CompanyKnowledgeSource).where(
+                            CompanyKnowledgeSource.organisation_id == organisation_id,
+                            CompanyKnowledgeSource.idempotency_key.in_(
+                                (OWNER_KNOWLEDGE_WEBSITE_KEY, OWNER_KNOWLEDGE_TEXT_KEY)
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            if owner_knowledge_sources:
+                by_key = {source.idempotency_key: source for source in owner_knowledge_sources}
+                website_source = by_key.get(OWNER_KNOWLEDGE_WEBSITE_KEY)
+                text_source = by_key.get(OWNER_KNOWLEDGE_TEXT_KEY)
+                if (
+                    len(owner_knowledge_sources) != 2
+                    or website_source is None
+                    or text_source is None
+                    or website_source.source_kind != "website"
+                    or website_source.label != "[DEMO] Oryntela website address"
+                    or website_source.website_url != OWNER_KNOWLEDGE_URL
+                    or website_source.source_text is not None
+                    or website_source.content_fingerprint != hashlib.sha256(OWNER_KNOWLEDGE_URL.encode()).hexdigest()
+                    or website_source.processing_status != "saved_unprocessed"
+                    or website_source.created_by_user_id != tenant.user_id
+                    or text_source.source_kind != "text_file"
+                    or text_source.label != "[DEMO] Approved conversation product brief.txt"
+                    or text_source.website_url is not None
+                    or text_source.source_text != OWNER_KNOWLEDGE_TEXT
+                    or text_source.content_fingerprint != hashlib.sha256(OWNER_KNOWLEDGE_TEXT.encode()).hexdigest()
+                    or text_source.processing_status != "ready_for_review"
+                    or text_source.created_by_user_id != tenant.user_id
+                    or (
+                        owner_extensions is not None
+                        and (
+                            owner_extensions["knowledge_website_source_id"] != website_source.id
+                            or owner_extensions["knowledge_text_source_id"] != text_source.id
+                        )
+                    )
+                ):
+                    raise _owner_collision("Company Knowledge source")
+            elif owner_extensions is not None:
+                raise _owner_collision("Company Knowledge source")
             business_service = BusinessCaseService(session, tenant, active_settings)
             validated_model = await _validated_owner_value_model(session, tenant, business_service)
             if validated_model is not None:
@@ -4205,6 +4339,7 @@ async def reset_owner_demo_extensions(
         # owner-presentation link is legitimate user data and remains untouched.
         owner_revision_ids = [owner_revision.id] if owner_revision is not None else []
         owner_profile_ids = [owner_revision.profile_id] if owner_revision is not None else []
+        owner_knowledge_source_ids = [source.id for source in owner_knowledge_sources]
         captured_keys = tuple(sorted({*template_storage_keys, *presentation_storage_keys}))
         _validated_cleanup_storage_keys(organisation_id, list(captured_keys))
         cleanup_keys = tuple(sorted({*pending_cleanup_keys, *captured_keys}))
@@ -4253,7 +4388,13 @@ async def reset_owner_demo_extensions(
         await session.execute(
             delete(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
-                BetaSystemEvent.subject_id.in_(owner_revision_ids),
+                BetaSystemEvent.subject_id.in_((*owner_revision_ids, *owner_knowledge_source_ids)),
+            )
+        )
+        await session.execute(
+            delete(CompanyKnowledgeSource).where(
+                CompanyKnowledgeSource.organisation_id == organisation_id,
+                CompanyKnowledgeSource.id.in_(owner_knowledge_source_ids),
             )
         )
         await session.execute(

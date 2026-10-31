@@ -112,6 +112,34 @@ class DebriefRepository:
         row = (await self.session.execute(statement)).one_or_none()
         return DebriefSessionRecord(row[0], row[1]) if row is not None else None
 
+    async def latest_session(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        user_id: UUID,
+    ) -> DebriefSessionRecord | None:
+        row = (
+            await self.session.execute(
+                select(CaptureSession, DebriefSession)
+                .join(
+                    DebriefSession,
+                    and_(
+                        DebriefSession.organisation_id == CaptureSession.organisation_id,
+                        DebriefSession.id == CaptureSession.id,
+                    ),
+                )
+                .where(
+                    DebriefSession.organisation_id == organisation_id,
+                    DebriefSession.interaction_id == interaction_id,
+                    DebriefSession.started_by_user_id == user_id,
+                    CaptureSession.deleted_at.is_(None),
+                )
+                .order_by(DebriefSession.created_at.desc(), DebriefSession.id.desc())
+                .limit(1)
+            )
+        ).one_or_none()
+        return DebriefSessionRecord(row[0], row[1]) if row is not None else None
+
     async def count_sessions_since(self, organisation_id: UUID, since: datetime) -> int:
         count = await self.session.scalar(
             select(func.count())

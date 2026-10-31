@@ -13,6 +13,7 @@ import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { RecordingFoundation } from "@/components/recording-foundation";
 import { ImportedCallRecording } from "@/components/imported-call-recording";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
+import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
 
 export function InteractionDetail({
   interactionId,
@@ -45,7 +46,7 @@ export function InteractionDetail({
           setError(
             requestError instanceof Error
               ? requestError.message
-              : "The interaction could not be loaded.",
+              : "The conversation could not be loaded.",
           );
         })
         .finally(() => {
@@ -72,7 +73,7 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be started.",
+          : "The conversation could not be started.",
       );
     } finally {
       setStarting(false);
@@ -96,7 +97,7 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be completed.",
+          : "The conversation could not be completed.",
       );
     } finally {
       setCompleting(false);
@@ -104,12 +105,12 @@ export function InteractionDetail({
   }
 
   if (loading) {
-    return <p role="status">Loading interaction…</p>;
+    return <p role="status">Loading conversation…</p>;
   }
   if (!interaction) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
-        <p role="alert">{error ?? "The interaction was not found."}</p>
+        <p role="alert">{error ?? "The conversation was not found."}</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
@@ -118,8 +119,8 @@ export function InteractionDetail({
           >
             Try again
           </button>
-          <Link href="/interactions" className="secondary-button">
-            Return to Interactions
+          <Link href="/conversations" className="secondary-button">
+            Return to conversations
           </Link>
         </div>
       </div>
@@ -138,9 +139,9 @@ export function InteractionDetail({
     <section aria-labelledby="interaction-detail-title">
       <Link
         className="text-sm font-bold text-brand-secondary hover:underline"
-        href="/interactions"
+        href="/conversations"
       >
-        Back to interactions
+        Back to conversations
       </Link>
       <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
@@ -149,7 +150,7 @@ export function InteractionDetail({
           </span>
           <span
             role="status"
-            aria-label="Interaction lifecycle status"
+            aria-label="Conversation lifecycle status"
             className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
           >
             {humanise(interaction.lifecycleStatus)}
@@ -247,7 +248,7 @@ export function InteractionDetail({
             className={
               isActive || isCompleted ? "secondary-button" : "primary-button"
             }
-            href={`/interactions/${interaction.id}/companion`}
+            href={`/conversations/${interaction.id}/workspace`}
           >
             {companionLabel}
           </Link>
@@ -345,13 +346,13 @@ export function InteractionDetail({
               </button>
             </>
           ) : null}
-          {interaction.meetingId ? (
-            <Link
-              className={isCompleted ? "primary-button" : "secondary-button"}
-              href={`/meetings/${interaction.meetingId}`}
+          {isCompleted ? (
+            <a
+              className="primary-button"
+              href={interaction.meetingId ? "#enhanced-notes" : "#debrief"}
             >
-              Review meeting intelligence
-            </Link>
+              Review notes and follow-up
+            </a>
           ) : null}
           {interaction.interactionType === "online_meeting" &&
           interaction.meetingUrl ? (
@@ -382,8 +383,15 @@ export function InteractionDetail({
             <PostInteractionCapture
               interactionId={interaction.id}
               interactionType={interaction.interactionType}
+              opportunityId={interaction.opportunityId}
+              restoreLatest
             />
           </BetaFeatureGate>
+        </div>
+      ) : null}
+      {isCompleted && interaction.meetingId ? (
+        <div className="mt-6 scroll-mt-6" id="enhanced-notes">
+          <MeetingIntelligenceWorkspace meetingId={interaction.meetingId} />
         </div>
       ) : null}
       {!isCompleted ? (

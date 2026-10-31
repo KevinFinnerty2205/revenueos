@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from revenueos.business_repositories import PageResult
 from revenueos.models import (
+    CandidateEvidence,
     CaptureSession,
     Company,
     Contact,
@@ -22,6 +23,7 @@ from revenueos.models import (
     OrganisationMembership,
     PreInteractionBrief,
     RecordingSession,
+    TranscriptVersion,
 )
 
 
@@ -113,7 +115,47 @@ class InteractionRepository:
             Interaction.deleted_at.is_(None),
         ]
         if search:
-            conditions.append(Interaction.title.ilike(f"%{search}%"))
+            pattern = f"%{search}%"
+            conditions.append(
+                or_(
+                    Interaction.title.ilike(pattern),
+                    Interaction.company_id.in_(
+                        select(Company.id).where(
+                            Company.organisation_id == organisation_id,
+                            Company.archived_at.is_(None),
+                            Company.name.ilike(pattern),
+                        )
+                    ),
+                    Interaction.contact_id.in_(
+                        select(Contact.id).where(
+                            Contact.organisation_id == organisation_id,
+                            Contact.archived_at.is_(None),
+                            or_(
+                                Contact.first_name.ilike(pattern),
+                                Contact.last_name.ilike(pattern),
+                                (Contact.first_name + " " + Contact.last_name).ilike(pattern),
+                            ),
+                        )
+                    ),
+                    select(TranscriptVersion.id)
+                    .where(
+                        TranscriptVersion.organisation_id == organisation_id,
+                        TranscriptVersion.interaction_id == Interaction.id,
+                        TranscriptVersion.deleted_at.is_(None),
+                        TranscriptVersion.status != "deleted",
+                        TranscriptVersion.raw_text.ilike(pattern),
+                    )
+                    .exists(),
+                    select(CandidateEvidence.id)
+                    .where(
+                        CandidateEvidence.organisation_id == organisation_id,
+                        CandidateEvidence.interaction_id == Interaction.id,
+                        CandidateEvidence.review_state == "accepted",
+                        CandidateEvidence.statement.ilike(pattern),
+                    )
+                    .exists(),
+                )
+            )
         if company_id:
             conditions.append(Interaction.company_id == company_id)
         if opportunity_id:

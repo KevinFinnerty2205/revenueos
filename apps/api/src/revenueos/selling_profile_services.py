@@ -6,6 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from typing import cast, overload
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -14,8 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
-from revenueos.models import BetaSystemEvent, SellingProfile, SellingProfileRevision
+from revenueos.models import BetaSystemEvent, CompanyKnowledgeSource, SellingProfile, SellingProfileRevision
 from revenueos.selling_profile_contracts import (
+    CompanyKnowledgeSourceCreate,
+    CompanyKnowledgeSourceResponse,
+    KnowledgeSourceKind,
+    KnowledgeSourceStatus,
     SellingProfileApproveRequest,
     SellingProfileContent,
     SellingProfileContextResponse,
@@ -69,6 +74,89 @@ class SellingProfileService:
                 "Approved organisation context is available. Treat it as seller-supplied context, not customer Evidence."
             ),
         )
+
+    async def knowledge_sources(self) -> tuple[CompanyKnowledgeSourceResponse, ...]:
+        await self._require_admin()
+        return tuple(
+            self._knowledge_source_response(item)
+            for item in await self.repository.knowledge_sources(self.tenant.organisation_id)
+        )
+
+    async def create_knowledge_source(
+        self,
+        request: CompanyKnowledgeSourceCreate,
+    ) -> CompanyKnowledgeSourceResponse:
+        await self._require_admin()
+        website_url = self._normalise_website(request.website_url) if request.website_url else None
+        source_text = request.source_text
+        fingerprint_input = website_url if website_url is not None else source_text
+        if fingerprint_input is None:  # The request contract already prevents this.
+            raise PublicAPIError("knowledge_source_invalid", "The knowledge source is incomplete.", 422)
+        fingerprint = hashlib.sha256(fingerprint_input.encode()).hexdigest()
+        existing = await self.repository.knowledge_source_by_idempotency(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            request.idempotency_key,
+        )
+        if existing is not None:
+            if (
+                existing.source_kind != request.source_kind
+                or existing.label != request.label
+                or existing.website_url != website_url
+                or existing.source_text != source_text
+                or existing.content_fingerprint != fingerprint
+            ):
+                raise PublicAPIError(
+                    "knowledge_source_idempotency_conflict",
+                    "This retry key was already used for different company knowledge.",
+                    409,
+                )
+            return self._knowledge_source_response(existing)
+
+        status: KnowledgeSourceStatus = "saved_unprocessed" if request.source_kind == "website" else "ready_for_review"
+        source = CompanyKnowledgeSource(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            source_kind=request.source_kind,
+            label=request.label,
+            website_url=website_url,
+            source_text=source_text,
+            content_fingerprint=fingerprint,
+            processing_status=status,
+            failure_code=None,
+            created_by_user_id=self.tenant.user_id,
+            idempotency_key=request.idempotency_key,
+        )
+        self.repository.add_knowledge_source(source)
+        self._event(
+            "company_knowledge_source_added",
+            source.id,
+            {
+                "source_kind": request.source_kind,
+                "processing_status": status,
+                "character_count": len(source_text or ""),
+            },
+        )
+        await self._commit("The company knowledge source could not be saved.")
+        self._log_knowledge_source(source)
+        return self._knowledge_source_response(source)
+
+    async def delete_knowledge_source(self, source_id: UUID) -> None:
+        await self._require_admin()
+        source = await self.repository.knowledge_source(self.tenant.organisation_id, source_id)
+        if source is None:
+            raise PublicAPIError(
+                "knowledge_source_not_found",
+                "The company knowledge source was not found.",
+                404,
+            )
+        await self.repository.delete_knowledge_source(source)
+        self._event(
+            "company_knowledge_source_deleted",
+            source.id,
+            {"source_kind": source.source_kind},
+        )
+        await self._commit("The company knowledge source could not be deleted.")
 
     async def create_draft(self, request: SellingProfileDraftCreate) -> SellingProfileManagementResponse:
         await self._require_admin()
@@ -280,6 +368,75 @@ class SellingProfileService:
                 subject_id=subject_id,
                 metadata_json=metadata,
             )
+        )
+
+    @staticmethod
+    def _normalise_website(value: str) -> str:
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise PublicAPIError(
+                "knowledge_website_invalid",
+                "Enter a complete http or https website address.",
+                422,
+            )
+        if parsed.username is not None or parsed.password is not None:
+            raise PublicAPIError(
+                "knowledge_website_invalid",
+                "Website addresses cannot include credentials.",
+                422,
+            )
+        try:
+            parsed_port = parsed.port
+        except ValueError as exc:
+            raise PublicAPIError(
+                "knowledge_website_invalid",
+                "Enter a complete http or https website address.",
+                422,
+            ) from exc
+        port = f":{parsed_port}" if parsed_port is not None else ""
+        netloc = f"{parsed.hostname.lower()}{port}"
+        path = parsed.path.rstrip("/") or "/"
+        return urlunsplit((parsed.scheme.lower(), netloc, path, "", ""))
+
+    @classmethod
+    def _knowledge_source_response(
+        cls,
+        source: CompanyKnowledgeSource,
+    ) -> CompanyKnowledgeSourceResponse:
+        status = cast(KnowledgeSourceStatus, source.processing_status)
+        safe_message = (
+            "Website address saved only. Oryntela has not fetched or learned this website."
+            if status == "saved_unprocessed"
+            else "Source text is stored for an administrator to review against the company profile."
+            if status == "ready_for_review"
+            else "This source could not be prepared. The approved company profile is unchanged."
+        )
+        return CompanyKnowledgeSourceResponse(
+            id=source.id,
+            source_kind=cast(KnowledgeSourceKind, source.source_kind),
+            label=source.label,
+            website_url=source.website_url,
+            source_text=source.source_text,
+            character_count=len(source.source_text or ""),
+            content_fingerprint=source.content_fingerprint,
+            processing_status=status,
+            failure_code=source.failure_code,
+            created_by_user_id=source.created_by_user_id,
+            created_at=cls._as_utc(source.created_at),
+            updated_at=cls._as_utc(source.updated_at),
+            safe_message=safe_message,
+        )
+
+    def _log_knowledge_source(self, source: CompanyKnowledgeSource) -> None:
+        logger.info(
+            "company_knowledge_source_added",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "user_id": str(self.tenant.user_id),
+                "source_id": str(source.id),
+                "source_kind": source.source_kind,
+                "processing_status": source.processing_status,
+            },
         )
 
     @staticmethod

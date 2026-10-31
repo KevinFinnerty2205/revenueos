@@ -4,17 +4,8 @@ import type { MeResponse } from "@revenueos/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
-import { BillingSubscriptionSettings } from "@/components/billing-subscription-settings";
-import { CommercialPlanSettings } from "@/components/commercial-plan-settings";
-import { CreditsSettings } from "@/components/credits-settings";
-import { CRMImportOnboarding } from "@/components/crm-import-onboarding";
-import { CRMSettings } from "@/components/crm-settings";
-import { EngageSettings } from "@/components/engage-settings";
+import { ConversationDeliveryPreferences } from "@/components/conversation-delivery-preferences";
 import { PageHeader } from "@/components/page-header";
-import { PipelineSettings } from "@/components/pipeline-settings";
-import { ProspectModuleSettings } from "@/components/prospect-module-settings";
-import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
-import { SellingProfileSettings } from "@/components/selling-profile-settings";
 import { apiRequest } from "@/lib/api";
 
 export function SettingsExperience() {
@@ -96,7 +87,7 @@ export function SettingsExperience() {
         title="Settings"
         description={
           isAdmin
-            ? "Manage your organisation, sales setup, integrations, commercial access and safety controls."
+            ? "Manage conversation briefings, members, data and private-beta safety controls."
             : "Review your workspace identity and return to the guidance that helps you get started."
         }
       />
@@ -123,6 +114,8 @@ export function SettingsExperience() {
         </Link>
       </section>
 
+      <ConversationDeliveryPreferences />
+
       {isAdmin ? (
         <>
           <nav
@@ -132,22 +125,17 @@ export function SettingsExperience() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Go to
             </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {[
                 {
-                  href: "#company-selling-profile",
-                  label: "Company profile",
-                  detail: "Approved company and offer context",
+                  href: "/knowledge",
+                  label: "Company knowledge",
+                  detail: "Sources and approved company understanding",
                 },
                 {
-                  href: "#commercial-settings",
-                  label: "Plan & billing",
-                  detail: "Access, billing and Credits",
-                },
-                {
-                  href: "#sales-settings",
-                  label: "Sales setup",
-                  detail: "Prospect, Engage, CRM and methodology",
+                  href: "/frameworks",
+                  label: "Frameworks",
+                  detail: "Notes-only, BANT, SPICED, MEDDICC or MEDDPICC",
                 },
                 {
                   href: "#workspace-administration",
@@ -170,20 +158,6 @@ export function SettingsExperience() {
               ))}
             </div>
           </nav>
-          <SellingProfileSettings />
-          <div id="commercial-settings" className="scroll-mt-6 space-y-8">
-            <CommercialPlanSettings />
-            <BillingSubscriptionSettings />
-            <CreditsSettings />
-          </div>
-          <div id="sales-settings" className="scroll-mt-6 space-y-8">
-            <ProspectModuleSettings />
-            <EngageSettings />
-            <CRMSettings />
-            <CRMImportOnboarding />
-            <PipelineSettings />
-            <SalesMethodologySettings />
-          </div>
           <div id="workspace-administration" className="scroll-mt-6 space-y-8">
             <BetaAdmin currentUserId={me.user.id} />
           </div>

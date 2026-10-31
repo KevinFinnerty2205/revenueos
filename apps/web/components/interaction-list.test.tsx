@@ -81,7 +81,7 @@ describe("InteractionList", () => {
 
     render(<InteractionList />);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading interactions",
+      "Loading conversations",
     );
     expect(
       await screen.findByRole("heading", { name: "Acme discovery" }),
@@ -93,7 +93,7 @@ describe("InteractionList", () => {
     expect(screen.getByText("Brief ready")).toBeVisible();
     expect(screen.getByRole("link", { name: "Open brief" })).toHaveAttribute(
       "href",
-      "/interactions/interaction-1#preparation",
+      "/conversations/interaction-1#preparation",
     );
     expect(
       screen.queryByText(/prompt|provider|worker/i),
@@ -114,9 +114,9 @@ describe("InteractionList", () => {
 
     render(<InteractionList />);
     expect(
-      await screen.findByRole("heading", { name: "No interactions found" }),
+      await screen.findByRole("heading", { name: "No conversations found" }),
     ).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Search interactions"), {
+    fireEvent.change(screen.getByLabelText("Search conversations"), {
       target: { value: "Acme discovery" },
     });
     fireEvent.change(screen.getByLabelText("Filter by type"), {
@@ -169,7 +169,7 @@ describe("InteractionList", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(
-      await screen.findByRole("heading", { name: "No interactions found" }),
+      await screen.findByRole("heading", { name: "No conversations found" }),
     ).toBeVisible();
   });
 

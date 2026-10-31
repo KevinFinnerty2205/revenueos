@@ -12,6 +12,9 @@ const profileContent = {
       intendedOutcomes: ["Clearer seller follow-through"],
       differentiators: ["Evidence-aware human review"],
       competitorsAlternatives: ["Manual notes and CRM-only workflows"],
+      commonObjections: [
+        "We already use a CRM — Oryntela complements systems of record.",
+      ],
       approvedProof: ["Approved internal product demonstration"],
       approvedClaims: ["Keeps approved context available to members"],
     },
@@ -78,6 +81,10 @@ test("administrator creates, reviews and approves selling context responsively",
       });
       return;
     }
+    if (url.pathname === "/api/v1/selling-profile/knowledge-sources") {
+      await route.fulfill({ json: [] });
+      return;
+    }
     if (url.pathname.startsWith("/api/v1/selling-profile")) {
       if (
         route.request().method() === "POST" &&
@@ -101,10 +108,10 @@ test("administrator creates, reviews and approves selling context responsively",
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/knowledge");
   const section = page.locator("#company-selling-profile");
   await expect(
-    section.getByRole("heading", { name: "Company & Selling Profile" }),
+    section.getByRole("heading", { name: "Company understanding" }),
   ).toBeVisible();
   await expect(
     section.getByText(/not customer Evidence, prospect research, CRM truth/i),

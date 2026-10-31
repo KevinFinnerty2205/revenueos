@@ -332,54 +332,22 @@ describe("Create", () => {
     expect(screen.queryByText("unsafe_pptx")).not.toBeInTheDocument();
   });
 
-  it("adds Create to desktop navigation without adding a fifth mobile item", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.endsWith("/api/v1/create/availability"))
-          return jsonResponse(availability);
-        if (url.endsWith("/api/v1/prospect/availability"))
-          return jsonResponse({ enabled: false });
-        if (url.endsWith("/api/v1/engage/availability"))
-          return jsonResponse({ enabled: false });
-        if (url.endsWith("/api/v1/beta/capabilities"))
-          return jsonResponse({ featureFlags: { engageEvents: false } });
-        return jsonResponse({}, 404);
-      }),
-    );
+  it("keeps Create out of the conversation-first default navigation", () => {
     render(<CoreNavigation />);
     const desktop = screen.getByRole("navigation", { name: "Main navigation" });
     expect(
-      await within(desktop).findByRole("link", { name: "Studio" }),
-    ).toHaveAttribute("href", "/create");
+      within(desktop).queryByRole("link", { name: /Studio|Create/ }),
+    ).not.toBeInTheDocument();
     const mobile = screen.getByRole("navigation", {
       name: "Mobile navigation",
     });
     expect(
-      within(mobile).queryByRole("link", { name: "Studio" }),
+      within(mobile).queryByRole("link", { name: /Studio|Create/ }),
     ).not.toBeInTheDocument();
     expect(within(mobile).getAllByRole("link")).toHaveLength(4);
-    const more = screen.getByRole("navigation", {
-      name: "More mobile destinations",
-    });
     expect(
-      within(more).getByRole("link", { name: "Accounts" }),
-    ).toHaveAttribute("href", "/companies");
-    expect(
-      within(more).getByRole("link", { name: "Pipeline" }),
-    ).toHaveAttribute("href", "/opportunities");
-    expect(within(more).getByRole("link", { name: "Tasks" })).toHaveAttribute(
-      "href",
-      "/tasks",
-    );
-    expect(
-      within(more).getByRole("link", { name: "Insights" }),
-    ).toHaveAttribute("href", "/insights");
-    expect(within(more).getByRole("link", { name: "Create" })).toHaveAttribute(
-      "href",
-      "/create",
-    );
+      screen.queryByRole("navigation", { name: "More mobile destinations" }),
+    ).not.toBeInTheDocument();
   });
 
   it("presents the plan before generation and keeps required slides fixed", async () => {
