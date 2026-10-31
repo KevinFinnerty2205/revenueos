@@ -8,7 +8,7 @@ export default function OnboardingPage() {
       <PageHeader
         eyebrow="Getting started"
         title="Get value from your first customer conversation"
-        description="A short, skippable path from a deal and its next interaction to a clear, reviewable follow-through."
+        description="A short, skippable path from company knowledge to a prepared conversation and clear, reviewable follow-through."
       />
       <TermsAcceptance source="trial_onboarding">
         <BetaOnboarding />

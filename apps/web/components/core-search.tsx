@@ -125,8 +125,8 @@ export function CoreSearch({
             Search your workspace
           </label>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Find an account, contact, opportunity or interaction. Search stays
-            inside your organisation and does not generate an AI answer.
+            Find a conversation, company or person. Supporting opportunity
+            records remain searchable, but stay out of the primary journey.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <input
@@ -135,7 +135,7 @@ export function CoreSearch({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="form-input flex-1"
-              placeholder="Try an account or deal name"
+              placeholder="Try a conversation, company or person"
               autoComplete="off"
             />
             <button type="submit" className="primary-button" disabled={loading}>
@@ -168,12 +168,22 @@ export function CoreSearch({
                   No matching work found
                 </h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Check the spelling or search using a shorter account, deal or
-                  interaction name.
+                  Check the spelling or search using a shorter conversation,
+                  company or person name.
                 </p>
               </div>
             ) : (
               <div className="grid gap-4">
+                <ResultGroup
+                  title="Conversations"
+                  items={results.interactions.map((interaction) => ({
+                    href: `/conversations/${interaction.id}`,
+                    title: interaction.title,
+                    detail: `${humanise(interaction.interactionType)} · ${humanise(
+                      interaction.lifecycleStatus,
+                    )}`,
+                  }))}
+                />
                 <ResultGroup
                   title="People"
                   items={results.contacts.map((contact) => ({
@@ -200,23 +210,13 @@ export function CoreSearch({
                       : humanise(opportunity.stage),
                   }))}
                 />
-                <ResultGroup
-                  title="Interactions"
-                  items={results.interactions.map((interaction) => ({
-                    href: `/interactions/${interaction.id}`,
-                    title: interaction.title,
-                    detail: `${humanise(interaction.interactionType)} · ${humanise(
-                      interaction.lifecycleStatus,
-                    )}`,
-                  }))}
-                />
               </div>
             )}
           </section>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
-            Start with the customer or deal you want to move forward. Recent
-            work remains on Home and your interaction timeline.
+            Start with the conversation or relationship you want to remember.
+            Recent work remains on Home and in conversation history.
           </div>
         )}
       </div>

@@ -151,7 +151,7 @@ export function OpportunityMethodology({
             Deal · evidence view
           </p>
           <h2 id="deal-methodology-title" className="form-legend mt-2">
-            Sales Methodology
+            Framework assessment
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             {methodology.definition

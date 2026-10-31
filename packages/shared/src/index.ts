@@ -1217,6 +1217,7 @@ export interface DailyAction {
   id: string;
   title: string;
   opportunityId: string;
+  interactionId: string | null;
   opportunityName: string;
   companyName: string | null;
   priority: "high" | "normal" | "low";
@@ -1323,6 +1324,42 @@ export interface DailyResponse {
   availability: DailyAvailability;
   hasOpportunities: boolean;
   caughtUp: boolean;
+}
+
+export interface DeliveryPreferenceResponse {
+  exists: boolean;
+  lockVersion: number;
+  timezone: string;
+  morningDigestEnabled: boolean;
+  morningDigestTime: string;
+  preMeetingEnabled: boolean;
+  preMeetingMinutes: number;
+  importedFromBrowserAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface BriefingPreviewResponse {
+  id: string;
+  kind: "morning_digest" | "pre_meeting";
+  status: "prepared" | "superseded" | "cancelled";
+  subject: string;
+  bodyText: string;
+  href: string;
+  preparedForAt: string;
+  duplicateSuppressed: boolean;
+}
+
+export interface ConversationWorkspaceResponse {
+  exists: boolean;
+  ownerUserId: string;
+  lockVersion: number;
+  liveNotes: string | null;
+  enhancedNotes: string | null;
+  followUpDraft: string | null;
+  followUpReviewed: boolean;
+  generationFingerprint: string | null;
+  importedFromBrowserAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface Meeting extends TenantEntity {
@@ -2842,7 +2879,8 @@ export interface OnlineMeetingTranscriptImport {
   safeMessage: string;
 }
 
-export type MethodologyKey = "meddic" | "meddpicc" | "bant" | "spiced";
+export type MethodologyKey =
+  "meddic" | "meddicc" | "meddpicc" | "bant" | "spiced";
 export type MethodologySelection = "none" | MethodologyKey | "custom";
 export type MethodologyState =
   "confirmed" | "partially_supported" | "unknown" | "conflicting" | "stale";
@@ -2970,6 +3008,60 @@ export interface OpportunityMethodologyResponse {
   projectionId: string | null;
   projection: MethodologyProjectionContent | null;
   generatedAt: string | null;
+}
+
+export interface ConversationThreadSummary {
+  id: string;
+  organisationId: string;
+  companyId: string | null;
+  name: string;
+  status: "active" | "archived";
+  interactionCount: number;
+  lastInteractionAt: string | null;
+  lockVersion: number;
+  createdByUserId: string;
+  updatedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationThreadAssignment {
+  interactionId: string;
+  thread: ConversationThreadSummary | null;
+  lockVersion: number;
+  confirmationKind: "user_confirmed" | "user_corrected" | null;
+  confirmedByUserId: string | null;
+  confirmedAt: string | null;
+}
+
+export interface ConversationThreadSuggestion {
+  thread: ConversationThreadSummary;
+  score: number;
+  reasons: string[];
+}
+
+export interface ConversationSourceContext {
+  sourceId: string;
+  interactionId: string;
+  interactionTitle: string;
+  occurredAt: string;
+}
+
+export interface ConversationFrameworkCoverage {
+  stateCounts: MethodologyStateCounts;
+  items: MethodologyProjectionItem[];
+  sourceConversations: ConversationSourceContext[];
+}
+
+export interface ConversationMemoryResponse {
+  state: "not_configured" | "current";
+  safeMessage: string;
+  definition: MethodologyDefinitionSummary | null;
+  assignment: ConversationThreadAssignment;
+  suggestions: ConversationThreadSuggestion[];
+  currentConversation: ConversationFrameworkCoverage | null;
+  confirmedThread: ConversationFrameworkCoverage | null;
+  generatedAt: string;
 }
 
 export interface MethodologyGenerationResponse extends OpportunityMethodologyResponse {
@@ -5757,6 +5849,7 @@ export interface SellingOffering {
   intendedOutcomes: string[];
   differentiators: string[];
   competitorsAlternatives: string[];
+  commonObjections: string[];
   approvedProof: string[];
   approvedClaims: string[];
 }
@@ -5804,4 +5897,41 @@ export interface SellingProfileContext {
   content: SellingProfileContent | null;
   approvedAt: string | null;
   message: string;
+}
+
+export type CompanyKnowledgeSourceKind =
+  "website" | "supporting_text" | "text_file" | "document";
+
+export type CompanyKnowledgeSourceStatus =
+  | "queued"
+  | "fetching"
+  | "extracting"
+  | "ready_for_review"
+  | "approved"
+  | "stale"
+  | "failed";
+
+export interface CompanyKnowledgeSource {
+  id: string;
+  sourceKind: CompanyKnowledgeSourceKind;
+  label: string;
+  websiteUrl: string | null;
+  sourceText: string | null;
+  sourceFilename: string | null;
+  sourceMimeType: string | null;
+  extractedText: string | null;
+  summaryText: string | null;
+  characterCount: number;
+  contentFingerprint: string;
+  processingStatus: CompanyKnowledgeSourceStatus;
+  failureCode: string | null;
+  processingAttempts: number;
+  processedAt: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
+  staleAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  safeMessage: string;
 }

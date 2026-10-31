@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:browser-audio": "playwright test --config playwright.browser-audio.config.ts --workers=1",
+    "test:e2e:full-stack": "playwright test --config playwright.full-stack.config.ts --workers=1",
     "format": "prettier --check .",
     "format:write": "prettier --write ."
   },

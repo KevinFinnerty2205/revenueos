@@ -1,5 +1,5 @@
-import { RevenueOSDaily } from "@/components/revenueos-daily";
+import { ConversationHome } from "@/components/conversation-home";
 
 export default function DashboardPage() {
-  return <RevenueOSDaily />;
+  return <ConversationHome />;
 }

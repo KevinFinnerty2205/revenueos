@@ -4,6 +4,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 
 from revenueos.selling_profile_contracts import (
+    CompanyKnowledgeSourceCreate,
+    CompanyKnowledgeSourceResponse,
     SellingProfileApproveRequest,
     SellingProfileContextResponse,
     SellingProfileDraftCreate,
@@ -25,6 +27,60 @@ async def get_selling_profile(service: Service) -> SellingProfileManagementRespo
 @router.get("/context", response_model=SellingProfileContextResponse)
 async def get_selling_context(service: Service) -> SellingProfileContextResponse:
     return await service.context()
+
+
+@router.get("/knowledge-sources", response_model=tuple[CompanyKnowledgeSourceResponse, ...])
+async def list_company_knowledge_sources(service: Service) -> tuple[CompanyKnowledgeSourceResponse, ...]:
+    return await service.knowledge_sources()
+
+
+@router.post(
+    "/knowledge-sources",
+    response_model=CompanyKnowledgeSourceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_company_knowledge_source(
+    request: CompanyKnowledgeSourceCreate,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.create_knowledge_source(request)
+
+
+@router.delete("/knowledge-sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_company_knowledge_source(source_id: UUID, service: Service) -> None:
+    await service.delete_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/approve", response_model=CompanyKnowledgeSourceResponse)
+async def approve_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.approve_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/retry", response_model=CompanyKnowledgeSourceResponse)
+async def retry_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.retry_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/refresh", response_model=CompanyKnowledgeSourceResponse)
+async def refresh_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.refresh_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/cancel", response_model=CompanyKnowledgeSourceResponse)
+async def cancel_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.cancel_knowledge_source(source_id)
 
 
 @router.post("/revisions", response_model=SellingProfileManagementResponse, status_code=status.HTTP_201_CREATED)

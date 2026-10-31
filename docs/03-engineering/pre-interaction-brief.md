@@ -14,6 +14,16 @@ composition, strict validation, versioning, persistence and product-safe respons
 Routes remain thin. Composition is bounded and synchronous because it performs no
 external provider call and reads only structured database records.
 
+When the target Interaction has a user-confirmed conversation thread, preparation
+selects the latest prior completed, non-deleted Interaction in that exact thread.
+Existing Meeting Intelligence remains available for a linked completed Meeting. A
+phone call or other Interaction can also contribute its latest supported validated
+Interaction Intelligence snapshot when the capture is completed and non-deleted and
+every referenced Evidence row is still verified and available. Schema-1 debrief
+items remain explicitly labelled as reviewed salesperson reports, not customer-direct
+evidence. Unknown snapshot schemas, broken lineage and unconfirmed company-wide
+history fail closed and do not enter the brief.
+
 ## Provider-use decision
 
 Version 1 is fully deterministic. It does not register a prompt, schema-registry

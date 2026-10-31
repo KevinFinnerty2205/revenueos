@@ -132,7 +132,16 @@ class AskIntentClassifier:
             return "stakeholder"
         if any(
             term in value
-            for term in ("meddpicc", "meddic", "bant", "spiced", "methodology", "still unknown", "what is missing")
+            for term in (
+                "meddpicc",
+                "meddicc",
+                "meddic",
+                "bant",
+                "spiced",
+                "methodology",
+                "still unknown",
+                "what is missing",
+            )
         ):
             return "methodology"
         if any(term in value for term in ("holding", "blocker", "biggest risk", "at risk", "risks")):

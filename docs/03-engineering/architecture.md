@@ -96,10 +96,12 @@ unchanged. See [AI Debrief](ai-debrief.md) and
 
 WO-014 adds private visual-evidence capture/review and WO-015 adds optional,
 consent-gated browser audio chunks plus batch transcription through the existing
-worker. WO-016 composes those capabilities with the brief and debrief on one
-responsive Companion route, adds metadata-only Interaction markers and projects the
-latest capture state into Opportunity Workspace. It adds no service, broker,
-datastore, native/PWA client or new AI provider path.
+worker. The current web path offers microphone-only or, where a deliberately
+selected tab/display returns an audio track, shared audio plus one distinct
+microphone mixed into an audio-only recorder stream. WO-016 composes capture with
+the brief, private live notes and debrief on one responsive Companion route, adds
+metadata-only Interaction markers and projects the latest capture state into
+Opportunity Workspace. It adds no service, broker, datastore or native/PWA client.
 
 WO-021 adds review-only Action proposals. WO-022 adds organisation connections,
 server-authoritative connector capabilities, fingerprinted execution previews and

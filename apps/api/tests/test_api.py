@@ -184,6 +184,7 @@ def test_staging_is_explicit_and_rejects_mock_authentication() -> None:
         Settings(environment="staging", auth_mode="mock", mock_auth_enabled=True)
 
     settings = Settings(
+        _env_file=None,
         environment="staging",
         auth_mode="clerk",
         mock_auth_enabled=False,
@@ -204,6 +205,7 @@ def test_staging_is_explicit_and_rejects_mock_authentication() -> None:
 def test_production_engage_requires_deployment_suppression_key() -> None:
     with pytest.raises(ValidationError, match="suppression HMAC key"):
         Settings(
+            _env_file=None,
             environment="production",
             auth_mode="clerk",
             mock_auth_enabled=False,
@@ -261,7 +263,7 @@ def test_hsts_is_explicit_and_never_preloads_subdomains(client: TestClient) -> N
 
 
 def test_event_intelligence_rollout_defaults_off() -> None:
-    assert Settings().feature_engage_events_enabled is False
+    assert Settings(_env_file=None).feature_engage_events_enabled is False
 
 
 def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
@@ -308,6 +310,12 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/ask/telemetry",
         "/api/v1/selling-profile",
         "/api/v1/selling-profile/context",
+        "/api/v1/selling-profile/knowledge-sources",
+        "/api/v1/selling-profile/knowledge-sources/{source_id}",
+        "/api/v1/selling-profile/knowledge-sources/{source_id}/approve",
+        "/api/v1/selling-profile/knowledge-sources/{source_id}/cancel",
+        "/api/v1/selling-profile/knowledge-sources/{source_id}/refresh",
+        "/api/v1/selling-profile/knowledge-sources/{source_id}/retry",
         "/api/v1/selling-profile/revisions",
         "/api/v1/selling-profile/revisions/{revision_id}",
         "/api/v1/selling-profile/revisions/{revision_id}/approve",
@@ -431,6 +439,8 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/contacts",
         "/api/v1/contacts/{contact_id}",
         "/api/v1/daily",
+        "/api/v1/daily/briefing-preview",
+        "/api/v1/daily/preferences",
         "/api/v1/insights/sales/metadata",
         "/api/v1/insights/sales/metrics",
         "/api/v1/insights/sales/metrics/{metric_id}",
@@ -548,8 +558,13 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/executions/{execution_id}/reconcile",
         "/api/v1/tasks",
         "/api/v1/tasks/{task_id}",
+        "/api/v1/conversation-threads",
+        "/api/v1/conversation-threads/{thread_id}",
         "/api/v1/interactions",
         "/api/v1/interactions/{interaction_id}",
+        "/api/v1/interactions/{interaction_id}/conversation-memory",
+        "/api/v1/interactions/{interaction_id}/thread-assignment",
+        "/api/v1/interactions/{interaction_id}/personal-workspace",
         "/api/v1/interactions/{interaction_id}/complete",
         "/api/v1/interactions/{interaction_id}/start",
         "/api/v1/interactions/{interaction_id}/companion/brief",
@@ -567,6 +582,7 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/interactions/{interaction_id}/online-meeting/transcripts",
         "/api/v1/interactions/{interaction_id}/debrief",
         "/api/v1/interactions/{interaction_id}/debrief/{session_id}",
+        "/api/v1/interactions/{interaction_id}/debrief/latest",
         "/api/v1/interactions/{interaction_id}/debrief/{session_id}/response",
         "/api/v1/interactions/{interaction_id}/debrief/{session_id}/voice-response",
         "/api/v1/interactions/{interaction_id}/debrief/{session_id}/finish",

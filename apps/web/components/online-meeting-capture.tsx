@@ -184,9 +184,10 @@ export function OnlineMeetingCapture({
           Capture this meeting
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          {capabilities.safeMessage} Oryntela never joins this meeting or
-          captures browser system audio. Choose an authorised source below, or
-          report what happened while the context is fresh.
+          {capabilities.safeMessage} Oryntela never joins this meeting or runs a
+          meeting bot. Browser audio is captured only during an explicit
+          Companion session; after the meeting, choose an authorised source
+          below or report what happened while the context is fresh.
         </p>
         <ul className="mt-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <li className="rounded-xl bg-slate-50 p-4">

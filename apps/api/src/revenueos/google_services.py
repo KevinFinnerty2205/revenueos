@@ -11,7 +11,7 @@ from typing import Literal, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -19,6 +19,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.credential_store import CredentialStore, EncryptedDatabaseCredentialStore
+from revenueos.database import set_private_user_database_context
 from revenueos.domain import ConnectionStatus, ConnectorKey
 from revenueos.errors import PublicAPIError
 from revenueos.google_workspace import GoogleAPIError, GoogleWorkspaceClient, gmail_message_url
@@ -37,6 +38,7 @@ from revenueos.models import (
     ActionProposal,
     ActionProposalVersion,
     Contact,
+    ConversationBriefingOutbox,
     EngageCampaignEnrollment,
     EngageEnrollmentStep,
     IntegrationAuditEvent,
@@ -671,6 +673,7 @@ class GoogleSyncService:
         modified_at = self._datetime(item.get("updated"))
         if status == "cancelled" and item.get("start") is None:
             if existing is not None:
+                await self._reconcile_linked_briefings(existing.interaction_id, "cancelled", now)
                 existing.state = "deleted"
                 existing.i_cal_uid = None
                 existing.series_master_id = None
@@ -685,7 +688,6 @@ class GoogleSyncService:
                 existing.contact_id = None
                 existing.company_id = None
                 existing.opportunity_id = None
-                existing.interaction_id = None
                 existing.provider_last_modified_at = modified_at
                 existing.last_synced_at = now
                 return 1
@@ -703,6 +705,7 @@ class GoogleSyncService:
             return 0
         if end < self._aware(sync_state.window_start_at) or start > self._aware(sync_state.window_end_at):
             if existing is not None:
+                await self._reconcile_linked_briefings(existing.interaction_id, "cancelled", now)
                 await self.session.delete(existing)
                 return 1
             return 0
@@ -717,6 +720,8 @@ class GoogleSyncService:
         )
         if private:
             match_state, contact, company_id, opportunity_id = "private", None, None, None
+        linked_interaction_id = existing.interaction_id if existing is not None else None
+        previous_start = existing.start_at if existing is not None else None
         values: dict[str, object] = {
             "i_cal_uid": None if private else self._string(item.get("iCalUID"), 255),
             "series_master_id": None if private else self._string(item.get("recurringEventId"), 255),
@@ -757,7 +762,47 @@ class GoogleSyncService:
                 setattr(existing, key, value)
             if private:
                 existing.interaction_id = None
+            if linked_interaction_id is not None:
+                briefing_status: Literal["superseded", "cancelled"] | None = (
+                    "cancelled"
+                    if private or values["state"] != "active"
+                    else ("superseded" if previous_start is not None and self._aware(previous_start) != start else None)
+                )
+                if briefing_status is not None:
+                    await self._reconcile_linked_briefings(linked_interaction_id, briefing_status, now)
         return 1
+
+    async def _reconcile_linked_briefings(
+        self,
+        interaction_id: UUID | None,
+        status: Literal["superseded", "cancelled"],
+        now: datetime,
+    ) -> None:
+        if interaction_id is None:
+            return
+        owner_user_id = await self.session.scalar(
+            select(Interaction.created_by_user_id).where(
+                Interaction.organisation_id == self.tenant.organisation_id,
+                Interaction.id == interaction_id,
+            )
+        )
+        if owner_user_id is None:
+            return
+        await set_private_user_database_context(self.session, owner_user_id)
+        try:
+            await self.session.execute(
+                update(ConversationBriefingOutbox)
+                .where(
+                    ConversationBriefingOutbox.organisation_id == self.tenant.organisation_id,
+                    ConversationBriefingOutbox.user_id == owner_user_id,
+                    ConversationBriefingOutbox.interaction_id == interaction_id,
+                    ConversationBriefingOutbox.kind == "pre_meeting",
+                    ConversationBriefingOutbox.status == "prepared",
+                )
+                .values(status=status, updated_at=now)
+            )
+        finally:
+            await set_private_user_database_context(self.session, self.tenant.user_id)
 
     @staticmethod
     def _referenced_message_ids(in_reply_to: str | None, references: str) -> set[str]:

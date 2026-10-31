@@ -16,6 +16,7 @@ import {
 } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 type InputPreference = "guided" | "voice" | "typed";
 type RecordingState = "idle" | "recording" | "paused" | "uploading";
@@ -73,9 +74,11 @@ async function blobToBase64(blob: Blob): Promise<string> {
 export function PostInteractionCapture({
   interactionId,
   interactionType,
+  restoreLatest = false,
 }: {
   interactionId: string;
   interactionType: InteractionType;
+  restoreLatest?: boolean;
 }) {
   const [session, setSession] = useState<DebriefSession | null>(null);
   const [preference, setPreference] = useState<InputPreference>("guided");
@@ -120,26 +123,31 @@ export function PostInteractionCapture({
 
   useEffect(() => {
     const saved = window.localStorage.getItem(storageKey(interactionId));
-    if (!saved) {
+    if (!saved && !restoreLatest) {
       window.queueMicrotask(() => setRestoring(false));
       return;
     }
     const controller = new AbortController();
-    apiRequest<DebriefSession>(
-      `/api/v1/interactions/${interactionId}/debrief/${saved}`,
+    apiRequest<DebriefSession | null>(
+      saved
+        ? `/api/v1/interactions/${interactionId}/debrief/${saved}`
+        : `/api/v1/interactions/${interactionId}/debrief/latest`,
       { signal: controller.signal },
     )
       .then((restored) => {
+        if (!restored) return;
         remember(restored);
         setVoiceAcknowledged(restored.captureType === "voice_journal");
-        setMessage("Your in-progress capture was restored.");
+        if (restored.lifecycleStatus !== "completed") {
+          setMessage("Your in-progress capture was restored.");
+        }
       })
       .catch(() => window.localStorage.removeItem(storageKey(interactionId)))
       .finally(() => {
         if (!controller.signal.aborted) setRestoring(false);
       });
     return () => controller.abort();
-  }, [interactionId, remember]);
+  }, [interactionId, remember, restoreLatest]);
 
   useEffect(() => {
     if (recordingState !== "recording") return;
@@ -454,24 +462,24 @@ export function PostInteractionCapture({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-            Post-interaction capture
+            Personal notes · preserved separately
           </p>
           <h2
             id="post-interaction-title"
             className="mt-2 text-2xl font-semibold text-slate-950"
           >
             {interactionType === "phone_call"
-              ? "Capture this call while it’s fresh"
+              ? "Write what you noticed on this call"
               : interactionType === "online_meeting"
-                ? "Capture this meeting while it’s fresh"
-                : "Capture what changed while it is fresh"}
+                ? "Write what you noticed in this meeting"
+                : "Write what changed while it is fresh"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             {interactionType === "phone_call"
-              ? "Type a short account below, or choose another authorised capture option when needed. Oryntela did not record or monitor the call."
+              ? "Your original notes and answers are preserved even if later processing fails. Oryntela did not record or monitor the call."
               : interactionType === "online_meeting"
-                ? "Type a short account below when no authorised recording or transcript is available. Oryntela did not join, record or monitor the meeting."
-                : `A short debrief for this ${humanise(interactionType).toLowerCase()} turns your own report into reviewable evidence. It does not record the customer interaction.`}
+                ? "Your original notes and answers are preserved even if later processing fails. Oryntela did not join, record or monitor the meeting."
+                : `Your notes for this ${humanise(interactionType).toLowerCase()} stay separate from enhanced notes. You review any evidence before it is added to shared intelligence.`}
           </p>
         </div>
         {session ? (
@@ -649,14 +657,258 @@ export function PostInteractionCapture({
       ) : null}
 
       {session?.lifecycleStatus === "completed" ? (
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-          <h3 className="font-semibold text-emerald-950">Debrief complete</h3>
-          <p className="mt-2 text-sm leading-6 text-emerald-900">
-            Accepted items are marked “Reported by you” so your account and
-            opportunity views do not confuse them with customer-direct evidence.
+        <CompletedConversationReview
+          interactionId={interactionId}
+          session={session}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function CompletedConversationReview({
+  interactionId,
+  session,
+}: {
+  interactionId: string;
+  session: DebriefSession;
+}) {
+  const accepted = session.candidates.filter(
+    (candidate) => candidate.userReviewState === "accepted",
+  );
+  const initialEnhanced = accepted
+    .map((candidate) => `• ${candidate.statement}`)
+    .join("\n");
+  const actions = accepted.filter((candidate) =>
+    ["action_item", "commitment", "next_step"].includes(
+      candidate.evidenceCategory,
+    ),
+  );
+  const questions = accepted.filter(
+    (candidate) => candidate.evidenceCategory === "open_question",
+  );
+  const initialFollowUp = [
+    "Subject: Conversation follow-up",
+    "",
+    "Thank you for the conversation. Here is my review draft of what we covered:",
+    ...accepted.slice(0, 5).map((candidate) => `- ${candidate.statement}`),
+    ...(actions.length
+      ? [
+          "",
+          "Next steps:",
+          ...actions.map((candidate) => `- ${candidate.statement}`),
+        ]
+      : []),
+    ...(questions.length
+      ? [
+          "",
+          "Open questions:",
+          ...questions.map((candidate) => `- ${candidate.statement}`),
+        ]
+      : []),
+    "",
+    "Please correct anything I have misunderstood.",
+  ].join("\n");
+  const enhancedLegacyKey = `revenueos:enhanced-notes:${interactionId}`;
+  const followUpLegacyKey = `revenueos:conversation-follow-up:${interactionId}`;
+  const workspace = useConversationWorkspace({
+    interactionId,
+    initialEnhancedNotes: initialEnhanced,
+    initialFollowUpDraft: initialFollowUp,
+  });
+  const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    window.queueMicrotask(() => {
+      if (active) {
+        setLegacyOwnershipBlocked(
+          window.localStorage.getItem(enhancedLegacyKey) !== null ||
+            window.localStorage.getItem(followUpLegacyKey) !== null,
+        );
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [enhancedLegacyKey, followUpLegacyKey]);
+
+  return (
+    <div className="mt-6 space-y-6">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+        <h3 className="font-semibold text-emerald-950">Debrief complete</h3>
+        <p className="mt-2 text-sm leading-6 text-emerald-900">
+          Accepted items remain marked “Reported by you”; they are not treated
+          as customer-direct evidence.
+        </p>
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 className="font-semibold text-slate-950">
+          Original personal notes
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Preserved separately from enhanced notes. Only the user who captured
+          this debrief can retrieve it.
+        </p>
+        {session.turns.length ? (
+          <ol className="mt-4 space-y-4">
+            {session.turns.map((turn) => (
+              <li key={turn.id} className="border-l-2 border-slate-200 pl-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {turn.question.question ?? "Personal note"}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                  {turn.answerText}
+                </p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-4 text-sm text-slate-600">
+            No personal notes were saved.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 className="font-semibold text-slate-950">
+          Enhanced conversation notes
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Edit the accepted, deterministic debrief output without changing your
+          original notes or evidence record.
+        </p>
+        <textarea
+          aria-label="Enhanced conversation notes"
+          className="form-control mt-4 min-h-52 py-3"
+          disabled={workspace.loading}
+          value={workspace.values.enhancedNotes}
+          onChange={(event) =>
+            workspace.setValues((current) => ({
+              ...current,
+              enhancedNotes: event.target.value,
+            }))
+          }
+        />
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          disabled={workspace.loading || workspace.saveState === "saving"}
+          onClick={() => void workspace.save()}
+        >
+          {workspace.saveState === "saving" ? "Saving…" : "Save enhanced notes"}
+        </button>
+      </section>
+
+      <StructuredDebrief accepted={accepted} />
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 className="font-semibold text-slate-950">Follow-up draft</h3>
+        <p className="mt-2 text-sm leading-6 text-amber-900">
+          Advisory draft only. Review before copying or exporting. Oryntela will
+          not send it.
+        </p>
+        <textarea
+          aria-label="Follow-up draft"
+          className="form-control mt-4 min-h-64 py-3"
+          disabled={workspace.loading}
+          value={workspace.values.followUpDraft}
+          onChange={(event) =>
+            workspace.setValues((current) => ({
+              ...current,
+              followUpDraft: event.target.value,
+            }))
+          }
+        />
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={workspace.loading || workspace.saveState === "saving"}
+            onClick={() => void workspace.save()}
+          >
+            Save follow-up draft
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() =>
+              void navigator.clipboard.writeText(workspace.values.followUpDraft)
+            }
+          >
+            Copy draft
+          </button>
+        </div>
+      </section>
+      {legacyOwnershipBlocked ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p>
+            An older browser-only draft exists, but it has no authenticated
+            owner metadata. Oryntela will not import or display private content
+            that cannot be matched to your user.
           </p>
         </div>
       ) : null}
+      {workspace.saveState === "saved" ? (
+        <p role="status" className="text-sm font-semibold text-brand-primary">
+          Saved privately to your Oryntela workspace. No external action was
+          taken.
+        </p>
+      ) : null}
+      {workspace.error ? (
+        <div role="alert" className="text-sm font-semibold text-rose-800">
+          <p>{workspace.error}</p>
+          {workspace.saveState === "conflict" ? (
+            <button
+              type="button"
+              className="secondary-button mt-3"
+              onClick={() => void workspace.reload()}
+            >
+              Reload latest saved draft
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StructuredDebrief({ accepted }: { accepted: CandidateEvidence[] }) {
+  const groups = [
+    ["Decisions", ["decision"]],
+    ["Objections and competitive context", ["objection", "competitor"]],
+    ["Actions and commitments", ["action_item", "commitment", "next_step"]],
+    ["Unanswered questions", ["open_question"]],
+  ] as const;
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold text-slate-950">What was learned</h3>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {groups.map(([title, categories]) => {
+          const items = accepted.filter((candidate) =>
+            (categories as readonly string[]).includes(
+              candidate.evidenceCategory,
+            ),
+          );
+          return (
+            <div key={title} className="rounded-xl bg-slate-50 p-4">
+              <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+              {items.length ? (
+                <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
+                  {items.map((item) => (
+                    <li key={item.id}>{item.statement}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  Not discussed or not reported.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -702,10 +954,11 @@ function StartCapture({
       </div>
       <div className="rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-700">
         <div>
-          <p className="font-semibold text-slate-950">Capture what happened</p>
+          <p className="font-semibold text-slate-950">Start personal notes</p>
           <p className="mt-1">
-            Type a short account of what changed, what was agreed and what needs
-            follow-up. You will review it before intelligence is updated.
+            Type what you noticed, what was agreed and what needs follow-up.
+            Your original wording is preserved and reviewed before intelligence
+            is updated.
           </p>
           <button
             type="button"
@@ -713,7 +966,7 @@ function StartCapture({
             disabled={working || !safetyConfirmed}
             onClick={() => onStart("ai_debrief", "typed")}
           >
-            Capture what happened
+            Start personal notes
           </button>
         </div>
       </div>

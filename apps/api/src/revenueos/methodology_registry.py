@@ -269,14 +269,38 @@ _MEDDPICC = MethodologyDefinitionContent(
     ),
 )
 
+_MEDDICC = MethodologyDefinitionContent(
+    key="meddicc",
+    name="MEDDICC",
+    description="Extend MEDDIC with the competitive position while keeping contracting separate.",
+    version=1,
+    standard=True,
+    fields=(
+        *_MEDDIC.fields,
+        _field(
+            "competition",
+            "Competition",
+            "The named alternatives, internal options and status quo under consideration.",
+            7,
+            ("competition",),
+            ("competitor", "objection", "buying_signal"),
+            "What other options, including the status quo, are being considered?",
+            freshness_days=60,
+            stage="evaluation",
+        ),
+    ),
+)
+
 STANDARD_METHODOLOGIES: dict[StandardMethodologyKey, MethodologyDefinitionContent] = {
     "meddic": _MEDDIC,
+    "meddicc": _MEDDICC,
     "meddpicc": _MEDDPICC,
     "bant": _BANT,
     "spiced": _SPICED,
 }
 STANDARD_METHODOLOGY_ORDER: tuple[StandardMethodologyKey, ...] = (
     "meddic",
+    "meddicc",
     "meddpicc",
     "bant",
     "spiced",

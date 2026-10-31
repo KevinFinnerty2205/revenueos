@@ -92,10 +92,10 @@ describe("AskRevenueOS", () => {
     render(<AskRevenueOS scopeType="workspace" />);
 
     expect(
-      await screen.findByRole("button", { name: "What should I do next?" }),
+      await screen.findByRole("button", { name: "What should I ask next?" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "What are the biggest deal risks?" }),
+      screen.getByRole("button", { name: "Which commitments are overdue?" }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Which commitments are overdue?" }),

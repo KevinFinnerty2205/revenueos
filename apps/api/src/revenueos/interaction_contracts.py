@@ -21,6 +21,8 @@ from revenueos.domain import (
 from revenueos.online_meeting_contracts import BoundedExternalMeetingId, BoundedMeetingReference
 
 TimezoneName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+ConversationDraft = Annotated[str, StringConstraints(max_length=100_000)]
+ContentFingerprint = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
 def _timezone_aware(value: datetime | None) -> datetime | None:
@@ -128,6 +130,41 @@ class InteractionStart(APIModel):
     @classmethod
     def actual_start_must_include_timezone(cls, value: datetime | None) -> datetime | None:
         return _timezone_aware(value)
+
+
+class ConversationWorkspaceUpdate(APIModel):
+    expected_lock_version: int
+    live_notes: ConversationDraft | None = None
+    enhanced_notes: ConversationDraft | None = None
+    follow_up_draft: ConversationDraft | None = None
+    follow_up_reviewed: bool = False
+    generation_fingerprint: ContentFingerprint | None = None
+    import_from_browser: bool = False
+
+    @field_validator("expected_lock_version")
+    @classmethod
+    def lock_version_is_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("expectedLockVersion must be zero or greater.")
+        return value
+
+
+class ConversationWorkspaceResponse(APIModel):
+    exists: bool
+    owner_user_id: UUID
+    lock_version: int
+    live_notes: str | None = None
+    enhanced_notes: str | None = None
+    follow_up_draft: str | None = None
+    follow_up_reviewed: bool = False
+    generation_fingerprint: str | None = None
+    imported_from_browser_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_validator("imported_from_browser_at", "updated_at", mode="before")
+    @classmethod
+    def workspace_timestamps_are_utc(cls, value: datetime | None) -> datetime | None:
+        return normalise_api_datetime(value) if value is not None else None
 
 
 class InteractionResponse(APIModel):

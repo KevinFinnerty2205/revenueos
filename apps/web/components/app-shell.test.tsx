@@ -1,16 +1,14 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/app-shell";
 import { resolveAuthState } from "@/lib/auth";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/opportunities/opportunity-1",
+  usePathname: () => "/frameworks",
 }));
 
-afterEach(() => vi.unstubAllGlobals());
-
-describe("application shell", () => {
-  it("renders required navigation and the development-auth warning", () => {
+describe("conversation-first application shell", () => {
+  it("keeps four primary destinations and administration secondary", () => {
     const authState = resolveAuthState({
       NODE_ENV: "test",
       AUTH_MODE: "mock",
@@ -30,83 +28,45 @@ describe("application shell", () => {
     const navigation = screen.getByRole("navigation", {
       name: "Main navigation",
     });
-    for (const label of [
-      "Home",
+    for (const label of ["Home", "Conversations", "Knowledge", "Frameworks"]) {
+      expect(
+        within(navigation).getByRole("link", { name: label }),
+      ).toBeVisible();
+    }
+    expect(
+      within(navigation).getByRole("link", { name: "Search / Ask Oryntela" }),
+    ).toHaveAttribute("href", "/assistant");
+    expect(
+      within(navigation).getByRole("link", { name: "Settings" }),
+    ).toBeVisible();
+    for (const hiddenLegacyLabel of [
       "Accounts",
       "People",
       "Tasks",
       "Pipeline",
       "Insights",
-      "Interactions",
-      "Search & Ask",
-      "Settings",
+      "Campaigns",
+      "Create",
     ]) {
       expect(
-        within(navigation).getByRole("link", { name: label }),
-      ).toBeVisible();
+        within(navigation).queryByRole("link", { name: hiddenLegacyLabel }),
+      ).not.toBeInTheDocument();
     }
+    expect(
+      within(navigation).getByRole("link", { name: "Frameworks" }),
+    ).toHaveAttribute("aria-current", "page");
+
     const mobileNavigation = screen.getByRole("navigation", {
       name: "Mobile navigation",
     });
-    expect(mobileNavigation).toBeVisible();
-    for (const label of ["Today", "Actions"]) {
+    for (const label of ["Home", "Conversations", "Knowledge", "Frameworks"]) {
       expect(
         within(mobileNavigation).getByRole("link", { name: label }),
       ).toBeVisible();
     }
-    expect(
-      screen.queryByRole("link", { name: "Getting started" }),
-    ).not.toBeInTheDocument();
-    expect(navigation).toBeVisible();
-    expect(
-      within(navigation).getByRole("link", { name: "Pipeline" }),
-    ).toHaveAttribute("aria-current", "page");
     expect(screen.getByText(/mock authentication is active/i)).toBeVisible();
-    expect(screen.getAllByRole("link", { name: "Sign out" })).toHaveLength(2);
-    for (const signOutLink of screen.getAllByRole("link", {
-      name: "Sign out",
-    })) {
-      expect(signOutLink).toHaveAttribute("href", "/sign-out");
+    for (const link of screen.getAllByRole("link", { name: "Sign out" })) {
+      expect(link).toHaveAttribute("href", "/sign-out");
     }
-  });
-
-  it("hides desktop Insights when the server explicitly disables it", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: string | URL | Request) => {
-        const payload = String(input).includes("/beta/capabilities")
-          ? { featureFlags: { salesAnalytics: false } }
-          : { enabled: false };
-        return Promise.resolve(
-          new Response(JSON.stringify(payload), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }),
-    );
-    const authState = resolveAuthState({
-      NODE_ENV: "test",
-      AUTH_MODE: "mock",
-      MOCK_AUTH_ENABLED: "true",
-    });
-
-    render(
-      <AppShell authState={authState}>
-        <h1>Test content</h1>
-      </AppShell>,
-    );
-
-    const navigation = screen.getByRole("navigation", {
-      name: "Main navigation",
-    });
-    await waitFor(() =>
-      expect(
-        within(navigation).queryByRole("link", { name: "Insights" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(
-      within(navigation).getByRole("link", { name: "Pipeline" }),
-    ).toBeVisible();
   });
 });

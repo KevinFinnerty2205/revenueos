@@ -63,12 +63,21 @@ def _custom_payload(name: str = "Value discovery") -> dict[str, object]:
 
 def test_standard_registry_is_versioned_bounded_and_non_predictive() -> None:
     standards = standard_methodologies()
-    assert [item.key for item in standards] == ["meddic", "meddpicc", "bant", "spiced"]
-    assert [item.name for item in standards] == ["MEDDIC", "MEDDPICC", "BANT", "SPICED"]
-    assert [len(item.fields) for item in standards] == [6, 8, 4, 5]
+    assert [item.key for item in standards] == ["meddic", "meddicc", "meddpicc", "bant", "spiced"]
+    assert [item.name for item in standards] == ["MEDDIC", "MEDDICC", "MEDDPICC", "BANT", "SPICED"]
+    assert [len(item.fields) for item in standards] == [6, 7, 8, 4, 5]
     assert all(item.version == 1 and item.standard for item in standards)
     assert [[field.key for field in item.fields] for item in standards] == [
         ["metrics", "economic_buyer", "decision_criteria", "decision_process", "identify_pain", "champion"],
+        [
+            "metrics",
+            "economic_buyer",
+            "decision_criteria",
+            "decision_process",
+            "identify_pain",
+            "champion",
+            "competition",
+        ],
         [
             "metrics",
             "economic_buyer",

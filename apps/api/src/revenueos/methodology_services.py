@@ -139,7 +139,7 @@ class SalesMethodologyProjectionService:
         effective = await self._effective_definition(setting)
         return MethodologySelectionResponse(
             selection=cast(
-                Literal["none", "meddic", "meddpicc", "bant", "spiced", "custom"],
+                Literal["none", "meddic", "meddicc", "meddpicc", "bant", "spiced", "custom"],
                 setting.selection,
             ),
             custom_definition_id=setting.custom_definition_id,
@@ -1421,7 +1421,7 @@ class SalesMethodologyProjectionService:
         self,
         setting: OrganisationMethodologySetting,
     ) -> EffectiveDefinition:
-        if setting.selection in {"meddic", "meddpicc", "bant", "spiced"}:
+        if setting.selection in {"meddic", "meddicc", "meddpicc", "bant", "spiced"}:
             content = standard_methodology(cast(StandardMethodologyKey, setting.selection))
             return EffectiveDefinition(
                 content=content,

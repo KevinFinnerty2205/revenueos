@@ -66,7 +66,7 @@ const importedTranscript = {
   safeMessage: "Transcript ready.",
 };
 
-test("online meeting uses a safe passive lifecycle and persists transcript import", async ({
+test("online meeting offers deliberate audio capture and persists transcript import", async ({
   page,
 }) => {
   let interaction: Record<string, unknown> = { ...baseInteraction };
@@ -86,7 +86,7 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
             voiceJournal: true,
             visualEvidence: true,
             presentationMode: false,
-            recordingCapture: false,
+            recordingCapture: true,
             transcription: false,
             autoGenerateIntelligenceAfterTranscription: false,
             onlineMeetingCapture: true,
@@ -117,6 +117,10 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
         return;
       }
       if (path.endsWith("/visual-evidence") && request.method() === "GET") {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/recordings") && request.method() === "GET") {
         await route.fulfill({ json: [] });
         return;
       }
@@ -202,7 +206,7 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
     },
   );
 
-  await page.goto("/interactions/interaction-online");
+  await page.goto("/conversations/interaction-online");
   const openMeeting = page.getByRole("link", {
     name: "Open meeting",
     exact: true,
@@ -216,13 +220,19 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
   await expect(
     page
       .getByRole("region", { name: "Use your meeting platform" })
-      .getByText(/remains passive while the meeting runs/i),
+      .getByText(/nothing starts in the background/i),
   ).toBeVisible();
   await page.getByRole("link", { name: "Continue in Companion" }).click();
   await expect(page.getByText("Live Intelligence unavailable")).toBeVisible();
   await expect(
     page.getByRole("button", { name: /capture meeting audio/i }),
-  ).toHaveCount(0);
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Continue without recording" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "No recording or listening" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "End meeting" }).click();
   const captureMeeting = page.getByRole("region", {
     name: "Capture this meeting",

@@ -30,12 +30,11 @@ const suggestedQuestions: Record<AskScopeType, string[]> = {
     "What opportunities are active?",
   ],
   workspace: [
-    "Which deals need my attention?",
-    "What do I need to do today?",
-    "What should I do next?",
-    "What are the biggest deal risks?",
-    "Which deals don’t have an economic buyer?",
+    "What did we promise?",
+    "What changed since the last conversation?",
+    "What should I ask next?",
     "Which commitments are overdue?",
+    "What do I need to follow up today?",
   ],
 };
 
@@ -175,8 +174,8 @@ export function AskRevenueOS({
               Ask Oryntela
             </label>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Ask a sales question about what Oryntela already knows. Every
-              factual answer shows its authorised sources.
+              Ask about conversations, commitments, changes and what to ask
+              next. Every factual answer shows its authorised sources.
             </p>
           </div>
           <span className="rounded-full bg-brand-secondary/10 px-3 py-1.5 text-xs font-bold text-brand-primary">
@@ -190,7 +189,7 @@ export function AskRevenueOS({
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               className="form-input min-h-28 resize-y"
-              placeholder="What is holding this deal back?"
+              placeholder="What changed since the last conversation?"
               maxLength={capabilities.maxQuestionCharacters}
               aria-describedby="ask-boundary"
             />

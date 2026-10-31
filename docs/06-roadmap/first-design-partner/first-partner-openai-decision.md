@@ -22,21 +22,23 @@ The preferred first-partner profile uses the main OpenAI Responses adapter for:
 - bounded AI Debrief question/evidence processing from typed debrief answers or
   fragments.
 
-The implementation also has separate OpenAI-capable audio transcription, visual and
-document/email evidence paths, but **all are disabled in the first-partner profile**.
-There is no live external-AI adapter, tool execution, mailbox send or Prospect
-provider in this scope.
+The implementation also has separate OpenAI-capable audio transcription, visual,
+document/email evidence and live-signal paths, but **all are disabled in the
+first-partner profile**. The live-signal adapter is implemented behind separate
+gates and durable per-session consent binding; it is outside this profile and has
+not been activated or verified live. There is no tool execution, mailbox send or
+Prospect provider in this scope.
 
 ## 2. What customer information is sent?
 
 Only after a user deliberately supplies an authorised transcript or debrief input:
 
-| Path | Sent to OpenAI | Not sent by this path |
-| --- | --- | --- |
+| Path             | Sent to OpenAI                                                                                                            | Not sent by this path                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Eight extractors | Registered instructions and strict output schema plus the selected transcript, bounded to 50,000 characters per extractor | Passwords/keys, browser auth headers, unrelated tenant records, files/audio/images |
-| Next Best Action | The eight validated current-transcript artefacts | Original transcript |
-| Follow-up Email | Validated Executive Summary, Decisions, Action Items and Open Questions projection plus selected tone | Original transcript; mailbox credentials; no email is sent |
-| AI Debrief | Bounded normalised context, answers or text fragments needed for the next question/evidence | Raw recording/audio in this profile |
+| Next Best Action | The eight validated current-transcript artefacts                                                                          | Original transcript                                                                |
+| Follow-up Email  | Validated Executive Summary, Decisions, Action Items and Open Questions projection plus selected tone                     | Original transcript; mailbox credentials; no email is sent                         |
+| AI Debrief       | Bounded normalised context, answers or text fragments needed for the next question/evidence                               | Raw recording/audio in this profile                                                |
 
 Names, employers, roles, contact details, meeting statements, commercial needs,
 objections, decisions and actions may appear inside those inputs. The first partner
@@ -113,11 +115,11 @@ extractors plus two composers is roughly 110,000 input and 10,000 output tokens,
 about **USD 0.34** before retries. Actual transcripts and outputs should usually be
 smaller.
 
-| Illustrative monthly use | Approximate provider cost | Planning interpretation |
-| --- | ---: | --- |
-| 10 full interaction analyses | about USD 3–5 | Small supervised start |
-| 50 full interaction analyses | about USD 17–25 | Includes modest debrief/retry allowance |
-| Recommended owner alert-and-stop | **AUD 50/month** | Disable external AI and review; not an automatic recharge authority |
+| Illustrative monthly use         | Approximate provider cost | Planning interpretation                                             |
+| -------------------------------- | ------------------------: | ------------------------------------------------------------------- |
+| 10 full interaction analyses     |             about USD 3–5 | Small supervised start                                              |
+| 50 full interaction analyses     |           about USD 17–25 | Includes modest debrief/retry allowance                             |
+| Recommended owner alert-and-stop |          **AUD 50/month** | Disable external AI and review; not an automatic recharge authority |
 
 At the maximum 75 attempts every day, a worst-case input/output assumption could
 exceed AUD 250/month. That is why the daily quota is not the budget. Record actual

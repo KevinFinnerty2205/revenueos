@@ -2,6 +2,28 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InteractionDetail } from "@/components/interaction-detail";
 
+vi.mock("@/components/conversation-memory", () => ({
+  ConversationMemory: () => <div>Conversation memory</div>,
+}));
+
+vi.mock("@/lib/use-conversation-workspace", () => ({
+  useConversationWorkspace: () => ({
+    workspace: null,
+    values: {
+      liveNotes: "",
+      enhancedNotes: "",
+      followUpDraft: "",
+      followUpReviewed: false,
+    },
+    setValues: vi.fn(),
+    loading: false,
+    saveState: "idle",
+    error: null,
+    save: vi.fn(() => Promise.resolve(true)),
+    reload: vi.fn(() => Promise.resolve()),
+  }),
+}));
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -54,16 +76,18 @@ describe("InteractionDetail", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<InteractionDetail interactionId="interaction-1" />);
-    expect(screen.getByRole("status")).toHaveTextContent("Loading interaction");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading conversation",
+    );
     expect(
       await screen.findByRole("heading", { name: "Acme discovery" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("status", { name: "Interaction lifecycle status" }),
+      screen.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveTextContent("Planned");
     expect(
-      screen.getByRole("link", { name: "Review meeting intelligence" }),
-    ).toHaveAttribute("href", "/meetings/meeting-1");
+      screen.getByRole("link", { name: "Prepare and start" }),
+    ).toHaveAttribute("href", "/conversations/interaction-1/workspace");
     fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
     expect(
       await screen.findByRole("button", { name: "End meeting" }),
@@ -75,7 +99,7 @@ describe("InteractionDetail", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("status", { name: "Interaction lifecycle status" }),
+      screen.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveTextContent("Completed");
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/interactions/interaction-1/complete"),
@@ -155,7 +179,7 @@ describe("InteractionDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "End connected call" }));
     await waitFor(() =>
       expect(
-        screen.getByRole("status", { name: "Interaction lifecycle status" }),
+        screen.getByRole("status", { name: "Conversation lifecycle status" }),
       ).toHaveTextContent("Completed"),
     );
     const completion = fetchMock.mock.calls.find(([input]) =>

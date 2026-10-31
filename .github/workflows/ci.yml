@@ -100,3 +100,73 @@ jobs:
         run: uv --directory apps/api build
       - name: Build API container definition
         run: docker build --file infra/docker/api.Dockerfile --tag revenueos-api:ci .
+
+  conversation-persistence:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: revenueos
+          POSTGRES_USER: revenueos
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U revenueos -d revenueos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # This isolated acceptance uses the API's fixed synthetic development
+      # identity bootstrap; no customer or live-provider data is available.
+      API_ENVIRONMENT: development
+      API_AUTH_MODE: mock
+      API_MOCK_AUTH_ENABLED: "true"
+      API_CORS_ORIGINS: http://localhost:3000
+      DATABASE_URL: postgresql+asyncpg://revenueos:local-ci-only@localhost:5432/revenueos
+      MOCK_AUTH_ENABLED: "true"
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --directory apps/api --locked
+      - name: Apply database migrations
+        run: uv --directory apps/api run alembic upgrade head
+      - name: Install Playwright Chromium
+        run: pnpm --filter @revenueos/web exec playwright install --with-deps chromium
+      - name: Run browser-to-API persistence acceptance
+        run: |
+          set -euo pipefail
+          uv --directory apps/api run uvicorn revenueos.main:app --port 8000 \
+            >/tmp/revenueos-full-stack-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8000/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              cat /tmp/revenueos-full-stack-api.log
+              exit 1
+            fi
+            sleep 1
+          done
+          pnpm test:e2e:full-stack

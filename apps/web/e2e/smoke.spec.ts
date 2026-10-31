@@ -549,6 +549,10 @@ test("interaction timeline supports deliberate creation and completion without i
         await route.fulfill({ json: [] });
         return;
       }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
+        return;
+      }
       if (request.method() === "POST" && path.endsWith("/start")) {
         await route.fulfill({
           json: {
@@ -689,20 +693,20 @@ test("interaction timeline supports deliberate creation and completion without i
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/interactions");
   await expect(
-    page.getByRole("heading", { name: "Interactions" }),
+    page.getByRole("heading", { name: "Conversations" }),
   ).toBeVisible();
   await expect(page.getByText("Acme Australia")).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Open Meeting Intelligence" }),
   ).toHaveAttribute("href", "/meetings/meeting-1");
 
-  await page.getByRole("link", { name: "Create interaction" }).first().click();
+  await page.getByRole("link", { name: "Add conversation" }).first().click();
   await page.getByLabel("Title").fill("Customer planning workshop");
-  await page.getByLabel("Interaction type").selectOption("workshop");
+  await page.getByLabel("Conversation type").selectOption("workshop");
   await page.getByLabel("Company").selectOption("company-1");
   await page.getByLabel("Opportunity").selectOption("opportunity-1");
-  await page.getByRole("button", { name: "Create interaction" }).click();
-  await expect(page).toHaveURL(/\/interactions\/interaction-2$/);
+  await page.getByRole("button", { name: "Add conversation" }).click();
+  await expect(page).toHaveURL(/\/conversations\/interaction-2$/);
   expect(created).toBe(true);
   expect(createPayload).toMatchObject({
     title: "Customer planning workshop",
@@ -713,7 +717,7 @@ test("interaction timeline supports deliberate creation and completion without i
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page.getByRole("button", { name: "Finish interaction" }).click();
   await expect(
-    page.getByRole("status", { name: "Interaction lifecycle status" }),
+    page.getByRole("status", { name: "Conversation lifecycle status" }),
   ).toHaveText("Completed");
   expect(completed).toBe(true);
   if (process.env.CAPTURE_WO_011_SCREENSHOT === "1") {
@@ -723,7 +727,7 @@ test("interaction timeline supports deliberate creation and completion without i
     });
   }
 
-  await page.getByRole("link", { name: "Back to interactions" }).click();
+  await page.getByRole("link", { name: "Back to conversations" }).click();
   await expect(
     page.getByRole("heading", { name: "Customer planning workshop" }),
   ).toBeVisible();
@@ -1274,7 +1278,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
   await page.getByRole("link", { name: "Prepare and start" }).click();
   await expect(page).toHaveURL(
-    /\/interactions\/interaction-visual\/companion$/,
+    /\/conversations\/interaction-visual\/workspace$/,
   );
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page
@@ -1294,7 +1298,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
     await page.getByRole("link", { name: "Back", exact: true }).click();
     await expect(
-      page.getByRole("status", { name: "Interaction lifecycle status" }),
+      page.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveText("Completed");
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({
@@ -1380,7 +1384,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   ).toBeVisible();
 
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await page
     .getByLabel("Your answer")
     .fill(
@@ -1526,6 +1530,10 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
       }
       if (path.endsWith("/recordings") && request.method() === "GET") {
         await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
         return;
       }
       if (path.endsWith("/start") && request.method() === "POST") {
@@ -1732,7 +1740,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await page.getByRole("button", { name: "Start call" }).click();
   await expect(
-    page.getByRole("status", { name: "Interaction lifecycle status" }),
+    page.getByRole("status", { name: "Conversation lifecycle status" }),
   ).toHaveText("In Progress");
   await expect(
     page.getByText(/does not intercept cellular calls/i),
@@ -1740,11 +1748,11 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
   await page.getByRole("button", { name: "End connected call" }).click();
   await expect(
     page.getByRole("heading", {
-      name: "Capture this call while it’s fresh",
+      name: "Write what you noticed on this call",
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Capture what happened" }),
+    page.getByRole("button", { name: "Start personal notes" }),
   ).toBeVisible();
   await page.getByText("Other debrief options").click();
   await expect(
@@ -1768,7 +1776,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
     });
   }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await page
     .getByLabel("Your answer")
     .fill("Jordan confirmed the budget and I will send the proposal.");
@@ -1902,6 +1910,10 @@ test("an authorised imported call recording uses the existing transcription and 
       if (path.endsWith("/recordings") && request.method() === "GET") {
         if (imported) transcriptionReady = true;
         await route.fulfill({ json: imported ? [importedRecording()] : [] });
+        return;
+      }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
         return;
       }
       if (path.endsWith("/recordings") && request.method() === "POST") {
@@ -2304,13 +2316,32 @@ test("mobile Companion recording path persists a consented transcript into exist
       }
     }
 
+    class DeterministicAudioTrack extends EventTarget {
+      readonly id = "synthetic-microphone-track";
+      readonly kind = "audio";
+      muted = false;
+      readyState: MediaStreamTrackState = "live";
+
+      getSettings(): MediaTrackSettings {
+        return { deviceId: "synthetic-microphone" };
+      }
+
+      stop(): void {
+        this.readyState = "ended";
+      }
+    }
+
+    const microphoneTrack = new DeterministicAudioTrack();
+    const mediaDevices = Object.assign(new EventTarget(), {
+      getUserMedia: async () => ({
+        getTracks: () => [microphoneTrack],
+        getAudioTracks: () => [microphoneTrack],
+        getVideoTracks: () => [],
+      }),
+    });
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
-      value: {
-        getUserMedia: async () => ({
-          getTracks: () => [{ stop: () => undefined }],
-        }),
-      },
+      value: mediaDevices,
     });
     Object.defineProperty(globalThis, "MediaRecorder", {
       configurable: true,
@@ -2863,7 +2894,7 @@ test("mobile Companion recording path persists a consented transcript into exist
     }),
   ).toBeVisible();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(
     page.getByText("What important outcome might the recording have missed?"),
   ).toBeVisible();
@@ -3136,7 +3167,7 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
     });
   }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(page.getByText("How did it go?")).toBeVisible();
   await page
     .getByLabel("Your answer")
@@ -3312,9 +3343,8 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(
     page
       .getByRole("article", { name: "Follow-up Email" })
-      .locator("p")
-      .filter({ hasText: "Subject: Pilot next steps" }),
-  ).toBeVisible();
+      .getByLabel("Editable follow-up draft"),
+  ).toHaveValue(/Subject: Pilot next steps/);
 
   await page.getByRole("button", { name: "Copy" }).click();
   await expect(page.getByText("Email copied to clipboard.")).toBeVisible();

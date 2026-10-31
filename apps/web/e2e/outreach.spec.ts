@@ -715,7 +715,7 @@ test("keeps Engage administration bounded and explicit", async ({ page }) => {
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
   const engage = page.locator("section", {
     has: page.getByRole("heading", { name: "Engage" }),
   });

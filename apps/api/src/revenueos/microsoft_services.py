@@ -9,13 +9,14 @@ from typing import Literal, cast
 from urllib.parse import quote, urlsplit
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.credential_store import CredentialStore, EncryptedDatabaseCredentialStore
+from revenueos.database import set_private_user_database_context
 from revenueos.domain import ConnectionStatus, ConnectorKey
 from revenueos.errors import PublicAPIError
 from revenueos.integration_contracts import (
@@ -34,6 +35,7 @@ from revenueos.models import (
     ActionProposal,
     ActionProposalVersion,
     Contact,
+    ConversationBriefingOutbox,
     EngageCampaignEnrollment,
     EngageEnrollmentStep,
     IntegrationAuditEvent,
@@ -563,6 +565,7 @@ class MicrosoftSyncService:
         removed = item.get("@removed")
         if isinstance(removed, dict):
             if existing is not None:
+                await self._reconcile_linked_briefings(existing.interaction_id, "cancelled", now)
                 existing.state = "deleted"
                 existing.last_synced_at = now
                 return 1
@@ -590,6 +593,8 @@ class MicrosoftSyncService:
         )
         if private:
             match_state, contact, company_id, opportunity_id = "private", None, None, None
+        linked_interaction_id = existing.interaction_id if existing is not None else None
+        previous_start = existing.start_at if existing is not None else None
         values: dict[str, object] = {
             "i_cal_uid": None if private else self._string(item.get("iCalUId"), 255),
             "series_master_id": None if private else self._string(item.get("seriesMasterId"), 255),
@@ -630,7 +635,47 @@ class MicrosoftSyncService:
                 setattr(existing, key, value)
             if private:
                 existing.interaction_id = None
+            if linked_interaction_id is not None:
+                briefing_status: Literal["superseded", "cancelled"] | None = (
+                    "cancelled"
+                    if private or values["state"] != "active"
+                    else ("superseded" if previous_start is not None and self._aware(previous_start) != start else None)
+                )
+                if briefing_status is not None:
+                    await self._reconcile_linked_briefings(linked_interaction_id, briefing_status, now)
         return 1
+
+    async def _reconcile_linked_briefings(
+        self,
+        interaction_id: UUID | None,
+        status: Literal["superseded", "cancelled"],
+        now: datetime,
+    ) -> None:
+        if interaction_id is None:
+            return
+        owner_user_id = await self.session.scalar(
+            select(Interaction.created_by_user_id).where(
+                Interaction.organisation_id == self.tenant.organisation_id,
+                Interaction.id == interaction_id,
+            )
+        )
+        if owner_user_id is None:
+            return
+        await set_private_user_database_context(self.session, owner_user_id)
+        try:
+            await self.session.execute(
+                update(ConversationBriefingOutbox)
+                .where(
+                    ConversationBriefingOutbox.organisation_id == self.tenant.organisation_id,
+                    ConversationBriefingOutbox.user_id == owner_user_id,
+                    ConversationBriefingOutbox.interaction_id == interaction_id,
+                    ConversationBriefingOutbox.kind == "pre_meeting",
+                    ConversationBriefingOutbox.status == "prepared",
+                )
+                .values(status=status, updated_at=now)
+            )
+        finally:
+            await set_private_user_database_context(self.session, self.tenant.user_id)
 
     async def _calendar_context(
         self,

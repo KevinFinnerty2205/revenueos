@@ -44,6 +44,7 @@ from revenueos.integration_executors import (
 )
 from revenueos.integration_worker import ActionExecutionWorkerService
 from revenueos.models import (
+    ConversationBriefingOutbox,
     EncryptedConnectorCredential,
     IntegrationConnection,
     Interaction,
@@ -52,6 +53,7 @@ from revenueos.models import (
     ProviderCalendarEvent,
     ProviderOutboundOperation,
     ProviderReply,
+    ProviderSyncState,
     User,
 )
 from revenueos.tenant import TenantContext
@@ -1108,6 +1110,89 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
             assert linked.interaction_id == interaction.id
             with pytest.raises(PublicAPIError, match="Private Google calendar events"):
                 await service.link_interaction(private.id, interaction.id)
+            calendar_state = await session.scalar(
+                select(ProviderSyncState).where(
+                    ProviderSyncState.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProviderSyncState.connection_id == connection.id,
+                    ProviderSyncState.resource_kind == "calendar",
+                )
+            )
+            assert calendar_state is not None
+            initial_briefing = ConversationBriefingOutbox(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=PRIMARY_USER_ID,
+                interaction_id=interaction.id,
+                kind="pre_meeting",
+                status="prepared",
+                deduplication_key=f"google-provider-reschedule:{interaction.id}",
+                source_fingerprint="a" * 64,
+                subject="Prepare",
+                body_text="Synthetic local preview",
+                href=f"/conversations/{interaction.id}#preparation",
+                prepared_for_at=now + timedelta(days=4),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(initial_briefing)
+            await session.flush()
+            rescheduled_at = now + timedelta(days=6)
+            assert (
+                await service._retain_calendar_event(
+                    connection,
+                    {
+                        "id": "customer-event",
+                        "summary": "Customer planning meeting — rescheduled",
+                        "start": {"dateTime": rescheduled_at.isoformat(), "timeZone": "Australia/Sydney"},
+                        "end": {
+                            "dateTime": (rescheduled_at + timedelta(hours=1)).isoformat(),
+                            "timeZone": "Australia/Sydney",
+                        },
+                        "organizer": {"email": "alex@example.test"},
+                        "attendees": [{"email": "jordan@example.com"}],
+                        "visibility": "default",
+                        "status": "confirmed",
+                        "updated": (now + timedelta(minutes=10)).isoformat(),
+                    },
+                    now + timedelta(minutes=10),
+                    calendar_state,
+                )
+                == 1
+            )
+            assert initial_briefing.status == "superseded"
+            assert service._aware(customer.start_at) == rescheduled_at
+            assert customer.provider_timezone == "Australia/Sydney"
+
+            cancellation_briefing = ConversationBriefingOutbox(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=PRIMARY_USER_ID,
+                interaction_id=interaction.id,
+                kind="pre_meeting",
+                status="prepared",
+                deduplication_key=f"google-provider-cancellation:{interaction.id}",
+                source_fingerprint="b" * 64,
+                subject="Prepare again",
+                body_text="Synthetic replacement preview",
+                href=f"/conversations/{interaction.id}#preparation",
+                prepared_for_at=now + timedelta(days=5),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(cancellation_briefing)
+            await session.flush()
+            assert (
+                await service._retain_calendar_event(
+                    connection,
+                    {"id": "customer-event", "status": "cancelled"},
+                    now + timedelta(minutes=11),
+                    calendar_state,
+                )
+                == 1
+            )
+            assert cancellation_briefing.status == "cancelled"
+            assert customer.state == "deleted"
+            assert customer.title == "Deleted event"
         await engine.dispose()
 
     asyncio.run(run())

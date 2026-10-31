@@ -2,7 +2,7 @@
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
 - Reviewed source baseline: `3fdf567e2f103abd312fee7e7297af996532c910`; deploy only the immutable post-review merge SHA recorded in the launch evidence
-- Required migration head: `0065_campaign_trigger_guard`
+- Required repository migration head: `0071_assignment_tombstones` (deployment remains a separate owner-approved operation)
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
 
@@ -22,11 +22,11 @@ This first deployment may contain synthetic data only. The target manifest inten
 
 ## 2. Environment model
 
-| Environment     | Identity/data                                                                    | Configuration and indexing                                                                                                                                                | Providers                                                                          |
-| --------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Development     | labelled mock auth and synthetic local data                                      | local HTTP permitted; normal developer SEO behaviour                                                                                                                      | deterministic mocks only unless a developer explicitly configures a test provider  |
-| Test            | deterministic isolated fixtures; no external credentials                         | test runner; robots disallow all                                                                                                                                          | contract-compatible mocks; external credentials never skip tests                   |
-| Preview/staging | separate Clerk development instance, synthetic data and separate database/bucket | `ORYNTELA_ENVIRONMENT=staging`; exact HTTPS origins; global `noindex`; production secrets prohibited                                                                      | all external execution off unless a bounded sandbox smoke is separately authorised |
+| Environment     | Identity/data                                                                    | Configuration and indexing                                                                                                                                                  | Providers                                                                          |
+| --------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Development     | labelled mock auth and synthetic local data                                      | local HTTP permitted; normal developer SEO behaviour                                                                                                                        | deterministic mocks only unless a developer explicitly configures a test provider  |
+| Test            | deterministic isolated fixtures; no external credentials                         | test runner; robots disallow all                                                                                                                                            | contract-compatible mocks; external credentials never skip tests                   |
+| Preview/staging | separate Clerk development instance, synthetic data and separate database/bucket | `ORYNTELA_ENVIRONMENT=staging`; exact HTTPS origins; global `noindex`; production secrets prohibited                                                                        | all external execution off unless a bounded sandbox smoke is separately authorised |
 | Production      | Clerk production instance; no customer data until WO-045                         | exact `.com.au` origins; legal version `2026-09-15` is indexable; trial requires exact administrator acceptance; checkout remains disabled; mock auth/connectors prohibited | all optional providers off until their individual approval gates pass              |
 
 The complete production handoff template is `infra/environments/production.env.example`. Classification:
@@ -208,7 +208,7 @@ paid-customer gate remains unapproved:
    capture safe identifiers/results only and refund only under separately approved
    policy.
 3. Only then enable `API_FEATURE_BILLING_ENABLED=true` for the paid-customer path and
-    monitor failed webhooks, reconciliation-required operations and payment failures.
+   monitor failed webhooks, reconciliation-required operations and payment failures.
 
 This future sequence is a runbook, not permission. Raw card data stays entirely in
 Stripe-hosted Checkout/portal surfaces; Oryntela does not claim PCI certification.
@@ -221,7 +221,7 @@ Before every release:
 2. Confirm a recent recoverable database backup and last restore result. If a migration is not backwards-compatible with the last app release, stop worker claims and schedule downtime.
 3. Run `alembic current` and verify the source state. Never edit `alembic_version` manually.
 4. Run once using the migration credential: `alembic upgrade head`.
-5. Verify `alembic current` is `0065_campaign_trigger_guard`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`. Before real customer data, also require `paid_customer_resilience_gate=pass`, backed by a fresh capacity/resilience review and explicit owner approval of the resulting production cost. A draft release or the downsized pre-launch profile must keep the overall result blocked.
+5. Verify `alembic current` is `0071_assignment_tombstones`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image. Require `terms_acceptance_release=pass`. Before real customer data, also require `paid_customer_resilience_gate=pass`, backed by a fresh capacity/resilience review and explicit owner approval of the resulting production cost. A draft release or the downsized pre-launch profile must keep the overall result blocked.
 6. Deploy the API and require `/health/live` = 200 and `/health/ready` = 200 before traffic. Start the exact same release's single worker and require its private liveness probe. Deploy web and require `/health/ready` = 200.
 7. Run the synthetic smoke matrix below. Inspect safe error rate/restarts and queue summaries before marking the release healthy.
 
@@ -392,6 +392,6 @@ Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic 
 
 ## 11. Rollback and release close
 
-Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. Retain migrations `0062_live_stripe_billing`, `0063_terms_acceptance`, `0064_deauthorisation` and `0065_campaign_trigger_guard` during application rollback so paid-through, acceptance, membership-authority and published-campaign immutability evidence remain authoritative. The billing downgrade refuses to run while live authority exists; do not delete or relabel billing, Terms or membership-authority evidence to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
+Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. Retain migrations `0062_live_stripe_billing` through `0071_assignment_tombstones` during application rollback so paid-through, acceptance, membership-authority, published-campaign immutability and conversation ownership evidence remain authoritative. The billing downgrade refuses to run while live authority exists; do not delete or relabel billing, Terms or membership-authority evidence to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
 
 After a successful launch window, record SHA, migration head, health/smoke results, any provider actions, spend, incidents and deviations. Public announcement and customer onboarding are separate owner gates and are not part of WO-054.

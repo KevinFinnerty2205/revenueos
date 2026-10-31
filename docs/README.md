@@ -22,6 +22,11 @@ This is the canonical product and engineering documentation index. Documents dis
    - [Oryntela preliminary trade-mark preparation](00-company/oryntela-trademark-preparation.md) — dated search record and adviser handoff; not legal clearance
    - [Oryntela trade mark adviser shortlist](00-company/oryntela-trademark-adviser-shortlist.md) — parked adviser research; professional review and filing deferred by owner
 2. [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md) — authoritative public-brand, product and future-direction consolidation
+   - [Conversation intelligence core](01-product/conversation-intelligence-core.md) — current conversation-first product surface, trust boundaries and legacy disposition
+   - [Conversation product foundations](03-engineering/conversation-product-foundations.md) — private workspace persistence, knowledge ingestion and local briefing-outbox boundaries
+   - [Conversation experience capability status](03-engineering/conversation-experience-capability-status.md) — strict A/B/C/D implementation and activation matrix plus browser verification record
+   - [ADR 0077: Conversation-first product surface](08-decisions/0077-conversation-first-product-surface.md)
+   - [ADR 0081: Explicit conversation threads and browser shared audio](08-decisions/0081-explicit-conversation-threads-and-browser-shared-audio.md)
    - [RevenueOS master product blueprint](01-product/master-product-blueprint.md) — historical technical product contract
    - [Oryntela commercial-product handoff](06-roadmap/oryntela-commercial-product-handoff.md) — owner decision brief
 3. [Interaction Intelligence vision](01-product/interaction-intelligence-vision.md) — approved post-WO-009 direction
@@ -829,6 +834,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 - [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
 - [ADR 0080: Canonical membership denial with Clerk session revocation](08-decisions/0080-immediate-user-deauthorisation.md)
+- [ADR 0081: Explicit conversation threads and browser shared audio](08-decisions/0081-explicit-conversation-threads-and-browser-shared-audio.md)
 
 ## Current delivery boundary
 
@@ -919,18 +925,20 @@ ingestion remain unimplemented.
 
 WO-015 adds optional consent-gated foreground browser recording, resumable private
 audio chunks, durable batch transcription, immutable transcript versions/segments,
-raw-audio retention/deletion/export handling and reconciliation. The default mock
-performs no network request. Native/background capture, meeting bots, telephony,
-online connectors, streaming transcription and biometric speaker identification
-remain unimplemented.
+raw-audio retention/deletion/export handling and reconciliation. The current web
+implementation supports microphone-only capture and, where a user-selected browser
+surface returns a live audio track, shared audio plus one distinct microphone mixed
+into an audio-only recorder stream. The default mock performs no network request.
+Native/background capture, meeting bots, telephony, production streaming
+transcription and biometric speaker identification remain unimplemented.
 
 WO-016 adds a mobile-first browser Companion over the existing Interaction
-lifecycle. Users deliberately choose recording or passive capture, can add
-authorised photos and metadata-only quick markers, and then enter a gap-fill
-debrief. Phone calls and online meetings remain passive; screen wake and local
-retry are best effort and foreground-only. Native/background capture, call or
-system-audio interception and automatically enabled live intelligence remain
-unimplemented.
+lifecycle. Users deliberately choose recording or passive capture, keep user-private
+live notes, can add authorised photos and metadata-only quick markers, and then
+enter a gap-fill debrief. Phone calls remain passive; online meetings can use
+supported explicit browser shared audio. Screen wake and local retry are best effort
+and foreground-only. Native/background capture, automatic call detection and
+automatically enabled live intelligence remain unimplemented.
 
 WO-017 makes phone calls first-class without changing that boundary. It adds a
 Contact-scoped compact brief, controlled direction/outcome, manual start/end,
@@ -940,9 +948,11 @@ remain visible. There is no dialler, cellular interception, call-log ingestion,
 telephony provider, phone enrichment, hidden microphone or native app.
 
 WO-018 makes Teams, Zoom, Meet and other online meetings first-class through safe
-navigation, passive Companion timing, authorised recording/transcript import and
-Debrief fallback. Provider-native and auto-ingestion flags remain off; there is no
-meeting bot, system-audio interception, extension, native app or real provider call.
+navigation, Companion capture, authorised recording/transcript import and Debrief
+fallback. Supported browser shared audio is user-selected and verified; it is not
+automatic or universal OS/cross-app interception. Provider-native and auto-ingestion
+flags remain off; there is no meeting bot, extension, native app or real provider
+call.
 
 WO-019 adds explicitly selected PDF/TXT documents and pasted plain-text email with
 private storage, bounded parsing, exact provenance and a complete human review
@@ -956,8 +966,11 @@ transcript already exists. PostgreSQL owns the cursor, bounded overlapping windo
 dedupe, provisional signals and brief progress. The quiet Companion can be collapsed,
 disabled or have one signal dismissed. Final reconciliation remains separate; no
 live result writes Opportunity Workspace final intelligence or Revenue Brain. The
-current detector and tests are deterministic/no-network, and production progressive
-transcription/external live AI remain disabled.
+current detector remains deterministic/no-network. A production-capable gated
+OpenAI live-signal adapter and provider-neutral progressive ordering/reconnect
+orchestration are implemented with fixture transports. Production progressive
+transcription remains an implementation gap and no external live provider was
+activated.
 
 WO-021 adds deterministic, typed Action proposals over final validated intelligence.
 Users can inspect sources, revise, approve, reject and manually complete safe internal

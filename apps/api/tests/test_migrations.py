@@ -14,7 +14,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-MIGRATION_HEAD = "0065_campaign_trigger_guard"
+MIGRATION_HEAD = "0071_assignment_tombstones"
 MIGRATION_HEAD_ROW = (MIGRATION_HEAD,)
 POSTGRES_IDENTIFIER_MAX_BYTES = 63
 MIGRATION_NAMED_OBJECT_ARGUMENTS = {
@@ -1931,6 +1931,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(live_interaction_sessions)").fetchall()
         }
         assert live_session_columns["organisation_id"] == 1
+        assert live_session_columns["provider_name"] == 1
+        assert live_session_columns["provider_uses_external_processing"] == 1
+        assert live_session_columns["external_processing_acknowledged_at"] == 0
         assert live_session_columns["last_processed_sequence"] == 1
         assert live_session_columns["retention_expires_at"] == 1
         live_signal_columns = {
@@ -3202,8 +3205,14 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:33] == [
+    assert [revision.revision for revision in script.walk_revisions()][:39] == [
         MIGRATION_HEAD,
+        "0070_live_provider_binding",
+        "0069_private_live_notes",
+        "0068_conversation_threads",
+        "0067_conversation_foundations",
+        "0066_conversation_core",
+        "0065_campaign_trigger_guard",
         "0064_deauthorisation",
         "0063_terms_acceptance",
         "0062_live_stripe_billing",
@@ -4443,6 +4452,104 @@ def test_commercial_migration_seeds_versions_backfills_add_ons_and_is_reversible
             ("create", 1, "manual_private_beta"),
             ("crm", 1, "manual_private_beta"),
         ]
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+
+
+def test_conversation_core_migration_preserves_meddicc_setting_on_rollback(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "conversation-core-migration.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0066_conversation_core")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    company_id = str(uuid.uuid4())
+    website_source_id = str(uuid.uuid4())
+    text_source_id = str(uuid.uuid4())
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Conversation core', ?)",
+            (organisation_id, f"conversation-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Owner')",
+            (user_id, f"user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO companies (id, organisation_id, name, status, owner_user_id) "
+            "VALUES (?, ?, 'Legacy knowledge company', 'active', ?)",
+            (company_id, organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO company_knowledge_sources "
+            "(id, organisation_id, source_kind, label, website_url, source_text, content_fingerprint, "
+            "processing_status, created_by_user_id, idempotency_key) "
+            "VALUES (?, ?, 'website', 'Legacy site', 'https://legacy.example.test', NULL, ?, "
+            "'saved_unprocessed', ?, 'legacy-site')",
+            (website_source_id, organisation_id, "a" * 64, user_id),
+        )
+        connection.execute(
+            "INSERT INTO company_knowledge_sources "
+            "(id, organisation_id, source_kind, label, website_url, source_text, content_fingerprint, "
+            "processing_status, created_by_user_id, idempotency_key) "
+            "VALUES (?, ?, 'supporting_text', 'Legacy text', NULL, 'Legacy approved context', ?, "
+            "'ready_for_review', ?, 'legacy-text')",
+            (text_source_id, organisation_id, "b" * 64, user_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_user_workspaces)")}
+        assert "live_notes" in workspace_columns
+        assignment_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(conversation_thread_assignments)")
+        }
+        assert assignment_columns["thread_id"][3] == 0
+        assert connection.execute(
+            "SELECT processing_status FROM company_knowledge_sources WHERE id = ?",
+            (website_source_id,),
+        ).fetchone() == ("queued",)
+        assert connection.execute(
+            "SELECT count(*) FROM company_knowledge_ingestion_jobs WHERE source_id = ? AND status = 'pending'",
+            (website_source_id,),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT summary_text FROM company_knowledge_sources WHERE id = ?",
+            (text_source_id,),
+        ).fetchone() == ("Legacy approved context",)
+        connection.execute(
+            "INSERT INTO organisation_methodology_settings "
+            "(organisation_id, selection, updated_by_user_id) VALUES (?, 'meddicc', ?)",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+
+    command.downgrade(configuration, "0065_campaign_trigger_guard")
+    with connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("meddic",)
+        remaining_tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "company_knowledge_sources" not in remaining_tables
+        assert "company_knowledge_ingestion_jobs" not in remaining_tables
+        assert "conversation_user_workspaces" not in remaining_tables
+        assert "conversation_delivery_preferences" not in remaining_tables
+        assert "conversation_briefing_outbox" not in remaining_tables
+        assert "conversation_threads" not in remaining_tables
+        assert "conversation_thread_assignments" not in remaining_tables
+        assert "conversation_thread_audit_events" not in remaining_tables
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:

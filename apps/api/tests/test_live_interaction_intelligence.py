@@ -3,24 +3,39 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID, uuid4
 
+import httpx
+import openai
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openai.types.responses import Response, ResponseInputParam, ResponseTextConfigParam
+from pydantic import SecretStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from revenueos.ai_provider_errors import ProviderTimeoutError, ProviderTransientError
 from revenueos.auth import get_current_user
 from revenueos.beta_maintenance import generate_export
+from revenueos.database import set_tenant_database_context
 from revenueos.debrief_repositories import DebriefRepository
+from revenueos.errors import PublicAPIError
 from revenueos.live_intelligence_contracts import (
     LiveBriefItemInput,
+    LiveProcessRequest,
     LiveProviderInput,
     LiveProviderOutput,
     LiveTranscriptSegmentInput,
 )
-from revenueos.live_intelligence_provider import DeterministicLiveSignalProvider
+from revenueos.live_intelligence_provider import (
+    LIVE_OPENAI_SCHEMA_NAME,
+    LIVE_SYSTEM_POLICY,
+    DeterministicLiveSignalProvider,
+    OpenAILiveSignalProvider,
+    create_live_signal_provider,
+)
 from revenueos.live_intelligence_services import (
     LiveInteractionIntelligenceService,
     expire_live_intelligence,
@@ -38,6 +53,7 @@ from revenueos.models import (
     TranscriptSegment,
     TranscriptVersion,
 )
+from revenueos.tenant import TenantContext
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -52,6 +68,141 @@ def enable_live(app: FastAPI) -> None:
     app.state.settings.feature_live_interaction_intelligence_enabled = True
     app.state.settings.private_beta_live_min_new_segments = 1
     app.state.settings.private_beta_live_min_new_characters = 40
+
+
+class _LiveResponseCreate:
+    def __init__(self, *, response: Response | None = None, error: Exception | None = None) -> None:
+        self.response = response
+        self.error = error
+        self.calls: list[dict[str, object]] = []
+
+    async def __call__(
+        self,
+        *,
+        model: str,
+        input: ResponseInputParam,
+        text: ResponseTextConfigParam,
+        max_output_tokens: int,
+        store: bool,
+        timeout: float,
+    ) -> Response:
+        self.calls.append(
+            {
+                "model": model,
+                "input": input,
+                "text": text,
+                "max_output_tokens": max_output_tokens,
+                "store": store,
+                "timeout": timeout,
+            }
+        )
+        if self.error is not None:
+            raise self.error
+        assert self.response is not None
+        return self.response
+
+
+def _live_openai_response(payload: dict[str, object]) -> Response:
+    response = Response.model_validate(
+        {
+            "id": "resp_live_test_123",
+            "created_at": 0.0,
+            "model": "gpt-live-test",
+            "object": "response",
+            "output": [
+                {
+                    "id": "msg_live_test_123",
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": json.dumps(payload),
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "parallel_tool_calls": False,
+            "tool_choice": "auto",
+            "tools": [],
+            "status": "completed",
+            "usage": {
+                "input_tokens": 100,
+                "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
+                "output_tokens": 40,
+                "output_tokens_details": {"reasoning_tokens": 0},
+                "total_tokens": 140,
+            },
+        }
+    )
+    response._request_id = "req_live_test_123"
+    return response
+
+
+def _live_provider_input() -> LiveProviderInput:
+    return LiveProviderInput(
+        interaction_type="phone_call",
+        segments=(
+            LiveTranscriptSegmentInput(
+                sequence_number=0,
+                start_ms=0,
+                end_ms=2_000,
+                speaker_label="Seller",
+                speaker_role="salesperson",
+                text="What timing would work for the rollout?",
+            ),
+            LiveTranscriptSegmentInput(
+                sequence_number=1,
+                start_ms=2_000,
+                end_ms=4_000,
+                speaker_label="Customer",
+                speaker_role="customer",
+                text="We are ready to move forward with an October rollout.",
+            ),
+        ),
+        brief_items=(
+            LiveBriefItemInput(
+                item_type="open_question",
+                item_index=0,
+                text="What rollout timing works?",
+            ),
+        ),
+        existing_signal_fingerprints=(),
+    )
+
+
+class _RecoveringExternalProvider:
+    provider_name = "openai"
+    uses_external_provider = True
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def detect(self, request: LiveProviderInput) -> LiveProviderOutput:
+        self.calls += 1
+        if self.calls == 1:
+            raise ProviderTransientError
+        customer = next(item for item in request.segments if item.speaker_role == "customer")
+        return LiveProviderOutput.model_validate_json(
+            json.dumps(
+                {
+                    "signals": [
+                        {
+                            "signal_type": "buying_signal",
+                            "statement": customer.text,
+                            "priority": "high",
+                            "evidence_strength": "customer_attributed",
+                            "subject_key": "commercial_progress",
+                            "sequence_start": customer.sequence_number,
+                            "sequence_end": customer.sequence_number,
+                        }
+                    ],
+                    "brief_progress": [],
+                }
+            )
+        )
 
 
 def create_supported_interaction(
@@ -557,18 +708,22 @@ def test_export_excludes_internal_fingerprints_and_meeting_deletion_removes_live
         return payload, meeting_id
 
     payload, meeting_id = asyncio.run(export_and_meeting_id())
-    assert payload["exportVersion"] == 39
+    assert payload["exportVersion"] == 41
     live_sessions = payload["liveInteractionSessions"]
     signals = payload["provisionalSignals"]
     assert isinstance(live_sessions, list) and len(live_sessions) == 1
     assert isinstance(signals, list) and signals
     assert isinstance(live_sessions[0], dict)
     assert isinstance(signals[0], dict)
+    assert live_sessions[0]["provider_name"] == "mock"
+    assert live_sessions[0]["provider_uses_external_processing"] is False
+    assert live_sessions[0]["external_processing_acknowledged_at"] is None
     assert "current_window_fingerprint" not in live_sessions[0]
     assert "signal_fingerprint" not in signals[0]
     assert "subject_fingerprint" not in signals[0]
     exported_live = json.dumps({"sessions": live_sessions, "signals": signals})
-    assert "provider" not in exported_live.casefold()
+    assert "provider_request" not in exported_live.casefold()
+    assert "raw_transcript" not in exported_live.casefold()
 
     deleted = client.delete(f"/api/v1/meetings/{meeting_id}")
     assert deleted.status_code == 204, deleted.text
@@ -591,12 +746,105 @@ def test_export_excludes_internal_fingerprints_and_meeting_deletion_removes_live
     assert asyncio.run(live_counts()) == (0, 0, 0, 0)
 
 
-def test_external_processing_requires_acknowledgement_and_configured_adapter(
+def test_openai_live_provider_uses_strict_no_tool_non_retained_request_without_network() -> None:
+    payload = {
+        "signals": [
+            {
+                "signal_type": "buying_signal",
+                "statement": "We are ready to move forward with an October rollout.",
+                "priority": "high",
+                "evidence_strength": "customer_attributed",
+                "subject_key": "commercial_progress",
+                "sequence_start": 1,
+                "sequence_end": 1,
+            }
+        ],
+        "brief_progress": [
+            {
+                "item_type": "open_question",
+                "item_index": 0,
+                "progress_status": "possibly_answered",
+                "source_sequence_end": 1,
+            }
+        ],
+    }
+    transport = _LiveResponseCreate(response=_live_openai_response(payload))
+    provider = OpenAILiveSignalProvider(
+        api_key="test-live-openai-key",
+        model_identifier="gpt-live-test",
+        timeout_seconds=12,
+        max_output_tokens=1_024,
+        response_create=transport,
+    )
+
+    output = asyncio.run(provider.detect(_live_provider_input()))
+
+    assert len(output.signals) == 1
+    assert output.signals[0].sequence_start == 1
+    assert output.brief_progress[0].source_sequence_end == 1
+    assert len(transport.calls) == 1
+    call = transport.calls[0]
+    assert call["model"] == "gpt-live-test"
+    assert call["store"] is False
+    assert call["timeout"] == 12
+    assert call["max_output_tokens"] == 1_024
+    assert "tools" not in call
+    assert LIVE_SYSTEM_POLICY in repr(call["input"])
+    assert "untrusted conversation evidence" in repr(call["input"])
+    text = cast(dict[str, object], call["text"])
+    output_format = cast(dict[str, object], text["format"])
+    assert output_format["name"] == LIVE_OPENAI_SCHEMA_NAME
+    assert output_format["strict"] is True
+    assert output_format["schema"] == LiveProviderOutput.model_json_schema(mode="validation")
+
+
+def test_openai_live_provider_maps_timeout_without_network() -> None:
+    transport = _LiveResponseCreate(
+        error=openai.APITimeoutError(httpx.Request("POST", "https://api.openai.com/v1/responses"))
+    )
+    provider = OpenAILiveSignalProvider(
+        api_key="test-live-openai-key",
+        model_identifier="gpt-live-test",
+        timeout_seconds=12,
+        max_output_tokens=1_024,
+        response_create=transport,
+    )
+
+    with pytest.raises(ProviderTimeoutError) as error:
+        asyncio.run(provider.detect(_live_provider_input()))
+
+    assert error.value.code == "provider_timeout"
+    assert error.value.retryable is True
+
+
+def test_live_provider_selection_defaults_local_and_requires_complete_openai_gate(app: FastAPI) -> None:
+    settings = app.state.settings
+    assert isinstance(create_live_signal_provider(settings), DeterministicLiveSignalProvider)
+
+    settings.feature_live_interaction_external_ai_enabled = True
+    settings.feature_openai_provider_enabled = True
+    settings.ai_provider_name = "openai"
+    settings.openai_api_key = SecretStr("test-live-openai-key")
+    settings.openai_model = "gpt-live-test"
+    transport = _LiveResponseCreate(response=_live_openai_response({"signals": [], "brief_progress": []}))
+
+    selected = create_live_signal_provider(settings, response_create=transport)
+
+    assert isinstance(selected, OpenAILiveSignalProvider)
+    assert selected.uses_external_provider is True
+    assert transport.calls == []
+
+
+def test_external_processing_requires_acknowledgement_before_gated_adapter_selection(
     app: FastAPI,
     client: TestClient,
 ) -> None:
     interaction_id, _ = create_supported_interaction(app, client)
     app.state.settings.feature_live_interaction_external_ai_enabled = True
+    app.state.settings.feature_openai_provider_enabled = True
+    app.state.settings.ai_provider_name = "openai"
+    app.state.settings.openai_api_key = SecretStr("test-live-openai-key")
+    app.state.settings.openai_model = "gpt-live-test"
 
     acknowledgement_required = client.post(
         f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
@@ -605,12 +853,177 @@ def test_external_processing_requires_acknowledgement_and_configured_adapter(
     assert acknowledgement_required.status_code == 422
     assert acknowledgement_required.json()["code"] == "external_processing_acknowledgement_required"
 
-    unavailable = client.post(
+    enabled = client.post(
         f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
         json={"externalProcessingAcknowledged": True},
     )
-    assert unavailable.status_code == 503
-    assert unavailable.json()["code"] == "live_external_provider_unavailable"
+    assert enabled.status_code == 200, enabled.text
+    assert enabled.json()["state"] == "active"
+
+    async def assert_persisted_authorisation() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            live_session = await session.scalar(
+                select(LiveInteractionSession).where(
+                    LiveInteractionSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                    LiveInteractionSession.interaction_id == UUID(interaction_id),
+                )
+            )
+            assert live_session is not None
+            assert live_session.provider_name == "openai"
+            assert live_session.provider_uses_external_processing is True
+            assert live_session.external_processing_acknowledged_at is not None
+        await engine.dispose()
+
+    asyncio.run(assert_persisted_authorisation())
+
+
+def test_live_session_provider_binding_prevents_config_switch_from_sending_externally(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    interaction_id, _ = create_supported_interaction(app, client)
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={},
+    )
+    assert started.status_code == 200, started.text
+    external_provider = _RecoveringExternalProvider()
+
+    async def run() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            service = LiveInteractionIntelligenceService(
+                session,
+                TenantContext(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    user_id=PRIMARY_USER_ID,
+                    role="admin",
+                ),
+                app.state.settings,
+                provider=external_provider,
+            )
+            with pytest.raises(PublicAPIError) as blocked:
+                await service.process(
+                    UUID(interaction_id),
+                    LiveProcessRequest(idempotency_key="provider-switch-must-fail-closed"),
+                )
+            assert blocked.value.code == "live_provider_binding_changed"
+            assert external_provider.calls == 0
+            live_session = await session.scalar(
+                select(LiveInteractionSession).where(
+                    LiveInteractionSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                    LiveInteractionSession.interaction_id == UUID(interaction_id),
+                )
+            )
+            assert live_session is not None
+            assert live_session.provider_name == "mock"
+            assert live_session.provider_uses_external_processing is False
+            assert live_session.external_processing_acknowledged_at is None
+            assert live_session.status == "active"
+            assert live_session.last_processed_sequence == -1
+            window_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(LiveProcessingWindow)
+                    .where(
+                        LiveProcessingWindow.organisation_id == PRIMARY_ORGANISATION_ID,
+                        LiveProcessingWindow.live_session_id == live_session.id,
+                    )
+                )
+                or 0
+            )
+            assert window_count == 0
+        await engine.dispose()
+
+    asyncio.run(run())
+
+
+def test_failed_live_provider_window_is_retryable_without_advancing_cursor(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    interaction_id, _ = create_supported_interaction(app, client)
+    app.state.settings.feature_live_interaction_external_ai_enabled = True
+    app.state.settings.feature_openai_provider_enabled = True
+    app.state.settings.ai_provider_name = "openai"
+    app.state.settings.openai_api_key = SecretStr("test-live-openai-key")
+    app.state.settings.openai_model = "gpt-live-test"
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={"externalProcessingAcknowledged": True},
+    )
+    assert started.status_code == 200, started.text
+    provider = _RecoveringExternalProvider()
+
+    async def run() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            service = LiveInteractionIntelligenceService(
+                session,
+                TenantContext(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    user_id=PRIMARY_USER_ID,
+                    role="admin",
+                ),
+                app.state.settings,
+                provider=provider,
+            )
+            with pytest.raises(PublicAPIError) as failed:
+                await service.process(
+                    UUID(interaction_id),
+                    LiveProcessRequest(idempotency_key="recoverable-live-window"),
+                )
+            assert failed.value.code == "live_processing_failed"
+            live_session = await session.scalar(
+                select(LiveInteractionSession).where(
+                    LiveInteractionSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                    LiveInteractionSession.interaction_id == UUID(interaction_id),
+                )
+            )
+            assert live_session is not None
+            assert live_session.status == "active"
+            assert live_session.last_processed_sequence == -1
+            failed_window = await session.scalar(
+                select(LiveProcessingWindow).where(
+                    LiveProcessingWindow.organisation_id == PRIMARY_ORGANISATION_ID,
+                    LiveProcessingWindow.live_session_id == live_session.id,
+                )
+            )
+            assert failed_window is not None
+            assert failed_window.status == "failed"
+            assert failed_window.failure_code == "provider_transient_failure"
+
+            recovered = await service.process(
+                UUID(interaction_id),
+                LiveProcessRequest(idempotency_key="recoverable-live-window"),
+            )
+            assert recovered.processed is True
+            assert provider.calls == 2
+            assert live_session.status == "active"
+            assert live_session.last_processed_sequence == 2
+            windows = list(
+                (
+                    await session.scalars(
+                        select(LiveProcessingWindow).where(
+                            LiveProcessingWindow.organisation_id == PRIMARY_ORGANISATION_ID,
+                            LiveProcessingWindow.live_session_id == live_session.id,
+                        )
+                    )
+                ).all()
+            )
+            assert len(windows) == 1
+            assert windows[0].id == failed_window.id
+            assert windows[0].status == "completed"
+            assert windows[0].failure_code is None
+        await engine.dispose()
+
+    asyncio.run(run())
 
 
 def test_live_character_and_concurrency_quotas_fail_closed(

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, update
+from sqlalchemy import event, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -34,12 +34,15 @@ from revenueos.models import (
     ActionProposal,
     ActionProposalVersion,
     Company,
+    ConversationBriefingOutbox,
+    IntegrationConnection,
     Interaction,
     MethodologyProjection,
     Opportunity,
     OrganisationMembership,
     OrganisationMethodologySetting,
     PreInteractionBrief,
+    ProviderCalendarEvent,
     RevenueBrainInsight,
     User,
 )
@@ -521,6 +524,199 @@ def test_daily_rejects_invalid_timezone(client: TestClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["code"] == "invalid_timezone"
+
+
+def test_delivery_preferences_and_local_outbox_are_versioned_deduplicated_and_reschedule_safe(
+    client: TestClient,
+) -> None:
+    seeded = _seed_daily_scenario()
+    preferences = client.get("/api/v1/daily/preferences")
+    assert preferences.status_code == 200
+    assert preferences.json()["exists"] is False
+    saved = client.put(
+        "/api/v1/daily/preferences",
+        json={
+            "expectedLockVersion": 0,
+            "timezone": "Australia/Sydney",
+            "morningDigestEnabled": True,
+            "morningDigestTime": "07:15",
+            "preMeetingEnabled": True,
+            "preMeetingMinutes": 45,
+            "importFromBrowser": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["lockVersion"] == 1
+    assert saved.json()["importedFromBrowserAt"] is not None
+    stale = client.put(
+        "/api/v1/daily/preferences",
+        json={
+            "expectedLockVersion": 0,
+            "timezone": "UTC",
+            "morningDigestEnabled": False,
+            "morningDigestTime": "08:00",
+            "preMeetingEnabled": False,
+            "preMeetingMinutes": 30,
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "delivery_preference_conflict"
+    morning = client.post("/api/v1/daily/briefing-preview", json={"kind": "morning_digest"})
+    assert morning.status_code == 200, morning.text
+    repeated_morning = client.post("/api/v1/daily/briefing-preview", json={"kind": "morning_digest"})
+    assert repeated_morning.status_code == 200, repeated_morning.text
+    assert repeated_morning.json()["id"] == morning.json()["id"]
+    assert repeated_morning.json()["duplicateSuppressed"] is True
+
+    async def statuses() -> list[str]:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            rows = list(
+                (
+                    await session.scalars(
+                        select(ConversationBriefingOutbox).where(
+                            ConversationBriefingOutbox.interaction_id == uuid.UUID(seeded["interaction_id"])
+                        )
+                    )
+                ).all()
+            )
+        await engine.dispose()
+        return sorted(row.status for row in rows)
+
+    request = {"kind": "pre_meeting", "interactionId": seeded["interaction_id"]}
+    first = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "prepared"
+    assert first.json()["duplicateSuppressed"] is False
+    assert "No generated brief is available" in first.json()["bodyText"]
+    repeated = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert repeated.status_code == 200
+    assert repeated.json()["id"] == first.json()["id"]
+    assert repeated.json()["duplicateSuppressed"] is True
+
+    rescheduled = client.patch(
+        f"/api/v1/interactions/{seeded['interaction_id']}",
+        json={
+            "scheduledStartAt": (datetime.now(UTC) + timedelta(days=2)).isoformat(),
+            "scheduledEndAt": (datetime.now(UTC) + timedelta(days=2, hours=1)).isoformat(),
+        },
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    assert asyncio.run(statuses()) == ["superseded"]
+    refreshed = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["id"] != first.json()["id"]
+
+    original_start = datetime.fromisoformat(first.json()["preparedForAt"]) + timedelta(minutes=45)
+    returned_to_original_time = client.patch(
+        f"/api/v1/interactions/{seeded['interaction_id']}",
+        json={
+            "scheduledStartAt": original_start.isoformat(),
+            "scheduledEndAt": (original_start + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert returned_to_original_time.status_code == 200, returned_to_original_time.text
+    reactivated = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["id"] == first.json()["id"]
+    assert reactivated.json()["status"] == "prepared"
+    assert reactivated.json()["duplicateSuppressed"] is False
+
+    assert asyncio.run(statuses()) == ["prepared", "superseded"]
+
+    cancelled = client.patch(
+        f"/api/v1/interactions/{seeded['interaction_id']}",
+        json={"lifecycleStatus": "cancelled"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert asyncio.run(statuses()) == ["cancelled", "superseded"]
+    cancelled_preview = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert cancelled_preview.status_code == 409
+    assert cancelled_preview.json()["code"] == "interaction_cancelled"
+    assert asyncio.run(statuses()) == ["cancelled", "superseded"]
+
+
+def test_pre_meeting_briefing_tracks_linked_provider_reschedule_and_cancellation(
+    client: TestClient,
+) -> None:
+    seeded = _seed_daily_scenario()
+    interaction_id = uuid.UUID(seeded["interaction_id"])
+    connection_id = uuid.uuid4()
+    event_id = uuid.uuid4()
+    first_start = datetime.now(UTC) + timedelta(days=3)
+
+    async def seed_provider_event() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            now = datetime.now(UTC)
+            session.add_all(
+                [
+                    IntegrationConnection(
+                        id=connection_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connector_key="microsoft_365",
+                        connection_status="active",
+                        created_by_user_id=PRIMARY_USER_ID,
+                        connected_at=now,
+                        last_verified_at=now,
+                        capability_state_json=["read_calendar"],
+                        metadata_version=1,
+                    ),
+                    ProviderCalendarEvent(
+                        id=event_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connection_id=connection_id,
+                        provider_key="microsoft_365",
+                        provider_event_id="synthetic-briefing-event",
+                        title="Synthetic provider meeting",
+                        start_at=first_start,
+                        end_at=first_start + timedelta(hours=1),
+                        provider_timezone="UTC",
+                        attendee_emails_json=[],
+                        sensitivity="normal",
+                        state="active",
+                        match_state="matched",
+                        interaction_id=interaction_id,
+                        last_synced_at=now,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ]
+            )
+            await session.commit()
+        await engine.dispose()
+
+    async def update_provider_event(*, starts_at: datetime | None = None, state: str | None = None) -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            event_record = await session.get(ProviderCalendarEvent, event_id)
+            assert event_record is not None
+            if starts_at is not None:
+                event_record.start_at = starts_at
+                event_record.end_at = starts_at + timedelta(hours=1)
+            if state is not None:
+                event_record.state = state
+            event_record.last_synced_at = datetime.now(UTC)
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed_provider_event())
+    request = {"kind": "pre_meeting", "interactionId": str(interaction_id)}
+    first = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert first.status_code == 200, first.text
+    assert datetime.fromisoformat(first.json()["preparedForAt"]) == first_start - timedelta(minutes=30)
+
+    rescheduled_start = first_start + timedelta(days=1)
+    asyncio.run(update_provider_event(starts_at=rescheduled_start))
+    rescheduled = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert rescheduled.status_code == 200, rescheduled.text
+    assert rescheduled.json()["id"] != first.json()["id"]
+    assert datetime.fromisoformat(rescheduled.json()["preparedForAt"]) == rescheduled_start - timedelta(minutes=30)
+
+    asyncio.run(update_provider_event(state="cancelled"))
+    cancelled = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert cancelled.status_code == 409
+    assert cancelled.json()["code"] == "interaction_cancelled"
 
 
 def test_daily_fails_closed_for_disabled_membership(client: TestClient) -> None:

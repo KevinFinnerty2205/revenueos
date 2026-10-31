@@ -1537,6 +1537,16 @@ async function routeFlagship(page: Page) {
       });
       return;
     }
+    if (path === "/api/v1/interactions" && method === "GET") {
+      await fulfilJson(route, {
+        items: [],
+        page: 1,
+        pageSize: 6,
+        total: 0,
+        pages: 0,
+      });
+      return;
+    }
     if (path === "/api/v1/prospect/companies/search") {
       await fulfilJson(route, {
         items: [
@@ -2327,16 +2337,16 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
   await test.step("15 Capture what happened", async () => {
     await page.getByRole("button", { name: "Start call" }).click();
     await expect(
-      page.getByRole("status", { name: "Interaction lifecycle status" }),
+      page.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveText("In Progress");
     await page.getByRole("button", { name: "End connected call" }).click();
     await expect(
       page.getByRole("heading", {
-        name: "Capture this call while it’s fresh",
+        name: "Write what you noticed on this call",
       }),
     ).toBeVisible();
     await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-    await page.getByRole("button", { name: "Capture what happened" }).click();
+    await page.getByRole("button", { name: "Start personal notes" }).click();
     await page
       .getByLabel("Your answer")
       .fill(
@@ -2472,7 +2482,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
       ),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Sales Methodology" }),
+      page.getByRole("heading", { name: "Framework assessment" }),
     ).toBeVisible();
     await expect(
       page.getByText(

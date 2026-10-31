@@ -43,6 +43,7 @@ from revenueos.models import (
     ClosedWonHandoverRevision,
     ClosedWonHandoverSource,
     Company,
+    CompanyKnowledgeSource,
     Contact,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
@@ -285,6 +286,14 @@ def test_owner_demo_seed_is_linked_idempotent_and_resettable() -> None:
             opportunity = await session.get(Opportunity, first["opportunity_id"])
             contact = await session.get(Contact, first["contact_id"])
             profile = await session.get(SellingProfileRevision, first["selling_profile_revision_id"])
+            knowledge_website = await session.get(
+                CompanyKnowledgeSource,
+                first["knowledge_website_source_id"],
+            )
+            knowledge_text = await session.get(
+                CompanyKnowledgeSource,
+                first["knowledge_text_source_id"],
+            )
             business_case = await session.get(CreateBusinessCase, first["business_case_id"])
             presentation = await session.get(CreatePresentation, first["presentation_id"])
             presentation_version = await session.get(
@@ -324,6 +333,12 @@ def test_owner_demo_seed_is_linked_idempotent_and_resettable() -> None:
             assert contact is not None
             assert contact.company_id == company.id
             assert profile is not None and profile.state == "approved"
+            assert knowledge_website is not None
+            assert knowledge_website.processing_status == "queued"
+            assert knowledge_website.website_url == "https://northstar-facilities.example/"
+            assert knowledge_text is not None
+            assert knowledge_text.source_kind == "text_file"
+            assert knowledge_text.processing_status == "queued"
             assert business_case is not None
             assert business_case.state == "approved"
             assert business_case.account_id == company.id

@@ -252,10 +252,13 @@ not applicable because no upstream connector exists.
 ## WO-020 Live Intelligence controls
 
 The live path is explicit, separately flagged and valid only over an already
-authorised progressive transcript. Its deterministic provider makes no external
-request. Customer-intent categories require customer attribution; unknown speakers
-are conservative and visible. Server cursor/idempotency controls prevent browser
-tampering and repeated windows, while completion freezes processing.
+authorised progressive transcript. Its deterministic default makes no external
+request. A gated OpenAI live-signal adapter exists, and each session durably binds
+the selected provider mode and external-processing acknowledgement before any
+provider call; a later configuration change fails closed. Customer-intent categories
+require customer attribution; unknown speakers are conservative and visible. Server
+cursor/idempotency controls prevent browser tampering and repeated windows, while
+completion freezes processing.
 
 Provisional state is tenant-owned under forced RLS, expires after 30 days by default
 and is included in export/deletion without raw transcript or hidden provider data.
