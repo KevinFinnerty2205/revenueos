@@ -28,7 +28,17 @@ test("briefing preferences survive a new browser context through the real API an
       },
     );
     await firstLeadTime.fill(String(changedMinutes));
+    await firstLeadTime.press("Tab");
+    const saveResponsePromise = firstPage.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/v1/daily/preferences" &&
+        response.request().method() === "PUT",
+    );
     await firstPage.getByRole("button", { name: "Save preferences" }).click();
+    const saveResponse = await saveResponsePromise;
+    expect(saveResponse.ok()).toBeTruthy();
+    const saved = (await saveResponse.json()) as DeliveryPreferenceResponse;
+    expect(saved.preMeetingMinutes).toBe(changedMinutes);
     await expect(
       firstPage.getByText(/Preferences saved privately/i),
     ).toBeVisible();
