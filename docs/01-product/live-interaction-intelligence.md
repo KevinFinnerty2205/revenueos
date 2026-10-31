@@ -30,9 +30,11 @@ valid result. There is no score, forecast, confidence percentage or coaching scr
 
 - Face-to-face meetings, presentations, workshops, site visits and online meetings
   can use live processing only when an authorised progressive source exists.
-- The current deterministic source is suitable for synthetic/private-beta evaluation.
-  WO-015 recording and WO-018 online import remain batch/post-interaction paths; the
-  product does not claim that they provide production live transcription.
+- The current deterministic source is suitable for synthetic/private-beta
+  evaluation. Provider-neutral audio ordering, partial/final revisions, bounded
+  buffering, cancellation and reconnect/retry are implemented and fixture-tested,
+  but no production progressive-transcription adapter feeds this source. WO-015
+  recording and WO-018 online import remain batch/post-interaction paths.
 - Ordinary cellular calls have no same-device capture. Phone Live Intelligence is
   unavailable unless a separately authorised progressive source exists.
 - Executive lunches and other sensitive unsupported modes fall back to passive
@@ -60,7 +62,15 @@ customer intent.
   processing also waits for enough new material.
 - Online live capability depends on an authorised progressive source.
 - There is no ordinary cellular-call interception, native app or meeting bot.
-- External live AI is disabled and unavailable in this work order.
+- A server-only OpenAI Responses live-signal adapter is implemented with strict
+  schema/source validation, no tools, `store=false`, bounded timeouts and safe
+  retry/error mapping. Each live session durably records its provider mode and,
+  when external processing is selected, the user's acknowledgement time; processing
+  fails closed if runtime configuration no longer matches that binding. Live
+  activation and verification remain disabled; the local deterministic detector
+  remains the default.
+- Production progressive audio-to-text transport is an implementation gap, not an
+  activation-only boundary.
 - Private-beta flags, quotas, consent, retention and production-data restrictions
   remain in force.
 

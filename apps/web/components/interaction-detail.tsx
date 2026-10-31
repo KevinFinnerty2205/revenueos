@@ -14,6 +14,8 @@ import { RecordingFoundation } from "@/components/recording-foundation";
 import { ImportedCallRecording } from "@/components/imported-call-recording";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
 import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
+import { ConversationMemory } from "@/components/conversation-memory";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 export function InteractionDetail({
   interactionId,
@@ -26,6 +28,20 @@ export function InteractionDetail({
   const [completing, setCompleting] = useState(false);
   const [starting, setStarting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const personalWorkspace = useConversationWorkspace({ interactionId });
+  const liveNotesStatus = personalWorkspace.error
+    ? personalWorkspace.error
+    : personalWorkspace.loading
+      ? "Loading your private notes…"
+      : personalWorkspace.saveState === "saving"
+        ? "Saving private notes…"
+        : personalWorkspace.saveState === "saved"
+          ? "Private notes saved."
+          : personalWorkspace.saveState === "conflict"
+            ? "These notes changed in another session. Your local text is still visible; reload before saving again."
+            : personalWorkspace.saveState === "failed"
+              ? "Private notes could not be saved. Your local text is still visible."
+              : "Private to you until you deliberately include something in review.";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -367,6 +383,12 @@ export function InteractionDetail({
           ) : null}
         </div>
       </div>
+      <div className="mt-6" id="conversation-memory">
+        <ConversationMemory
+          interactionId={interaction.id}
+          companyId={interaction.companyId}
+        />
+      </div>
       {!isCompleted ? (
         <div className="mt-6" id="preparation">
           <BetaFeatureGate feature="aiCompanion">
@@ -383,7 +405,6 @@ export function InteractionDetail({
             <PostInteractionCapture
               interactionId={interaction.id}
               interactionType={interaction.interactionType}
-              opportunityId={interaction.opportunityId}
               restoreLatest
             />
           </BetaFeatureGate>
@@ -408,10 +429,11 @@ export function InteractionDetail({
                 Use your meeting platform
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Oryntela remains passive while the meeting runs. It does not
-                join, record system audio, monitor the browser or run a meeting
-                bot. End the meeting here, then add an authorised recording or
-                transcript, or report what happened while it is fresh.
+                Oryntela never joins the meeting or runs a meeting bot. In
+                Companion, you can deliberately share a meeting tab or screen
+                with audio and add your microphone, choose microphone only, or
+                continue without recording. Nothing starts in the background,
+                and display video is never recorded or uploaded.
               </p>
             </section>
           ) : interaction.interactionType === "phone_call" ? (
@@ -466,6 +488,19 @@ export function InteractionDetail({
                   interactionId={interaction.id}
                   interactionType={interaction.interactionType}
                   lifecycleStatus={interaction.lifecycleStatus}
+                  liveNotes={personalWorkspace.values.liveNotes}
+                  onLiveNotesChange={(value) =>
+                    personalWorkspace.setValues((current) => ({
+                      ...current,
+                      liveNotes: value,
+                    }))
+                  }
+                  onSaveLiveNotes={() => void personalWorkspace.save()}
+                  liveNotesSaveDisabled={
+                    personalWorkspace.loading ||
+                    personalWorkspace.saveState === "saving"
+                  }
+                  liveNotesStatus={liveNotesStatus}
                 />
               </BetaFeatureGate>
             )}

@@ -130,6 +130,7 @@ class InteractionService:
             if request.expected_lock_version != workspace.lock_version:
                 raise self._workspace_conflict()
             workspace.lock_version += 1
+        workspace.live_notes = request.live_notes
         workspace.enhanced_notes = request.enhanced_notes
         workspace.follow_up_draft = request.follow_up_draft
         workspace.follow_up_reviewed = request.follow_up_reviewed
@@ -780,6 +781,7 @@ class InteractionService:
             exists=True,
             owner_user_id=workspace.user_id,
             lock_version=workspace.lock_version,
+            live_notes=workspace.live_notes,
             enhanced_notes=workspace.enhanced_notes,
             follow_up_draft=workspace.follow_up_draft,
             follow_up_reviewed=workspace.follow_up_reviewed,

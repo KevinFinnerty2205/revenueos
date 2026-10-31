@@ -5,7 +5,7 @@
 - Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest owner build-only boundary: 24 October 2026 (Australia/Sydney)
 - Pre-gate main baseline: `4facc04`
-- Current repository migration head: `0065_campaign_trigger_guard`
+- Current repository migration head: `0071_assignment_tombstones`
 - Deployed pre-build migration head: `0064_deauthorisation`
 - State: downsized synthetic-only production healthy; Stripe live configuration bound and verified;
   exact legal release owner-approved and published; OpenAI project funded and its
@@ -28,14 +28,14 @@ when invoked. AWS S3 Standard in `ap-southeast-2` is the independent encrypted b
 destination and has no fixed monthly minimum. This configuration is synthetic-only
 and is not approved as the first paid-customer or customer-data resilience profile.
 
-| Item | Exact selection | Current displayed price | Billing boundary |
-| --- | --- | ---: | --- |
-| Web | DigitalOcean `apps-s-1vcpu-0.5gb` | USD 5/month | billed per second, one-minute minimum, capped using the provider's monthly component rules |
-| API | DigitalOcean `apps-s-1vcpu-0.5gb` | USD 5/month | same |
-| Worker | DigitalOcean `apps-s-1vcpu-0.5gb` | USD 5/month | same |
-| Database | DigitalOcean PostgreSQL, 1 GiB/1 shared vCPU/10 GiB, primary only | USD 15.15/month | prorated provider monthly rate; no standby in the pre-launch profile |
-| Application objects | DigitalOcean Spaces Standard, Sydney | USD 5/month | starts with the first bucket; prorated hourly after all buckets are destroyed |
-| Independent backup | AWS S3 Standard, Sydney | USD 0 fixed | USD 0.025/GB-month first 50 TB; USD 0.0055/1,000 PUT/COPY/POST/LIST; USD 0.0044/10,000 GET/other, plus transfer |
+| Item                | Exact selection                                                   | Current displayed price | Billing boundary                                                                                                |
+| ------------------- | ----------------------------------------------------------------- | ----------------------: | --------------------------------------------------------------------------------------------------------------- |
+| Web                 | DigitalOcean `apps-s-1vcpu-0.5gb`                                 |             USD 5/month | billed per second, one-minute minimum, capped using the provider's monthly component rules                      |
+| API                 | DigitalOcean `apps-s-1vcpu-0.5gb`                                 |             USD 5/month | same                                                                                                            |
+| Worker              | DigitalOcean `apps-s-1vcpu-0.5gb`                                 |             USD 5/month | same                                                                                                            |
+| Database            | DigitalOcean PostgreSQL, 1 GiB/1 shared vCPU/10 GiB, primary only |         USD 15.15/month | prorated provider monthly rate; no standby in the pre-launch profile                                            |
+| Application objects | DigitalOcean Spaces Standard, Sydney                              |             USD 5/month | starts with the first bucket; prorated hourly after all buckets are destroyed                                   |
+| Independent backup  | AWS S3 Standard, Sydney                                           |             USD 0 fixed | USD 0.025/GB-month first 50 TB; USD 0.0055/1,000 PUT/COPY/POST/LIST; USD 0.0044/10,000 GET/other, plus transfer |
 
 The current fixed DigitalOcean total is **USD 35.15/month** before tax and short-lived
 job usage. The former fixed DigitalOcean total was USD 95.90/month, so the approved
@@ -64,15 +64,15 @@ authenticated control-plane evidence; DigitalOcean, AWS and Clerk reflect subseq
 owner-confirmed state and the current build-only boundary. This owner-demo branch does
 not independently re-verify or change any provider control plane.
 
-| Provider | Account/resource evidence | Launch classification |
-| --- | --- | --- |
-| DigitalOcean | existing Sydney web, API, worker, single-node PostgreSQL and private Spaces resources; owner-confirmed healthy at USD 35.15/month fixed before tax and short-lived jobs; no customer data | active synthetic-only pre-launch profile; unchanged and not approved for first-customer resilience |
-| AWS | existing independent-backup schedule and retention must be preserved; this build-only pass does not create, delete, purchase or re-test AWS resources | existing control retained; current delivery/recovery evidence remains a separate operations gate |
-| Clerk | existing production identity configuration is preserved; this build-only pass neither changes identity settings nor onboards a customer | production activation state unchanged; named-customer/session proof remains a separate gate |
-| Stripe | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled under the separate billing gate |
-| OpenAI API | owner-controlled `Personal` organisation; project `Oryntela Production` (`proj_fb1vGtmPRjlbzlMamBvJbPKf`); USD 5 prepaid balance with auto-reload off; organisation and project hard limits each USD 5/month; only `gpt-5.6-terra` allowed at 10,000 TPM / 1 RPM; 90-day service-account key restricted to Responses write and bound as an encrypted runtime secret to API and worker | configured but execution remains fail-closed; the current build-only direction authorises no paid request or synthetic production smoke |
-| Zoho Mail | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure | active/existing |
-| Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised | not configured; must remain disabled |
+| Provider                                                       | Account/resource evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Launch classification                                                                                                                   |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| DigitalOcean                                                   | existing Sydney web, API, worker, single-node PostgreSQL and private Spaces resources; owner-confirmed healthy at USD 35.15/month fixed before tax and short-lived jobs; no customer data                                                                                                                                                                                                                                                                                                                              | active synthetic-only pre-launch profile; unchanged and not approved for first-customer resilience                                      |
+| AWS                                                            | existing independent-backup schedule and retention must be preserved; this build-only pass does not create, delete, purchase or re-test AWS resources                                                                                                                                                                                                                                                                                                                                                                  | existing control retained; current delivery/recovery evidence remains a separate operations gate                                        |
+| Clerk                                                          | existing production identity configuration is preserved; this build-only pass neither changes identity settings nor onboards a customer                                                                                                                                                                                                                                                                                                                                                                                | production activation state unchanged; named-customer/session proof remains a separate gate                                             |
+| Stripe                                                         | Australian live account `acct_1UFXmNEAHCYYkWOg`; Core/Growth/Complete live Products and six exact recurring AUD Prices; live webhook `we_1UFYbZEAHCYYkWOgz2zpW3Ox`; bounded portal `bpc_1UFYdFEAHCYYkWOg309ZjGMV`; encrypted runtime-only API and webhook secrets bound to API and worker; read-only `live_stripe_billing` preflight passed; owner completed the Stripe Services Agreement certification; Stripe reports no active verification tasks and Payments/Payouts active; no customer, charge or subscription | configured and provider-activated; checkout and Credits disabled under the separate billing gate                                        |
+| OpenAI API                                                     | owner-controlled `Personal` organisation; project `Oryntela Production` (`proj_fb1vGtmPRjlbzlMamBvJbPKf`); USD 5 prepaid balance with auto-reload off; organisation and project hard limits each USD 5/month; only `gpt-5.6-terra` allowed at 10,000 TPM / 1 RPM; 90-day service-account key restricted to Responses write and bound as an encrypted runtime secret to API and worker                                                                                                                                  | configured but execution remains fail-closed; the current build-only direction authorises no paid request or synthetic production smoke |
+| Zoho Mail                                                      | existing owner register plus live MX/SPF/DMARC evidence; do not reconfigure                                                                                                                                                                                                                                                                                                                                                                                                                                            | active/existing                                                                                                                         |
+| Prospect, Microsoft 365, Google Workspace, HubSpot, Salesforce | no production credentials or activation authorised                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | not configured; must remain disabled                                                                                                    |
 
 On 15 September 2026 the owner approved the exact PR #88 Terms and Privacy Policy,
 selected effective date `2026-09-15`, and authorised publication. The legal-release
@@ -197,9 +197,9 @@ records exactly as they are; this branch does not re-verify or modify the contro
 plane. Leave `oryntela.com` unchanged and do not enable HSTS preload as part of this
 work.
 
-Additional production expansion is paused. Alembic migration
-`0065_campaign_trigger_guard` belongs to the reviewed repository candidate and may
-reach production only through a separately approved deployment. Do not resize
+Additional production expansion is paused. Alembic migrations through the current
+repository head `0071_assignment_tombstones` may reach production only through a
+separately approved deployment. Do not resize
 services, add a standby, create paid
 test/restore resources, activate a provider, enable checkout/Credits, release real
 customer data or begin WO-045 under this build instruction.
@@ -209,7 +209,7 @@ customer data or begin WO-045 under this build instruction.
 1. Approve a fresh capacity, high-availability, bounded-load and recovery assessment
    plus the resulting fixed cost before the first paid customer or real customer data.
 2. Separately approve a reviewed production deployment of the eventual merged Git
-   revision containing Alembic head `0065_campaign_trigger_guard`; the owner-demo
+   revision containing Alembic head `0071_assignment_tombstones`; the owner-demo
    branch itself must not deploy.
 3. Separately approve the real-data release and named-customer/Clerk session evidence.
 4. Separately approve any OpenAI, Prospect, Microsoft, Google, HubSpot or Salesforce

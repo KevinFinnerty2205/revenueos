@@ -18,22 +18,24 @@ Conversations, Knowledge and Frameworks. Search / Ask Oryntela and Settings are
 secondary. Conversation routes become the canonical links emitted by the daily
 service, while legacy Interaction routes remain compatible.
 
-The existing modular-monolith domains remain in place. Company knowledge adds a
-small tenant-owned source table with explicit honest states. A website address
-is stored without being fetched; manually supplied bounded text is ready for
-administrator review and can be inspected or removed. The versioned Company &
-Selling Profile remains the only approved organisation context.
+The existing modular-monolith domains remain in place. Company knowledge uses the
+tenant-owned queued ingestion/review lifecycle. Approved bounded website/document
+extractions and the versioned Company & Selling Profile are organisation context;
+unapproved source content remains unavailable to preparation and guidance.
 
 Completed user-owned debriefs are recoverable in the conversation page so
 phone calls receive the same visible review journey as meetings. Conversation
-coverage is evaluated against the selected framework without being presented
-as win probability. Cumulative qualification remains attached only to an
-explicitly linked Opportunity so unrelated initiatives are not merged.
+coverage is evaluated against the selected framework without being presented as
+win probability. Lightweight conversation threads replace Opportunity as the
+mandatory longitudinal grouping key. Company and participant overlap may suggest a
+thread, but only an explicit user confirmation creates or corrects the assignment;
+there is no company-wide fallback.
 
-Digest and pre-meeting preferences use a deterministic browser-local preview
-in this pass. It demonstrates current-state content, tenant-scoped links and a
-stable duplicate key but intentionally does not activate a scheduler or email
-transport.
+Private live/enhanced notes, follow-up drafts and briefing preferences use
+authenticated user-and-tenant server persistence with optimistic locking. Digest
+and pre-meeting scheduling writes exact deterministic content to a local outbox with
+timezone, duplicate, reschedule and cancellation handling; it intentionally does
+not activate email delivery.
 
 Legacy CRM, prospecting, revenue, campaign and content-creation routes and
 tables remain intact but are absent from default navigation and onboarding.
@@ -55,3 +57,6 @@ tables remain intact but are absent from default navigation and onboarding.
 - Some legacy pages remain reachable by direct links from supporting records;
   they are compatibility surfaces, not the product's primary experience.
 - Native capture and live external providers remain separate future work.
+- Explicit supported-browser shared tab/display audio is a web capability under
+  [ADR 0081](0081-explicit-conversation-threads-and-browser-shared-audio.md); native
+  cross-app capture remains future work.

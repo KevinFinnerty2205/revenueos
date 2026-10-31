@@ -134,6 +134,7 @@ class InteractionStart(APIModel):
 
 class ConversationWorkspaceUpdate(APIModel):
     expected_lock_version: int
+    live_notes: ConversationDraft | None = None
     enhanced_notes: ConversationDraft | None = None
     follow_up_draft: ConversationDraft | None = None
     follow_up_reviewed: bool = False
@@ -152,6 +153,7 @@ class ConversationWorkspaceResponse(APIModel):
     exists: bool
     owner_user_id: UUID
     lock_version: int
+    live_notes: str | None = None
     enhanced_notes: str | None = None
     follow_up_draft: str | None = None
     follow_up_reviewed: bool = False

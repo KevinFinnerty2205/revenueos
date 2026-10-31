@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.ai_provider_errors import ProviderError
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
@@ -41,8 +42,8 @@ from revenueos.live_intelligence_contracts import (
     ProvisionalSignalResponse,
 )
 from revenueos.live_intelligence_provider import (
-    DeterministicLiveSignalProvider,
     LiveSignalProvider,
+    create_live_signal_provider,
 )
 from revenueos.live_intelligence_repositories import LiveIntelligenceRepository
 from revenueos.models import (
@@ -86,7 +87,7 @@ class LiveInteractionIntelligenceService:
         self.settings = settings
         self.repository = LiveIntelligenceRepository(session)
         self.beta = BetaService(session, tenant, settings)
-        self.provider = provider or DeterministicLiveSignalProvider()
+        self.provider = provider or create_live_signal_provider(settings)
 
     async def get(self, interaction_id: UUID) -> LiveIntelligenceResponse:
         interaction = await self._interaction(interaction_id)
@@ -138,17 +139,11 @@ class LiveInteractionIntelligenceService:
                 "No authorised progressive transcript source is available. Use the post-interaction Debrief instead.",
                 409,
             )
-        if self.settings.feature_live_interaction_external_ai_enabled:
-            if not request.external_processing_acknowledged:
-                raise PublicAPIError(
-                    "external_processing_acknowledgement_required",
-                    "Acknowledge external processing before enabling this live path.",
-                    422,
-                )
+        if self.provider.uses_external_provider and not request.external_processing_acknowledged:
             raise PublicAPIError(
-                "live_external_provider_unavailable",
-                "The external Live Intelligence provider is not configured for this release.",
-                503,
+                "external_processing_acknowledgement_required",
+                "Acknowledge external processing before enabling this live path.",
+                422,
             )
         if (
             await self.repository.count_active_sessions(self.tenant.organisation_id)
@@ -170,6 +165,9 @@ class LiveInteractionIntelligenceService:
             created_by_user_id=self.tenant.user_id,
             status="active",
             source_kind="progressive_transcript",
+            provider_name=self.provider.provider_name,
+            provider_uses_external_processing=self.provider.uses_external_provider,
+            external_processing_acknowledged_at=(now if self.provider.uses_external_provider else None),
             last_processed_sequence=-1,
             processed_character_count=0,
             processing_request_count=0,
@@ -259,12 +257,14 @@ class LiveInteractionIntelligenceService:
                 "Live processing is not active for this interaction.",
                 409,
             )
+        self._require_bound_provider(live_session)
         replay = await self.repository.window_by_trigger(
             self.tenant.organisation_id,
             live_session.id,
             request.idempotency_key,
         )
-        if replay is not None:
+        failed_replay = replay if replay is not None and replay.status == "failed" else None
+        if replay is not None and failed_replay is None:
             return self._process_response(
                 await self._response(interaction, live_session),
                 processed=replay.status in {"completed", "no_signal"},
@@ -277,16 +277,37 @@ class LiveInteractionIntelligenceService:
             overlap=self.settings.private_beta_live_window_overlap_segments,
             limit=self.settings.private_beta_live_window_segments,
         )
-        new_segments = [item for item in segments if item.sequence_number > live_session.last_processed_sequence]
-        contiguous = self._contiguous_new_segments(new_segments, live_session.last_processed_sequence + 1)
-        if not contiguous:
+        if failed_replay is not None:
+            window = [
+                item
+                for item in segments
+                if failed_replay.first_sequence <= item.sequence_number <= failed_replay.last_sequence
+            ]
+            if [item.sequence_number for item in window] != list(
+                range(failed_replay.first_sequence, failed_replay.last_sequence + 1)
+            ):
+                raise PublicAPIError(
+                    "live_source_changed",
+                    "The progressive transcript window changed before retry. Wait for the next bounded update.",
+                    409,
+                )
+        else:
+            new_segments = [item for item in segments if item.sequence_number > live_session.last_processed_sequence]
+            contiguous = self._contiguous_new_segments(new_segments, live_session.last_processed_sequence + 1)
+            if not contiguous:
+                return self._process_response(
+                    await self._response(interaction, live_session),
+                    processed=False,
+                    new_segment_count=0,
+                )
+            window = self._bounded_window(segments, contiguous[-1].sequence_number)
+        new_in_window = [item for item in window if item.sequence_number > live_session.last_processed_sequence]
+        if not new_in_window:
             return self._process_response(
                 await self._response(interaction, live_session),
                 processed=False,
                 new_segment_count=0,
             )
-        window = self._bounded_window(segments, contiguous[-1].sequence_number)
-        new_in_window = [item for item in window if item.sequence_number > live_session.last_processed_sequence]
         if not self._cadence_ready(live_session, new_in_window):
             return self._process_response(
                 await self._response(interaction, live_session),
@@ -296,12 +317,20 @@ class LiveInteractionIntelligenceService:
         new_character_count = sum(len(item.text) for item in new_in_window)
         await self._enforce_quotas(live_session, new_character_count)
         window_fingerprint = self._window_fingerprint(live_session.transcript_version_id, window)
-        duplicate = await self.repository.window_by_fingerprint(
-            self.tenant.organisation_id,
-            live_session.id,
-            window_fingerprint,
-        )
-        if duplicate is not None:
+        if failed_replay is not None and failed_replay.window_fingerprint != window_fingerprint:
+            raise PublicAPIError(
+                "live_source_changed",
+                "The progressive transcript window changed before retry. Wait for the next bounded update.",
+                409,
+            )
+        duplicate = failed_replay
+        if duplicate is None:
+            duplicate = await self.repository.window_by_fingerprint(
+                self.tenant.organisation_id,
+                live_session.id,
+                window_fingerprint,
+            )
+        if duplicate is not None and duplicate.status != "failed":
             return self._process_response(
                 await self._response(interaction, live_session),
                 processed=duplicate.status in {"completed", "no_signal"},
@@ -309,21 +338,28 @@ class LiveInteractionIntelligenceService:
             )
 
         now = datetime.now(UTC)
-        processing_window = LiveProcessingWindow(
-            id=uuid.uuid4(),
-            organisation_id=self.tenant.organisation_id,
-            live_session_id=live_session.id,
-            trigger_idempotency_key=request.idempotency_key,
-            window_fingerprint=window_fingerprint,
-            first_sequence=window[0].sequence_number,
-            last_sequence=window[-1].sequence_number,
-            segment_count=len(window),
-            character_count=sum(len(item.text) for item in window),
-            status="processing",
-            signal_count=0,
-            created_at=now,
-        )
-        self.session.add(processing_window)
+        if duplicate is not None:
+            processing_window = duplicate
+            processing_window.status = "processing"
+            processing_window.failure_code = None
+            processing_window.completed_at = None
+            processing_window.signal_count = 0
+        else:
+            processing_window = LiveProcessingWindow(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                live_session_id=live_session.id,
+                trigger_idempotency_key=request.idempotency_key,
+                window_fingerprint=window_fingerprint,
+                first_sequence=window[0].sequence_number,
+                last_sequence=window[-1].sequence_number,
+                segment_count=len(window),
+                character_count=sum(len(item.text) for item in window),
+                status="processing",
+                signal_count=0,
+                created_at=now,
+            )
+            self.session.add(processing_window)
         live_session.status = "processing"
         live_session.current_window_fingerprint = window_fingerprint
         logger.info(
@@ -377,19 +413,22 @@ class LiveInteractionIntelligenceService:
                     ),
                 )
             )
-            detected_count, updated_count, superseded_count = await self._apply_detections(
-                live_session,
-                provider_output.signals,
-                now,
-            )
-            signal_count = detected_count + updated_count
-            await self._apply_progress(live_session, provider_output.brief_progress)
+            async with self.session.begin_nested():
+                detected_count, updated_count, superseded_count = await self._apply_detections(
+                    live_session,
+                    provider_output.signals,
+                    now,
+                )
+                signal_count = detected_count + updated_count
+                await self._apply_progress(live_session, provider_output.brief_progress)
         except Exception as exc:
+            error_code = exc.code if isinstance(exc, ProviderError) else "live_provider_failure"
             processing_window.status = "failed"
-            processing_window.failure_code = "live_provider_failure"
+            processing_window.failure_code = error_code
             processing_window.completed_at = datetime.now(UTC)
-            live_session.status = "failed"
-            live_session.failure_code = "live_provider_failure"
+            live_session.status = "active"
+            live_session.failure_code = None
+            live_session.current_window_fingerprint = None
             await self._commit("Live processing failed safely.")
             logger.warning(
                 "live_processing_failed",
@@ -397,18 +436,20 @@ class LiveInteractionIntelligenceService:
                     "organisation_id": str(self.tenant.organisation_id),
                     "interaction_id": str(interaction_id),
                     "live_session_id": str(live_session.id),
-                    "error_code": "live_provider_failure",
+                    "error_code": error_code,
+                    "retryable": getattr(exc, "retryable", False),
                 },
             )
             raise PublicAPIError(
                 "live_processing_failed",
-                "Live Intelligence paused safely. Continue the interaction and use Debrief afterwards.",
+                "The latest bounded live update failed safely. You can retry while the interaction remains active.",
                 503,
             ) from exc
 
         completed_at = datetime.now(UTC)
         processing_window.status = "completed" if signal_count else "no_signal"
         processing_window.signal_count = signal_count
+        processing_window.failure_code = None
         processing_window.completed_at = completed_at
         live_session.status = "active"
         live_session.failure_code = None
@@ -807,6 +848,25 @@ class LiveInteractionIntelligenceService:
                 409,
             )
         return live_session
+
+    def _require_bound_provider(self, live_session: LiveInteractionSession) -> None:
+        """Fail closed if runtime configuration differs from session consent."""
+
+        binding_matches = (
+            live_session.provider_name == self.provider.provider_name
+            and live_session.provider_uses_external_processing == self.provider.uses_external_provider
+        )
+        acknowledgement_present = (
+            not live_session.provider_uses_external_processing
+            or live_session.external_processing_acknowledged_at is not None
+        )
+        if binding_matches and acknowledgement_present:
+            return
+        raise PublicAPIError(
+            "live_provider_binding_changed",
+            "Live processing is paused because its provider authorisation no longer matches this session.",
+            409,
+        )
 
     def _cadence_ready(
         self,

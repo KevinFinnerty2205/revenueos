@@ -8,6 +8,7 @@ export type WorkspaceSaveState =
   "idle" | "saving" | "saved" | "failed" | "conflict";
 
 interface WorkspaceValues {
+  liveNotes: string;
   enhancedNotes: string;
   followUpDraft: string;
   followUpReviewed: boolean;
@@ -15,20 +16,24 @@ interface WorkspaceValues {
 
 export function useConversationWorkspace({
   interactionId,
+  initialLiveNotes = "",
   initialEnhancedNotes = "",
   initialFollowUpDraft = "",
 }: {
   interactionId: string;
+  initialLiveNotes?: string;
   initialEnhancedNotes?: string;
   initialFollowUpDraft?: string;
 }) {
   const [workspace, setWorkspace] =
     useState<ConversationWorkspaceResponse | null>(null);
   const defaults = useRef({
+    liveNotes: initialLiveNotes,
     enhancedNotes: initialEnhancedNotes,
     followUpDraft: initialFollowUpDraft,
   });
   const [values, setValues] = useState<WorkspaceValues>({
+    liveNotes: initialLiveNotes,
     enhancedNotes: initialEnhancedNotes,
     followUpDraft: initialFollowUpDraft,
     followUpReviewed: false,
@@ -46,6 +51,9 @@ export function useConversationWorkspace({
       );
       setWorkspace(response);
       setValues({
+        liveNotes: response.exists
+          ? (response.liveNotes ?? "")
+          : defaults.current.liveNotes,
         enhancedNotes: response.exists
           ? (response.enhancedNotes ?? "")
           : defaults.current.enhancedNotes,
@@ -92,6 +100,7 @@ export function useConversationWorkspace({
             method: "PUT",
             body: JSON.stringify({
               expectedLockVersion: workspace.lockVersion,
+              liveNotes: merged.liveNotes,
               enhancedNotes: merged.enhancedNotes,
               followUpDraft: merged.followUpDraft,
               followUpReviewed: merged.followUpReviewed,

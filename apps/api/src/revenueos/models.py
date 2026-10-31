@@ -1502,12 +1502,159 @@ class ConversationUserWorkspace(TimestampMixin, Base):
     )
     interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    live_notes: Mapped[str | None] = mapped_column(Text)
     enhanced_notes: Mapped[str | None] = mapped_column(Text)
     follow_up_draft: Mapped[str | None] = mapped_column(Text)
     follow_up_reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     generation_fingerprint: Mapped[str | None] = mapped_column(String(64))
     imported_from_browser_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ConversationThread(TimestampMixin, Base):
+    __tablename__ = "conversation_threads"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 200", name="ck_conversation_threads_name"),
+        CheckConstraint("status IN ('active', 'archived')", name="ck_conversation_threads_status"),
+        CheckConstraint("lock_version > 0", name="ck_conversation_threads_lock"),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_conversation_threads_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_threads_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "updated_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_threads_updater",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_threads_org_id"),
+        Index(
+            "ix_conversation_threads_org_company_status",
+            "organisation_id",
+            "company_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ConversationThreadAssignment(TimestampMixin, Base):
+    __tablename__ = "conversation_thread_assignments"
+    __table_args__ = (
+        CheckConstraint(
+            "confirmation_kind IN ('user_confirmed', 'user_corrected')",
+            name="ck_conversation_thread_assignments_confirmation",
+        ),
+        CheckConstraint("lock_version > 0", name="ck_conversation_thread_assignments_lock"),
+        ForeignKeyConstraint(
+            ["organisation_id", "thread_id"],
+            ["conversation_threads.organisation_id", "conversation_threads.id"],
+            name="fk_conversation_thread_assignments_thread",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_conversation_thread_assignments_interaction",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "confirmed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_thread_assignments_confirmer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_thread_assignments_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            name="uq_conversation_thread_assignments_interaction",
+        ),
+        Index(
+            "ix_conversation_thread_assignments_org_thread",
+            "organisation_id",
+            "thread_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    # A nullable thread keeps an assignment tombstone after unassignment so the
+    # optimistic version remains monotonic across remove/recreate cycles.
+    thread_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    confirmed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    confirmation_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="user_confirmed", server_default="user_confirmed"
+    )
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ConversationThreadAuditEvent(Base):
+    __tablename__ = "conversation_thread_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('created', 'updated', 'archived', 'assigned', 'reassigned', 'unassigned')",
+            name="ck_conversation_thread_audit_events_action",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "thread_id"],
+            ["conversation_threads.organisation_id", "conversation_threads.id"],
+            name="fk_conversation_thread_audit_events_thread",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_conversation_thread_audit_events_interaction",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_thread_audit_events_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_thread_audit_events_org_id"),
+        Index(
+            "ix_conversation_thread_audit_events_org_thread_created",
+            "organisation_id",
+            "thread_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    thread_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class ConversationDeliveryPreference(TimestampMixin, Base):
@@ -8783,6 +8930,17 @@ class LiveInteractionSession(TimestampMixin, Base):
             name="ck_live_interaction_sessions_failure_code",
         ),
         CheckConstraint(
+            "length(trim(provider_name)) BETWEEN 1 AND 50",
+            name="ck_live_sessions_provider_name",
+        ),
+        CheckConstraint(
+            "(provider_uses_external_processing = false AND "
+            "external_processing_acknowledged_at IS NULL) OR "
+            "(provider_uses_external_processing = true AND "
+            "external_processing_acknowledged_at IS NOT NULL)",
+            name="ck_live_sessions_external_ack",
+        ),
+        CheckConstraint(
             "stopped_at IS NULL OR stopped_at >= started_at",
             name="ck_live_interaction_sessions_time_range",
         ),
@@ -8853,6 +9011,14 @@ class LiveInteractionSession(TimestampMixin, Base):
     source_kind: Mapped[str] = mapped_column(
         String(32), nullable=False, default="progressive_transcript", server_default="progressive_transcript"
     )
+    provider_name: Mapped[str] = mapped_column(String(50), nullable=False, default="mock", server_default="mock")
+    provider_uses_external_processing: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    external_processing_acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_processed_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=-1, server_default="-1")
     last_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     current_window_fingerprint: Mapped[str | None] = mapped_column(String(64))

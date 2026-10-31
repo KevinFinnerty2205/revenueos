@@ -85,6 +85,7 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         "exists": False,
         "ownerUserId": str(PRIMARY_USER_ID),
         "lockVersion": 0,
+        "liveNotes": None,
         "enhancedNotes": None,
         "followUpDraft": None,
         "followUpReviewed": False,
@@ -97,6 +98,7 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         f"/api/v1/interactions/{interaction_id}/personal-workspace",
         json={
             "expectedLockVersion": 0,
+            "liveNotes": "Private notes typed while capture was active.",
             "enhancedNotes": "Private edited notes from browser one.",
             "followUpDraft": "Draft only — do not send.",
             "followUpReviewed": False,
@@ -110,6 +112,7 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
 
     second_session = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
     assert second_session.status_code == 200
+    assert second_session.json()["liveNotes"] == "Private notes typed while capture was active."
     assert second_session.json()["enhancedNotes"] == "Private edited notes from browser one."
     stale = client.put(
         f"/api/v1/interactions/{interaction_id}/personal-workspace",
@@ -196,6 +199,7 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
     private_workspaces = exported["privateConversationWorkspaces"]
     assert isinstance(private_workspaces, list)
     assert len(private_workspaces) == 1
+    assert private_workspaces[0]["live_notes"] == "Private notes typed while capture was active."
     assert private_workspaces[0]["enhanced_notes"] == "Private edited notes from browser one."
     assert "Another member's private notes" not in str(exported)
 

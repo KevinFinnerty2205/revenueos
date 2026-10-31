@@ -13,6 +13,7 @@ const savedWorkspace = {
   exists: true,
   ownerUserId: "user-1",
   lockVersion: 4,
+  liveNotes: "Notes retained if media capture stops",
   enhancedNotes: "Saved in another browser",
   followUpDraft: "Saved draft — never send automatically.",
   followUpReviewed: false,
@@ -61,6 +62,7 @@ describe("useConversationWorkspace", () => {
     expect(result.current.saveState).toBe("saved");
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
       expectedLockVersion: 4,
+      liveNotes: "Notes retained if media capture stops",
       enhancedNotes: "Edited in this browser",
       followUpDraft: "Saved draft — never send automatically.",
     });

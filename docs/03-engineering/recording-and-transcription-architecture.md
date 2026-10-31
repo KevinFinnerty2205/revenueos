@@ -7,10 +7,13 @@ quota, worker and transcription lifecycle with `platform_recording` or
 `user_uploaded_recording` provenance. Authorised TXT/VTT/SRT transcript import
 creates the same immutable transcript versions/segments directly, plus Capture and
 Evidence records; it does not create a second transcript or intelligence system.
-The new online-meeting UI never offers browser microphone capture as platform/system
-audio; the explicitly consented WO-015 foreground recording API remains compatible
-for established Meeting flows. Native fetch and auto-ingestion are disabled pending
-a selected, reviewed provider adapter.
+The online-meeting Companion offers an explicit browser choice between microphone
+only and shared tab/display audio plus microphone where the browser returns a live
+shared audio track. It does not represent microphone-only capture as remote meeting
+audio and does not call this provider/platform recording. Display video is never
+passed to `MediaRecorder` or uploaded. Authorised import remains available, while
+native fetch and auto-ingestion are disabled pending a selected, reviewed provider
+adapter.
 
 ## WO-016 Companion orchestration
 
@@ -21,10 +24,12 @@ warning that includes queued bytes, best-effort Screen Wake Lock and a hard
 interlock before Interaction completion. A tenant-scoped service rule rejects a
 second active recording session for the same Interaction.
 
-Phone calls and online meetings do not expose Companion recording controls.
-The browser cannot claim same-device call capture or reliable meeting
-system-audio capture. Unsent chunks remain only in the current tab's memory;
-verified server chunks continue to use the durable lifecycle below.
+Phone calls do not expose Companion recording controls because the browser cannot
+claim same-device call capture. Online meetings can expose deliberate shared-audio
+capture, but support depends on the browser, OS, selected surface and share-audio
+choice; the implementation verifies the returned audio track and falls back visibly.
+Unsent chunks remain only in the current tab's memory; verified server chunks
+continue to use the durable lifecycle below.
 
 WO-017 adds only an explicit import client for an already authorised phone-call
 recording. It creates `imported_audio_recording` with a required controlled
@@ -32,17 +37,19 @@ recording. It creates `imported_audio_recording` with a required controlled
 transcript versioning below. It does not add direct telephony capture or a second
 pipeline.
 
-- **Status:** WO-015 current implementation for browser-first recording, resumable
-  private upload and batch transcription. Near-real-time, native and connector
-  paths remain target architecture.
+- **Status:** browser-first microphone/shared-audio recording, resumable private
+  upload and batch transcription are implemented. Provider-neutral progressive
+  ordering/reconnect orchestration is fixture-verified, but no production streaming
+  transcription adapter is implemented. Native and connector capture remain target
+  architecture.
 - **MVP posture:** Debrief remains first-class. Authorised recording uses finalised
   sessions and batch transcription, not real-time infrastructure.
 
 ## Decision summary
 
 - Recording remains an optional Capture Session, never the only interaction path.
-- Use direct-to-private-object-storage chunk upload with short-lived tenant-bound
-  upload authorisation when binary capture is implemented.
+- Browser and imported binary capture use direct-to-private-object-storage chunk
+  upload with short-lived tenant-bound upload authorisation.
 - Keep session metadata/manifests and processing state in PostgreSQL.
 - Reuse the existing durable PostgreSQL worker and provider abstraction for bounded
   asynchronous finalisation/transcription stages.
@@ -140,8 +147,9 @@ retry.
 - Maximum duration: 10,800 seconds (three hours).
 - Maximum recording: 512 MiB; maximum chunk: 8 MiB; maximum chunks: 4,096.
 - Session expiry: 24 hours; verified raw-audio retention: seven days by default.
-- Browser: feature detection and foreground `MediaRecorder`; no background or
-  screen-lock guarantee.
+- Browser: feature detection and foreground `MediaRecorder`; supported shared audio
+  is mixed with one microphone through Web Audio into one audio-only output. There
+  is no background, screen-lock or universal system-audio guarantee.
 - Storage: the hardened private visual-storage port is reused under a neutral
   binary-object alias. Production requires S3-compatible private storage.
 - Queueing: `recording_sessions.lifecycle_status='uploaded'` is the durable work
@@ -259,15 +267,15 @@ flowchart TD
     D --> X
 ```
 
-| Option                                        | Reliability                                        | Complexity/maintenance                                   | Visibility and consent                              | Enterprise acceptance                   | Recommendation                                   |
-| --------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------- | --------------------------------------- | ------------------------------------------------ |
+| Option                                        | Reliability                                        | Complexity/maintenance                                   | Visibility and consent                             | Enterprise acceptance                   | Recommendation                                   |
+| --------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------- | --------------------------------------- | ------------------------------------------------ |
 | Platform-provided recording/transcript import | High after provider finalises; availability varies | Moderate adapter/webhook/polling work                    | Uses platform notice/controls plus Oryntela policy | Usually strongest                       | First option for an approved target platform     |
-| User-operated recording/import                | User-dependent but explicit and recoverable        | Lowest                                                   | Clear user control; notice still required           | Good as fallback                        | MVP fallback                                     |
-| Native Zoom/Teams/Meet integration            | Good with supported APIs; platform differences     | High per platform, policy changes and regional behaviour | Native recording indicators/permissions             | Strong when approved by customer        | Select one based on design partners, then expand |
-| Visible meeting bot                           | Join/admission/waiting-room/removal failures       | High cross-platform operations                           | Highly visible but can be rejected                  | Mixed; often restricted                 | Not first; later opt-in coverage path            |
-| Desktop audio capture                         | OS/device dependent and hard to attribute          | High QA and permissions                                  | Local indicator/notice required                     | Security review can be difficult        | Later specialised fallback                       |
-| Browser extension                             | Browser/platform-specific                          | High policy/compatibility maintenance                    | Extension and meeting notice required               | Requires enterprise deployment approval | Later selected workflows only                    |
-| Calendar-triggered bot join                   | Adds timing convenience, not capture reliability   | High identity/admission/error surface                    | Risk of unexpected join                             | Often sensitive                         | Do not build first                               |
+| User-operated recording/import                | User-dependent but explicit and recoverable        | Lowest                                                   | Clear user control; notice still required          | Good as fallback                        | MVP fallback                                     |
+| Native Zoom/Teams/Meet integration            | Good with supported APIs; platform differences     | High per platform, policy changes and regional behaviour | Native recording indicators/permissions            | Strong when approved by customer        | Select one based on design partners, then expand |
+| Visible meeting bot                           | Join/admission/waiting-room/removal failures       | High cross-platform operations                           | Highly visible but can be rejected                 | Mixed; often restricted                 | Not first; later opt-in coverage path            |
+| Desktop audio capture                         | OS/device dependent and hard to attribute          | High QA and permissions                                  | Local indicator/notice required                    | Security review can be difficult        | Later specialised fallback                       |
+| Browser extension                             | Browser/platform-specific                          | High policy/compatibility maintenance                    | Extension and meeting notice required              | Requires enterprise deployment approval | Later selected workflows only                    |
+| Calendar-triggered bot join                   | Adds timing convenience, not capture reliability   | High identity/admission/error surface                    | Risk of unexpected join                            | Often sensitive                         | Do not build first                               |
 
 Platform-provided imports normally preserve the strongest platform speaker/attendance
 metadata and avoid per-meeting bot operations, but their licence/API availability and
@@ -291,7 +299,10 @@ mismatch, transcript-only sources, missing speaker identity and provider deletio
 ## Live Interaction Intelligence
 
 WO-020 implements the live intelligence aggregate over a deliberately supplied
-`progressive`/`provisional` transcript version. It does not make the WO-015 batch
+`progressive`/`provisional` transcript version. The provider-neutral progressive
+orchestrator now defines ordered audio delivery, stable deduplication, partial/final
+revisions, bounded buffering, cancellation and resumable retry, but it is not wired
+to a production provider or public capture route. It does not make the WO-015 batch
 provider stream, does not pretend WO-018 imports are live and stores no duplicate
 transcript window. Segment `speaker_role` is controlled and optional; a label remains
 different from identity.
@@ -305,9 +316,11 @@ reconciles separately. The final result may remove or contradict a live signal.
 Real-time transport becomes justified only when tests show that a specific
 in-session decision benefits from low latency and the benefit outweighs attention,
 privacy, cost and reliability risks. WebSockets/streaming are not architecture goals
-by themselves; the current path uses bounded HTTP polling. Production progressive
-transcription remains disabled until a provider and its consent/privacy/operational
-controls are separately approved.
+by themselves; live-signal reads still use bounded HTTP polling. Production
+progressive transcription is an implementation gap until an evaluated provider
+adapter and its consent/privacy/region/cost/operational controls are separately
+approved. The OpenAI live-signal Responses adapter is implemented and gated, but it
+consumes authorised progressive text rather than audio.
 
 ## Observability and failure UX
 

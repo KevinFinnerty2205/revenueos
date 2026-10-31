@@ -61,6 +61,9 @@ from revenueos.models import (
     ContactSuppression,
     ConversationBriefingOutbox,
     ConversationDeliveryPreference,
+    ConversationThread,
+    ConversationThreadAssignment,
+    ConversationThreadAuditEvent,
     ConversationUserWorkspace,
     CreateApprovedContentItem,
     CreateBusinessCase,
@@ -215,7 +218,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import S3CompatibleVisualStorage, VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 40
+EXPORT_VERSION = 41
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1323,8 +1326,26 @@ async def _delete_organisation_records(
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
         await session.execute(
+            delete(ConversationBriefingOutbox).where(ConversationBriefingOutbox.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ConversationUserWorkspace).where(ConversationUserWorkspace.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ConversationDeliveryPreference).where(
+                ConversationDeliveryPreference.organisation_id == organisation_id
+            )
+        )
+        await session.execute(
             delete(InteractionAuditEvent).where(InteractionAuditEvent.organisation_id == organisation_id)
         )
+        await session.execute(
+            delete(ConversationThreadAuditEvent).where(ConversationThreadAuditEvent.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ConversationThreadAssignment).where(ConversationThreadAssignment.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ConversationThread).where(ConversationThread.organisation_id == organisation_id))
         await session.execute(
             delete(OnlineMeetingMetadata).where(OnlineMeetingMetadata.organisation_id == organisation_id)
         )
@@ -3516,6 +3537,21 @@ async def _export_payload(
         select(CompanyKnowledgeIngestionJob)
         .where(CompanyKnowledgeIngestionJob.organisation_id == organisation_id)
         .order_by(CompanyKnowledgeIngestionJob.created_at, CompanyKnowledgeIngestionJob.id)
+    )
+    conversation_threads = await rows(
+        select(ConversationThread)
+        .where(ConversationThread.organisation_id == organisation_id)
+        .order_by(ConversationThread.created_at, ConversationThread.id)
+    )
+    conversation_thread_assignments = await rows(
+        select(ConversationThreadAssignment)
+        .where(ConversationThreadAssignment.organisation_id == organisation_id)
+        .order_by(ConversationThreadAssignment.created_at, ConversationThreadAssignment.id)
+    )
+    conversation_thread_audit_events = await rows(
+        select(ConversationThreadAuditEvent)
+        .where(ConversationThreadAuditEvent.organisation_id == organisation_id)
+        .order_by(ConversationThreadAuditEvent.created_at, ConversationThreadAuditEvent.id)
     )
     conversation_workspaces = (
         await rows(
@@ -5784,6 +5820,54 @@ async def _export_payload(
             )
             for item in company_knowledge_jobs
         ],
+        "conversationThreads": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "company_id",
+                    "name",
+                    "status",
+                    "created_by_user_id",
+                    "updated_by_user_id",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_threads
+        ],
+        "conversationThreadAssignments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "thread_id",
+                    "interaction_id",
+                    "confirmed_by_user_id",
+                    "confirmation_kind",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_thread_assignments
+        ],
+        "conversationThreadAuditEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "thread_id",
+                    "interaction_id",
+                    "actor_user_id",
+                    "action",
+                    "metadata_json",
+                    "created_at",
+                ),
+            )
+            for item in conversation_thread_audit_events
+        ],
         "privateConversationWorkspaces": [
             _columns(
                 item,
@@ -5791,6 +5875,7 @@ async def _export_payload(
                     "id",
                     "interaction_id",
                     "user_id",
+                    "live_notes",
                     "enhanced_notes",
                     "follow_up_draft",
                     "follow_up_reviewed",
@@ -6833,6 +6918,9 @@ async def _export_payload(
                     "created_by_user_id",
                     "status",
                     "source_kind",
+                    "provider_name",
+                    "provider_uses_external_processing",
+                    "external_processing_acknowledged_at",
                     "last_processed_sequence",
                     "last_processed_at",
                     "processed_character_count",

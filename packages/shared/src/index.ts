@@ -1353,6 +1353,7 @@ export interface ConversationWorkspaceResponse {
   exists: boolean;
   ownerUserId: string;
   lockVersion: number;
+  liveNotes: string | null;
   enhancedNotes: string | null;
   followUpDraft: string | null;
   followUpReviewed: boolean;
@@ -3007,6 +3008,60 @@ export interface OpportunityMethodologyResponse {
   projectionId: string | null;
   projection: MethodologyProjectionContent | null;
   generatedAt: string | null;
+}
+
+export interface ConversationThreadSummary {
+  id: string;
+  organisationId: string;
+  companyId: string | null;
+  name: string;
+  status: "active" | "archived";
+  interactionCount: number;
+  lastInteractionAt: string | null;
+  lockVersion: number;
+  createdByUserId: string;
+  updatedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationThreadAssignment {
+  interactionId: string;
+  thread: ConversationThreadSummary | null;
+  lockVersion: number;
+  confirmationKind: "user_confirmed" | "user_corrected" | null;
+  confirmedByUserId: string | null;
+  confirmedAt: string | null;
+}
+
+export interface ConversationThreadSuggestion {
+  thread: ConversationThreadSummary;
+  score: number;
+  reasons: string[];
+}
+
+export interface ConversationSourceContext {
+  sourceId: string;
+  interactionId: string;
+  interactionTitle: string;
+  occurredAt: string;
+}
+
+export interface ConversationFrameworkCoverage {
+  stateCounts: MethodologyStateCounts;
+  items: MethodologyProjectionItem[];
+  sourceConversations: ConversationSourceContext[];
+}
+
+export interface ConversationMemoryResponse {
+  state: "not_configured" | "current";
+  safeMessage: string;
+  definition: MethodologyDefinitionSummary | null;
+  assignment: ConversationThreadAssignment;
+  suggestions: ConversationThreadSuggestion[];
+  currentConversation: ConversationFrameworkCoverage | null;
+  confirmedThread: ConversationFrameworkCoverage | null;
+  generatedAt: string;
 }
 
 export interface MethodologyGenerationResponse extends OpportunityMethodologyResponse {

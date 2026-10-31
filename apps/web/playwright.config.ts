@@ -5,7 +5,10 @@ const baseURL = `http://localhost:${webPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: "conversation-persistence-full-stack.spec.ts",
+  testIgnore: [
+    "conversation-persistence-full-stack.spec.ts",
+    "actual-browser-media/**",
+  ],
   use: {
     baseURL,
     trace: "retain-on-failure",

@@ -2,6 +2,28 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InteractionDetail } from "@/components/interaction-detail";
 
+vi.mock("@/components/conversation-memory", () => ({
+  ConversationMemory: () => <div>Conversation memory</div>,
+}));
+
+vi.mock("@/lib/use-conversation-workspace", () => ({
+  useConversationWorkspace: () => ({
+    workspace: null,
+    values: {
+      liveNotes: "",
+      enhancedNotes: "",
+      followUpDraft: "",
+      followUpReviewed: false,
+    },
+    setValues: vi.fn(),
+    loading: false,
+    saveState: "idle",
+    error: null,
+    save: vi.fn(() => Promise.resolve(true)),
+    reload: vi.fn(() => Promise.resolve()),
+  }),
+}));
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

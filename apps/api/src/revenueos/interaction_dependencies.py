@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.companion_services import CompanionService
 from revenueos.config import Settings, get_settings
+from revenueos.conversation_thread_services import ConversationThreadService
 from revenueos.database import get_db, set_private_user_database_context, set_tenant_database_context
 from revenueos.debrief_services import DebriefService
 from revenueos.errors import PublicAPIError
@@ -27,6 +28,17 @@ async def get_interaction_service(
     if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
     yield InteractionService(session, tenant)
+
+
+async def get_conversation_thread_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[ConversationThreadService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
+        raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
+    yield ConversationThreadService(session, tenant, settings)
 
 
 async def get_companion_service(

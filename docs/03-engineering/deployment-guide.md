@@ -8,7 +8,7 @@ synthetic-only DigitalOcean Sydney deployment: one 512 MiB web service, one
 cluster and one private Spaces subscription. Its fixed DigitalOcean run rate is
 USD 35.15/month before tax and short-lived job usage. It contains no customer
 data and is not the approved first-customer resilience profile. The current
-repository's Alembic migration head is `0065_campaign_trigger_guard`; the
+repository's Alembic migration head is `0071_assignment_tombstones`; the
 deployed pre-build release remains on its previously reviewed Git and migration
 heads until a separate deployment approval.
 
@@ -19,8 +19,9 @@ work must not change that production environment. The canonical
 setup, operation, cost and recovery evidence; neither is production-data
 approval.
 
-WO-039C adds a conditional supervised real-data path through current Alembic head
-`0065_campaign_trigger_guard`; it is not blanket approval. Before any named partner,
+WO-039C added a conditional supervised real-data path through its then-current
+Alembic head. The repository has since advanced to `0071_assignment_tombstones`;
+that does not widen the activation approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.

@@ -33,6 +33,19 @@ reach.
   accepted evidence remain separate. Saving, failure and conflict states are
   visible. Owner-tagged browser drafts require an explicit import; older
   unscoped keys are blocked because authenticated ownership cannot be proved.
+- Conversations can be explicitly grouped into lightweight initiatives without an
+  Opportunity. Company and participant overlap creates suggestions only; it never
+  auto-assigns. Users can confirm, correct or remove a grouping. The conversation
+  company is resolved consistently from direct, Opportunity and Person links;
+  conflicting relationships block grouping, and assignment versions remain
+  monotonic after removal so stale sessions cannot recreate an old state. The conversation
+  page presents validated framework coverage for this conversation separately from
+  cumulative completed conversations in the confirmed initiative, including exact
+  source dates and conflicting/stale states.
+- Preparation uses approved organisation knowledge and, when confirmed, the latest
+  completed non-deleted conversation in the same initiative before the target date.
+  It never falls back to every conversation at the company. First outbound calls
+  and later confirmed-thread meetings receive different objectives and questions.
 - Company knowledge sources use queued, fetching, extracting,
   ready-for-review, approved, stale and failed states. Bounded background jobs
   extract authorised PDF, DOCX, TXT, supporting text and fixture-backed website
@@ -43,8 +56,11 @@ reach.
 - Framework definitions include BANT, SPICED, MEDDIC, MEDDICC and MEDDPICC,
   plus organisation-defined frameworks and notes-only operation.
 - Existing deterministic calendar, research, brief, debrief, transcription,
-  source evidence and intelligence adapters remain the local demonstration
-  path. No live provider is activated by this refocus.
+  source evidence and intelligence adapters remain the local demonstration path.
+  Production-capable OpenAI batch-transcription, structured-intelligence and
+  live-signal adapters exist behind disabled server gates and fake-transport tests;
+  no live provider is activated by this refocus. Progressive transcription has a
+  provider-neutral ordered/retry boundary but no production streaming adapter.
 - Settings stores timezone, morning-digest and pre-meeting preferences in the
   authenticated user's private server scope. The exact generated content is
   written to a local test outbox for preview only. Stable source fingerprints
@@ -59,8 +75,15 @@ reach.
 ## Trust boundaries
 
 - The browser never claims universal call detection or cross-application audio
-  access. Browser microphone capture requires an explicit user action and
-  permission; transcript import and typed notes remain alternatives.
+  access. An explicit user action can request microphone-only capture or, where the
+  browser supplies it, shared tab/display audio plus the microphone. Oryntela checks
+  for a live shared audio track, records one mixed audio-only stream and never adds
+  the display video to the recorder/upload path. Permission denial, missing shared
+  audio, track ending and device changes fail visibly. Transcript import, authorised
+  recording upload and typed notes remain alternatives.
+- Live notes are user-private server data, separate from enhanced notes. They stay
+  mounted through media errors and use explicit save plus optimistic conflict
+  protection.
 - Website extraction is implemented behind a disabled live-fetch feature flag.
   Local tests exercise the same fetch/extract boundary with deterministic HTTP
   fixtures. Extracted website and document text is always untrusted data: it
@@ -94,12 +117,23 @@ trial terms.
 
 - activation of live customer-website fetching and external research (the
   bounded ingestion pipeline is implemented and locally fixture-verified);
-- live AI, transcription, email and connector execution;
+- activation of live AI, batch transcription, email and connector execution (the
+  production adapters listed in the capability status are implemented but not live);
+- a production progressive/realtime transcription adapter and capture-to-live-source
+  integration; provider-neutral ordering, deduplication, bounded buffering,
+  cancellation and reconnect/retry are locally verified;
 - real email transport or automatic external delivery (the private preferences,
   exact-content local outbox and schedule metadata are implemented);
-- cumulative framework projections for conversations that are not explicitly
-  linked to an Opportunity; these are deliberately not merged by company name;
+- a due-outbox worker that connects conversation briefing previews to the existing
+  provider email adapters;
+- automatic final-transcript conversion into user-private reported debrief notes;
+  final transcript intelligence and the user-started reviewed debrief remain
+  separate provenance paths;
 - native macOS and Windows capture, call detection, overlays and installers.
 
 Native clients should reuse the current conversation, capture and intelligence
 service boundaries when separately authorised.
+
+See the dated
+[conversation experience capability status](../03-engineering/conversation-experience-capability-status.md)
+for the exact A/B/C/D classification and browser verification record.

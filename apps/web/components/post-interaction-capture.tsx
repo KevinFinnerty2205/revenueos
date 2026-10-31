@@ -6,8 +6,6 @@ import type {
   DebriefReviewResponse,
   DebriefSession,
   InteractionType,
-  MethodologySelectionResponse,
-  OpportunityMethodologyResponse,
 } from "@revenueos/shared";
 import {
   useCallback,
@@ -76,12 +74,10 @@ async function blobToBase64(blob: Blob): Promise<string> {
 export function PostInteractionCapture({
   interactionId,
   interactionType,
-  opportunityId = null,
   restoreLatest = false,
 }: {
   interactionId: string;
   interactionType: InteractionType;
-  opportunityId?: string | null;
   restoreLatest?: boolean;
 }) {
   const [session, setSession] = useState<DebriefSession | null>(null);
@@ -663,7 +659,6 @@ export function PostInteractionCapture({
       {session?.lifecycleStatus === "completed" ? (
         <CompletedConversationReview
           interactionId={interactionId}
-          opportunityId={opportunityId}
           session={session}
         />
       ) : null}
@@ -673,11 +668,9 @@ export function PostInteractionCapture({
 
 function CompletedConversationReview({
   interactionId,
-  opportunityId,
   session,
 }: {
   interactionId: string;
-  opportunityId: string | null;
   session: DebriefSession;
 }) {
   const accepted = session.candidates.filter(
@@ -809,10 +802,6 @@ function CompletedConversationReview({
       </section>
 
       <StructuredDebrief accepted={accepted} />
-      <ConversationFrameworkAssessment
-        accepted={accepted}
-        opportunityId={opportunityId}
-      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="font-semibold text-slate-950">Follow-up draft</h3>
@@ -919,115 +908,6 @@ function StructuredDebrief({ accepted }: { accepted: CandidateEvidence[] }) {
             </div>
           );
         })}
-      </div>
-    </section>
-  );
-}
-
-function ConversationFrameworkAssessment({
-  accepted,
-  opportunityId,
-}: {
-  accepted: CandidateEvidence[];
-  opportunityId: string | null;
-}) {
-  const [selection, setSelection] =
-    useState<MethodologySelectionResponse | null>(null);
-  const [cumulative, setCumulative] =
-    useState<OpportunityMethodologyResponse | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void Promise.all([
-      apiRequest<MethodologySelectionResponse>(
-        "/api/v1/methodologies/current",
-        {
-          signal: controller.signal,
-        },
-      ),
-      opportunityId
-        ? apiRequest<OpportunityMethodologyResponse>(
-            `/api/v1/opportunities/${opportunityId}/methodology`,
-            { signal: controller.signal },
-          )
-        : Promise.resolve(null),
-    ])
-      .then(([current, related]) => {
-        setSelection(current);
-        setCumulative(related);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [opportunityId]);
-
-  const definition = selection?.effectiveDefinition;
-  if (!selection || selection.selection === "none" || !definition) {
-    return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h3 className="font-semibold text-slate-950">Framework assessment</h3>
-        <p className="mt-2 text-sm text-slate-600">
-          Notes-only mode is selected. Choose BANT, SPICED, MEDDICC or MEDDPICC
-          in Frameworks to assess conversation coverage.
-        </p>
-      </section>
-    );
-  }
-  const fields = definition.fields.map((field) => ({
-    ...field,
-    evidence: accepted.filter((candidate) =>
-      field.evidenceCategories.includes(candidate.evidenceCategory),
-    ),
-  }));
-  const covered = fields.filter((field) => field.evidence.length > 0).length;
-  const next = fields.find((field) => field.evidence.length === 0);
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="font-semibold text-slate-950">Framework assessment</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        <strong>This conversation:</strong> {covered} of {fields.length}{" "}
-        {definition.name} areas have reported evidence. This is coverage, not a
-        win probability, and missing areas mean “not discussed”, not a negative
-        buyer answer.
-      </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {fields.map((field) => (
-          <div key={field.key} className="rounded-xl bg-slate-50 p-4">
-            <p className="text-sm font-bold text-slate-900">
-              {field.displayName}
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              {field.evidence.length
-                ? `${field.evidence.length} reported evidence item${field.evidence.length === 1 ? "" : "s"}`
-                : "Not discussed"}
-            </p>
-          </div>
-        ))}
-      </div>
-      {next?.suggestedQuestions[0] ? (
-        <p className="mt-4 rounded-xl bg-brand-secondary/10 p-4 text-sm text-brand-primary">
-          <strong>Suggested next question:</strong> {next.suggestedQuestions[0]}
-        </p>
-      ) : null}
-      <div className="mt-5 border-t border-slate-200 pt-4">
-        <p className="text-sm font-bold text-slate-900">
-          Cumulative related knowledge
-        </p>
-        {cumulative?.projection ? (
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            The intentionally linked Opportunity has{" "}
-            {cumulative.projection.stateCounts.confirmed} confirmed and{" "}
-            {cumulative.projection.stateCounts.partiallySupported} partially
-            supported areas across related evidence. Open the Opportunity
-            workspace for evidence references and reviews.
-          </p>
-        ) : (
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            No cumulative assessment is shown because this conversation is not
-            linked to an Opportunity with a generated projection. Oryntela will
-            not merge separate initiatives merely because a company matches.
-          </p>
-        )}
       </div>
     </section>
   );

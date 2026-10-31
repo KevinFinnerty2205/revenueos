@@ -2316,13 +2316,32 @@ test("mobile Companion recording path persists a consented transcript into exist
       }
     }
 
+    class DeterministicAudioTrack extends EventTarget {
+      readonly id = "synthetic-microphone-track";
+      readonly kind = "audio";
+      muted = false;
+      readyState: MediaStreamTrackState = "live";
+
+      getSettings(): MediaTrackSettings {
+        return { deviceId: "synthetic-microphone" };
+      }
+
+      stop(): void {
+        this.readyState = "ended";
+      }
+    }
+
+    const microphoneTrack = new DeterministicAudioTrack();
+    const mediaDevices = Object.assign(new EventTarget(), {
+      getUserMedia: async () => ({
+        getTracks: () => [microphoneTrack],
+        getAudioTracks: () => [microphoneTrack],
+        getVideoTracks: () => [],
+      }),
+    });
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
-      value: {
-        getUserMedia: async () => ({
-          getTracks: () => [{ stop: () => undefined }],
-        }),
-      },
+      value: mediaDevices,
     });
     Object.defineProperty(globalThis, "MediaRecorder", {
       configurable: true,

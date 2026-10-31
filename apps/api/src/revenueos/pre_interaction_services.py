@@ -5,7 +5,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TypeVar, cast
+from typing import Literal, TypeVar, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
@@ -29,7 +29,7 @@ from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.methodology_contracts import MethodologyGapContext
 from revenueos.methodology_services import SalesMethodologyProjectionService
-from revenueos.models import AIArtifact, PreInteractionBrief
+from revenueos.models import AIArtifact, InteractionIntelligenceSnapshot, PreInteractionBrief
 from revenueos.pre_interaction_contracts import (
     BriefCommitment,
     BriefInteractionType,
@@ -57,9 +57,20 @@ from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightConte
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.pre_interaction_briefs")
-PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 4
+PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 6
 PRE_INTERACTION_BRIEF_HISTORY_LIMIT = 6
 ValidatedModel = TypeVar("ValidatedModel", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class PriorInteractionIntelligenceItem:
+    category: str
+    statement: str
+    source_label: str
+    source_classification: Literal[
+        "salesperson_reported",
+        "inferred_from_prior_intelligence",
+    ]
 
 
 @dataclass(frozen=True)
@@ -75,6 +86,7 @@ class ValidatedBriefContext:
     open_questions: OpenQuestionsArtifactContent | None
     next_best_action: NextBestActionArtifactContent | None
     revenue_brain: RevenueBrainInsightContent | None
+    prior_interaction_items: tuple[PriorInteractionIntelligenceItem, ...]
     methodology_gaps: tuple[MethodologyGapContext, ...]
     source_references: tuple[PreInteractionSourceReference, ...]
     fingerprint: str
@@ -152,7 +164,7 @@ class PreInteractionBriefService:
                 "interaction_type": records.interaction.interaction_type,
             },
         )
-        if records.company is None and records.opportunity is None:
+        if records.company is None and records.opportunity is None and records.confirmed_thread_id is None:
             logger.info(
                 "insufficient_context",
                 extra={
@@ -367,6 +379,7 @@ class PreInteractionBriefService:
         risks = self._validated_artifact(artifacts.get("risks_blockers"), RisksBlockersArtifactContent)
         open_questions = self._validated_artifact(artifacts.get("open_questions"), OpenQuestionsArtifactContent)
         next_best_action = self._validated_artifact(artifacts.get("next_best_action"), NextBestActionArtifactContent)
+        prior_interaction_items = self._validated_interaction_items(records.source_interaction_snapshot)
         revenue_brain: RevenueBrainInsightContent | None = None
         if records.revenue_brain_insight is not None:
             try:
@@ -401,7 +414,11 @@ class PreInteractionBriefService:
             if value is not None and capability in artifacts
         }
         methodology_gaps: tuple[MethodologyGapContext, ...] = ()
-        if self.settings.feature_sales_methodology_enabled and records.opportunity is not None:
+        if (
+            self.settings.feature_sales_methodology_enabled
+            and records.opportunity is not None
+            and records.confirmed_thread_id is None
+        ):
             methodology_gaps = await self.methodology.gap_context(records.opportunity.id, limit=8)
         references = self._source_references(records, validated_artifacts, revenue_brain is not None)
         references += tuple(
@@ -430,6 +447,9 @@ class PreInteractionBriefService:
                     str(records.interaction.opportunity_id) if records.interaction.opportunity_id else None
                 ),
             },
+            "confirmed_thread_id": (
+                str(records.confirmed_thread_id) if records.confirmed_thread_id is not None else None
+            ),
             "company": (
                 {
                     "id": str(records.company.id),
@@ -477,6 +497,36 @@ class PreInteractionBriefService:
                 "next_best_action": self._json(next_best_action),
             },
             "revenue_brain": self._json(revenue_brain),
+            "prior_interaction": (
+                {
+                    "id": str(records.source_interaction.id),
+                    "type": records.source_interaction.interaction_type,
+                    "title": records.source_interaction.title,
+                    "actual_start_at": self._iso(records.source_interaction.actual_start_at),
+                    "actual_end_at": self._iso(records.source_interaction.actual_end_at),
+                    "scheduled_start_at": self._iso(records.source_interaction.scheduled_start_at),
+                }
+                if records.source_interaction is not None
+                else None
+            ),
+            "prior_interaction_intelligence": (
+                {
+                    "id": str(records.source_interaction_snapshot.id),
+                    "schema_version": records.source_interaction_snapshot.schema_version,
+                    "version": records.source_interaction_snapshot.version,
+                    "items": [
+                        {
+                            "category": item.category,
+                            "statement": item.statement,
+                            "source_label": item.source_label,
+                            "source_classification": item.source_classification,
+                        }
+                        for item in prior_interaction_items
+                    ],
+                }
+                if records.source_interaction_snapshot is not None and prior_interaction_items
+                else None
+            ),
             "methodology_gaps": [
                 {
                     "projection_id": str(gap.projection_id),
@@ -546,6 +596,7 @@ class PreInteractionBriefService:
             open_questions=open_questions,
             next_best_action=next_best_action,
             revenue_brain=revenue_brain,
+            prior_interaction_items=prior_interaction_items,
             methodology_gaps=methodology_gaps,
             source_references=references,
             fingerprint=fingerprint,
@@ -586,6 +637,31 @@ class PreInteractionBriefService:
 
     def _account_context(self, context: ValidatedBriefContext) -> str:
         records = context.records
+        if records.confirmed_thread_id is not None:
+            company_name = records.company.name if records.company is not None else "this account"
+            value = f"Preparation is scoped to the confirmed conversation thread for {company_name}."
+            if records.opportunity is not None:
+                value = (
+                    f"{value} The target interaction is linked to the {records.opportunity.name} opportunity "
+                    f"at the {self._humanise(records.opportunity.stage)} stage."
+                )
+            if context.executive_summary is not None:
+                value = f"{value} Latest validated thread context: {context.executive_summary.executive_summary}"
+            elif context.prior_interaction_items and records.source_interaction is not None:
+                summaries = "; ".join(
+                    f"{self._humanise(item.category)}: {item.statement}" for item in context.prior_interaction_items[:3]
+                )
+                value = (
+                    f"{value} Latest validated interaction context from "
+                    f"{records.source_interaction.title}: {summaries}."
+                )
+                if any(
+                    item.source_classification == "salesperson_reported" for item in context.prior_interaction_items
+                ):
+                    value = f"{value} Salesperson-reported items are reviewed reports, not customer-direct evidence."
+            elif not records.artifacts:
+                value = f"{value} Limited validated interaction intelligence is currently available."
+            return self._bounded(self._with_approved_knowledge(value, records), 1_000)
         if records.opportunity is not None:
             company_name = records.company.name if records.company is not None else "The linked account"
             value = (
@@ -676,6 +752,17 @@ class PreInteractionBriefService:
             ),
         }
         objective, reason = defaults[interaction_type]
+        if self._is_initial_outbound_call(context):
+            objective = "Establish whether a focused follow-up is worthwhile."
+            reason = (
+                "No earlier authorised conversation is available, so this first outbound call should "
+                "qualify relevance without implying an existing relationship."
+            )
+        elif interaction_type in {"online_meeting", "face_to_face_meeting"} and (
+            context.records.source_interaction is not None or context.records.source_meeting is not None
+        ):
+            objective = "Resolve the most important change or open point from the previous conversation."
+            reason = "This later meeting is scoped to an explicitly confirmed conversation history."
         values = [BriefObjective(objective=objective, priority="high", reason=reason)]
         if context.next_best_action is not None:
             for recommendation in context.next_best_action.recommended_actions:
@@ -854,6 +941,30 @@ class PreInteractionBriefService:
                 ("What is the most important unknown to resolve?", "Focus limited context on discovery."),
             ),
         }
+        if self._is_initial_outbound_call(context):
+            type_questions["phone_call"] = (
+                (
+                    "Which business outcome is most important to improve right now?",
+                    "Start discovery without implying a previous discussion.",
+                ),
+                (
+                    "Would a focused follow-up be useful, and on what topic?",
+                    "Set a clear next-step criterion without assuming interest.",
+                ),
+            )
+        elif context.records.interaction.interaction_type in {"online_meeting", "face_to_face_meeting"} and (
+            context.records.source_interaction is not None or context.records.source_meeting is not None
+        ):
+            type_questions[context.records.interaction.interaction_type] = (
+                (
+                    "What has changed since our last conversation?",
+                    "Surface new or contradictory evidence before relying on prior context.",
+                ),
+                (
+                    "Which open point is most important to resolve today?",
+                    "Use the confirmed history without repeating already-settled questions.",
+                ),
+            )
         for question, purpose in type_questions[context.records.interaction.interaction_type]:
             self._append_unique_question(
                 values,
@@ -861,6 +972,18 @@ class PreInteractionBriefService:
             )
         maximum = 5 if context.records.interaction.interaction_type == "phone_call" else 8
         return tuple(values[:maximum])
+
+    @staticmethod
+    def _is_initial_outbound_call(context: ValidatedBriefContext) -> bool:
+        interaction = context.records.interaction
+        return (
+            interaction.interaction_type == "phone_call"
+            and interaction.call_direction == "outbound"
+            and context.records.source_interaction is None
+            and context.records.source_meeting is None
+            and not context.records.artifacts
+            and context.revenue_brain is None
+        )
 
     @staticmethod
     def _ordered_methodology_gaps(
@@ -1051,6 +1174,7 @@ class PreInteractionBriefService:
         )
         score += min(validated_count * 0.04, 0.25)
         score += 0.1 if context.revenue_brain is not None else 0
+        score += 0.05 if context.prior_interaction_items else 0
         score += 0.05 if context.records.approved_knowledge else 0
         return round(min(score, 0.95), 2)
 
@@ -1145,6 +1269,29 @@ class PreInteractionBriefService:
                         validation_status="completed",
                     )
                 )
+        snapshot = records.source_interaction_snapshot
+        if snapshot is not None:
+            prior_items = self._validated_interaction_items(snapshot)
+            if prior_items:
+                source_classification: Literal[
+                    "salesperson_reported",
+                    "inferred_from_prior_intelligence",
+                ] = (
+                    "salesperson_reported"
+                    if all(item.source_classification == "salesperson_reported" for item in prior_items)
+                    else "inferred_from_prior_intelligence"
+                )
+                for section in ("account_context", "objectives", "questions_to_ask"):
+                    values.append(
+                        PreInteractionSourceReference(
+                            section=cast(BriefSection, section),
+                            capability="interaction_intelligence",
+                            source_id=snapshot.id,
+                            scope="interaction",
+                            source_classification=source_classification,
+                            validation_status="validated",
+                        )
+                    )
         if valid_revenue_brain and records.revenue_brain_insight is not None:
             values.append(
                 PreInteractionSourceReference(
@@ -1192,6 +1339,91 @@ class PreInteractionBriefService:
                 },
             )
             return None
+
+    @staticmethod
+    def _validated_interaction_items(
+        snapshot: InteractionIntelligenceSnapshot | None,
+    ) -> tuple[PriorInteractionIntelligenceItem, ...]:
+        if snapshot is None or snapshot.schema_version not in {1, 2}:
+            return ()
+        try:
+            evidence_ids = {UUID(value) for value in snapshot.source_evidence_ids}
+        except (TypeError, ValueError):
+            return ()
+        raw_items = snapshot.content_json.get("items")
+        if not evidence_ids or not isinstance(raw_items, list):
+            return ()
+        values: list[PriorInteractionIntelligenceItem] = []
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            evidence_id = raw.get("evidenceId")
+            category = raw.get("category")
+            statement = raw.get("statement")
+            if (
+                not isinstance(evidence_id, str)
+                or not isinstance(category, str)
+                or not category.strip()
+                or not isinstance(statement, str)
+                or not statement.strip()
+                or raw.get("validationState") != "verified"
+            ):
+                continue
+            try:
+                if UUID(evidence_id) not in evidence_ids:
+                    continue
+            except ValueError:
+                continue
+            if snapshot.schema_version == 1:
+                if (
+                    snapshot.content_json.get("origin") != "salesperson_reported"
+                    or snapshot.content_json.get("sourceLabel") != "Reported by you"
+                    or raw.get("origin") != "salesperson_reported"
+                ):
+                    continue
+                source_label = "Reported by you"
+                source_classification: Literal[
+                    "salesperson_reported",
+                    "inferred_from_prior_intelligence",
+                ] = "salesperson_reported"
+            else:
+                ownership = raw.get("sourceOwnership")
+                support = raw.get("supportClassification")
+                source_label_value = raw.get("sourceLabel")
+                if (
+                    snapshot.content_json.get("origin") != "ai_inferred"
+                    or raw.get("origin") != "ai_inferred"
+                    or ownership
+                    not in {
+                        "customer_created",
+                        "salesperson_created",
+                        "jointly_created",
+                        "unknown_origin",
+                    }
+                    or support not in {"direct", "observed", "context"}
+                    or not isinstance(source_label_value, str)
+                    or not source_label_value.strip()
+                ):
+                    continue
+                if ownership == "salesperson_created" and category in {
+                    "budget",
+                    "commercial_intent",
+                    "objection",
+                }:
+                    continue
+                source_label = source_label_value.strip()
+                source_classification = "inferred_from_prior_intelligence"
+            values.append(
+                PriorInteractionIntelligenceItem(
+                    category=category.strip(),
+                    statement=statement.strip(),
+                    source_label=source_label,
+                    source_classification=source_classification,
+                )
+            )
+            if len(values) == 8:
+                break
+        return tuple(values)
 
     async def _completed_response(self, record: PreInteractionBrief) -> PreInteractionBriefResponse:
         try:
@@ -1258,7 +1490,7 @@ class PreInteractionBriefService:
 
     @staticmethod
     def _empty_response(records: PreInteractionSourceRecords) -> PreInteractionBriefResponse:
-        if records.company is None and records.opportunity is None:
+        if records.company is None and records.opportunity is None and records.confirmed_thread_id is None:
             return PreInteractionBriefResponse(
                 state="unavailable",
                 generation_available=False,
@@ -1292,6 +1524,8 @@ class PreInteractionBriefService:
             labels.append("Company record")
         if "opportunity_metadata" in capabilities:
             labels.append("Opportunity record")
+        if "interaction_intelligence" in capabilities:
+            labels.append("Prior validated Interaction Intelligence")
         if "action_layer" in capabilities:
             labels.append("Current pending or approved Actions")
         if "meeting_participants" in capabilities:
