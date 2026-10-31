@@ -34,12 +34,28 @@ test("briefing preferences survive a new browser context through the real API an
     ).toBeVisible();
     await firstContext.close();
 
+    await expect
+      .poll(
+        async () => {
+          const persistedResponse = await request.get(
+            `${apiBaseUrl}/api/v1/daily/preferences`,
+          );
+          if (!persistedResponse.ok()) return null;
+          const candidate =
+            (await persistedResponse.json()) as DeliveryPreferenceResponse;
+          return candidate.preMeetingMinutes;
+        },
+        {
+          message: "the API to expose the committed preference update",
+          timeout: 5_000,
+        },
+      )
+      .toBe(changedMinutes);
     const persistedResponse = await request.get(
       `${apiBaseUrl}/api/v1/daily/preferences`,
     );
     expect(persistedResponse.ok()).toBeTruthy();
     persisted = (await persistedResponse.json()) as DeliveryPreferenceResponse;
-    expect(persisted.preMeetingMinutes).toBe(changedMinutes);
     expect(persisted.lockVersion).toBe(original.lockVersion + 1);
 
     const secondContext = await browser.newContext();
