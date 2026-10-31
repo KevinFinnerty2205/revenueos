@@ -5,11 +5,12 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.business_repositories import PageResult
+from revenueos.database import set_private_user_database_context
 from revenueos.domain import (
     CallDirection,
     InteractionAuditAction,
@@ -23,10 +24,19 @@ from revenueos.interaction_compatibility import (
     meeting_type_for_interaction,
     project_interaction_to_meeting,
 )
-from revenueos.interaction_contracts import InteractionComplete, InteractionCreate, InteractionStart, InteractionUpdate
+from revenueos.interaction_contracts import (
+    ConversationWorkspaceResponse,
+    ConversationWorkspaceUpdate,
+    InteractionComplete,
+    InteractionCreate,
+    InteractionStart,
+    InteractionUpdate,
+)
 from revenueos.interaction_repositories import InteractionRecord, InteractionRepository
 from revenueos.models import (
     Contact,
+    ConversationBriefingOutbox,
+    ConversationUserWorkspace,
     Interaction,
     InteractionAuditEvent,
     LiveInteractionSession,
@@ -70,6 +80,7 @@ class InteractionService:
             await self._require_opportunity(opportunity_id)
         return await self.repository.list_interactions(
             self.tenant.organisation_id,
+            self.tenant.user_id,
             page=page,
             page_size=page_size,
             search=search,
@@ -82,6 +93,57 @@ class InteractionService:
             sort_by=sort_by,
             sort_order=sort_order,
         )
+
+    async def get_personal_workspace(self, interaction_id: UUID) -> ConversationWorkspaceResponse:
+        await self.get_interaction(interaction_id)
+        workspace = await self.repository.get_user_workspace(
+            self.tenant.organisation_id,
+            interaction_id,
+            self.tenant.user_id,
+        )
+        return self._workspace_response(workspace)
+
+    async def save_personal_workspace(
+        self,
+        interaction_id: UUID,
+        request: ConversationWorkspaceUpdate,
+    ) -> ConversationWorkspaceResponse:
+        await self.get_interaction(interaction_id)
+        workspace = await self.repository.get_user_workspace(
+            self.tenant.organisation_id,
+            interaction_id,
+            self.tenant.user_id,
+            for_update=True,
+        )
+        if workspace is None:
+            if request.expected_lock_version != 0:
+                raise self._workspace_conflict()
+            workspace = ConversationUserWorkspace(
+                id=uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=interaction_id,
+                user_id=self.tenant.user_id,
+                lock_version=1,
+            )
+            self.session.add(workspace)
+        else:
+            if request.expected_lock_version != workspace.lock_version:
+                raise self._workspace_conflict()
+            workspace.lock_version += 1
+        workspace.enhanced_notes = request.enhanced_notes
+        workspace.follow_up_draft = request.follow_up_draft
+        workspace.follow_up_reviewed = request.follow_up_reviewed
+        workspace.generation_fingerprint = request.generation_fingerprint
+        if request.import_from_browser:
+            workspace.imported_from_browser_at = datetime.now(UTC)
+        try:
+            await self.session.flush()
+            await self.session.refresh(workspace)
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise self._workspace_conflict() from exc
+        return self._workspace_response(workspace)
 
     async def get_interaction(self, interaction_id: UUID) -> InteractionRecord:
         record = await self.repository.get_interaction(self.tenant.organisation_id, interaction_id)
@@ -328,6 +390,34 @@ class InteractionService:
             else InteractionAuditAction.UPDATED
         )
         self.session.add(self._audit(interaction.id, action, [*values, *online_values]))
+        briefing_status = (
+            "cancelled"
+            if values.get("lifecycle_status") == InteractionLifecycleStatus.CANCELLED.value
+            else (
+                "superseded"
+                if any(field in values for field in ("scheduled_start_at", "scheduled_end_at", "timezone"))
+                else None
+            )
+        )
+        if briefing_status is not None:
+            # The interaction creator is the only user who can prepare a briefing
+            # for this interaction. Derive that owner from the locked row and use
+            # the private RLS context only for this bounded reconciliation.
+            await set_private_user_database_context(self.session, interaction.created_by_user_id)
+            try:
+                await self.session.execute(
+                    update(ConversationBriefingOutbox)
+                    .where(
+                        ConversationBriefingOutbox.organisation_id == self.tenant.organisation_id,
+                        ConversationBriefingOutbox.user_id == interaction.created_by_user_id,
+                        ConversationBriefingOutbox.interaction_id == interaction.id,
+                        ConversationBriefingOutbox.kind == "pre_meeting",
+                        ConversationBriefingOutbox.status == "prepared",
+                    )
+                    .values(status=briefing_status, updated_at=now)
+                )
+            finally:
+                await set_private_user_database_context(self.session, self.tenant.user_id)
         await self._commit(interaction)
         return await self.get_interaction(interaction.id)
 
@@ -678,3 +768,30 @@ class InteractionService:
     @staticmethod
     def _not_found() -> PublicAPIError:
         return PublicAPIError("interaction_not_found", "The requested interaction was not found.", 404)
+
+    def _workspace_response(self, workspace: ConversationUserWorkspace | None) -> ConversationWorkspaceResponse:
+        if workspace is None:
+            return ConversationWorkspaceResponse(
+                exists=False,
+                owner_user_id=self.tenant.user_id,
+                lock_version=0,
+            )
+        return ConversationWorkspaceResponse(
+            exists=True,
+            owner_user_id=workspace.user_id,
+            lock_version=workspace.lock_version,
+            enhanced_notes=workspace.enhanced_notes,
+            follow_up_draft=workspace.follow_up_draft,
+            follow_up_reviewed=workspace.follow_up_reviewed,
+            generation_fingerprint=workspace.generation_fingerprint,
+            imported_from_browser_at=workspace.imported_from_browser_at,
+            updated_at=workspace.updated_at,
+        )
+
+    @staticmethod
+    def _workspace_conflict() -> PublicAPIError:
+        return PublicAPIError(
+            "conversation_workspace_conflict",
+            "This conversation draft changed in another session. Reload before saving so no work is overwritten.",
+            409,
+        )

@@ -391,7 +391,10 @@ export function InteractionDetail({
       ) : null}
       {isCompleted && interaction.meetingId ? (
         <div className="mt-6 scroll-mt-6" id="enhanced-notes">
-          <MeetingIntelligenceWorkspace meetingId={interaction.meetingId} />
+          <MeetingIntelligenceWorkspace
+            meetingId={interaction.meetingId}
+            interactionId={interaction.id}
+          />
         </div>
       ) : null}
       {!isCompleted ? (

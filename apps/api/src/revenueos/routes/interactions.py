@@ -32,6 +32,8 @@ from revenueos.domain import (
 )
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_contracts import (
+    ConversationWorkspaceResponse,
+    ConversationWorkspaceUpdate,
     InteractionComplete,
     InteractionCreate,
     InteractionResponse,
@@ -231,6 +233,29 @@ async def create_interaction(request: InteractionCreate, service: Interactions) 
 @router.get("/{interaction_id}", response_model=InteractionResponse)
 async def get_interaction(interaction_id: UUID, service: Interactions) -> InteractionResponse:
     return _response(await service.get_interaction(interaction_id))
+
+
+@router.get(
+    "/{interaction_id}/personal-workspace",
+    response_model=ConversationWorkspaceResponse,
+)
+async def get_personal_workspace(
+    interaction_id: UUID,
+    service: Interactions,
+) -> ConversationWorkspaceResponse:
+    return await service.get_personal_workspace(interaction_id)
+
+
+@router.put(
+    "/{interaction_id}/personal-workspace",
+    response_model=ConversationWorkspaceResponse,
+)
+async def save_personal_workspace(
+    interaction_id: UUID,
+    request: ConversationWorkspaceUpdate,
+    service: Interactions,
+) -> ConversationWorkspaceResponse:
+    return await service.save_personal_workspace(interaction_id, request)
 
 
 @router.patch("/{interaction_id}", response_model=InteractionResponse)

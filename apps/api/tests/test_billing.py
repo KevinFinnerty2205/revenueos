@@ -1319,7 +1319,7 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                 )
                 assert await service.process_webhook(payload, signature) == "processed"
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 39
+                assert exported["exportVersion"] == EXPORT_VERSION == 40
                 acceptances = exported["termsAcceptances"]
                 assert isinstance(acceptances, list)
                 assert acceptances[0]["accepted_by_user_id"] == PRIMARY_USER_ID

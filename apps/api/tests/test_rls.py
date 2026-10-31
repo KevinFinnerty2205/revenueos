@@ -522,6 +522,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "credit_reservation_allocations",
         "credit_ledger_entries",
         "company_knowledge_sources",
+        "company_knowledge_ingestion_jobs",
+        "conversation_user_workspaces",
+        "conversation_delivery_preferences",
+        "conversation_briefing_outbox",
         "selling_profiles",
         "selling_profile_revisions",
         "prospect_usage_counters",
@@ -755,6 +759,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_forecast_reviewer_judgment_id": uuid.uuid4(),
                 "sales_forecast_reviewer_revision_id": uuid.uuid4(),
                 "company_knowledge_source_id": uuid.uuid4(),
+                "company_knowledge_job_id": uuid.uuid4(),
+                "conversation_workspace_id": uuid.uuid4(),
+                "conversation_delivery_preference_id": uuid.uuid4(),
+                "conversation_briefing_outbox_id": uuid.uuid4(),
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
                 "commercial_event_id": uuid.uuid4(),
@@ -1061,7 +1069,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :knowledge_source_label,
                                  :knowledge_source_url, NULL,
                                  :knowledge_source_fingerprint,
-                                 'saved_unprocessed', NULL, :user_id,
+                                 'queued', NULL, :user_id,
                                  :knowledge_source_key)
                             """
                         ),
@@ -1071,6 +1079,24 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "knowledge_source_url": f"https://rls-{suffix.lower()}.example.test",
                             "knowledge_source_fingerprint": suffix.lower() * 64,
                             "knowledge_source_key": f"rls-company-knowledge-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO company_knowledge_ingestion_jobs
+                                (id, organisation_id, source_id,
+                                 requested_by_user_id, status,
+                                 request_fingerprint)
+                            VALUES
+                                (:company_knowledge_job_id, :organisation_id,
+                                 :company_knowledge_source_id, :user_id,
+                                 'pending', :knowledge_job_fingerprint)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "knowledge_job_fingerprint": suffix.lower() * 64,
                         },
                     )
                     await connection.execute(
@@ -2460,6 +2486,61 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {
                             **identity_parameters,
                             "interaction_title": f"RLS Interaction {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_user_workspaces
+                                (id, organisation_id, interaction_id, user_id,
+                                 enhanced_notes, follow_up_draft)
+                            VALUES
+                                (:conversation_workspace_id, :organisation_id,
+                                 :interaction_id, :user_id,
+                                 :workspace_notes, :workspace_draft)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "workspace_notes": f"Private notes {suffix}",
+                            "workspace_draft": f"Private follow-up {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_delivery_preferences
+                                (id, organisation_id, user_id, timezone)
+                            VALUES
+                                (:conversation_delivery_preference_id,
+                                 :organisation_id, :user_id, 'Australia/Sydney')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_briefing_outbox
+                                (id, organisation_id, user_id, interaction_id,
+                                 kind, status, deduplication_key,
+                                 source_fingerprint, subject, body_text, href,
+                                 prepared_for_at)
+                            VALUES
+                                (:conversation_briefing_outbox_id,
+                                 :organisation_id, :user_id, :interaction_id,
+                                 'pre_meeting', 'prepared', :outbox_key,
+                                 :outbox_fingerprint, :outbox_subject,
+                                 :outbox_body, :outbox_href, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "outbox_key": f"rls-outbox-{suffix.lower()}",
+                            "outbox_fingerprint": suffix.lower() * 64,
+                            "outbox_subject": f"Private briefing {suffix}",
+                            "outbox_body": f"Private briefing body {suffix}",
+                            "outbox_href": f"/interactions/{identity_parameters['interaction_id']}",
                         },
                     )
                     await connection.execute(
@@ -4068,6 +4149,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'credit_reservation_allocations',
                                     'credit_ledger_entries',
                                     'company_knowledge_sources',
+                                    'company_knowledge_ingestion_jobs',
+                                    'conversation_user_workspaces',
+                                    'conversation_delivery_preferences',
+                                    'conversation_briefing_outbox',
                                     'selling_profiles',
                                     'selling_profile_revisions',
                                     'prospect_usage_counters',
@@ -4225,6 +4310,22 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 await connection.execute(
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
                     {"organisation_id": str(tenant_a["organisation_id"])},
+                )
+                await connection.execute(
+                    text("SELECT set_config('app.user_id', :user_id, true)"),
+                    {"user_id": str(tenant_a["user_id"])},
+                )
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_user_workspaces")) == 1
+                await connection.execute(
+                    text("SELECT set_config('app.user_id', :user_id, true)"),
+                    {"user_id": str(uuid.uuid4())},
+                )
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_user_workspaces")) == 0
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_delivery_preferences")) == 0
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_briefing_outbox")) == 0
+                await connection.execute(
+                    text("SELECT set_config('app.user_id', :user_id, true)"),
+                    {"user_id": str(tenant_a["user_id"])},
                 )
                 await connection.execute(
                     text(
@@ -5202,6 +5303,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "commercial_state_events",
                     "organisation_commercial_states",
                     "organisation_module_entitlements",
+                    "conversation_briefing_outbox",
+                    "conversation_delivery_preferences",
+                    "conversation_user_workspaces",
+                    "company_knowledge_ingestion_jobs",
                     "company_knowledge_sources",
                     "selling_profile_revisions",
                     "selling_profiles",

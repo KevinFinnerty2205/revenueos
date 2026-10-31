@@ -13,6 +13,7 @@ import type {
   MeetingIntelligenceGenerationResponse,
   MeetingIntelligenceOverallState,
   MeetingIntelligenceResponse,
+  MeResponse,
   NextBestActionContent,
   OpenQuestionsContent,
   ObjectionsCompetitiveSignalsContent,
@@ -23,6 +24,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 const POLLING_INTERVAL_MS = 3_000;
 const tones: FollowUpEmailTone[] = ["professional", "friendly", "executive"];
@@ -54,8 +56,10 @@ const overallLabels: Record<MeetingIntelligenceOverallState, string> = {
 
 export function MeetingIntelligenceWorkspace({
   meetingId,
+  interactionId,
 }: {
   meetingId: string;
+  interactionId?: string;
 }) {
   const [workspace, setWorkspace] =
     useState<MeetingIntelligenceResponse | null>(null);
@@ -461,6 +465,7 @@ export function MeetingIntelligenceWorkspace({
       >
         <FollowUpEmailView
           meetingId={meetingId}
+          interactionId={interactionId}
           content={workspace.followUpEmail.content}
           tone={tone}
           busy={capabilityBusy === "follow_up_email"}
@@ -1167,6 +1172,56 @@ export function OpenQuestionsView({
 
 function FollowUpEmailView({
   meetingId,
+  interactionId,
+  content,
+  tone,
+  busy,
+  copyStatus,
+  onToneChange,
+  onCopy,
+  onRegenerate,
+}: {
+  meetingId: string;
+  interactionId?: string;
+  content: FollowUpEmailContent | null;
+  tone: FollowUpEmailTone;
+  busy: boolean;
+  copyStatus: string | null;
+  onToneChange: (tone: FollowUpEmailTone) => void;
+  onCopy: (content: string) => Promise<void>;
+  onRegenerate: () => void;
+}) {
+  if (interactionId) {
+    return (
+      <PersistedFollowUpEmailView
+        meetingId={meetingId}
+        interactionId={interactionId}
+        content={content}
+        tone={tone}
+        busy={busy}
+        copyStatus={copyStatus}
+        onToneChange={onToneChange}
+        onCopy={onCopy}
+        onRegenerate={onRegenerate}
+      />
+    );
+  }
+  return (
+    <LegacyFollowUpEmailView
+      meetingId={meetingId}
+      content={content}
+      tone={tone}
+      busy={busy}
+      copyStatus={copyStatus}
+      onToneChange={onToneChange}
+      onCopy={onCopy}
+      onRegenerate={onRegenerate}
+    />
+  );
+}
+
+function LegacyFollowUpEmailView({
+  meetingId,
   content,
   tone,
   busy,
@@ -1189,31 +1244,21 @@ function FollowUpEmailView({
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(null);
+  const [identityChecking, setIdentityChecking] = useState(false);
+  const [ownershipError, setOwnershipError] = useState<string | null>(null);
+  const [legacyRecoveryAvailable, setLegacyRecoveryAvailable] = useState(false);
+  const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
   const draftKey = `revenueos:follow-up-draft:${meetingId}`;
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(draftKey);
     let active = true;
     window.queueMicrotask(() => {
       if (!active) return;
-      if (stored) {
-        try {
-          const value = JSON.parse(stored) as {
-            draft?: unknown;
-            approved?: unknown;
-          };
-          if (typeof value.draft === "string") {
-            setDraft(value.draft);
-            setApproved(value.approved === true);
-            setSaved(true);
-            setDirty(false);
-            return;
-          }
-        } catch {
-          window.localStorage.removeItem(draftKey);
-        }
-      }
-      setDraft("");
+      setLegacyRecoveryAvailable(
+        window.localStorage.getItem(draftKey) !== null,
+      );
+      setDraft(generatedDraft);
       setApproved(false);
       setSaved(false);
       setDirty(false);
@@ -1221,7 +1266,7 @@ function FollowUpEmailView({
     return () => {
       active = false;
     };
-  }, [draftKey]);
+  }, [draftKey, generatedDraft]);
 
   useEffect(() => {
     if (!saved && !dirty) {
@@ -1231,10 +1276,78 @@ function FollowUpEmailView({
 
   if (!content) return <MissingContent />;
 
-  function saveDraft(nextApproved = approved) {
+  async function verifyOwner(): Promise<string | null> {
+    if (ownerUserId) return ownerUserId;
+    setIdentityChecking(true);
+    setOwnershipError(null);
+    try {
+      const response = await apiRequest<MeResponse>("/api/v1/me");
+      if (!response.user?.id) {
+        throw new Error("The active user identity is unavailable.");
+      }
+      setOwnerUserId(response.user.id);
+      return response.user.id;
+    } catch (reason: unknown) {
+      setOwnershipError(
+        reason instanceof Error
+          ? reason.message
+          : "The active user identity could not be verified.",
+      );
+      return null;
+    } finally {
+      setIdentityChecking(false);
+    }
+  }
+
+  async function recoverBrowserDraft() {
+    const verifiedOwnerUserId = await verifyOwner();
+    if (!verifiedOwnerUserId) return;
+    const stored = window.localStorage.getItem(draftKey);
+    if (!stored) {
+      setLegacyRecoveryAvailable(false);
+      return;
+    }
+    try {
+      const value = JSON.parse(stored) as {
+        draft?: unknown;
+        approved?: unknown;
+        ownerUserId?: unknown;
+      };
+      if (
+        value.ownerUserId !== verifiedOwnerUserId ||
+        typeof value.draft !== "string"
+      ) {
+        throw new Error("owner_mismatch");
+      }
+      setDraft(value.draft);
+      setApproved(value.approved === true);
+      setSaved(true);
+      setDirty(false);
+      setLegacyRecoveryAvailable(false);
+      setLegacyOwnershipBlocked(false);
+    } catch {
+      setLegacyRecoveryAvailable(false);
+      setLegacyOwnershipBlocked(true);
+    }
+  }
+
+  async function saveDraft(nextApproved = approved) {
+    const verifiedOwnerUserId = await verifyOwner();
+    if (!verifiedOwnerUserId) return;
+    if (window.localStorage.getItem(draftKey) !== null && !saved) {
+      setLegacyRecoveryAvailable(true);
+      setOwnershipError(
+        "Verify and load the existing browser draft before replacing it.",
+      );
+      return;
+    }
     window.localStorage.setItem(
       draftKey,
-      JSON.stringify({ draft, approved: nextApproved }),
+      JSON.stringify({
+        draft,
+        approved: nextApproved,
+        ownerUserId: verifiedOwnerUserId,
+      }),
     );
     setApproved(nextApproved);
     setSaved(true);
@@ -1256,10 +1369,40 @@ function FollowUpEmailView({
         {humanise(content.tone)} tone · {formatConfidence(content.confidence)}{" "}
         confidence
       </p>
+      {legacyRecoveryAvailable ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p>
+            A browser draft exists. Its contents stay hidden until Oryntela
+            verifies that it belongs to your authenticated user.
+          </p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            disabled={identityChecking}
+            onClick={() => void recoverBrowserDraft()}
+          >
+            {identityChecking ? "Verifying…" : "Verify and load browser draft"}
+          </button>
+        </div>
+      ) : null}
       <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
         Advisory draft only. Review every statement before customer use. Saving
-        keeps this edited draft in this browser; it does not send an email.
+        keeps this edited draft in this browser under your verified user ID; it
+        does not send an email. If this meeting is later linked to an
+        interaction, export it first if you need to carry it across safely.
       </p>
+      {legacyOwnershipBlocked ? (
+        <p role="alert" className="mt-3 text-sm text-amber-900">
+          An older browser draft exists, but its owner cannot be verified. It
+          has not been displayed or assigned to you.
+        </p>
+      ) : null}
+      {ownershipError ? (
+        <p role="alert" className="mt-3 text-sm text-rose-700">
+          Browser saving is unavailable because your identity could not be
+          verified. You can still copy or export this generated draft.
+        </p>
+      ) : null}
       <label className="mt-4 block text-sm font-bold text-slate-800">
         Editable follow-up draft
         <textarea
@@ -1314,14 +1457,283 @@ function FollowUpEmailView({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => saveDraft(false)}
+            disabled={identityChecking}
+            onClick={() => void saveDraft(false)}
           >
             Save draft
           </button>
           <button
             type="button"
             className="secondary-button"
-            onClick={() => saveDraft(true)}
+            disabled={identityChecking}
+            onClick={() => void saveDraft(true)}
+          >
+            Mark reviewed
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={exportDraft}
+          >
+            Export .txt
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={busy}
+            onClick={onRegenerate}
+          >
+            {busy ? "Requesting…" : "Regenerate"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PersistedFollowUpEmailView({
+  meetingId,
+  interactionId,
+  content,
+  tone,
+  busy,
+  copyStatus,
+  onToneChange,
+  onCopy,
+  onRegenerate,
+}: {
+  meetingId: string;
+  interactionId: string;
+  content: FollowUpEmailContent | null;
+  tone: FollowUpEmailTone;
+  busy: boolean;
+  copyStatus: string | null;
+  onToneChange: (tone: FollowUpEmailTone) => void;
+  onCopy: (content: string) => Promise<void>;
+  onRegenerate: () => void;
+}) {
+  const generatedDraft = content ? renderFollowUpEmail(content) : "";
+  const workspace = useConversationWorkspace({
+    interactionId,
+    initialFollowUpDraft: generatedDraft,
+  });
+  const previousGeneratedDraft = useRef<string | null>(null);
+  const [regeneratedDraft, setRegeneratedDraft] = useState<string | null>(null);
+  const legacyKey = `revenueos:follow-up-draft:${meetingId}`;
+  const [legacyRecoveryAvailable, setLegacyRecoveryAvailable] = useState(false);
+  const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!content) return;
+    if (previousGeneratedDraft.current === null) {
+      previousGeneratedDraft.current = generatedDraft;
+      return;
+    }
+    if (previousGeneratedDraft.current !== generatedDraft) {
+      previousGeneratedDraft.current = generatedDraft;
+      setRegeneratedDraft(generatedDraft);
+    }
+  }, [content, generatedDraft]);
+
+  useEffect(() => {
+    let active = true;
+    window.queueMicrotask(() => {
+      if (!active || workspace.workspace === null) return;
+      const stored = window.localStorage.getItem(legacyKey);
+      if (stored === null) return;
+      try {
+        const parsed = JSON.parse(stored) as { ownerUserId?: unknown };
+        const owned = parsed.ownerUserId === workspace.workspace.ownerUserId;
+        setLegacyRecoveryAvailable(owned);
+        setLegacyOwnershipBlocked(!owned);
+      } catch {
+        setLegacyOwnershipBlocked(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [legacyKey, workspace.workspace]);
+
+  if (!content) return <MissingContent />;
+
+  async function saveDraft(reviewed: boolean) {
+    await workspace.save({ followUpReviewed: reviewed });
+  }
+
+  async function recoverLegacyDraft() {
+    const stored = window.localStorage.getItem(legacyKey);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as {
+        draft?: unknown;
+        approved?: unknown;
+        ownerUserId?: unknown;
+      };
+      if (
+        typeof parsed.draft !== "string" ||
+        parsed.ownerUserId !== workspace.workspace?.ownerUserId
+      )
+        return;
+      const saved = await workspace.save(
+        {
+          followUpDraft: parsed.draft,
+          followUpReviewed: parsed.approved === true,
+        },
+        { importFromBrowser: true },
+      );
+      if (saved) {
+        window.localStorage.removeItem(legacyKey);
+        setLegacyRecoveryAvailable(false);
+      }
+    } catch {
+      // Keep malformed legacy content isolated in the browser for manual recovery.
+    }
+  }
+
+  function exportDraft() {
+    const url = URL.createObjectURL(
+      new Blob([workspace.values.followUpDraft], { type: "text/plain" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "oryntela-follow-up-draft.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="mt-5">
+      <p className="text-xs font-medium text-slate-500">
+        {humanise(content.tone)} tone · {formatConfidence(content.confidence)}{" "}
+        confidence
+      </p>
+      <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+        Advisory draft only. Review every statement before customer use. Saving
+        keeps this draft private to your Oryntela user; it never sends an email.
+      </p>
+      <label className="mt-4 block text-sm font-bold text-slate-800">
+        Editable follow-up draft
+        <textarea
+          className="form-control mt-2 min-h-80 py-3 font-mono text-sm leading-6"
+          disabled={workspace.loading}
+          value={workspace.values.followUpDraft}
+          onChange={(event) =>
+            workspace.setValues((current) => ({
+              ...current,
+              followUpDraft: event.target.value,
+              followUpReviewed: false,
+            }))
+          }
+        />
+      </label>
+      <p className="mt-3 text-xs font-semibold text-slate-500">
+        {workspace.saveState === "saving"
+          ? "Saving…"
+          : workspace.saveState === "saved" && workspace.values.followUpReviewed
+            ? "Reviewed and saved privately"
+            : workspace.saveState === "saved"
+              ? "Draft saved privately — review still required"
+              : "Generated or edited draft — save required"}
+      </p>
+      {legacyRecoveryAvailable ? (
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          onClick={() => void recoverLegacyDraft()}
+        >
+          Import earlier browser draft
+        </button>
+      ) : null}
+      {legacyOwnershipBlocked ? (
+        <p className="mt-3 text-sm text-amber-900">
+          An older browser-only draft exists, but its owner cannot be verified,
+          so Oryntela will not import or display it. Use Export .txt in the
+          browser-only view before linking if you need a manual recovery copy.
+        </p>
+      ) : null}
+      {regeneratedDraft !== null ? (
+        <div
+          role="status"
+          className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950"
+        >
+          <p>
+            A regenerated version is ready. Your current draft has not been
+            replaced.
+          </p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            onClick={() => {
+              workspace.setValues((current) => ({
+                ...current,
+                followUpDraft: regeneratedDraft,
+                followUpReviewed: false,
+              }));
+              setRegeneratedDraft(null);
+            }}
+          >
+            Use regenerated draft
+          </button>
+        </div>
+      ) : null}
+      {workspace.error ? (
+        <div role="alert" className="mt-3 text-sm text-rose-800">
+          <p>{workspace.error}</p>
+          {workspace.saveState === "conflict" ? (
+            <button
+              type="button"
+              className="secondary-button mt-3"
+              onClick={() => void workspace.reload()}
+            >
+              Reload latest saved draft
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {copyStatus ? (
+        <p role="status" className="mt-4 text-sm text-slate-700">
+          {copyStatus}
+        </p>
+      ) : null}
+      <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <label className="text-sm font-bold text-slate-800">
+          Tone
+          <select
+            className="form-control mt-2 block min-w-44"
+            value={tone}
+            onChange={(event) =>
+              onToneChange(event.target.value as FollowUpEmailTone)
+            }
+          >
+            {tones.map((value) => (
+              <option key={value} value={value}>
+                {humanise(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void onCopy(workspace.values.followUpDraft)}
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={workspace.loading || workspace.saveState === "saving"}
+            onClick={() => void saveDraft(false)}
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={workspace.loading || workspace.saveState === "saving"}
+            onClick={() => void saveDraft(true)}
           >
             Mark reviewed
           </button>

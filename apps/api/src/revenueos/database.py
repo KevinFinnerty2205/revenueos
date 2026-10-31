@@ -117,3 +117,14 @@ async def set_tenant_database_context(session: AsyncSession, organisation_id: UU
             text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
             {"organisation_id": str(organisation_id)},
         )
+
+
+async def set_private_user_database_context(session: AsyncSession, user_id: UUID) -> None:
+    """Set the transaction-local owner context for user-private RLS tables."""
+
+    bind = session.get_bind()
+    if bind.dialect.name == "postgresql":
+        await session.execute(
+            text("SELECT set_config('app.user_id', :user_id, true)"),
+            {"user_id": str(user_id)},
+        )

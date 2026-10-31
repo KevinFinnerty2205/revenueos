@@ -8,7 +8,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
-type SourceMode = "website" | "text";
+type SourceMode = "website" | "text" | "document";
 
 function idempotencyKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -23,6 +23,8 @@ export function CompanyKnowledgeSources() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [sourceText, setSourceText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
+  const [fileMimeType, setFileMimeType] = useState<string | null>(null);
+  const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [authorityConfirmed, setAuthorityConfirmed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,14 +65,17 @@ export function CompanyKnowledgeSources() {
     const sourceKind: CompanyKnowledgeSourceKind =
       mode === "website"
         ? "website"
-        : fileName
-          ? "text_file"
+        : mode === "document"
+          ? "document"
           : "supporting_text";
     const payload = {
       sourceKind,
       label: label.trim(),
       websiteUrl: mode === "website" ? websiteUrl.trim() : null,
       sourceText: mode === "text" ? sourceText.trim() : null,
+      sourceDocumentBase64: mode === "document" ? fileBase64 : null,
+      sourceFilename: mode === "document" ? fileName : null,
+      sourceMimeType: mode === "document" ? fileMimeType : null,
       authorityConfirmed,
     };
     const fingerprint = JSON.stringify(payload);
@@ -95,6 +100,8 @@ export function CompanyKnowledgeSources() {
       setWebsiteUrl("");
       setSourceText("");
       setFileName(null);
+      setFileMimeType(null);
+      setFileBase64(null);
       setAuthorityConfirmed(false);
       retryRef.current = null;
       setMessage(saved.safeMessage);
@@ -137,19 +144,66 @@ export function CompanyKnowledgeSources() {
 
   async function selectFile(file: File | undefined) {
     if (!file) return;
-    if (file.type && file.type !== "text/plain") {
-      setError("Choose a plain-text .txt file.");
+    const supported = new Map([
+      ["application/pdf", "application/pdf"],
+      [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ],
+      ["text/plain", "text/plain"],
+    ]);
+    const inferred = file.name.toLowerCase().endsWith(".pdf")
+      ? "application/pdf"
+      : file.name.toLowerCase().endsWith(".docx")
+        ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        : file.name.toLowerCase().endsWith(".txt")
+          ? "text/plain"
+          : null;
+    const mimeType = supported.get(file.type) ?? inferred;
+    if (!mimeType) {
+      setError("Choose a PDF, DOCX or UTF-8 TXT file.");
       return;
     }
-    const text = await file.text();
-    if (text.length > 40_000) {
-      setError("Supporting text must be 40,000 characters or fewer.");
+    if (file.size > 15_000_000) {
+      setError("Knowledge documents must be 15 MB or smaller.");
       return;
     }
-    setSourceText(text);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 32_768) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+    }
+    setFileBase64(window.btoa(binary));
+    setFileMimeType(mimeType);
     setFileName(file.name);
     if (!label) setLabel(file.name);
     setError(null);
+  }
+
+  async function sourceAction(
+    source: CompanyKnowledgeSource,
+    action: "approve" | "retry" | "refresh" | "cancel",
+  ) {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await apiRequest<CompanyKnowledgeSource>(
+        `/api/v1/selling-profile/knowledge-sources/${source.id}/${action}`,
+        { method: "POST" },
+      );
+      setSources((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setMessage(updated.safeMessage);
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The knowledge source action could not be completed.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -163,13 +217,15 @@ export function CompanyKnowledgeSources() {
             Add company knowledge
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Save your company website and add approved supporting text. Website
-            ingestion is externally gated in this build: saving an address does
-            not mean Oryntela has fetched or learned it.
+            Add a public website, approved supporting text, or a PDF, DOCX or
+            TXT file. Text and documents are extracted in bounded background
+            jobs. Website fetching can be disabled by the deployment; the source
+            status will say when it is paused. Every source stays excluded from
+            preparation until an administrator reviews and approves it.
           </p>
         </div>
         <span className="w-fit rounded-full border border-brand-secondary/20 bg-brand-secondary/10 px-3 py-1 text-xs font-bold text-brand-primary">
-          No external processing
+          Review before use
         </span>
       </div>
 
@@ -178,7 +234,7 @@ export function CompanyKnowledgeSources() {
         aria-label="Knowledge source type"
         role="group"
       >
-        {(["website", "text"] as const).map((value) => (
+        {(["website", "text", "document"] as const).map((value) => (
           <button
             key={value}
             type="button"
@@ -193,7 +249,11 @@ export function CompanyKnowledgeSources() {
               setError(null);
             }}
           >
-            {value === "website" ? "Company website" : "Text or .txt file"}
+            {value === "website"
+              ? "Company website"
+              : value === "text"
+                ? "Supporting text"
+                : "PDF, DOCX or TXT"}
           </button>
         ))}
       </div>
@@ -208,7 +268,11 @@ export function CompanyKnowledgeSources() {
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             placeholder={
-              mode === "website" ? "Company website" : "Product overview"
+              mode === "website"
+                ? "Company website"
+                : mode === "document"
+                  ? "Product guide"
+                  : "Product overview"
             }
           />
         </label>
@@ -225,31 +289,33 @@ export function CompanyKnowledgeSources() {
               placeholder="https://example.test"
             />
           </label>
+        ) : mode === "text" ? (
+          <label className="grid gap-2 text-sm font-bold text-slate-800">
+            Supporting text
+            <textarea
+              className="form-control min-h-36 py-3"
+              required
+              maxLength={40_000}
+              value={sourceText}
+              onChange={(event) => setSourceText(event.target.value)}
+              placeholder="Paste approved product, audience, objection or outcome context."
+            />
+          </label>
         ) : (
           <>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Supporting text
-              <textarea
-                className="form-control min-h-36 py-3"
-                required
-                maxLength={40_000}
-                value={sourceText}
-                onChange={(event) => {
-                  setSourceText(event.target.value);
-                  setFileName(null);
-                }}
-                placeholder="Paste approved product, audience, objection or outcome context."
-              />
-            </label>
             <label className="w-fit text-sm font-bold text-slate-800">
-              Or choose a .txt file
+              Choose a document
               <input
                 className="mt-2 block max-w-full text-sm font-normal"
                 type="file"
-                accept=".txt,text/plain"
+                required
+                accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                 onChange={(event) => void selectFile(event.target.files?.[0])}
               />
             </label>
+            {fileName ? (
+              <p className="text-sm text-slate-600">Selected: {fileName}</p>
+            ) : null}
           </>
         )}
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
@@ -343,10 +409,72 @@ export function CompanyKnowledgeSources() {
                     </p>
                   </details>
                 ) : null}
+                {source.summaryText ? (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Extractive review summary
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      {source.summaryText}
+                    </p>
+                  </div>
+                ) : null}
+                {source.extractedText ? (
+                  <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <summary className="cursor-pointer text-sm font-bold text-slate-800">
+                      Review extracted text
+                    </summary>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                      {source.extractedText}
+                    </p>
+                  </details>
+                ) : null}
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a className="secondary-button" href="#company-understanding">
                     Review company understanding
                   </a>
+                  {source.processingStatus === "ready_for_review" ? (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={saving}
+                      onClick={() => void sourceAction(source, "approve")}
+                    >
+                      Approve for preparation
+                    </button>
+                  ) : null}
+                  {source.processingStatus === "failed" ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={saving}
+                      onClick={() => void sourceAction(source, "retry")}
+                    >
+                      Retry extraction
+                    </button>
+                  ) : null}
+                  {["queued", "fetching", "extracting", "stale"].includes(
+                    source.processingStatus,
+                  ) ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={saving}
+                      onClick={() => void sourceAction(source, "cancel")}
+                    >
+                      Cancel job
+                    </button>
+                  ) : null}
+                  {source.processingStatus === "approved" ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={saving}
+                      onClick={() => void sourceAction(source, "refresh")}
+                    >
+                      Refresh source
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="secondary-button border-rose-200 text-rose-800"

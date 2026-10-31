@@ -1326,6 +1326,41 @@ export interface DailyResponse {
   caughtUp: boolean;
 }
 
+export interface DeliveryPreferenceResponse {
+  exists: boolean;
+  lockVersion: number;
+  timezone: string;
+  morningDigestEnabled: boolean;
+  morningDigestTime: string;
+  preMeetingEnabled: boolean;
+  preMeetingMinutes: number;
+  importedFromBrowserAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface BriefingPreviewResponse {
+  id: string;
+  kind: "morning_digest" | "pre_meeting";
+  status: "prepared" | "superseded" | "cancelled";
+  subject: string;
+  bodyText: string;
+  href: string;
+  preparedForAt: string;
+  duplicateSuppressed: boolean;
+}
+
+export interface ConversationWorkspaceResponse {
+  exists: boolean;
+  ownerUserId: string;
+  lockVersion: number;
+  enhancedNotes: string | null;
+  followUpDraft: string | null;
+  followUpReviewed: boolean;
+  generationFingerprint: string | null;
+  importedFromBrowserAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface Meeting extends TenantEntity {
   interactionId: string;
   title: string;
@@ -5810,10 +5845,16 @@ export interface SellingProfileContext {
 }
 
 export type CompanyKnowledgeSourceKind =
-  "website" | "supporting_text" | "text_file";
+  "website" | "supporting_text" | "text_file" | "document";
 
 export type CompanyKnowledgeSourceStatus =
-  "saved_unprocessed" | "ready_for_review" | "failed";
+  | "queued"
+  | "fetching"
+  | "extracting"
+  | "ready_for_review"
+  | "approved"
+  | "stale"
+  | "failed";
 
 export interface CompanyKnowledgeSource {
   id: string;
@@ -5821,10 +5862,19 @@ export interface CompanyKnowledgeSource {
   label: string;
   websiteUrl: string | null;
   sourceText: string | null;
+  sourceFilename: string | null;
+  sourceMimeType: string | null;
+  extractedText: string | null;
+  summaryText: string | null;
   characterCount: number;
   contentFingerprint: string;
   processingStatus: CompanyKnowledgeSourceStatus;
   failureCode: string | null;
+  processingAttempts: number;
+  processedAt: string | null;
+  approvedAt: string | null;
+  approvedByUserId: string | null;
+  staleAt: string | null;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;

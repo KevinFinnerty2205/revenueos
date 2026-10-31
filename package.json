@@ -16,6 +16,7 @@
     "typecheck": "pnpm --filter @revenueos/web typecheck",
     "test": "pnpm --filter @revenueos/web test",
     "test:e2e": "pnpm --filter @revenueos/web test:e2e",
+    "test:e2e:full-stack": "pnpm --filter @revenueos/web test:e2e:full-stack",
     "format": "pnpm --filter @revenueos/web format",
     "format:write": "pnpm --filter @revenueos/web format:write",
     "api:lint": "uv --directory apps/api run ruff check .",

@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.models import (
+    CompanyKnowledgeIngestionJob,
     CompanyKnowledgeSource,
     OrganisationMembership,
     SellingProfile,
@@ -138,19 +139,46 @@ class SellingProfileRepository:
         self,
         organisation_id: UUID,
         source_id: UUID,
+        *,
+        for_update: bool = False,
     ) -> CompanyKnowledgeSource | None:
+        statement = select(CompanyKnowledgeSource).where(
+            CompanyKnowledgeSource.organisation_id == organisation_id,
+            CompanyKnowledgeSource.id == source_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
         return cast(
             CompanyKnowledgeSource | None,
-            await self.session.scalar(
-                select(CompanyKnowledgeSource).where(
-                    CompanyKnowledgeSource.organisation_id == organisation_id,
-                    CompanyKnowledgeSource.id == source_id,
-                )
-            ),
+            await self.session.scalar(statement),
         )
 
     def add_knowledge_source(self, row: CompanyKnowledgeSource) -> None:
         self.session.add(row)
+
+    def add_knowledge_job(self, row: CompanyKnowledgeIngestionJob) -> None:
+        self.session.add(row)
+
+    async def active_knowledge_job(
+        self,
+        organisation_id: UUID,
+        source_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> CompanyKnowledgeIngestionJob | None:
+        statement = (
+            select(CompanyKnowledgeIngestionJob)
+            .where(
+                CompanyKnowledgeIngestionJob.organisation_id == organisation_id,
+                CompanyKnowledgeIngestionJob.source_id == source_id,
+                CompanyKnowledgeIngestionJob.status.in_(("pending", "running")),
+            )
+            .order_by(CompanyKnowledgeIngestionJob.created_at.desc())
+            .limit(1)
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(CompanyKnowledgeIngestionJob | None, await self.session.scalar(statement))
 
     async def delete_knowledge_source(self, row: CompanyKnowledgeSource) -> None:
         await self.session.delete(row)

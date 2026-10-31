@@ -51,6 +51,38 @@ async def delete_company_knowledge_source(source_id: UUID, service: Service) -> 
     await service.delete_knowledge_source(source_id)
 
 
+@router.post("/knowledge-sources/{source_id}/approve", response_model=CompanyKnowledgeSourceResponse)
+async def approve_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.approve_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/retry", response_model=CompanyKnowledgeSourceResponse)
+async def retry_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.retry_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/refresh", response_model=CompanyKnowledgeSourceResponse)
+async def refresh_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.refresh_knowledge_source(source_id)
+
+
+@router.post("/knowledge-sources/{source_id}/cancel", response_model=CompanyKnowledgeSourceResponse)
+async def cancel_company_knowledge_source(
+    source_id: UUID,
+    service: Service,
+) -> CompanyKnowledgeSourceResponse:
+    return await service.cancel_knowledge_source(source_id)
+
+
 @router.post("/revisions", response_model=SellingProfileManagementResponse, status_code=status.HTTP_201_CREATED)
 async def create_selling_profile_draft(
     request: SellingProfileDraftCreate,

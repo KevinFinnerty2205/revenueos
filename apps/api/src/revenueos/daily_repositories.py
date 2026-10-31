@@ -16,6 +16,9 @@ from revenueos.models import (
     AIArtifact,
     AIJob,
     Company,
+    ConversationBriefingOutbox,
+    ConversationDeliveryPreference,
+    IntegrationConnection,
     Interaction,
     InteractionIntelligenceSnapshot,
     Meeting,
@@ -25,6 +28,7 @@ from revenueos.models import (
     OrganisationMembership,
     OrganisationMethodologySetting,
     PreInteractionBrief,
+    ProviderCalendarEvent,
     RevenueBrainInsight,
     RevenueBrainSnapshot,
     Transcript,
@@ -91,6 +95,15 @@ class DailyRecommendationRecord:
     content_json: dict[str, object]
 
 
+@dataclass(frozen=True)
+class DailyBriefingInteractionRecord:
+    interaction: Interaction
+    company_name: str | None
+    opportunity_name: str | None
+    brief: PreInteractionBrief | None
+    provider_event: ProviderCalendarEvent | None
+
+
 class DailyRepository:
     """Bounded, explicitly tenant- and user-scoped reads for RevenueOS Daily."""
 
@@ -112,6 +125,131 @@ class DailyRepository:
     async def user_display_name(self, user_id: UUID) -> str:
         return cast(str | None, await self.session.scalar(select(User.display_name).where(User.id == user_id))) or (
             "Oryntela user"
+        )
+
+    async def delivery_preference(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ConversationDeliveryPreference | None:
+        statement = select(ConversationDeliveryPreference).where(
+            ConversationDeliveryPreference.organisation_id == organisation_id,
+            ConversationDeliveryPreference.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def briefing_interaction(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        interaction_id: UUID,
+    ) -> DailyBriefingInteractionRecord | None:
+        row = (
+            await self.session.execute(
+                select(Interaction, Company.name, Opportunity.name)
+                .outerjoin(
+                    Company,
+                    and_(
+                        Company.organisation_id == Interaction.organisation_id,
+                        Company.id == Interaction.company_id,
+                    ),
+                )
+                .outerjoin(
+                    Opportunity,
+                    and_(
+                        Opportunity.organisation_id == Interaction.organisation_id,
+                        Opportunity.id == Interaction.opportunity_id,
+                    ),
+                )
+                .where(
+                    Interaction.organisation_id == organisation_id,
+                    Interaction.id == interaction_id,
+                    Interaction.created_by_user_id == user_id,
+                    Interaction.deleted_at.is_(None),
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        brief = (
+            await self.session.execute(
+                select(PreInteractionBrief)
+                .where(
+                    PreInteractionBrief.organisation_id == organisation_id,
+                    PreInteractionBrief.interaction_id == interaction_id,
+                    PreInteractionBrief.status == "completed",
+                )
+                .order_by(PreInteractionBrief.brief_version.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        provider_event = (
+            await self.session.execute(
+                select(ProviderCalendarEvent)
+                .join(
+                    IntegrationConnection,
+                    and_(
+                        IntegrationConnection.organisation_id == ProviderCalendarEvent.organisation_id,
+                        IntegrationConnection.id == ProviderCalendarEvent.connection_id,
+                    ),
+                )
+                .where(
+                    ProviderCalendarEvent.organisation_id == organisation_id,
+                    ProviderCalendarEvent.interaction_id == interaction_id,
+                    IntegrationConnection.created_by_user_id == user_id,
+                )
+                .order_by(
+                    ProviderCalendarEvent.last_synced_at.desc(),
+                    ProviderCalendarEvent.id.desc(),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return DailyBriefingInteractionRecord(
+            interaction=row[0],
+            company_name=row[1],
+            opportunity_name=row[2],
+            brief=brief,
+            provider_event=provider_event,
+        )
+
+    async def briefing_by_key(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        deduplication_key: str,
+    ) -> ConversationBriefingOutbox | None:
+        return (
+            await self.session.execute(
+                select(ConversationBriefingOutbox).where(
+                    ConversationBriefingOutbox.organisation_id == organisation_id,
+                    ConversationBriefingOutbox.user_id == user_id,
+                    ConversationBriefingOutbox.deduplication_key == deduplication_key,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def active_interaction_briefings(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        interaction_id: UUID,
+    ) -> list[ConversationBriefingOutbox]:
+        return list(
+            (
+                await self.session.scalars(
+                    select(ConversationBriefingOutbox).where(
+                        ConversationBriefingOutbox.organisation_id == organisation_id,
+                        ConversationBriefingOutbox.user_id == user_id,
+                        ConversationBriefingOutbox.interaction_id == interaction_id,
+                        ConversationBriefingOutbox.status == "prepared",
+                    )
+                )
+            ).all()
         )
 
     async def interactions(

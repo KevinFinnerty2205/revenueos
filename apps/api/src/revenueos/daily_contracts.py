@@ -177,3 +177,41 @@ class DailyResponse(APIModel):
     availability: DailyAvailability
     has_opportunities: bool
     caught_up: bool
+
+
+class DeliveryPreferenceUpdate(APIModel):
+    expected_lock_version: int = Field(ge=0)
+    timezone: str = Field(min_length=1, max_length=64)
+    morning_digest_enabled: bool
+    morning_digest_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    pre_meeting_enabled: bool
+    pre_meeting_minutes: int = Field(ge=5, le=1440)
+    import_from_browser: bool = False
+
+
+class DeliveryPreferenceResponse(APIModel):
+    exists: bool
+    lock_version: int = Field(ge=0)
+    timezone: str = Field(min_length=1, max_length=64)
+    morning_digest_enabled: bool
+    morning_digest_time: str
+    pre_meeting_enabled: bool
+    pre_meeting_minutes: int
+    imported_from_browser_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class BriefingPreviewRequest(APIModel):
+    kind: Literal["morning_digest", "pre_meeting"]
+    interaction_id: UUID | None = None
+
+
+class BriefingPreviewResponse(APIModel):
+    id: UUID
+    kind: Literal["morning_digest", "pre_meeting"]
+    status: Literal["prepared", "superseded", "cancelled"]
+    subject: str = Field(min_length=1, max_length=500)
+    body_text: str = Field(min_length=1, max_length=100_000)
+    href: str = Field(min_length=1, max_length=500, pattern=r"^/")
+    prepared_for_at: datetime
+    duplicate_suppressed: bool

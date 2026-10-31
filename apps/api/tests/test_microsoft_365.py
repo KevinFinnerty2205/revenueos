@@ -48,6 +48,7 @@ from revenueos.models import (
     ActionExecution,
     ActionProposal,
     ContactSuppression,
+    ConversationBriefingOutbox,
     EncryptedConnectorCredential,
     IntegrationConnection,
     Interaction,
@@ -1413,6 +1414,24 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
                 == 4
             )
             customer.interaction_id = interaction.id
+            briefing = ConversationBriefingOutbox(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=PRIMARY_USER_ID,
+                interaction_id=interaction.id,
+                kind="pre_meeting",
+                status="prepared",
+                deduplication_key=f"provider-test:{interaction.id}",
+                source_fingerprint="a" * 64,
+                subject="Prepare",
+                body_text="Synthetic local preview",
+                href=f"/conversations/{interaction.id}#preparation",
+                prepared_for_at=now + timedelta(days=3),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(briefing)
+            await session.flush()
             changed = await service._retain_calendar_event(
                 connection,
                 {
@@ -1434,6 +1453,7 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
                 now + timedelta(minutes=1),
             )
             assert changed == 1
+            assert briefing.status == "cancelled"
             assert customer.title == "Private event"
             assert customer.interaction_id is None
             assert customer.organiser_email is None

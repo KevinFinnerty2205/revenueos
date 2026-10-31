@@ -206,8 +206,8 @@ def test_company_knowledge_sources_are_persisted_honestly_and_tenant_scoped(
     )
     assert website.status_code == 201, website.text
     assert website.json()["websiteUrl"] == "https://example.test/product"
-    assert website.json()["processingStatus"] == "saved_unprocessed"
-    assert "has not fetched or learned" in website.json()["safeMessage"]
+    assert website.json()["processingStatus"] == "queued"
+    assert "excluded from use" in website.json()["safeMessage"]
 
     supporting_text = client.post(
         "/api/v1/selling-profile/knowledge-sources",
@@ -221,7 +221,7 @@ def test_company_knowledge_sources_are_persisted_honestly_and_tenant_scoped(
         },
     )
     assert supporting_text.status_code == 201, supporting_text.text
-    assert supporting_text.json()["processingStatus"] == "ready_for_review"
+    assert supporting_text.json()["processingStatus"] == "queued"
     assert supporting_text.json()["characterCount"] > 0
     assert supporting_text.json()["sourceText"] == ("We help synthetic GTM teams prepare for important conversations.")
 
@@ -507,7 +507,7 @@ def test_profile_is_included_in_export_and_removed_by_organisation_deletion() ->
             await engine.dispose()
 
     exported, profiles, revisions = asyncio.run(scenario())
-    assert exported["exportVersion"] == EXPORT_VERSION == 39
+    assert exported["exportVersion"] == EXPORT_VERSION == 40
     assert exported["sellingProfiles"][0]["id"] == profile_id
     assert exported["sellingProfileRevisions"][0]["content_json"] == profile_content
     assert profiles == revisions == 0

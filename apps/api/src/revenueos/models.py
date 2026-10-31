@@ -1337,23 +1337,36 @@ class CompanyKnowledgeSource(TimestampMixin, Base):
     __tablename__ = "company_knowledge_sources"
     __table_args__ = (
         CheckConstraint(
-            "source_kind IN ('website', 'supporting_text', 'text_file')",
+            "source_kind IN ('website', 'supporting_text', 'text_file', 'document')",
             name="ck_company_knowledge_sources_kind",
         ),
         CheckConstraint(
-            "processing_status IN ('saved_unprocessed', 'ready_for_review', 'failed')",
+            "processing_status IN ('queued', 'fetching', 'extracting', 'ready_for_review', "
+            "'approved', 'stale', 'failed')",
             name="ck_company_knowledge_sources_status",
         ),
         CheckConstraint(
-            "(source_kind = 'website' AND website_url IS NOT NULL AND source_text IS NULL) OR "
+            "(source_kind = 'website' AND website_url IS NOT NULL AND source_text IS NULL "
+            "AND source_document IS NULL AND source_filename IS NULL AND source_mime_type IS NULL) OR "
             "(source_kind IN ('supporting_text', 'text_file') AND website_url IS NULL "
-            "AND source_text IS NOT NULL)",
+            "AND source_text IS NOT NULL AND source_document IS NULL AND source_filename IS NULL "
+            "AND source_mime_type IS NULL) OR "
+            "(source_kind = 'document' AND website_url IS NULL AND source_text IS NULL "
+            "AND source_document IS NOT NULL AND source_filename IS NOT NULL "
+            "AND source_mime_type IS NOT NULL)",
             name="ck_company_knowledge_sources_content",
         ),
+        CheckConstraint("processing_attempts >= 0", name="ck_company_knowledge_sources_attempts"),
         ForeignKeyConstraint(
             ["organisation_id", "created_by_user_id"],
             ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
             name="fk_company_knowledge_sources_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_company_knowledge_sources_approver",
             ondelete="RESTRICT",
         ),
         UniqueConstraint("organisation_id", "id", name="uq_company_knowledge_sources_org_id"),
@@ -1378,11 +1391,213 @@ class CompanyKnowledgeSource(TimestampMixin, Base):
     label: Mapped[str] = mapped_column(String(200), nullable=False)
     website_url: Mapped[str | None] = mapped_column(String(2_000))
     source_text: Mapped[str | None] = mapped_column(Text)
+    source_document: Mapped[bytes | None] = mapped_column(LargeBinary)
+    source_filename: Mapped[str | None] = mapped_column(String(255))
+    source_mime_type: Mapped[str | None] = mapped_column(String(120))
+    extracted_text: Mapped[str | None] = mapped_column(Text)
+    summary_text: Mapped[str | None] = mapped_column(Text)
     content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     processing_status: Mapped[str] = mapped_column(String(24), nullable=False)
     failure_code: Mapped[str | None] = mapped_column(String(100))
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_http_etag: Mapped[str | None] = mapped_column(String(500))
+    last_http_modified: Mapped[str | None] = mapped_column(String(500))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    stale_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class CompanyKnowledgeIngestionJob(TimestampMixin, Base):
+    __tablename__ = "company_knowledge_ingestion_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
+            name="ck_company_knowledge_jobs_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_company_knowledge_jobs_attempts"),
+        CheckConstraint("max_attempts BETWEEN 1 AND 5", name="ck_company_knowledge_jobs_max_attempts"),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_id"],
+            ["company_knowledge_sources.organisation_id", "company_knowledge_sources.id"],
+            name="fk_company_knowledge_jobs_source",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_company_knowledge_jobs_requester",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_company_knowledge_jobs_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "source_id",
+            "request_fingerprint",
+            name="uq_company_knowledge_jobs_request",
+        ),
+        Index(
+            "ix_company_knowledge_jobs_org_status",
+            "organisation_id",
+            "status",
+            "next_attempt_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ConversationUserWorkspace(TimestampMixin, Base):
+    __tablename__ = "conversation_user_workspaces"
+    __table_args__ = (
+        CheckConstraint("lock_version > 0", name="ck_conversation_user_workspaces_lock"),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_conversation_user_workspaces_interaction",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_user_workspaces_user",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_user_workspaces_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "user_id",
+            name="uq_conversation_user_workspaces_owner",
+        ),
+        Index(
+            "ix_conversation_user_workspaces_owner_updated",
+            "organisation_id",
+            "user_id",
+            "updated_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    enhanced_notes: Mapped[str | None] = mapped_column(Text)
+    follow_up_draft: Mapped[str | None] = mapped_column(Text)
+    follow_up_reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    generation_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    imported_from_browser_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ConversationDeliveryPreference(TimestampMixin, Base):
+    __tablename__ = "conversation_delivery_preferences"
+    __table_args__ = (
+        CheckConstraint("lock_version > 0", name="ck_conversation_delivery_preferences_lock"),
+        CheckConstraint(
+            "pre_meeting_minutes BETWEEN 5 AND 1440",
+            name="ck_conversation_delivery_preferences_lead",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_delivery_preferences_user",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_delivery_preferences_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "user_id",
+            name="uq_conversation_delivery_preferences_owner",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC", server_default="UTC")
+    morning_digest_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    morning_digest_time: Mapped[str] = mapped_column(String(5), nullable=False, default="07:30", server_default="07:30")
+    pre_meeting_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    pre_meeting_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
+    imported_from_browser_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ConversationBriefingOutbox(TimestampMixin, Base):
+    __tablename__ = "conversation_briefing_outbox"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('morning_digest', 'pre_meeting')",
+            name="ck_conversation_briefing_outbox_kind",
+        ),
+        CheckConstraint(
+            "status IN ('prepared', 'superseded', 'cancelled')",
+            name="ck_conversation_briefing_outbox_status",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_briefing_outbox_user",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_conversation_briefing_outbox_interaction",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_briefing_outbox_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "user_id",
+            "deduplication_key",
+            name="uq_conversation_briefing_outbox_deduplication",
+        ),
+        Index(
+            "ix_conversation_briefing_outbox_owner_created",
+            "organisation_id",
+            "user_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="prepared", server_default="prepared")
+    deduplication_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    href: Mapped[str] = mapped_column(String(500), nullable=False)
+    prepared_for_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class SellingProfileRevision(TimestampMixin, Base):

@@ -4,17 +4,20 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, time, timedelta
+from hashlib import sha256
 from typing import Literal, TypeVar, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import ValidationError
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.ai_contracts import NextBestActionArtifactContent
 from revenueos.config import Settings
 from revenueos.daily_contracts import (
+    BriefingPreviewRequest,
+    BriefingPreviewResponse,
     DailyAction,
     DailyActionSection,
     DailyAvailability,
@@ -27,6 +30,8 @@ from revenueos.daily_contracts import (
     DailyPriority,
     DailyRecommendation,
     DailyResponse,
+    DeliveryPreferenceResponse,
+    DeliveryPreferenceUpdate,
 )
 from revenueos.daily_repositories import (
     DailyActionCounts,
@@ -39,7 +44,13 @@ from revenueos.daily_repositories import (
 )
 from revenueos.errors import PublicAPIError
 from revenueos.methodology_contracts import MethodologyProjectionContent
-from revenueos.models import MethodologyProjection, RevenueBrainInsight
+from revenueos.models import (
+    ConversationBriefingOutbox,
+    ConversationDeliveryPreference,
+    MethodologyProjection,
+    RevenueBrainInsight,
+)
+from revenueos.pre_interaction_contracts import PreInteractionBriefContent
 from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightContent
 from revenueos.tenant import TenantContext
 
@@ -91,6 +102,323 @@ class RevenueOSDailyService:
         self.tenant = tenant
         self.settings = settings
         self.repository = DailyRepository(session)
+
+    async def get_delivery_preferences(self) -> DeliveryPreferenceResponse:
+        preference = await self.repository.delivery_preference(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+        )
+        return self._preference_response(preference)
+
+    async def save_delivery_preferences(
+        self,
+        request: DeliveryPreferenceUpdate,
+    ) -> DeliveryPreferenceResponse:
+        timezone = self._timezone(request.timezone)
+        preference = await self.repository.delivery_preference(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            for_update=True,
+        )
+        if preference is None:
+            if request.expected_lock_version != 0:
+                raise self._preference_conflict()
+            preference = ConversationDeliveryPreference(
+                id=uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                user_id=self.tenant.user_id,
+                lock_version=1,
+            )
+            self.session.add(preference)
+        else:
+            if preference.lock_version != request.expected_lock_version:
+                raise self._preference_conflict()
+            preference.lock_version += 1
+        preference.timezone = timezone.key
+        preference.morning_digest_enabled = request.morning_digest_enabled
+        preference.morning_digest_time = request.morning_digest_time
+        preference.pre_meeting_enabled = request.pre_meeting_enabled
+        preference.pre_meeting_minutes = request.pre_meeting_minutes
+        if request.import_from_browser:
+            preference.imported_from_browser_at = datetime.now(UTC)
+        try:
+            await self.session.flush()
+            await self.session.refresh(preference)
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise self._preference_conflict() from exc
+        return self._preference_response(preference)
+
+    async def prepare_briefing_preview(
+        self,
+        request: BriefingPreviewRequest,
+        *,
+        now: datetime | None = None,
+    ) -> BriefingPreviewResponse:
+        preference = await self.repository.delivery_preference(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+        )
+        timezone_name = preference.timezone if preference is not None else "UTC"
+        morning_digest_enabled = preference.morning_digest_enabled if preference is not None else True
+        morning_digest_time = preference.morning_digest_time if preference is not None else "07:30"
+        pre_meeting_enabled = preference.pre_meeting_enabled if preference is not None else True
+        pre_meeting_minutes = preference.pre_meeting_minutes if preference is not None else 30
+        generated_at = (now or datetime.now(UTC)).astimezone(UTC)
+        if request.kind == "morning_digest":
+            if not morning_digest_enabled:
+                raise PublicAPIError("briefing_disabled", "Morning briefing delivery is disabled.", 409)
+            daily = await self.read(timezone_name, now=generated_at)
+            subject = f"Your Oryntela briefing for {daily.local_date.isoformat()}"
+            body = self._morning_digest_body(daily)
+            local_time = time.fromisoformat(morning_digest_time)
+            prepared_for_at = datetime.combine(daily.local_date, local_time, self._timezone(timezone_name)).astimezone(
+                UTC
+            )
+            href = "/"
+            interaction_id = None
+            source_parts: tuple[object, ...] = (
+                subject,
+                body,
+                prepared_for_at.isoformat(),
+                timezone_name,
+                morning_digest_time,
+            )
+            logical_key = f"morning:{daily.local_date.isoformat()}"
+        else:
+            if not pre_meeting_enabled:
+                raise PublicAPIError("briefing_disabled", "Pre-meeting briefing delivery is disabled.", 409)
+            if request.interaction_id is None:
+                raise PublicAPIError(
+                    "interaction_required",
+                    "Choose an interaction before previewing a pre-meeting briefing.",
+                    422,
+                )
+            record = await self.repository.briefing_interaction(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+                request.interaction_id,
+            )
+            if record is None:
+                raise PublicAPIError("interaction_not_found", "The requested interaction was not found.", 404)
+            prior = await self.repository.active_interaction_briefings(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+                request.interaction_id,
+            )
+            provider_cancelled = record.provider_event is not None and record.provider_event.state != "active"
+            if record.interaction.lifecycle_status == "cancelled" or provider_cancelled:
+                for item in prior:
+                    item.status = "cancelled"
+                await self.session.commit()
+                raise PublicAPIError("interaction_cancelled", "Cancelled interactions do not receive briefings.", 409)
+            starts_at = (
+                record.provider_event.start_at
+                if record.provider_event is not None
+                else record.interaction.scheduled_start_at
+            )
+            if starts_at is None:
+                raise PublicAPIError(
+                    "interaction_not_scheduled",
+                    "Add a scheduled start before preparing a pre-meeting briefing.",
+                    409,
+                )
+            aware_start = starts_at.replace(tzinfo=UTC) if starts_at.tzinfo is None else starts_at.astimezone(UTC)
+            content = (
+                PreInteractionBriefContent.model_validate(record.brief.content_json)
+                if record.brief is not None
+                else None
+            )
+            subject = f"Prepare: {record.interaction.title}"
+            body = self._pre_meeting_body(
+                record.interaction.title,
+                record.company_name,
+                record.opportunity_name,
+                content,
+            )
+            prepared_for_at = aware_start - timedelta(minutes=pre_meeting_minutes)
+            href = f"/conversations/{record.interaction.id}#preparation"
+            interaction_id = record.interaction.id
+            source_parts = (
+                str(record.interaction.id),
+                aware_start.isoformat(),
+                record.brief.source_context_fingerprint if record.brief is not None else None,
+                pre_meeting_minutes,
+            )
+            logical_key = f"pre:{record.interaction.id}"
+        fingerprint = sha256(
+            json.dumps(source_parts, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        deduplication_key = f"{logical_key}:{fingerprint[:24]}"
+        existing = await self.repository.briefing_by_key(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            deduplication_key,
+        )
+        if existing is not None:
+            if existing.status != "prepared":
+                if interaction_id is not None:
+                    for item in await self.repository.active_interaction_briefings(
+                        self.tenant.organisation_id,
+                        self.tenant.user_id,
+                        interaction_id,
+                    ):
+                        item.status = "superseded"
+                existing.status = "prepared"
+                existing.subject = subject
+                existing.body_text = body
+                existing.href = href
+                existing.prepared_for_at = prepared_for_at
+                await self.session.commit()
+                return self._briefing_response(existing, duplicate_suppressed=False)
+            return self._briefing_response(existing, duplicate_suppressed=True)
+        if interaction_id is not None:
+            for item in await self.repository.active_interaction_briefings(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+                interaction_id,
+            ):
+                item.status = "superseded"
+        outbox = ConversationBriefingOutbox(
+            id=uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            user_id=self.tenant.user_id,
+            interaction_id=interaction_id,
+            kind=request.kind,
+            status="prepared",
+            deduplication_key=deduplication_key,
+            source_fingerprint=fingerprint,
+            subject=subject,
+            body_text=body,
+            href=href,
+            prepared_for_at=prepared_for_at,
+        )
+        self.session.add(outbox)
+        try:
+            await self.session.flush()
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            existing = await self.repository.briefing_by_key(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+                deduplication_key,
+            )
+            if existing is None:
+                raise PublicAPIError(
+                    "briefing_conflict",
+                    "The briefing could not be prepared safely.",
+                    409,
+                ) from exc
+            return self._briefing_response(existing, duplicate_suppressed=True)
+        return self._briefing_response(outbox, duplicate_suppressed=False)
+
+    @staticmethod
+    def _preference_response(
+        preference: ConversationDeliveryPreference | None,
+    ) -> DeliveryPreferenceResponse:
+        if preference is None:
+            return DeliveryPreferenceResponse(
+                exists=False,
+                lock_version=0,
+                timezone="UTC",
+                morning_digest_enabled=True,
+                morning_digest_time="07:30",
+                pre_meeting_enabled=True,
+                pre_meeting_minutes=30,
+            )
+        return DeliveryPreferenceResponse(
+            exists=True,
+            lock_version=preference.lock_version,
+            timezone=preference.timezone,
+            morning_digest_enabled=preference.morning_digest_enabled,
+            morning_digest_time=preference.morning_digest_time,
+            pre_meeting_enabled=preference.pre_meeting_enabled,
+            pre_meeting_minutes=preference.pre_meeting_minutes,
+            imported_from_browser_at=preference.imported_from_browser_at,
+            updated_at=preference.updated_at,
+        )
+
+    @staticmethod
+    def _preference_conflict() -> PublicAPIError:
+        return PublicAPIError(
+            "delivery_preference_conflict",
+            "Briefing preferences changed in another session. Reload before saving.",
+            409,
+        )
+
+    @staticmethod
+    def _briefing_response(
+        outbox: ConversationBriefingOutbox,
+        *,
+        duplicate_suppressed: bool,
+    ) -> BriefingPreviewResponse:
+        return BriefingPreviewResponse(
+            id=outbox.id,
+            kind=cast(Literal["morning_digest", "pre_meeting"], outbox.kind),
+            status=cast(Literal["prepared", "superseded", "cancelled"], outbox.status),
+            subject=outbox.subject,
+            body_text=outbox.body_text,
+            href=outbox.href,
+            prepared_for_at=outbox.prepared_for_at,
+            duplicate_suppressed=duplicate_suppressed,
+        )
+
+    @staticmethod
+    def _morning_digest_body(daily: DailyResponse) -> str:
+        lines = [f"Good morning, {daily.user_display_name}.", ""]
+        if daily.top_priority is not None:
+            lines.extend(
+                (
+                    "Top priority",
+                    f"{daily.top_priority.title} — {daily.top_priority.reason}",
+                    "",
+                )
+            )
+        if daily.today_interactions:
+            lines.append("Today’s conversations")
+            for interaction in daily.today_interactions:
+                lines.append(f"- {interaction.title}: {interaction.context} ({interaction.cta_label})")
+            lines.append("")
+        if daily.actions.attention_count:
+            lines.append(f"Follow-up: {daily.actions.attention_count} item(s) need attention.")
+        if daily.deal_attention.attention_count:
+            lines.append(f"Deal attention: {daily.deal_attention.attention_count} opportunity item(s).")
+        if daily.caught_up:
+            lines.append("You’re caught up. No current conversation work needs attention.")
+        lines.extend(("", "Open Oryntela Daily to review the source records before acting."))
+        return "\n".join(lines)
+
+    @staticmethod
+    def _pre_meeting_body(
+        title: str,
+        company_name: str | None,
+        opportunity_name: str | None,
+        content: PreInteractionBriefContent | None,
+    ) -> str:
+        lines = [title]
+        context_label = opportunity_name or company_name
+        if context_label:
+            lines.append(context_label)
+        lines.append("")
+        if content is None:
+            lines.extend(
+                (
+                    "No generated brief is available yet.",
+                    "Open the conversation to generate and review preparation from authorised records.",
+                )
+            )
+            return "\n".join(lines)
+        lines.extend((content.headline, "", content.account_context, "", "Objectives"))
+        lines.extend(f"- {item.objective}" for item in content.objectives)
+        lines.extend(("", "Questions to ask"))
+        lines.extend(f"- {item.question}" for item in content.questions_to_ask)
+        if content.risks_to_watch:
+            lines.extend(("", "Risks to watch"))
+            lines.extend(f"- {item.risk}" for item in content.risks_to_watch)
+        lines.extend(("", "Review the full brief and its source labels in Oryntela before the conversation."))
+        return "\n".join(lines)
 
     async def read(self, timezone_name: str | None, *, now: datetime | None = None) -> DailyResponse:
         timezone = self._timezone(timezone_name)

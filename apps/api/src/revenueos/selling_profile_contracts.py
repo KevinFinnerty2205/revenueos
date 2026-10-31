@@ -10,8 +10,16 @@ from revenueos.contracts import APIModel, to_camel
 
 SellingProfileState = Literal["draft", "approved", "superseded", "retired"]
 SellingProfileStatus = Literal["empty", "draft", "current", "retired"]
-KnowledgeSourceKind = Literal["website", "supporting_text", "text_file"]
-KnowledgeSourceStatus = Literal["saved_unprocessed", "ready_for_review", "failed"]
+KnowledgeSourceKind = Literal["website", "supporting_text", "text_file", "document"]
+KnowledgeSourceStatus = Literal[
+    "queued",
+    "fetching",
+    "extracting",
+    "ready_for_review",
+    "approved",
+    "stale",
+    "failed",
+]
 
 CompanyDescription = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2_000)]
 OfferingName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
@@ -21,6 +29,7 @@ IdempotencyKey = Annotated[str, StringConstraints(strip_whitespace=True, min_len
 KnowledgeLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 KnowledgeWebsite = Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=2_000)]
 KnowledgeText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40_000)]
+KnowledgeDocumentBase64 = Annotated[str, StringConstraints(min_length=4, max_length=20_000_000)]
 
 
 class StrictSellingProfileModel(APIModel):
@@ -135,15 +144,42 @@ class CompanyKnowledgeSourceCreate(StrictSellingProfileModel):
     label: KnowledgeLabel
     website_url: KnowledgeWebsite | None = None
     source_text: KnowledgeText | None = None
+    source_document_base64: KnowledgeDocumentBase64 | None = None
+    source_filename: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)] | None = (
+        None
+    )
+    source_mime_type: (
+        Literal[
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+        ]
+        | None
+    ) = None
     authority_confirmed: Literal[True]
     idempotency_key: IdempotencyKey
 
     @model_validator(mode="after")
     def content_matches_kind(self) -> CompanyKnowledgeSourceCreate:
         if self.source_kind == "website":
-            if self.website_url is None or self.source_text is not None:
-                raise ValueError("Website sources require a websiteUrl and no sourceText.")
-        elif self.source_text is None or self.website_url is not None:
+            if self.website_url is None or self.source_text is not None or self.source_document_base64 is not None:
+                raise ValueError("Website sources require a websiteUrl only.")
+        elif self.source_kind == "document":
+            if (
+                self.source_document_base64 is None
+                or self.source_filename is None
+                or self.source_mime_type is None
+                or self.website_url is not None
+                or self.source_text is not None
+            ):
+                raise ValueError("Document sources require a file name, MIME type and base64 document only.")
+        elif (
+            self.source_text is None
+            or self.website_url is not None
+            or self.source_document_base64 is not None
+            or self.source_filename is not None
+            or self.source_mime_type is not None
+        ):
             raise ValueError("Text sources require sourceText and no websiteUrl.")
         return self
 
@@ -154,10 +190,19 @@ class CompanyKnowledgeSourceResponse(StrictSellingProfileModel):
     label: str
     website_url: str | None
     source_text: str | None
+    source_filename: str | None
+    source_mime_type: str | None
+    extracted_text: str | None
+    summary_text: str | None
     character_count: int
     content_fingerprint: str
     processing_status: KnowledgeSourceStatus
     failure_code: str | None
+    processing_attempts: int
+    processed_at: datetime | None
+    approved_at: datetime | None
+    approved_by_user_id: UUID | None
+    stale_at: datetime | None
     created_by_user_id: UUID
     created_at: datetime
     updated_at: datetime

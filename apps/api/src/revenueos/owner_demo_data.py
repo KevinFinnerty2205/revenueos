@@ -1620,6 +1620,9 @@ OWNER_KNOWLEDGE_TEXT = (
     "for meetings, phone calls and in-person conversations. It does not replace a CRM, fabricate buyer facts "
     "or send follow-up without an authorised user action."
 )
+OWNER_KNOWLEDGE_PROCESSING_STATES = frozenset(
+    {"queued", "fetching", "extracting", "ready_for_review", "approved", "stale", "failed"}
+)
 
 
 async def _seed_company_knowledge_sources(
@@ -1654,7 +1657,6 @@ async def _seed_company_knowledge_sources(
             OWNER_KNOWLEDGE_URL,
             0,
             hashlib.sha256(OWNER_KNOWLEDGE_URL.encode()).hexdigest(),
-            "saved_unprocessed",
         ),
         (
             "text_file",
@@ -1662,7 +1664,6 @@ async def _seed_company_knowledge_sources(
             None,
             len(OWNER_KNOWLEDGE_TEXT),
             hashlib.sha256(OWNER_KNOWLEDGE_TEXT.encode()).hexdigest(),
-            "ready_for_review",
         ),
     )
     for source, values in zip(saved, expected, strict=True):
@@ -1672,8 +1673,7 @@ async def _seed_company_knowledge_sources(
             source.website_url,
             source.character_count,
             source.content_fingerprint,
-            source.processing_status,
-        ) != values:
+        ) != values or source.processing_status not in OWNER_KNOWLEDGE_PROCESSING_STATES:
             raise _owner_collision("Company Knowledge source")
     return saved[0].id, saved[1].id
 
@@ -4083,14 +4083,14 @@ async def reset_owner_demo_extensions(
                     or website_source.website_url != OWNER_KNOWLEDGE_URL
                     or website_source.source_text is not None
                     or website_source.content_fingerprint != hashlib.sha256(OWNER_KNOWLEDGE_URL.encode()).hexdigest()
-                    or website_source.processing_status != "saved_unprocessed"
+                    or website_source.processing_status not in OWNER_KNOWLEDGE_PROCESSING_STATES
                     or website_source.created_by_user_id != tenant.user_id
                     or text_source.source_kind != "text_file"
                     or text_source.label != "[DEMO] Approved conversation product brief.txt"
                     or text_source.website_url is not None
                     or text_source.source_text != OWNER_KNOWLEDGE_TEXT
                     or text_source.content_fingerprint != hashlib.sha256(OWNER_KNOWLEDGE_TEXT.encode()).hexdigest()
-                    or text_source.processing_status != "ready_for_review"
+                    or text_source.processing_status not in OWNER_KNOWLEDGE_PROCESSING_STATES
                     or text_source.created_by_user_id != tenant.user_id
                     or (
                         owner_extensions is not None

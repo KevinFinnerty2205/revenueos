@@ -57,7 +57,7 @@ from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightConte
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.pre_interaction_briefs")
-PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 3
+PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 4
 PRE_INTERACTION_BRIEF_HISTORY_LIMIT = 6
 ValidatedModel = TypeVar("ValidatedModel", bound=BaseModel)
 
@@ -511,6 +511,16 @@ class PreInteractionBriefService:
                 }
                 for item in records.actions
             ],
+            "approved_company_knowledge": [
+                {
+                    "id": str(item.source_id),
+                    "label": item.label,
+                    "summary": item.summary,
+                    "content_fingerprint": item.content_fingerprint,
+                    "approved_at": self._iso(item.approved_at),
+                }
+                for item in records.approved_knowledge
+            ],
         }
         fingerprint = hashlib.sha256(
             json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
@@ -587,11 +597,25 @@ class PreInteractionBriefService:
                 value = f"{value} Latest validated context: {context.executive_summary.executive_summary}"
             elif not context.records.artifacts:
                 value = f"{value} Limited validated interaction intelligence is currently available."
-            return self._bounded(value, 1_000)
+            return self._bounded(self._with_approved_knowledge(value, records), 1_000)
         assert records.company is not None
+        return self._bounded(
+            self._with_approved_knowledge(
+                f"Preparation is based on company metadata for {records.company.name}. "
+                "No linked opportunity or prior validated opportunity intelligence is available.",
+                records,
+            ),
+            1_000,
+        )
+
+    @staticmethod
+    def _with_approved_knowledge(value: str, records: PreInteractionSourceRecords) -> str:
+        if not records.approved_knowledge:
+            return value
+        summaries = " ".join(f"{item.label}: {item.summary}" for item in records.approved_knowledge[:3])
         return (
-            f"Preparation is based on company metadata for {records.company.name}. "
-            "No linked opportunity or prior validated opportunity intelligence is available."
+            f"{value} Approved organisation context: {summaries} "
+            "This is seller-approved context, not customer evidence."
         )
 
     @staticmethod
@@ -1027,6 +1051,7 @@ class PreInteractionBriefService:
         )
         score += min(validated_count * 0.04, 0.25)
         score += 0.1 if context.revenue_brain is not None else 0
+        score += 0.05 if context.records.approved_knowledge else 0
         return round(min(score, 0.95), 2)
 
     def _source_references(
@@ -1062,6 +1087,17 @@ class PreInteractionBriefService:
                     scope="account",
                     source_classification="system_metadata",
                     validation_status="not_applicable",
+                )
+            )
+        for item in records.approved_knowledge:
+            values.append(
+                PreInteractionSourceReference(
+                    section="account_context",
+                    capability="approved_company_knowledge",
+                    source_id=item.source_id,
+                    scope="account",
+                    source_classification="organisation_approved",
+                    validation_status="completed",
                 )
             )
         if records.opportunity is not None:

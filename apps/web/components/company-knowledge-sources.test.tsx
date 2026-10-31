@@ -12,7 +12,7 @@ function response(body: object, status = 200) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CompanyKnowledgeSources", () => {
-  it("saves a website without claiming it was ingested", async () => {
+  it("queues a website without claiming it is approved knowledge", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response([]))
@@ -26,13 +26,13 @@ describe("CompanyKnowledgeSources", () => {
             sourceText: null,
             characterCount: 0,
             contentFingerprint: "a".repeat(64),
-            processingStatus: "saved_unprocessed",
+            processingStatus: "queued",
             failureCode: null,
             createdByUserId: "user-1",
             createdAt: "2026-10-31T00:00:00Z",
             updatedAt: "2026-10-31T00:00:00Z",
             safeMessage:
-              "Website address saved only. Oryntela has not fetched or learned this website.",
+              "This source is queued for bounded extraction. It is not used until an administrator approves it.",
           },
           201,
         ),
@@ -55,10 +55,13 @@ describe("CompanyKnowledgeSources", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save source" }));
 
     expect(
-      (await screen.findAllByText(/has not fetched or learned this website/i))
-        .length,
+      (
+        await screen.findAllByText(
+          /not used until an administrator approves it/i,
+        )
+      ).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/saved unprocessed/i)).toBeVisible();
+    expect(screen.getAllByText(/queued/i).length).toBeGreaterThan(0);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
       sourceKind: "website",
@@ -96,7 +99,7 @@ describe("CompanyKnowledgeSources", () => {
     await screen.findByText(
       "No company knowledge sources have been saved yet.",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Text or .txt file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Supporting text" }));
     fireEvent.change(screen.getByLabelText("Source label"), {
       target: { value: "Approved notes" },
     });

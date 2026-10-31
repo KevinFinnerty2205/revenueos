@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -46,10 +47,14 @@ from revenueos.models import (
     ClosedWonHandoverSource,
     CommercialStateEvent,
     Company,
+    CompanyKnowledgeIngestionJob,
     CompanyKnowledgeSource,
     Contact,
     ContactFieldSource,
     ContactSuppression,
+    ConversationBriefingOutbox,
+    ConversationDeliveryPreference,
+    ConversationUserWorkspace,
     CreateApprovedContentItem,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
@@ -211,6 +216,19 @@ PRIMARY_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000002")
 PRIMARY_USER_ID = UUID("00000000-0000-4000-8000-000000000001")
 SECONDARY_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000012")
 SECONDARY_USER_ID = UUID("00000000-0000-4000-8000-000000000011")
+
+
+def pytest_configure() -> None:
+    """Keep local demo feature overrides from changing deterministic test defaults."""
+
+    os.environ.update(
+        {
+            "API_FEATURE_ACTION_EXECUTION_ENABLED": "false",
+            "API_FEATURE_ENGAGE_EVENTS_ENABLED": "false",
+            "API_FEATURE_INTEGRATIONS_ENABLED": "false",
+            "API_FEATURE_MOCK_CONNECTORS_ENABLED": "false",
+        }
+    )
 
 
 def set_test_commercial_plan(
@@ -562,7 +580,11 @@ def clean_business_entities() -> Iterator[None]:
                 ActionAuditEvent,
                 ActionProposalVersion,
                 ActionProposal,
+                CompanyKnowledgeIngestionJob,
                 CompanyKnowledgeSource,
+                ConversationBriefingOutbox,
+                ConversationDeliveryPreference,
+                ConversationUserWorkspace,
                 SellingProfileRevision,
                 SellingProfile,
                 MethodologyReview,

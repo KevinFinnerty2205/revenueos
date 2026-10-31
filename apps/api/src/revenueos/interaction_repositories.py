@@ -14,6 +14,7 @@ from revenueos.models import (
     CaptureSession,
     Company,
     Contact,
+    ConversationUserWorkspace,
     DebriefSession,
     Interaction,
     InteractionIntelligenceSnapshot,
@@ -97,6 +98,7 @@ class InteractionRepository:
     async def list_interactions(
         self,
         organisation_id: UUID,
+        user_id: UUID,
         *,
         page: int,
         page_size: int,
@@ -150,6 +152,12 @@ class InteractionRepository:
                     .where(
                         CandidateEvidence.organisation_id == organisation_id,
                         CandidateEvidence.interaction_id == Interaction.id,
+                        CandidateEvidence.session_id.in_(
+                            select(DebriefSession.id).where(
+                                DebriefSession.organisation_id == organisation_id,
+                                DebriefSession.started_by_user_id == user_id,
+                            )
+                        ),
                         CandidateEvidence.review_state == "accepted",
                         CandidateEvidence.statement.ilike(pattern),
                     )
@@ -397,3 +405,20 @@ class InteractionRepository:
             .with_for_update()
         )
         return result.scalar_one_or_none()
+
+    async def get_user_workspace(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        user_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ConversationUserWorkspace | None:
+        statement = select(ConversationUserWorkspace).where(
+            ConversationUserWorkspace.organisation_id == organisation_id,
+            ConversationUserWorkspace.interaction_id == interaction_id,
+            ConversationUserWorkspace.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()

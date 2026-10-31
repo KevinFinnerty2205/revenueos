@@ -15,6 +15,7 @@ from revenueos.models import (
     AIArtifact,
     AIJob,
     Company,
+    CompanyKnowledgeSource,
     Contact,
     Interaction,
     Meeting,
@@ -57,6 +58,15 @@ class BriefActionRecord:
 
 
 @dataclass(frozen=True)
+class KnowledgeContextRecord:
+    source_id: UUID
+    label: str
+    summary: str
+    content_fingerprint: str
+    approved_at: datetime
+
+
+@dataclass(frozen=True)
 class PreInteractionSourceRecords:
     interaction: Interaction
     linked_meeting_id: UUID | None
@@ -67,6 +77,7 @@ class PreInteractionSourceRecords:
     artifacts: dict[str, AIArtifact]
     revenue_brain_insight: RevenueBrainInsight | None
     actions: tuple[BriefActionRecord, ...]
+    approved_knowledge: tuple[KnowledgeContextRecord, ...]
 
 
 class PreInteractionBriefRepository:
@@ -129,6 +140,7 @@ class PreInteractionBriefRepository:
             organisation_id,
             interaction.opportunity_id,
         )
+        approved_knowledge = await self._approved_knowledge(organisation_id)
         return PreInteractionSourceRecords(
             interaction=interaction,
             linked_meeting_id=linked_meeting_id,
@@ -139,6 +151,7 @@ class PreInteractionBriefRepository:
             artifacts=artifacts,
             revenue_brain_insight=insight,
             actions=actions,
+            approved_knowledge=approved_knowledge,
         )
 
     async def get_equivalent_brief(
@@ -242,6 +255,31 @@ class PreInteractionBriefRepository:
                     Company.id == company_id,
                 )
             ),
+        )
+
+    async def _approved_knowledge(self, organisation_id: UUID) -> tuple[KnowledgeContextRecord, ...]:
+        rows = (
+            await self.session.scalars(
+                select(CompanyKnowledgeSource)
+                .where(
+                    CompanyKnowledgeSource.organisation_id == organisation_id,
+                    CompanyKnowledgeSource.processing_status == "approved",
+                    CompanyKnowledgeSource.summary_text.is_not(None),
+                    CompanyKnowledgeSource.approved_at.is_not(None),
+                )
+                .order_by(CompanyKnowledgeSource.approved_at.desc(), CompanyKnowledgeSource.id.desc())
+                .limit(20)
+            )
+        ).all()
+        return tuple(
+            KnowledgeContextRecord(
+                source_id=row.id,
+                label=row.label,
+                summary=cast(str, row.summary_text),
+                content_fingerprint=row.content_fingerprint,
+                approved_at=cast(datetime, row.approved_at),
+            )
+            for row in rows
         )
 
     async def _opportunity(self, organisation_id: UUID, opportunity_id: UUID | None) -> Opportunity | None:

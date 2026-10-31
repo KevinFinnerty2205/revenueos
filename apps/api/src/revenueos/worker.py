@@ -15,6 +15,7 @@ from revenueos.crm_connector_worker import CRMConnectorWorkerService
 from revenueos.database import create_engine, create_session_factory
 from revenueos.google_worker import GoogleSyncWorkerService
 from revenueos.integration_worker import ActionExecutionWorkerService
+from revenueos.knowledge_ingestion import KnowledgeIngestionWorkerService
 from revenueos.microsoft_worker import MicrosoftSyncWorkerService
 from revenueos.observability import configure_logging
 from revenueos.prospect_worker import ProspectWorkerService
@@ -87,6 +88,7 @@ class AIWorker:
         microsoft_service: MicrosoftSyncWorkerService | None = None,
         google_service: GoogleSyncWorkerService | None = None,
         crm_connector_service: CRMConnectorWorkerService | None = None,
+        knowledge_service: KnowledgeIngestionWorkerService | None = None,
         health_tick: Callable[[], None] | None = None,
         worker_id: str | None = None,
     ) -> None:
@@ -100,6 +102,7 @@ class AIWorker:
         self._microsoft_service = microsoft_service
         self._google_service = google_service
         self._crm_connector_service = crm_connector_service
+        self._knowledge_service = knowledge_service
         self._health_tick = health_tick
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
@@ -151,6 +154,9 @@ class AIWorker:
             if self._crm_connector_service is not None
             else False
         )
+        knowledge_processed = (
+            await self._knowledge_service.run_once(self.worker_id) if self._knowledge_service is not None else False
+        )
         organisations = await self._service.discover_eligible_organisations()
         processed = (
             prospect_processed
@@ -162,6 +168,7 @@ class AIWorker:
             or microsoft_processed
             or google_processed
             or crm_connector_processed
+            or knowledge_processed
         )
         for organisation_id in organisations:
             cancelled = await self._service.cancel_pending_jobs(organisation_id)
@@ -209,6 +216,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         microsoft_service=MicrosoftSyncWorkerService(session_factory, resolved_settings),
         google_service=GoogleSyncWorkerService(session_factory, resolved_settings),
         crm_connector_service=CRMConnectorWorkerService(session_factory, resolved_settings),
+        knowledge_service=KnowledgeIngestionWorkerService(session_factory, resolved_settings),
         health_tick=health_server.tick if health_server is not None else None,
     )
     try:

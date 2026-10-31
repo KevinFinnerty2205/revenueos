@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.models import (
     CandidateEvidence,
     CaptureSession,
+    CompanyKnowledgeSource,
     DebriefSession,
     DebriefTurn,
     EvidenceFragment,
@@ -278,6 +279,7 @@ class DebriefRepository:
     async def normalised_start_context(
         self,
         organisation_id: UUID,
+        user_id: UUID,
         interaction: Interaction,
         *,
         include_reconciliation_text: bool = False,
@@ -333,11 +335,25 @@ class DebriefRepository:
             else None
         )
         reported = (
-            await self.latest_reported_intelligence(organisation_id, interaction.opportunity_id)
+            await self.latest_reported_intelligence(organisation_id, user_id, interaction.opportunity_id)
             if interaction.opportunity_id is not None
             else None
         )
         recording_context = await self._recording_context(organisation_id, interaction.id)
+        approved_knowledge = list(
+            (
+                await self.session.scalars(
+                    select(CompanyKnowledgeSource)
+                    .where(
+                        CompanyKnowledgeSource.organisation_id == organisation_id,
+                        CompanyKnowledgeSource.processing_status == "approved",
+                        CompanyKnowledgeSource.summary_text.is_not(None),
+                    )
+                    .order_by(CompanyKnowledgeSource.approved_at.desc(), CompanyKnowledgeSource.id.desc())
+                    .limit(20)
+                )
+            ).all()
+        )
         context: dict[str, object] = {
             "interaction": {
                 "id": str(interaction.id),
@@ -367,6 +383,20 @@ class DebriefRepository:
                 else None
             ),
             "preInteractionBrief": brief.content_json if brief is not None else None,
+            "approvedOrganisationKnowledge": {
+                "authority": "organisation_approved",
+                "customerEvidence": False,
+                "untrustedSourceText": True,
+                "items": [
+                    {
+                        "sourceId": str(item.id),
+                        "label": item.label,
+                        "summary": item.summary_text,
+                        "contentFingerprint": item.content_fingerprint,
+                    }
+                    for item in approved_knowledge
+                ],
+            },
             "revenueBrainLatestState": (
                 {"snapshotId": str(brain_snapshot.id), "version": brain_snapshot.version}
                 if brain_snapshot is not None
@@ -501,12 +531,21 @@ class DebriefRepository:
     async def latest_reported_intelligence(
         self,
         organisation_id: UUID,
+        user_id: UUID,
         opportunity_id: UUID,
     ) -> InteractionIntelligenceSnapshot | None:
         return cast(
             InteractionIntelligenceSnapshot | None,
             await self.session.scalar(
                 select(InteractionIntelligenceSnapshot)
+                .join(
+                    DebriefSession,
+                    and_(
+                        DebriefSession.organisation_id == InteractionIntelligenceSnapshot.organisation_id,
+                        DebriefSession.id == InteractionIntelligenceSnapshot.session_id,
+                        DebriefSession.started_by_user_id == user_id,
+                    ),
+                )
                 .where(
                     InteractionIntelligenceSnapshot.organisation_id == organisation_id,
                     InteractionIntelligenceSnapshot.opportunity_id == opportunity_id,

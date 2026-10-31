@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql import Select
 
 from revenueos.config import Settings, get_settings
-from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
+from revenueos.database import (
+    create_engine,
+    create_session_factory,
+    set_private_user_database_context,
+    set_tenant_database_context,
+)
 from revenueos.export_storage import export_object_reference, export_storage_key, parse_export_object_reference
 from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.live_intelligence_services import expire_live_intelligence
@@ -49,10 +54,14 @@ from revenueos.models import (
     CommercialPlanVersion,
     CommercialStateEvent,
     Company,
+    CompanyKnowledgeIngestionJob,
     CompanyKnowledgeSource,
     Contact,
     ContactFieldSource,
     ContactSuppression,
+    ConversationBriefingOutbox,
+    ConversationDeliveryPreference,
+    ConversationUserWorkspace,
     CreateApprovedContentItem,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
@@ -206,7 +215,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import S3CompatibleVisualStorage, VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 39
+EXPORT_VERSION = 40
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -930,7 +939,21 @@ async def generate_export(
     try:
         async with session_factory() as session, session.begin():
             await set_tenant_database_context(session, organisation_id)
-            payload = await _export_payload(session, organisation_id, settings)
+            requester_id = await session.scalar(
+                select(BetaDataRequest.requested_by_user_id).where(
+                    BetaDataRequest.organisation_id == organisation_id,
+                    BetaDataRequest.id == request_id,
+                )
+            )
+            if requester_id is None:
+                raise RuntimeError("Export request disappeared before content generation.")
+            await set_private_user_database_context(session, requester_id)
+            payload = await _export_payload(
+                session,
+                organisation_id,
+                settings,
+                private_user_id=requester_id,
+            )
         if isinstance(storage, S3CompatibleVisualStorage):
             with tempfile.TemporaryDirectory(prefix="revenueos-export-") as temporary_root:
                 temporary_path = Path(temporary_root) / f"revenueos-export-{request_id}.json"
@@ -3006,6 +3029,8 @@ async def _export_payload(
     session: AsyncSession,
     organisation_id: UUID,
     settings: Settings,
+    *,
+    private_user_id: UUID | None = None,
 ) -> dict[str, object]:
     organisation = await session.get(Organisation, organisation_id)
     if organisation is None:
@@ -3486,6 +3511,45 @@ async def _export_payload(
         select(CompanyKnowledgeSource)
         .where(CompanyKnowledgeSource.organisation_id == organisation_id)
         .order_by(CompanyKnowledgeSource.created_at, CompanyKnowledgeSource.id)
+    )
+    company_knowledge_jobs = await rows(
+        select(CompanyKnowledgeIngestionJob)
+        .where(CompanyKnowledgeIngestionJob.organisation_id == organisation_id)
+        .order_by(CompanyKnowledgeIngestionJob.created_at, CompanyKnowledgeIngestionJob.id)
+    )
+    conversation_workspaces = (
+        await rows(
+            select(ConversationUserWorkspace)
+            .where(
+                ConversationUserWorkspace.organisation_id == organisation_id,
+                ConversationUserWorkspace.user_id == private_user_id,
+            )
+            .order_by(ConversationUserWorkspace.updated_at, ConversationUserWorkspace.id)
+        )
+        if private_user_id is not None
+        else []
+    )
+    conversation_delivery_preferences = (
+        await rows(
+            select(ConversationDeliveryPreference).where(
+                ConversationDeliveryPreference.organisation_id == organisation_id,
+                ConversationDeliveryPreference.user_id == private_user_id,
+            )
+        )
+        if private_user_id is not None
+        else []
+    )
+    conversation_briefing_outbox = (
+        await rows(
+            select(ConversationBriefingOutbox)
+            .where(
+                ConversationBriefingOutbox.organisation_id == organisation_id,
+                ConversationBriefingOutbox.user_id == private_user_id,
+            )
+            .order_by(ConversationBriefingOutbox.created_at, ConversationBriefingOutbox.id)
+        )
+        if private_user_id is not None
+        else []
     )
     action_proposals = await rows(
         select(ActionProposal)
@@ -5667,23 +5731,115 @@ async def _export_payload(
             for item in selling_profile_revisions
         ],
         "companyKnowledgeSources": [
+            {
+                **_columns(
+                    item,
+                    (
+                        "id",
+                        "source_kind",
+                        "label",
+                        "website_url",
+                        "source_text",
+                        "source_filename",
+                        "source_mime_type",
+                        "extracted_text",
+                        "summary_text",
+                        "content_fingerprint",
+                        "processing_status",
+                        "processing_attempts",
+                        "failure_code",
+                        "created_by_user_id",
+                        "processed_at",
+                        "approved_at",
+                        "approved_by_user_id",
+                        "stale_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                ),
+                "source_document_base64": (
+                    base64.b64encode(item.source_document).decode("ascii") if item.source_document is not None else None
+                ),
+            }
+            for item in company_knowledge_sources
+        ],
+        "companyKnowledgeIngestionJobs": [
             _columns(
                 item,
                 (
                     "id",
-                    "source_kind",
-                    "label",
-                    "website_url",
-                    "source_text",
-                    "content_fingerprint",
-                    "processing_status",
+                    "source_id",
+                    "requested_by_user_id",
+                    "status",
+                    "attempt_count",
+                    "max_attempts",
+                    "next_attempt_at",
+                    "started_at",
+                    "completed_at",
                     "failure_code",
-                    "created_by_user_id",
+                    "cancellation_requested_at",
                     "created_at",
                     "updated_at",
                 ),
             )
-            for item in company_knowledge_sources
+            for item in company_knowledge_jobs
+        ],
+        "privateConversationWorkspaces": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "user_id",
+                    "enhanced_notes",
+                    "follow_up_draft",
+                    "follow_up_reviewed",
+                    "generation_fingerprint",
+                    "imported_from_browser_at",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_workspaces
+        ],
+        "privateConversationDeliveryPreferences": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "user_id",
+                    "timezone",
+                    "morning_digest_enabled",
+                    "morning_digest_time",
+                    "pre_meeting_enabled",
+                    "pre_meeting_minutes",
+                    "imported_from_browser_at",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_delivery_preferences
+        ],
+        "privateConversationBriefingOutbox": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "user_id",
+                    "interaction_id",
+                    "kind",
+                    "status",
+                    "subject",
+                    "body_text",
+                    "href",
+                    "prepared_for_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_briefing_outbox
         ],
         "actionProposals": [
             _columns(

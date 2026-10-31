@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,7 +12,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.auth import AuthenticatedUser, get_current_user
-from revenueos.models import CaptureSession, Evidence, Interaction, InteractionIntelligenceSnapshot, InteractionMarker
+from revenueos.beta_maintenance import _export_payload
+from revenueos.interaction_contracts import InteractionUpdate
+from revenueos.interaction_services import InteractionService
+from revenueos.models import (
+    CaptureSession,
+    ConversationBriefingOutbox,
+    Evidence,
+    Interaction,
+    InteractionIntelligenceSnapshot,
+    InteractionMarker,
+    OrganisationMembership,
+    User,
+)
+from revenueos.tenant import TenantContext
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -58,6 +71,133 @@ def create_interaction(
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwrite(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    interaction = create_interaction(client, title="Private conversation workspace")
+    interaction_id = str(interaction["id"])
+    empty = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert empty.status_code == 200
+    assert empty.json() == {
+        "exists": False,
+        "ownerUserId": str(PRIMARY_USER_ID),
+        "lockVersion": 0,
+        "enhancedNotes": None,
+        "followUpDraft": None,
+        "followUpReviewed": False,
+        "generationFingerprint": None,
+        "importedFromBrowserAt": None,
+        "updatedAt": None,
+    }
+
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "enhancedNotes": "Private edited notes from browser one.",
+            "followUpDraft": "Draft only — do not send.",
+            "followUpReviewed": False,
+            "generationFingerprint": "a" * 64,
+            "importFromBrowser": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["lockVersion"] == 1
+    assert saved.json()["importedFromBrowserAt"] is not None
+
+    second_session = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert second_session.status_code == 200
+    assert second_session.json()["enhancedNotes"] == "Private edited notes from browser one."
+    stale = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "enhancedNotes": "A stale browser must not win.",
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "conversation_workspace_conflict"
+
+    same_org_user_id = uuid4()
+
+    async def seed_same_org_user() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add_all(
+                (
+                    User(
+                        id=same_org_user_id,
+                        external_auth_id=f"same-org-{same_org_user_id}",
+                        email=f"{same_org_user_id}@example.test",
+                        display_name="Same Org User",
+                    ),
+                    OrganisationMembership(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        user_id=same_org_user_id,
+                        role="member",
+                    ),
+                )
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed_same_org_user())
+    app.dependency_overrides[get_current_user] = cast_auth_dependency(
+        AuthenticatedUser(
+            user_id=same_org_user_id,
+            external_auth_id=f"same-org-{same_org_user_id}",
+            display_name="Same Org User",
+            email=f"{same_org_user_id}@example.test",
+            organisation_id=PRIMARY_ORGANISATION_ID,
+            organisation_name="Example Revenue Team",
+            organisation_slug="example-revenue-team",
+            role="member",
+            auth_mode="mock",
+        )
+    )
+    other_user_view = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert other_user_view.status_code == 200
+    assert other_user_view.json()["exists"] is False
+    other_user_saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "enhancedNotes": "Another member's private notes must not be exported.",
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert other_user_saved.status_code == 200, other_user_saved.text
+    app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
+    cross_tenant_view = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert cross_tenant_view.status_code == 404
+    app.dependency_overrides.pop(get_current_user, None)
+
+    preserved = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert preserved.json()["enhancedNotes"] == "Private edited notes from browser one."
+
+    async def export_for_owner() -> dict[str, object]:
+        async with app.state.session_factory() as session:
+            return await _export_payload(
+                session,
+                PRIMARY_ORGANISATION_ID,
+                app.state.settings,
+                private_user_id=PRIMARY_USER_ID,
+            )
+
+    exported = asyncio.run(export_for_owner())
+    private_workspaces = exported["privateConversationWorkspaces"]
+    assert isinstance(private_workspaces, list)
+    assert len(private_workspaces) == 1
+    assert private_workspaces[0]["enhanced_notes"] == "Private edited notes from browser one."
+    assert "Another member's private notes" not in str(exported)
 
 
 def test_phone_call_metadata_contact_tenant_safety_outcomes_and_duration(client: TestClient) -> None:
@@ -559,3 +699,66 @@ def test_interaction_validation_rejects_unknown_types_and_bad_ranges(client: Tes
     assert naive.status_code == 422
 
     assert str(SECONDARY_USER_ID) not in client.get("/api/v1/interactions").text
+
+
+def test_colleague_reschedule_supersedes_creator_private_briefing(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    interaction = create_interaction(client, title="Shared reschedule")
+    interaction_id = UUID(str(interaction["id"]))
+    editor_user_id = uuid4()
+    outbox_id = uuid4()
+
+    async def scenario() -> str:
+        async with app.state.session_factory() as session:
+            session.add_all(
+                [
+                    User(
+                        id=editor_user_id,
+                        external_auth_id=f"user_editor_{editor_user_id.hex}",
+                        email=f"editor-{editor_user_id.hex}@example.test",
+                        display_name="Synthetic colleague",
+                    ),
+                    OrganisationMembership(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        user_id=editor_user_id,
+                        role="member",
+                    ),
+                    ConversationBriefingOutbox(
+                        id=outbox_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        user_id=PRIMARY_USER_ID,
+                        interaction_id=interaction_id,
+                        kind="pre_meeting",
+                        status="prepared",
+                        deduplication_key=f"shared-reschedule-{outbox_id.hex}",
+                        source_fingerprint="a" * 64,
+                        subject="Synthetic preparation",
+                        body_text="Review-only synthetic briefing.",
+                        href=f"/interactions/{interaction_id}",
+                        prepared_for_at=datetime(2026, 8, 11, 23, 0, tzinfo=UTC),
+                    ),
+                ]
+            )
+            await session.commit()
+            service = InteractionService(
+                session,
+                TenantContext(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    user_id=editor_user_id,
+                    role="member",
+                ),
+            )
+            await service.update_interaction(
+                interaction_id,
+                InteractionUpdate(
+                    scheduled_start_at=datetime(2026, 8, 12, 1, 0, tzinfo=UTC) + timedelta(hours=1),
+                    scheduled_end_at=datetime(2026, 8, 12, 3, 0, tzinfo=UTC) + timedelta(hours=1),
+                ),
+            )
+            row = await session.get(ConversationBriefingOutbox, outbox_id)
+            assert row is not None
+            return row.status
+
+    assert asyncio.run(scenario()) == "superseded"

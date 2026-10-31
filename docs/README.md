@@ -23,6 +23,7 @@ This is the canonical product and engineering documentation index. Documents dis
    - [Oryntela trade mark adviser shortlist](00-company/oryntela-trademark-adviser-shortlist.md) — parked adviser research; professional review and filing deferred by owner
 2. [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md) — authoritative public-brand, product and future-direction consolidation
    - [Conversation intelligence core](01-product/conversation-intelligence-core.md) — current conversation-first product surface, trust boundaries and legacy disposition
+   - [Conversation product foundations](03-engineering/conversation-product-foundations.md) — private workspace persistence, knowledge ingestion and local briefing-outbox boundaries
    - [ADR 0077: Conversation-first product surface](08-decisions/0077-conversation-first-product-surface.md)
    - [RevenueOS master product blueprint](01-product/master-product-blueprint.md) — historical technical product contract
    - [Oryntela commercial-product handoff](06-roadmap/oryntela-commercial-product-handoff.md) — owner decision brief

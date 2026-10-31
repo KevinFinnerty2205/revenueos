@@ -18,6 +18,7 @@ import {
 } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 type InputPreference = "guided" | "voice" | "typed";
 type RecordingState = "idle" | "recording" | "paused" | "uploading";
@@ -715,20 +716,29 @@ function CompletedConversationReview({
     "",
     "Please correct anything I have misunderstood.",
   ].join("\n");
-  const [enhanced, setEnhanced] = useStoredDraft(
-    `revenueos:enhanced-notes:${interactionId}`,
-    initialEnhanced,
-  );
-  const [followUp, setFollowUp] = useStoredDraft(
-    `revenueos:conversation-follow-up:${interactionId}`,
-    initialFollowUp,
-  );
-  const [message, setMessage] = useState<string | null>(null);
+  const enhancedLegacyKey = `revenueos:enhanced-notes:${interactionId}`;
+  const followUpLegacyKey = `revenueos:conversation-follow-up:${interactionId}`;
+  const workspace = useConversationWorkspace({
+    interactionId,
+    initialEnhancedNotes: initialEnhanced,
+    initialFollowUpDraft: initialFollowUp,
+  });
+  const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
 
-  function save(key: string, value: string, label: string) {
-    window.localStorage.setItem(key, value);
-    setMessage(`${label} saved in this browser. No external action was taken.`);
-  }
+  useEffect(() => {
+    let active = true;
+    window.queueMicrotask(() => {
+      if (active) {
+        setLegacyOwnershipBlocked(
+          window.localStorage.getItem(enhancedLegacyKey) !== null ||
+            window.localStorage.getItem(followUpLegacyKey) !== null,
+        );
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [enhancedLegacyKey, followUpLegacyKey]);
 
   return (
     <div className="mt-6 space-y-6">
@@ -779,21 +789,22 @@ function CompletedConversationReview({
         <textarea
           aria-label="Enhanced conversation notes"
           className="form-control mt-4 min-h-52 py-3"
-          value={enhanced}
-          onChange={(event) => setEnhanced(event.target.value)}
+          disabled={workspace.loading}
+          value={workspace.values.enhancedNotes}
+          onChange={(event) =>
+            workspace.setValues((current) => ({
+              ...current,
+              enhancedNotes: event.target.value,
+            }))
+          }
         />
         <button
           type="button"
           className="secondary-button mt-3"
-          onClick={() =>
-            save(
-              `revenueos:enhanced-notes:${interactionId}`,
-              enhanced,
-              "Enhanced notes",
-            )
-          }
+          disabled={workspace.loading || workspace.saveState === "saving"}
+          onClick={() => void workspace.save()}
         >
-          Save enhanced notes
+          {workspace.saveState === "saving" ? "Saving…" : "Save enhanced notes"}
         </button>
       </section>
 
@@ -812,48 +823,66 @@ function CompletedConversationReview({
         <textarea
           aria-label="Follow-up draft"
           className="form-control mt-4 min-h-64 py-3"
-          value={followUp}
-          onChange={(event) => setFollowUp(event.target.value)}
+          disabled={workspace.loading}
+          value={workspace.values.followUpDraft}
+          onChange={(event) =>
+            workspace.setValues((current) => ({
+              ...current,
+              followUpDraft: event.target.value,
+            }))
+          }
         />
         <div className="mt-3 flex flex-wrap gap-3">
           <button
             type="button"
             className="secondary-button"
-            onClick={() =>
-              save(
-                `revenueos:conversation-follow-up:${interactionId}`,
-                followUp,
-                "Follow-up draft",
-              )
-            }
+            disabled={workspace.loading || workspace.saveState === "saving"}
+            onClick={() => void workspace.save()}
           >
             Save follow-up draft
           </button>
           <button
             type="button"
             className="secondary-button"
-            onClick={() => void navigator.clipboard.writeText(followUp)}
+            onClick={() =>
+              void navigator.clipboard.writeText(workspace.values.followUpDraft)
+            }
           >
             Copy draft
           </button>
         </div>
       </section>
-      {message ? (
+      {legacyOwnershipBlocked ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p>
+            An older browser-only draft exists, but it has no authenticated
+            owner metadata. Oryntela will not import or display private content
+            that cannot be matched to your user.
+          </p>
+        </div>
+      ) : null}
+      {workspace.saveState === "saved" ? (
         <p role="status" className="text-sm font-semibold text-brand-primary">
-          {message}
+          Saved privately to your Oryntela workspace. No external action was
+          taken.
         </p>
+      ) : null}
+      {workspace.error ? (
+        <div role="alert" className="text-sm font-semibold text-rose-800">
+          <p>{workspace.error}</p>
+          {workspace.saveState === "conflict" ? (
+            <button
+              type="button"
+              className="secondary-button mt-3"
+              onClick={() => void workspace.reload()}
+            >
+              Reload latest saved draft
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
-}
-
-function useStoredDraft(key: string, initialValue: string) {
-  const [value, setValue] = useState(initialValue);
-  useEffect(() => {
-    const stored = window.localStorage.getItem(key);
-    window.queueMicrotask(() => setValue(stored ?? initialValue));
-  }, [initialValue, key]);
-  return [value, setValue] as const;
 }
 
 function StructuredDebrief({ accepted }: { accepted: CandidateEvidence[] }) {

@@ -14,7 +14,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-MIGRATION_HEAD = "0066_conversation_core"
+MIGRATION_HEAD = "0067_conversation_foundations"
 MIGRATION_HEAD_ROW = (MIGRATION_HEAD,)
 POSTGRES_IDENTIFIER_MAX_BYTES = 63
 MIGRATION_NAMED_OBJECT_ARGUMENTS = {
@@ -3202,8 +3202,9 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:34] == [
+    assert [revision.revision for revision in script.walk_revisions()][:35] == [
         MIGRATION_HEAD,
+        "0066_conversation_core",
         "0065_campaign_trigger_guard",
         "0064_deauthorisation",
         "0063_terms_acceptance",
@@ -4457,9 +4458,12 @@ def test_conversation_core_migration_preserves_meddicc_setting_on_rollback(
     database_path = tmp_path / "conversation-core-migration.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
-    command.upgrade(configuration, "0065_campaign_trigger_guard")
+    command.upgrade(configuration, "0066_conversation_core")
     organisation_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
+    company_id = str(uuid.uuid4())
+    website_source_id = str(uuid.uuid4())
+    text_source_id = str(uuid.uuid4())
     with connect(database_path) as connection:
         connection.execute(
             "INSERT INTO organisations (id, name, slug) VALUES (?, 'Conversation core', ?)",
@@ -4473,11 +4477,44 @@ def test_conversation_core_migration_preserves_meddicc_setting_on_rollback(
             "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
             (organisation_id, user_id),
         )
+        connection.execute(
+            "INSERT INTO companies (id, organisation_id, name, status, owner_user_id) "
+            "VALUES (?, ?, 'Legacy knowledge company', 'active', ?)",
+            (company_id, organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO company_knowledge_sources "
+            "(id, organisation_id, source_kind, label, website_url, source_text, content_fingerprint, "
+            "processing_status, created_by_user_id, idempotency_key) "
+            "VALUES (?, ?, 'website', 'Legacy site', 'https://legacy.example.test', NULL, ?, "
+            "'saved_unprocessed', ?, 'legacy-site')",
+            (website_source_id, organisation_id, "a" * 64, user_id),
+        )
+        connection.execute(
+            "INSERT INTO company_knowledge_sources "
+            "(id, organisation_id, source_kind, label, website_url, source_text, content_fingerprint, "
+            "processing_status, created_by_user_id, idempotency_key) "
+            "VALUES (?, ?, 'supporting_text', 'Legacy text', NULL, 'Legacy approved context', ?, "
+            "'ready_for_review', ?, 'legacy-text')",
+            (text_source_id, organisation_id, "b" * 64, user_id),
+        )
         connection.commit()
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        assert connection.execute(
+            "SELECT processing_status FROM company_knowledge_sources WHERE id = ?",
+            (website_source_id,),
+        ).fetchone() == ("queued",)
+        assert connection.execute(
+            "SELECT count(*) FROM company_knowledge_ingestion_jobs WHERE source_id = ? AND status = 'pending'",
+            (website_source_id,),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT summary_text FROM company_knowledge_sources WHERE id = ?",
+            (text_source_id,),
+        ).fetchone() == ("Legacy approved context",)
         connection.execute(
             "INSERT INTO organisation_methodology_settings "
             "(organisation_id, selection, updated_by_user_id) VALUES (?, 'meddicc', ?)",
@@ -4491,9 +4528,12 @@ def test_conversation_core_migration_preserves_meddicc_setting_on_rollback(
             "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
             (organisation_id,),
         ).fetchone() == ("meddic",)
-        assert "company_knowledge_sources" not in {
-            row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-        }
+        remaining_tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "company_knowledge_sources" not in remaining_tables
+        assert "company_knowledge_ingestion_jobs" not in remaining_tables
+        assert "conversation_user_workspaces" not in remaining_tables
+        assert "conversation_delivery_preferences" not in remaining_tables
+        assert "conversation_briefing_outbox" not in remaining_tables
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:

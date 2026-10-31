@@ -278,6 +278,10 @@ class Settings(BaseSettings):
     feature_online_meeting_native_integration_enabled: bool = False
     feature_online_meeting_auto_ingest_enabled: bool = False
     feature_document_evidence_enabled: bool = True
+    feature_knowledge_website_fetch_enabled: bool = False
+    knowledge_website_connect_timeout_seconds: float = Field(default=3.0, gt=0, le=10)
+    knowledge_website_read_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
+    knowledge_website_max_response_bytes: int = Field(default=2_000_000, ge=10_000, le=5_000_000)
     feature_email_evidence_enabled: bool = True
     feature_sales_methodology_enabled: bool = True
     feature_ask_revenueos_enabled: bool = True

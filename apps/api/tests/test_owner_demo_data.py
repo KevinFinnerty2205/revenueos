@@ -334,11 +334,11 @@ def test_owner_demo_seed_is_linked_idempotent_and_resettable() -> None:
             assert contact.company_id == company.id
             assert profile is not None and profile.state == "approved"
             assert knowledge_website is not None
-            assert knowledge_website.processing_status == "saved_unprocessed"
+            assert knowledge_website.processing_status == "queued"
             assert knowledge_website.website_url == "https://northstar-facilities.example/"
             assert knowledge_text is not None
             assert knowledge_text.source_kind == "text_file"
-            assert knowledge_text.processing_status == "ready_for_review"
+            assert knowledge_text.processing_status == "queued"
             assert business_case is not None
             assert business_case.state == "approved"
             assert business_case.account_id == company.id

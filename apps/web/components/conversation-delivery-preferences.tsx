@@ -1,10 +1,14 @@
 "use client";
 
-import type { DailyResponse } from "@revenueos/shared";
-import { useEffect, useState } from "react";
-import { apiRequest } from "@/lib/api";
+import type {
+  BriefingPreviewResponse,
+  DailyResponse,
+  DeliveryPreferenceResponse,
+} from "@revenueos/shared";
+import { useCallback, useEffect, useState } from "react";
+import { ApiClientError, apiRequest } from "@/lib/api";
 
-interface ConversationDeliveryPreference {
+interface PreferenceValues {
   timezone: string;
   morningDigestEnabled: boolean;
   morningDigestTime: string;
@@ -12,18 +16,9 @@ interface ConversationDeliveryPreference {
   preMeetingMinutes: number;
 }
 
-interface Preview {
-  kind: "morning" | "pre_meeting";
-  subject: string;
-  lines: string[];
-  link: string;
-  duplicateKey: string;
-  reused: boolean;
-}
-
 const STORAGE_KEY = "revenueos:conversation-delivery-preferences";
 
-function defaults(): ConversationDeliveryPreference {
+function browserDefaults(): PreferenceValues {
   return {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     morningDigestEnabled: true,
@@ -34,95 +29,165 @@ function defaults(): ConversationDeliveryPreference {
 }
 
 export function ConversationDeliveryPreferences() {
-  const [preference, setPreference] = useState(defaults);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [server, setServer] = useState<DeliveryPreferenceResponse | null>(null);
+  const [preference, setPreference] = useState(browserDefaults);
+  const [preview, setPreview] = useState<BriefingPreviewResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const [legacyRecoveryAvailable, setLegacyRecoveryAvailable] = useState(false);
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return;
-    let active = true;
-    window.queueMicrotask(() => {
-      if (!active) return;
-      try {
-        setPreference({ ...defaults(), ...(JSON.parse(stored) as object) });
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  function save() {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preference));
-    setMessage(
-      "Preferences saved in this browser for the local demo. No scheduled job or email was created.",
-    );
-  }
-
-  async function createPreview(kind: Preview["kind"]) {
+  const load = useCallback(async () => {
     setWorking(true);
     setError(null);
-    setMessage(null);
     try {
-      const day = await apiRequest<DailyResponse>(
-        `/api/v1/daily?${new URLSearchParams({ timezone: preference.timezone }).toString()}`,
+      const response = await apiRequest<DeliveryPreferenceResponse>(
+        "/api/v1/daily/preferences",
       );
-      const next = day.nextInteraction;
-      const link = next
-        ? `/conversations/${next.id}${next.preparationState === "prepared" ? "#preparation" : ""}`
-        : "/conversations";
-      const duplicateKey = [
-        "local-preview",
-        kind,
-        day.localDate,
-        next?.id ?? "no-next-conversation",
-        kind === "morning"
-          ? preference.morningDigestTime
-          : preference.preMeetingMinutes,
-      ].join(":");
-      const storageKey = `revenueos:test-transport:${duplicateKey}`;
-      const reused = window.localStorage.getItem(storageKey) === "prepared";
-      window.localStorage.setItem(storageKey, "prepared");
-      setPreview({
-        kind,
-        subject:
-          kind === "morning"
-            ? `Your conversation plan for ${day.localDate}`
-            : next
-              ? `Prepare for ${next.title}`
-              : "No upcoming conversation to brief",
-        lines:
-          kind === "morning"
-            ? [
-                `${day.todayInteractions.length} conversation${day.todayInteractions.length === 1 ? "" : "s"} today`,
-                next
-                  ? `Next: ${next.title}`
-                  : "No upcoming conversation is currently scheduled.",
-                `${day.actions.attentionCount} follow-up item${day.actions.attentionCount === 1 ? "" : "s"} need attention`,
-              ]
-            : [
-                next
-                  ? `Current calendar state: ${next.title} is upcoming.`
-                  : "The current calendar state has no upcoming conversation.",
-                next?.preparationState === "prepared"
-                  ? "A preparation brief is ready for review."
-                  : "A preparation brief is not yet available.",
-                "Changes and cancellations are reflected when this preview is regenerated from current data.",
-              ],
-        link,
-        duplicateKey,
-        reused,
+      setServer(response);
+      setPreference({
+        timezone: response.exists
+          ? response.timezone
+          : browserDefaults().timezone,
+        morningDigestEnabled: response.morningDigestEnabled,
+        morningDigestTime: response.morningDigestTime,
+        preMeetingEnabled: response.preMeetingEnabled,
+        preMeetingMinutes: response.preMeetingMinutes,
       });
+      setLegacyRecoveryAvailable(
+        window.localStorage.getItem(STORAGE_KEY) !== null,
+      );
     } catch (reason: unknown) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The local email preview could not be prepared.",
+          : "Conversation briefing preferences could not be loaded.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    window.queueMicrotask(() => {
+      if (active) void load();
+    });
+    return () => {
+      active = false;
+    };
+  }, [load]);
+
+  async function save(options: { importFromBrowser?: boolean } = {}) {
+    if (!server) return false;
+    setWorking(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await apiRequest<DeliveryPreferenceResponse>(
+        "/api/v1/daily/preferences",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            expectedLockVersion: server.lockVersion,
+            ...preference,
+            importFromBrowser: options.importFromBrowser === true,
+          }),
+        },
+      );
+      setServer(response);
+      setMessage("Preferences saved privately. No email was sent.");
+      return true;
+    } catch (reason: unknown) {
+      const conflict =
+        reason instanceof ApiClientError &&
+        reason.code === "delivery_preference_conflict";
+      setError(
+        conflict
+          ? "These preferences changed in another session. Reload before saving."
+          : reason instanceof Error
+            ? reason.message
+            : "Conversation briefing preferences could not be saved.",
+      );
+      return false;
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function recoverLegacyPreferences() {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (!stored || !server) return;
+    try {
+      const recovered = {
+        ...browserDefaults(),
+        ...(JSON.parse(stored) as Partial<PreferenceValues>),
+      };
+      setPreference(recovered);
+      setWorking(true);
+      const response = await apiRequest<DeliveryPreferenceResponse>(
+        "/api/v1/daily/preferences",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            expectedLockVersion: server.lockVersion,
+            ...recovered,
+            importFromBrowser: true,
+          }),
+        },
+      );
+      setServer(response);
+      window.localStorage.removeItem(STORAGE_KEY);
+      setLegacyRecoveryAvailable(false);
+      setMessage(
+        "Earlier browser preferences were imported and saved privately.",
+      );
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Earlier browser preferences could not be imported safely.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function createPreview(kind: "morning_digest" | "pre_meeting") {
+    setWorking(true);
+    setError(null);
+    setMessage(null);
+    try {
+      let interactionId: string | null = null;
+      if (kind === "pre_meeting") {
+        const day = await apiRequest<DailyResponse>(
+          `/api/v1/daily?${new URLSearchParams({ timezone: preference.timezone }).toString()}`,
+        );
+        interactionId = day.nextInteraction?.id ?? null;
+        if (!interactionId) {
+          throw new Error(
+            "No upcoming conversation is available for a pre-meeting preview.",
+          );
+        }
+      }
+      const response = await apiRequest<BriefingPreviewResponse>(
+        "/api/v1/daily/briefing-preview",
+        {
+          method: "POST",
+          body: JSON.stringify({ kind, interactionId }),
+        },
+      );
+      setPreview(response);
+      setMessage(
+        response.duplicateSuppressed
+          ? "The existing identical local outbox preview was reused."
+          : "Exact content prepared in the local test outbox. Nothing was sent.",
+      );
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The local briefing preview could not be prepared.",
       );
     } finally {
       setWorking(false);
@@ -141,9 +206,8 @@ export function ConversationDeliveryPreferences() {
         Digest and pre-meeting preferences
       </h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        Configure and preview the intended experience. This first pass uses a
-        deterministic local test transport only: it never schedules or sends an
-        email.
+        Preferences persist across sessions. Previewed content is prepared in a
+        local test outbox only; this build never sends an email.
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -219,14 +283,19 @@ export function ConversationDeliveryPreferences() {
       </div>
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <button type="button" className="primary-button" onClick={save}>
-          Save local preferences
+        <button
+          type="button"
+          className="primary-button"
+          disabled={working || !server}
+          onClick={() => void save()}
+        >
+          {working ? "Working…" : "Save preferences"}
         </button>
         <button
           type="button"
           className="secondary-button"
           disabled={working || !preference.morningDigestEnabled}
-          onClick={() => void createPreview("morning")}
+          onClick={() => void createPreview("morning_digest")}
         >
           Preview morning digest
         </button>
@@ -240,35 +309,56 @@ export function ConversationDeliveryPreferences() {
         </button>
       </div>
 
+      {legacyRecoveryAvailable ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p>
+            Earlier browser-only preferences are available. They remain local
+            until you explicitly import them.
+          </p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            disabled={working}
+            onClick={() => void recoverLegacyPreferences()}
+          >
+            Import browser preferences
+          </button>
+        </div>
+      ) : null}
       {message ? (
         <p role="status" className="mt-4 text-sm text-brand-primary">
           {message}
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-4 text-sm text-rose-800">
-          {error}
-        </p>
+        <div role="alert" className="mt-4 text-sm text-rose-800">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            onClick={() => void load()}
+          >
+            Reload saved preferences
+          </button>
+        </div>
       ) : null}
       {preview ? (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            Local test transport ·{" "}
-            {preview.reused ? "duplicate reused" : "new preview"}
+            Local test outbox ·{" "}
+            {preview.duplicateSuppressed ? "duplicate reused" : "new preview"}
           </p>
           <h3 className="mt-2 font-semibold text-slate-950">
             {preview.subject}
           </h3>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-700">
-            {preview.lines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-          <a className="secondary-button mt-4" href={preview.link}>
+          <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
+            {preview.bodyText}
+          </pre>
+          <a className="secondary-button mt-4" href={preview.href}>
             Open in Oryntela
           </a>
-          <p className="mt-3 break-all text-xs text-slate-500">
-            Duplicate-prevention key: {preview.duplicateKey}
+          <p className="mt-3 text-xs text-slate-500">
+            Prepared for {new Date(preview.preparedForAt).toLocaleString()}
           </p>
         </div>
       ) : null}
