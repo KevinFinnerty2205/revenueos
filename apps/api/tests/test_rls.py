@@ -766,6 +766,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "conversation_workspace_id": uuid.uuid4(),
                 "conversation_delivery_preference_id": uuid.uuid4(),
                 "conversation_briefing_outbox_id": uuid.uuid4(),
+                "conversation_thread_id": uuid.uuid4(),
+                "conversation_thread_assignment_id": uuid.uuid4(),
+                "conversation_thread_audit_event_id": uuid.uuid4(),
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
                 "commercial_event_id": uuid.uuid4(),
@@ -2494,6 +2497,51 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
+                            INSERT INTO conversation_threads
+                                (id, organisation_id, company_id, name,
+                                 created_by_user_id, updated_by_user_id)
+                            VALUES
+                                (:conversation_thread_id, :organisation_id,
+                                 :company_id, :thread_name, :user_id, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "thread_name": f"RLS conversation thread {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_thread_assignments
+                                (id, organisation_id, thread_id, interaction_id,
+                                 confirmed_by_user_id)
+                            VALUES
+                                (:conversation_thread_assignment_id,
+                                 :organisation_id, :conversation_thread_id,
+                                 :interaction_id, :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_thread_audit_events
+                                (id, organisation_id, thread_id, interaction_id,
+                                 actor_user_id, action, metadata_json)
+                            VALUES
+                                (:conversation_thread_audit_event_id,
+                                 :organisation_id, :conversation_thread_id,
+                                 :interaction_id, :user_id, 'assigned',
+                                 '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
                             INSERT INTO conversation_user_workspaces
                                 (id, organisation_id, interaction_id, user_id,
                                  enhanced_notes, follow_up_draft)
@@ -4156,6 +4204,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'conversation_user_workspaces',
                                     'conversation_delivery_preferences',
                                     'conversation_briefing_outbox',
+                                    'conversation_threads',
+                                    'conversation_thread_assignments',
+                                    'conversation_thread_audit_events',
                                     'selling_profiles',
                                     'selling_profile_revisions',
                                     'prospect_usage_counters',
