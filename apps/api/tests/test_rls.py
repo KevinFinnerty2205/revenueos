@@ -754,6 +754,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_forecast_revision_id": uuid.uuid4(),
                 "sales_forecast_reviewer_judgment_id": uuid.uuid4(),
                 "sales_forecast_reviewer_revision_id": uuid.uuid4(),
+                "company_knowledge_source_id": uuid.uuid4(),
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
                 "commercial_event_id": uuid.uuid4(),
@@ -1044,6 +1045,33 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO company_knowledge_sources
+                                (id, organisation_id, source_kind, label,
+                                 website_url, source_text,
+                                 content_fingerprint, processing_status,
+                                 failure_code, created_by_user_id,
+                                 idempotency_key)
+                            VALUES
+                                (:company_knowledge_source_id,
+                                 :organisation_id, 'website',
+                                 :knowledge_source_label,
+                                 :knowledge_source_url, NULL,
+                                 :knowledge_source_fingerprint,
+                                 'saved_unprocessed', NULL, :user_id,
+                                 :knowledge_source_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "knowledge_source_label": f"RLS website {suffix}",
+                            "knowledge_source_url": f"https://rls-{suffix.lower()}.example.test",
+                            "knowledge_source_fingerprint": suffix.lower() * 64,
+                            "knowledge_source_key": f"rls-company-knowledge-{suffix.lower()}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -4039,6 +4067,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'credit_operations',
                                     'credit_reservation_allocations',
                                     'credit_ledger_entries',
+                                    'company_knowledge_sources',
                                     'selling_profiles',
                                     'selling_profile_revisions',
                                     'prospect_usage_counters',
@@ -4403,6 +4432,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                knowledge_source_update = await connection.execute(
+                    text("UPDATE company_knowledge_sources SET label = 'Blocked' WHERE id = :id"),
+                    {"id": tenant_b["company_knowledge_source_id"]},
+                )
+                assert knowledge_source_update.rowcount == 0
                 selling_profile_update = await connection.execute(
                     text("UPDATE selling_profiles SET updated_at = now() WHERE id = :id"),
                     {"id": tenant_b["selling_profile_id"]},
