@@ -102,22 +102,105 @@ describe("BusinessEntityList", () => {
     ).toBe(true);
   });
 
-  it("shows a recoverable error state", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse(
-          {
-            code: "persistence_unavailable",
-            message: "Persistence is unavailable.",
-            requestId: "request-1",
-          },
-          503,
-        ),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ items: [], page: 1, pageSize: 20, total: 0, pages: 0 }),
+  it("shows active, unassigned, inactive and unavailable task assignees", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/v1/crm/members")) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              userId: "user-active",
+              displayName: "Alex Morgan",
+              active: true,
+            },
+            {
+              userId: "user-inactive",
+              displayName: "Casey Nguyen",
+              active: false,
+            },
+          ]),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            {
+              id: "task-active",
+              title: "Active owner task",
+              assignedUserId: "user-active",
+              status: "open",
+              priority: "medium",
+              dueAt: null,
+            },
+            {
+              id: "task-unassigned",
+              title: "Unassigned task",
+              assignedUserId: null,
+              status: "open",
+              priority: "low",
+              dueAt: null,
+            },
+            {
+              id: "task-inactive",
+              title: "Inactive owner task",
+              assignedUserId: "user-inactive",
+              status: "in_progress",
+              priority: "high",
+              dueAt: null,
+            },
+            {
+              id: "task-unavailable",
+              title: "Unavailable owner task",
+              assignedUserId: "user-unavailable",
+              status: "open",
+              priority: "medium",
+              dueAt: null,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 4,
+          pages: 1,
+        }),
       );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityList entity="tasks" />);
+
+    expect(await screen.findAllByText("Alex Morgan")).not.toHaveLength(0);
+    expect(screen.getAllByText("Unassigned")).not.toHaveLength(0);
+    expect(screen.getAllByText("Casey Nguyen (inactive)")).not.toHaveLength(0);
+    expect(
+      screen.getAllByText("Inactive or unavailable member"),
+    ).not.toHaveLength(0);
+  });
+
+  it("shows a recoverable error state", async () => {
+    let taskRequests = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/v1/crm/members")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      taskRequests += 1;
+      return Promise.resolve(
+        taskRequests === 1
+          ? jsonResponse(
+              {
+                code: "persistence_unavailable",
+                message: "Persistence is unavailable.",
+                requestId: "request-1",
+              },
+              503,
+            )
+          : jsonResponse({
+              items: [],
+              page: 1,
+              pageSize: 20,
+              total: 0,
+              pages: 0,
+            }),
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<BusinessEntityList entity="tasks" />);

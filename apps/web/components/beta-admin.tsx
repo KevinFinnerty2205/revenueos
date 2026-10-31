@@ -127,7 +127,10 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
-  const [busyMember, setBusyMember] = useState<string | null>(null);
+  const [busyMember, setBusyMember] = useState<{
+    userId: string;
+    operation: "role" | "status";
+  } | null>(null);
   const [busyExport, setBusyExport] = useState<string | null>(null);
 
   async function load() {
@@ -205,7 +208,7 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
   ) {
     setError(null);
     setStatus(null);
-    setBusyMember(userId);
+    setBusyMember({ userId, operation: "status" });
     try {
       const result = await apiRequest<MemberStatusUpdateResponse>(
         `/api/v1/beta/admin/members/${userId}`,
@@ -229,6 +232,46 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
           ? reason.message
           : "The member status could not be changed.",
       );
+    } finally {
+      setBusyMember(null);
+    }
+  }
+
+  async function updateMemberRole(userId: string, role: "admin" | "member") {
+    setError(null);
+    setStatus(null);
+    setBusyMember({ userId, operation: "role" });
+    try {
+      const result = await apiRequest<MemberStatusUpdateResponse>(
+        `/api/v1/beta/admin/members/${userId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ role }),
+        },
+      );
+      setOverview((current) =>
+        current
+          ? {
+              ...current,
+              members: current.members.map((member) =>
+                member.user.id === userId ? result.member : member,
+              ),
+            }
+          : current,
+      );
+      setStatus(
+        result.member.role === "admin"
+          ? "The member is now an administrator. Their previous authentication is no longer valid; they must authenticate again."
+          : "The member is now a standard member. Their previous authentication is no longer valid; they must authenticate again.",
+      );
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The member role could not be changed.",
+      );
+      await load();
     } finally {
       setBusyMember(null);
     }
@@ -371,46 +414,85 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
           Members
         </h2>
         <ul className="mt-4 divide-y divide-slate-200">
-          {overview.members.map((member) => (
-            <li
-              key={member.user.id}
-              className="flex flex-wrap items-center justify-between gap-3 py-3"
-            >
-              <div>
-                <p className="font-semibold">{member.user.displayName}</p>
-                <p className="text-sm text-slate-500">{member.user.email}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">
-                  {member.role} · {member.status}
-                </span>
-                {member.user.id === currentUserId ? (
-                  <span className="text-xs font-semibold text-slate-500">
-                    Current user
+          {overview.members.map((member) => {
+            const memberIsBusy = busyMember?.userId === member.user.id;
+            return (
+              <li
+                key={member.user.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3"
+              >
+                <div>
+                  <p className="font-semibold">{member.user.displayName}</p>
+                  <p className="text-sm text-slate-500">{member.user.email}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">
+                    {member.status}
                   </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={busyMember === member.user.id}
-                    aria-label={`${member.status === "active" ? "Disable" : "Enable"} ${member.user.displayName}`}
-                    onClick={() =>
-                      void updateMember(
-                        member.user.id,
-                        member.status === "active" ? "disabled" : "active",
-                      )
-                    }
-                  >
-                    {busyMember === member.user.id
-                      ? "Saving…"
-                      : member.status === "active"
-                        ? "Disable"
-                        : "Enable"}
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
+                  {member.user.id === currentUserId ? (
+                    <>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">
+                        {member.role}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        Current user
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <label
+                        htmlFor={`member-role-${member.user.id}`}
+                        className="sr-only"
+                      >
+                        Role for {member.user.displayName}
+                      </label>
+                      <select
+                        id={`member-role-${member.user.id}`}
+                        className="form-control min-w-36"
+                        value={member.role}
+                        disabled={memberIsBusy}
+                        aria-busy={
+                          memberIsBusy && busyMember?.operation === "role"
+                        }
+                        onChange={(event) =>
+                          void updateMemberRole(
+                            member.user.id,
+                            event.target.value as "admin" | "member",
+                          )
+                        }
+                      >
+                        <option value="admin">Administrator</option>
+                        <option value="member">Member</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={memberIsBusy}
+                        aria-label={`${member.status === "active" ? "Disable" : "Enable"} ${member.user.displayName}`}
+                        onClick={() =>
+                          void updateMember(
+                            member.user.id,
+                            member.status === "active" ? "disabled" : "active",
+                          )
+                        }
+                      >
+                        {memberIsBusy && busyMember?.operation === "status"
+                          ? "Saving…"
+                          : member.status === "active"
+                            ? "Disable"
+                            : "Enable"}
+                      </button>
+                      {memberIsBusy ? (
+                        <span role="status" className="text-xs text-slate-500">
+                          Saving {busyMember?.operation}…
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </section>
 

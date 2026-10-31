@@ -142,7 +142,7 @@ existing Campaign create contract.
 | `GET`       | `/api/v1/beta/admin`                              | Admin-only safe organisation overview                          |
 | `PATCH`     | `/api/v1/beta/admin/retention`                    | Admin-only 30/90/180/manual setting                            |
 | `GET`       | `/api/v1/beta/admin/feedback`                     | Admin-only bounded feedback retrieval                          |
-| `PATCH`     | `/api/v1/beta/admin/members/{userId}`             | Admin-only membership disable/re-enable with session outcome   |
+| `PATCH`     | `/api/v1/beta/admin/members/{userId}`             | Admin-only status or reviewed role change                      |
 | `POST`      | `/api/v1/beta/admin/exports`                      | Queue tenant export request                                    |
 | `GET`       | `/api/v1/beta/admin/data-requests`                | Read export/deletion status                                    |
 | `GET`       | `/api/v1/beta/admin/exports/{requestId}/download` | Download non-expired restricted export                         |
@@ -153,14 +153,24 @@ database, migration-head, auth, selected-provider and worker-configuration
 checks without an external provider request. See
 [private beta readiness](private-beta-readiness.md).
 
-The membership status route is organisation-scoped. Disable commits canonical
-denial and a new authentication watermark before attempting exact-user Clerk
-session revocation for sessions active in that exact organisation. Its response contains the member plus a bounded
-`sessionRevocation` outcome and count. A failed or unknown provider outcome never
-restores access. Re-enable keeps the membership disabled until a fresh revocation
-check succeeds, advances the watermark again and requires normal authentication;
-both pre-disable and disabled-period Clerk JWTs remain denied. The route does not globally lock a Clerk identity and an
-administrator cannot disable their own membership.
+The organisation-scoped member route accepts exactly one command: `status` with
+`active`/`disabled`, or `role` with `admin`/`member`. Disable commits canonical denial
+and a new authentication watermark before attempting exact-user Clerk session
+revocation for sessions active in that exact organisation. Its response contains the
+member plus a bounded `sessionRevocation` outcome and count. A failed or unknown
+provider outcome never restores access. Re-enable keeps the membership disabled until
+a fresh revocation check succeeds, advances the watermark again and requires normal
+authentication; both pre-disable and disabled-period Clerk JWTs remain denied. These
+status behaviours are unchanged by role management.
+
+An effective reviewed role change is available only to an active administrator for
+another organisation member. It advances the authority version and authentication
+watermark, making all earlier tokens stale, and records a content-free audit event.
+The application membership remains authoritative even while a Clerk role claim is
+stale. Identical role requests are idempotent. Self-demotion and removal of the last
+active administrator are refused; disable and demotion commands share an
+organisation-first lock order and count only active memberships whose users are also
+active. The route does not globally lock a Clerk identity.
 
 ## Companies
 

@@ -335,8 +335,8 @@ async def _resolve_identity(
         session.add(membership)
     else:
         _require_current_membership_authority(identity, membership)
-        if allow_provisioning and membership.role != identity.role and identity.auth_mode == "clerk":
-            membership.role = identity.role
+        # Existing membership roles are application authority. Provider claims can
+        # remain stale after a reviewed role change and must never overwrite it.
 
     if identity.auth_mode == "clerk":
         user.email = identity.email

@@ -73,7 +73,12 @@ describe("BusinessEntityForm", () => {
       )
       .mockResolvedValueOnce(
         jsonResponse([
-          { userId: "user-1", displayName: "Alex Morgan", active: true },
+          {
+            userId: "user-1",
+            displayName: "Alex Morgan",
+            active: true,
+            canAssign: true,
+          },
         ]),
       )
       .mockResolvedValueOnce(
@@ -172,6 +177,351 @@ describe("BusinessEntityForm", () => {
       expect.stringContaining("/api/v1/companies/company-101"),
       expect.any(Object),
     );
+  });
+
+  it("loads active members and assigns a task in the create payload", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              userId: "user-active",
+              displayName: "Alex Morgan",
+              active: true,
+              canAssign: true,
+            },
+            {
+              userId: "user-inactive",
+              displayName: "Casey Nguyen",
+              active: false,
+              canAssign: false,
+            },
+          ]),
+        );
+      }
+      if (init?.method === "POST" && url.includes("/api/v1/tasks")) {
+        return Promise.resolve(jsonResponse({ id: "task-1" }, 201));
+      }
+      return Promise.resolve(
+        jsonResponse({
+          items: [],
+          page: 1,
+          pageSize: 100,
+          total: 0,
+          pages: 0,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="tasks" />);
+
+    expect(await screen.findByLabelText("Assignee")).toBeVisible();
+    expect(screen.getByRole("option", { name: "Alex Morgan" })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: "Casey Nguyen (inactive)" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/task title/i), {
+      target: { value: "Confirm renewal plan" },
+    });
+    fireEvent.change(screen.getByLabelText("Assignee"), {
+      target: { value: "user-active" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.find((call) => call[1]?.method === "POST"),
+      ).toBeDefined(),
+    );
+    const postCall = fetchMock.mock.calls.find(
+      (call) => call[1]?.method === "POST",
+    );
+    expect(JSON.parse(String(postCall?.[1]?.body))).toMatchObject({
+      title: "Confirm renewal plan",
+      assignedUserId: "user-active",
+      status: "open",
+      priority: "medium",
+    });
+    expect(router.push).toHaveBeenCalledWith("/tasks");
+  });
+
+  it("shows only task assignees the current member may choose", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              userId: "user-self",
+              displayName: "Alex Morgan",
+              active: true,
+              canAssign: true,
+            },
+            {
+              userId: "user-peer",
+              displayName: "Casey Nguyen",
+              active: true,
+              canAssign: false,
+            },
+            {
+              userId: "user-disabled",
+              displayName: "Taylor Singh",
+              active: false,
+              canAssign: false,
+            },
+          ]),
+        );
+      }
+      if (init?.method === "POST" && url.includes("/api/v1/tasks")) {
+        return Promise.resolve(jsonResponse({ id: "task-1" }, 201));
+      }
+      return Promise.resolve(
+        jsonResponse({
+          items: [],
+          page: 1,
+          pageSize: 100,
+          total: 0,
+          pages: 0,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="tasks" />);
+
+    const assignee = await screen.findByLabelText("Assignee");
+    expect(screen.getByRole("option", { name: "Alex Morgan" })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /Casey Nguyen/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Taylor Singh/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/task title/i), {
+      target: { value: "Member-owned follow-up" },
+    });
+    fireEvent.change(assignee, { target: { value: "user-self" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.find((call) => call[1]?.method === "POST"),
+      ).toBeDefined(),
+    );
+    const postCall = fetchMock.mock.calls.find(
+      (call) => call[1]?.method === "POST",
+    );
+    expect(JSON.parse(String(postCall?.[1]?.body))).toMatchObject({
+      assignedUserId: "user-self",
+    });
+  });
+
+  it("retains an inactive task assignee without resending it and permits unassignment", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url.endsWith("/api/v1/tasks/task-1")) {
+        return Promise.resolve(jsonResponse({ id: "task-1" }));
+      }
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              userId: "user-active",
+              displayName: "Alex Morgan",
+              active: true,
+              canAssign: true,
+            },
+            {
+              userId: "user-inactive",
+              displayName: "Casey Nguyen",
+              active: false,
+              canAssign: false,
+            },
+          ]),
+        );
+      }
+      if (url.endsWith("/api/v1/tasks/task-1")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "task-1",
+            title: "Confirm renewal plan",
+            description: null,
+            companyId: null,
+            contactId: null,
+            opportunityId: null,
+            assignedUserId: "user-inactive",
+            status: "open",
+            priority: "medium",
+            dueAt: null,
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          items: [],
+          page: 1,
+          pageSize: 100,
+          total: 0,
+          pages: 0,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="tasks" entityId="task-1" />);
+
+    const assignee = await screen.findByLabelText("Assignee");
+    expect(assignee).toHaveValue("user-inactive");
+    expect(
+      screen.getByRole("option", { name: "Casey Nguyen (inactive)" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Alex Morgan" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText(/task title/i), {
+      target: { value: "Confirm updated renewal plan" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter((call) => call[1]?.method === "PATCH"),
+      ).toHaveLength(1),
+    );
+    const unchangedPatch = fetchMock.mock.calls.find(
+      (call) => call[1]?.method === "PATCH",
+    );
+    const unchangedPayload = JSON.parse(String(unchangedPatch?.[1]?.body));
+    expect(unchangedPayload).toMatchObject({
+      title: "Confirm updated renewal plan",
+    });
+    expect(unchangedPayload).not.toHaveProperty("assignedUserId");
+
+    fireEvent.change(assignee, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter((call) => call[1]?.method === "PATCH"),
+      ).toHaveLength(2),
+    );
+    const unassignPatch = fetchMock.mock.calls.filter(
+      (call) => call[1]?.method === "PATCH",
+    )[1];
+    expect(JSON.parse(String(unassignPatch?.[1]?.body))).toMatchObject({
+      assignedUserId: null,
+    });
+  });
+
+  it("applies assignment authority to account owner choices", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse([
+          {
+            userId: "user-self",
+            displayName: "Alex Morgan",
+            active: true,
+            canAssign: true,
+          },
+          {
+            userId: "user-peer",
+            displayName: "Casey Nguyen",
+            active: true,
+            canAssign: false,
+          },
+        ]),
+      ),
+    );
+
+    render(<BusinessEntityForm entity="companies" />);
+
+    expect(await screen.findByLabelText("Owner")).toBeVisible();
+    expect(screen.getByRole("option", { name: "Alex Morgan" })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /Casey Nguyen/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an unavailable account owner without revalidating an unchanged owner", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (
+        init?.method === "PATCH" &&
+        url.endsWith("/api/v1/companies/company-1")
+      ) {
+        return Promise.resolve(jsonResponse({ id: "company-1" }));
+      }
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              userId: "user-self",
+              displayName: "Alex Morgan",
+              active: true,
+              canAssign: true,
+            },
+            {
+              userId: "user-former-owner",
+              displayName: "Casey Nguyen",
+              active: false,
+              canAssign: false,
+            },
+          ]),
+        );
+      }
+      if (url.endsWith("/api/v1/companies/company-1")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "company-1",
+            name: "Acme Australia",
+            website: null,
+            industry: null,
+            location: null,
+            employeeCount: null,
+            ownerUserId: "user-former-owner",
+            status: "active",
+            updatedAt: "2026-10-31T03:00:00Z",
+          }),
+        );
+      }
+      if (url.endsWith("/api/v1/crm/records/account/company-1")) {
+        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="companies" entityId="company-1" />);
+
+    const owner = await screen.findByLabelText("Owner");
+    expect(owner).toHaveValue("user-former-owner");
+    expect(
+      screen.getByRole("option", { name: "Casey Nguyen (inactive)" }),
+    ).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/account name/i), {
+      target: { value: "Acme Australia Updated" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save account" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.find((call) => call[1]?.method === "PATCH"),
+      ).toBeDefined(),
+    );
+    const patchCall = fetchMock.mock.calls.find(
+      (call) => call[1]?.method === "PATCH",
+    );
+    const payload = JSON.parse(String(patchCall?.[1]?.body));
+    expect(payload).toMatchObject({
+      name: "Acme Australia Updated",
+      expectedUpdatedAt: "2026-10-31T03:00:00Z",
+    });
+    expect(payload).not.toHaveProperty("ownerUserId");
   });
 
   it("shows safe API validation errors without navigating", async () => {

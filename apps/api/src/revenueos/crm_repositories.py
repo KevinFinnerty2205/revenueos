@@ -177,13 +177,25 @@ class CRMRepository:
     async def members(self, organisation_id: UUID) -> list[CRMMemberRecord]:
         rows = (
             await self.session.execute(
-                select(User.id, User.display_name, OrganisationMembership.status)
+                select(
+                    User.id,
+                    User.display_name,
+                    OrganisationMembership.status,
+                    User.status,
+                )
                 .join(OrganisationMembership, OrganisationMembership.user_id == User.id)
                 .where(OrganisationMembership.organisation_id == organisation_id)
                 .order_by(User.display_name, User.id)
             )
         ).all()
-        return [CRMMemberRecord(user_id=row[0], display_name=row[1], active=row[2] == "active") for row in rows]
+        return [
+            CRMMemberRecord(
+                user_id=row[0],
+                display_name=row[1],
+                active=row[2] == "active" and row[3] == "active",
+            )
+            for row in rows
+        ]
 
     async def definitions(
         self,

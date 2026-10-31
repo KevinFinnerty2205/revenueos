@@ -9,7 +9,7 @@ from uuid import UUID
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from revenueos.auth import (
@@ -288,6 +288,344 @@ def test_wrong_tenant_and_self_disable_never_call_session_revocation(
     assert self_disable.status_code == 409
     assert self_disable.json()["code"] == "cannot_disable_self"
     assert revoker.external_id_pairs == []
+
+
+def test_admin_can_promote_and_demote_member_with_durable_authority_and_content_free_audit(
+    app: FastAPI,
+    client: TestClient,
+    target_member: None,
+) -> None:
+    del target_member
+    revoker = RecordingSessionRevoker()
+    app.dependency_overrides[get_session_revoker] = lambda: revoker
+    issued_before_change = datetime.now(UTC) - timedelta(minutes=1)
+
+    promoted = client.patch(
+        f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+        json={"role": "admin"},
+    )
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["member"]["role"] == "admin"
+    assert promoted.json()["member"]["status"] == "active"
+    assert promoted.json()["sessionRevocation"] == {
+        "outcome": "not_required",
+        "revokedSessionCount": 0,
+    }
+    assert revoker.external_id_pairs == []
+
+    factory = app.state.session_factory
+    assert isinstance(factory, async_sessionmaker)
+
+    async def verify_promotion() -> datetime:
+        async with factory() as session:
+            membership = await session.get(
+                OrganisationMembership,
+                (PRIMARY_ORGANISATION_ID, TARGET_USER_ID),
+            )
+            assert membership is not None
+            assert membership.role == "admin"
+            assert membership.status == "active"
+            assert membership.authority_version == 2
+            assert membership.authentication_valid_after is not None
+            watermark: datetime = membership.authentication_valid_after.replace(tzinfo=UTC)
+            with pytest.raises(AuthenticationError, match="predates"):
+                _require_current_membership_authority(
+                    _identity("org_dev_001", issued_before_change),
+                    membership,
+                )
+            events = list(
+                (
+                    await session.scalars(
+                        select(BetaSystemEvent).where(
+                            BetaSystemEvent.organisation_id == PRIMARY_ORGANISATION_ID,
+                            BetaSystemEvent.subject_id == TARGET_USER_ID,
+                            BetaSystemEvent.event_type == "member_role_changed",
+                        )
+                    )
+                ).all()
+            )
+            assert len(events) == 1
+            assert events[0].metadata_json == {
+                "previousRole": "member",
+                "role": "admin",
+                "authorityVersion": 2,
+            }
+            assert TARGET_EXTERNAL_ID not in str(events[0].metadata_json)
+
+        return watermark
+
+    promotion_watermark = asyncio.run(verify_promotion())
+
+    unchanged = client.patch(
+        f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+        json={"role": "admin"},
+    )
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["member"]["role"] == "admin"
+    assert unchanged.json()["sessionRevocation"]["outcome"] == "not_required"
+
+    async def verify_noop() -> None:
+        async with factory() as session:
+            membership = await session.get(
+                OrganisationMembership,
+                (PRIMARY_ORGANISATION_ID, TARGET_USER_ID),
+            )
+            assert membership is not None
+            assert membership.authority_version == 2
+            assert membership.authentication_valid_after is not None
+            assert membership.authentication_valid_after.replace(tzinfo=UTC) == promotion_watermark
+            event_count = await session.scalar(
+                select(func.count())
+                .select_from(BetaSystemEvent)
+                .where(
+                    BetaSystemEvent.organisation_id == PRIMARY_ORGANISATION_ID,
+                    BetaSystemEvent.subject_id == TARGET_USER_ID,
+                    BetaSystemEvent.event_type == "member_role_changed",
+                )
+            )
+            assert event_count == 1
+
+    asyncio.run(verify_noop())
+
+    demoted = client.patch(
+        f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+        json={"role": "member"},
+    )
+    assert demoted.status_code == 200, demoted.text
+    assert demoted.json()["member"]["role"] == "member"
+
+    async def verify_demotion() -> None:
+        async with factory() as session:
+            membership = await session.get(
+                OrganisationMembership,
+                (PRIMARY_ORGANISATION_ID, TARGET_USER_ID),
+            )
+            assert membership is not None
+            assert membership.role == "member"
+            assert membership.authority_version == 3
+            assert membership.authentication_valid_after is not None
+            assert membership.authentication_valid_after.replace(tzinfo=UTC) > promotion_watermark
+            events = list(
+                (
+                    await session.scalars(
+                        select(BetaSystemEvent)
+                        .where(
+                            BetaSystemEvent.organisation_id == PRIMARY_ORGANISATION_ID,
+                            BetaSystemEvent.subject_id == TARGET_USER_ID,
+                            BetaSystemEvent.event_type == "member_role_changed",
+                        )
+                        .order_by(BetaSystemEvent.created_at, BetaSystemEvent.id)
+                    )
+                ).all()
+            )
+            events_by_role = {event.metadata_json["role"]: event.metadata_json for event in events}
+            assert set(events_by_role) == {"admin", "member"}
+            assert events_by_role["member"] == {
+                "previousRole": "admin",
+                "role": "member",
+                "authorityVersion": 3,
+            }
+
+    asyncio.run(verify_demotion())
+
+
+def test_reviewed_membership_role_is_not_overwritten_by_a_stale_provider_claim(app: FastAPI) -> None:
+    factory = app.state.session_factory
+    assert isinstance(factory, async_sessionmaker)
+    external_organisation_id = "org_role_authority_A1"
+    external_user_id = "user_role_authority_A1"
+    organisation_id = identity_organisation_id(external_organisation_id)
+    user_id = identity_user_id(external_user_id)
+    authority_changed_at = datetime.now(UTC) - timedelta(seconds=1)
+    identity = VerifiedIdentity(
+        external_auth_id=external_user_id,
+        external_organisation_id=external_organisation_id,
+        display_name="Role Authority Target",
+        email="role-authority@example.test",
+        organisation_name="Role authority tenant",
+        role="member",
+        auth_mode="clerk",
+        issued_at=datetime.now(UTC),
+    )
+
+    async def scenario() -> None:
+        try:
+            async with factory() as session:
+                session.add(
+                    Organisation(
+                        id=organisation_id,
+                        external_auth_id=external_organisation_id,
+                        name="Role authority tenant",
+                        slug="role-authority-tenant",
+                    )
+                )
+                session.add(
+                    User(
+                        id=user_id,
+                        external_auth_id=external_user_id,
+                        email="role-authority@example.test",
+                        display_name="Role Authority Target",
+                    )
+                )
+                session.add(
+                    OrganisationMembership(
+                        organisation_id=organisation_id,
+                        user_id=user_id,
+                        role="admin",
+                        authority_version=2,
+                        authentication_valid_after=authority_changed_at,
+                    )
+                )
+                await session.commit()
+
+            async with factory() as session:
+                resolved = await _resolve_identity(session, identity, allow_provisioning=True)
+                assert resolved.role == "admin"
+
+            async with factory() as session:
+                membership = await session.get(OrganisationMembership, (organisation_id, user_id))
+                assert membership is not None
+                assert membership.role == "admin"
+                assert membership.authority_version == 2
+        finally:
+            async with factory() as session:
+                await session.execute(
+                    delete(OrganisationMembership).where(
+                        OrganisationMembership.organisation_id == organisation_id,
+                        OrganisationMembership.user_id == user_id,
+                    )
+                )
+                await session.execute(delete(Organisation).where(Organisation.id == organisation_id))
+                await session.execute(delete(User).where(User.id == user_id))
+                await session.commit()
+
+    asyncio.run(scenario())
+
+
+def test_member_role_change_blocks_last_admin_self_demotion_and_ambiguous_commands(
+    app: FastAPI,
+    client: TestClient,
+    target_member: None,
+) -> None:
+    del target_member
+    primary_user_id = "00000000-0000-4000-8000-000000000001"
+
+    last_admin = client.patch(
+        f"/api/v1/beta/admin/members/{primary_user_id}",
+        json={"role": "member"},
+    )
+    assert last_admin.status_code == 409
+    assert last_admin.json()["code"] == "last_active_admin_required"
+
+    promoted = client.patch(
+        f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+        json={"role": "admin"},
+    )
+    assert promoted.status_code == 200, promoted.text
+    self_demotion = client.patch(
+        f"/api/v1/beta/admin/members/{primary_user_id}",
+        json={"role": "member"},
+    )
+    assert self_demotion.status_code == 409
+    assert self_demotion.json()["code"] == "cannot_demote_self"
+
+    factory = app.state.session_factory
+    assert isinstance(factory, async_sessionmaker)
+
+    async def set_primary_user_status(status: str) -> None:
+        async with factory() as session:
+            primary_user = await session.get(User, UUID(primary_user_id))
+            assert primary_user is not None
+            primary_user.status = status
+            await session.commit()
+
+    asyncio.run(set_primary_user_status("disabled"))
+    try:
+        disabled_user_not_counted = client.patch(
+            f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+            json={"role": "member"},
+        )
+    finally:
+        asyncio.run(set_primary_user_status("active"))
+    assert disabled_user_not_counted.status_code == 409
+    assert disabled_user_not_counted.json()["code"] == "last_active_admin_required"
+
+    assert (
+        client.patch(
+            f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+            json={},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+            json={"role": "member", "status": "disabled"},
+        ).status_code
+        == 422
+    )
+
+
+def test_member_disable_preserves_last_active_admin_and_ignores_disabled_users(
+    app: FastAPI,
+    client: TestClient,
+    target_member: None,
+) -> None:
+    del target_member
+    primary_user_id = UUID("00000000-0000-4000-8000-000000000001")
+    revoker = RecordingSessionRevoker()
+    app.dependency_overrides[get_session_revoker] = lambda: revoker
+
+    promoted = client.patch(
+        f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+        json={"role": "admin"},
+    )
+    assert promoted.status_code == 200, promoted.text
+
+    factory = app.state.session_factory
+    assert isinstance(factory, async_sessionmaker)
+
+    async def set_primary_user_status(status: str) -> None:
+        async with factory() as session:
+            primary_user = await session.get(User, primary_user_id)
+            assert primary_user is not None
+            primary_user.status = status
+            await session.commit()
+
+    asyncio.run(set_primary_user_status("disabled"))
+    try:
+        refused = client.patch(
+            f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+            json={"status": "disabled"},
+        )
+    finally:
+        asyncio.run(set_primary_user_status("active"))
+
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "last_active_admin_required"
+    assert revoker.external_id_pairs == []
+
+    async def verify_refusal_was_atomic() -> None:
+        async with factory() as session:
+            membership = await session.get(
+                OrganisationMembership,
+                (PRIMARY_ORGANISATION_ID, TARGET_USER_ID),
+            )
+            assert membership is not None
+            assert membership.role == "admin"
+            assert membership.status == "active"
+            assert membership.authority_version == 2
+
+    asyncio.run(verify_refusal_was_atomic())
+
+    disabled = client.patch(
+        f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
+        json={"status": "disabled"},
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["member"]["role"] == "admin"
+    assert disabled.json()["member"]["status"] == "disabled"
+    assert revoker.external_id_pairs == [(TARGET_EXTERNAL_ID, "org_dev_001")]
 
 
 def test_removed_membership_is_denied_and_restore_requires_normal_authentication(app: FastAPI) -> None:

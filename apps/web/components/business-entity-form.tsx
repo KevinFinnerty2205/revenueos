@@ -194,6 +194,12 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       reference: "opportunities",
     },
     {
+      name: "assignedUserId",
+      label: "Assignee",
+      kind: "reference",
+      reference: "members",
+    },
+    {
       name: "status",
       label: "Status",
       kind: "select",
@@ -231,6 +237,10 @@ export function BusinessEntityForm({
   const labels = entityLabels[entity];
   const isEditing = Boolean(entityId);
   const formFields = useMemo(() => fields[entity], [entity]);
+  const memberReferenceField = useMemo(
+    () => formFields.find((field) => field.reference === "members"),
+    [formFields],
+  );
   const [values, setValues] = useState<Record<string, string>>(
     initialCompanyId
       ? { ...createDefaults[entity], companyId: initialCompanyId }
@@ -248,6 +258,9 @@ export function BusinessEntityForm({
   const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(
     null,
   );
+  const [initialMemberReference, setInitialMemberReference] = useState<
+    { fieldName: string; value: string } | undefined
+  >(undefined);
   const [readOnlyFields, setReadOnlyFields] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -277,8 +290,14 @@ export function BusinessEntityForm({
               reference,
               members.map((member) => ({
                 value: member.userId,
-                label: `${member.displayName}${member.active ? "" : " (inactive)"}`,
-                disabled: !member.active,
+                label: `${member.displayName}${
+                  !member.active
+                    ? " (inactive)"
+                    : member.canAssign
+                      ? ""
+                      : " (not assignable)"
+                }`,
+                disabled: !member.active || !member.canAssign,
               })),
             ] as const;
           }
@@ -368,6 +387,14 @@ export function BusinessEntityForm({
         setValues(loaded.values);
         setExpectedUpdatedAt(loaded.updatedAt);
         setReadOnlyFields(loaded.readOnlyFields);
+        setInitialMemberReference(
+          entityId && memberReferenceField
+            ? {
+                fieldName: memberReferenceField.name,
+                value: loaded.values[memberReferenceField.name] ?? "",
+              }
+            : undefined,
+        );
       })
       .catch((requestError: unknown) => {
         if (
@@ -388,7 +415,7 @@ export function BusinessEntityForm({
         }
       });
     return () => controller.abort();
-  }, [loadForm, retryKey]);
+  }, [entityId, loadForm, memberReferenceField, retryKey]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -396,10 +423,17 @@ export function BusinessEntityForm({
     setDuplicateLink(null);
     setSubmitting(true);
     try {
-      const payload = payloadFor(
-        formFields.filter((field) => !readOnlyFields.has(field.name)),
-        values,
+      const payloadFields = formFields.filter(
+        (field) =>
+          !readOnlyFields.has(field.name) &&
+          !(
+            entityId &&
+            field.reference === "members" &&
+            initialMemberReference?.fieldName === field.name &&
+            values[field.name] === initialMemberReference.value
+          ),
       );
+      const payload = payloadFor(payloadFields, values);
       if (entity !== "tasks" && entityId && expectedUpdatedAt) {
         payload.expectedUpdatedAt = expectedUpdatedAt;
       }
