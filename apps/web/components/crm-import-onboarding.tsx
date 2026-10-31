@@ -280,7 +280,7 @@ export function CRMImportOnboarding() {
       setContentBase64("");
       setCsvRows([]);
       setMessage(
-        `${result.importedRowCount} ${humanise(entityType)} record${result.importedRowCount === 1 ? "" : "s"} imported.`,
+        `${result.importedRowCount} ${entityType === "contact" ? "Person" : humanise(entityType)} record${result.importedRowCount === 1 ? "" : "s"} imported.`,
       );
     } catch (reason) {
       setMessage(
@@ -334,9 +334,9 @@ export function CRMImportOnboarding() {
         Import CRM data
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-        Import Accounts, Contacts or open Opportunities from a UTF-8 CSV.
-        Preview is read-only; Oryntela never infers permission to contact and
-        does not retain the raw CSV.
+        Import Accounts, People or open Opportunities from a UTF-8 CSV. Preview
+        is read-only; Oryntela never infers permission to contact and does not
+        retain the raw CSV.
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -351,7 +351,7 @@ export function CRMImportOnboarding() {
             disabled={working}
           >
             <option value="account">Accounts</option>
-            <option value="contact">Contacts</option>
+            <option value="contact">People</option>
             <option value="opportunity">Open Opportunities</option>
           </select>
         </label>

@@ -1,0 +1,42 @@
+diff --git a/lib/rules/no-internal-modules.js b/lib/rules/no-internal-modules.js
+index 3b20616a24314b815c11561faeaa6a32ea629e4e..3e165c528938571ea6fad610027a7d943582b234 100644
+--- a/lib/rules/no-internal-modules.js
++++ b/lib/rules/no-internal-modules.js
+@@ -1,4 +1,4 @@
+-'use strict';var _minimatch = require('minimatch');var _minimatch2 = _interopRequireDefault(_minimatch);
++'use strict';var _minimatch = require('minimatch');
+-
++
+ var _resolve = require('eslint-module-utils/resolve');var _resolve2 = _interopRequireDefault(_resolve);
+ var _importType = require('../core/importType');var _importType2 = _interopRequireDefault(_importType);
+@@ -48,8 +48,8 @@ module.exports = {
+-
++
+   create: function () {function noReachingInside(context) {
+       var options = context.options[0] || {};
+-      var allowRegexps = (options.allow || []).map(function (p) {return _minimatch2['default'].makeRe(p);});
+-      var forbidRegexps = (options.forbid || []).map(function (p) {return _minimatch2['default'].makeRe(p);});
++      var allowMatchers = (options.allow || []).map(function (p) {return new _minimatch.Minimatch(p);});
++      var forbidMatchers = (options.forbid || []).map(function (p) {return new _minimatch.Minimatch(p);});
+-
++
+       // minimatch patterns are expected to use / path separators, like import
+       // statements, so normalize paths to use the same
+@@ -71,12 +71,12 @@ module.exports = {
+-
++
+       // test if reaching to this destination is allowed
+       function reachingAllowed(importPath) {
+-        return allowRegexps.some(function (re) {return re.test(importPath);});
++        return allowMatchers.some(function (matcher) {return matcher.match(importPath);});
+       }
+-
++
+       // test if reaching to this destination is forbidden
+       function reachingForbidden(importPath) {
+-        return forbidRegexps.some(function (re) {return re.test(importPath);});
++        return forbidMatchers.some(function (matcher) {return matcher.match(importPath);});
+       }
+-
++
+       function isAllowViolation(importPath) {

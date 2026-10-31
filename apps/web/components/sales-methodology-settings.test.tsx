@@ -85,7 +85,7 @@ describe("SalesMethodologySettings", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        /do not score opportunities, block stages, or execute rules/i,
+        /do not score opportunities, block stages or make automatic changes/i,
       ),
     ).toBeVisible();
     const card = screen.getByText("MEDDPICC").closest("div.rounded-2xl");
@@ -105,7 +105,7 @@ describe("SalesMethodologySettings", () => {
     ).toBeVisible();
   });
 
-  it("creates a bounded custom definition through the guided form", async () => {
+  it("keeps the custom builder collapsed until an admin opens it", async () => {
     const saved = {
       ...standard("bant"),
       id: "custom-1",
@@ -121,7 +121,13 @@ describe("SalesMethodologySettings", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<SalesMethodologySettings />);
 
-    await screen.findByRole("heading", { name: "Custom methodology builder" });
+    const summary = await screen.findByText("Custom methodology builder");
+    const builder = summary.closest("details");
+    expect(builder).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("Name")).not.toBeVisible();
+    fireEvent.click(summary);
+    expect(builder).toHaveAttribute("open");
+    expect(screen.getByLabelText("Name")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Mutual plan" },
     });
@@ -131,7 +137,7 @@ describe("SalesMethodologySettings", () => {
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Success outcome" },
     });
-    fireEvent.change(screen.getByLabelText("Stable key"), {
+    fireEvent.change(screen.getByLabelText("Field key"), {
       target: { value: "success_outcome" },
     });
     fireEvent.change(screen.getByLabelText("What this field means"), {
@@ -161,5 +167,36 @@ describe("SalesMethodologySettings", () => {
       ],
     });
     expect(await screen.findByText(/Created Mutual plan/i)).toBeVisible();
+  });
+
+  it("opens the builder and focuses its name when editing", async () => {
+    const custom = {
+      ...standard("bant"),
+      id: "custom-1",
+      key: "custom_custom1",
+      name: "Mutual plan",
+      description: "Understand the jointly agreed path.",
+      standard: false,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        response({
+          ...catalogue(),
+          custom: [custom],
+        }),
+      ),
+    );
+    render(<SalesMethodologySettings />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit as new version" }),
+    );
+
+    expect(
+      screen.getByText("Custom methodology builder").closest("details"),
+    ).toHaveAttribute("open");
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
+    expect(screen.getByLabelText("Name")).toHaveValue("Mutual plan");
   });
 });

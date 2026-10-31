@@ -237,19 +237,22 @@ describe("sales insights", () => {
     render(<SalesInsights />);
 
     expect(await screen.findByText("Open opportunities")).toBeVisible();
-    expect(screen.getByText("$125,000")).toBeVisible();
-    expect(screen.getByText(/USD\s*50,000/u)).toBeVisible();
+    expect(screen.getByText("AUD $125,000")).toBeVisible();
+    expect(screen.getByText("USD $50,000")).toBeVisible();
     expect(screen.getByText(/currencies remain separate/i)).toBeVisible();
     expect(await screen.findByText("Active targets")).toBeVisible();
-    expect(screen.getByRole("tab", { name: "Targets" })).toBeVisible();
-    expect(screen.getByRole("tab", { name: "Forecast" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Targets" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Forecast" })).toBeVisible();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Funnel" }));
-    expect(screen.getByText(/choose one pipeline/i)).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Pipeline"), {
-      target: { value: pipelineId },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Funnel" }));
     expect(await screen.findByText("New business progression")).toBeVisible();
+    expect(screen.getByLabelText("Pipeline")).toHaveValue(pipelineId);
+    expect(
+      within(screen.getByLabelText("Pipeline")).queryByRole("option", {
+        name: "All pipelines",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/choose one pipeline/i)).not.toBeInTheDocument();
     expect(screen.getByText(/skipped stages are not inferred/i)).toBeVisible();
     fireEvent.click(screen.getAllByText("View exact values")[0]);
     expect(
@@ -258,20 +261,22 @@ describe("sales insights", () => {
       ).getByText("75%"),
     ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Activity" }));
     expect(
       await screen.findByText("Calls followed by a meeting"),
     ).toBeVisible();
-    expect(screen.getByText(/not causal attribution/i)).toBeVisible();
+    expect(
+      screen.getByText(/do not prove that one activity caused another/i),
+    ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Win / loss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Win / loss" }));
     expect(await screen.findByText("Why we won")).toBeVisible();
     expect(screen.getAllByText("Product fit")[0]).toBeVisible();
     expect(
       screen.getByText(/free-text win\/loss notes are intentionally excluded/i),
     ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Targets" }));
+    fireEvent.click(screen.getByRole("button", { name: "Targets" }));
     expect(
       await screen.findByRole("heading", { name: "Targets" }),
     ).toBeVisible();
@@ -285,6 +290,45 @@ describe("sales insights", () => {
         expect.any(Object),
       ),
     );
+  });
+
+  it("asks for a pipeline only when more than one is available", async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/api/v1/beta/capabilities"))
+        return json({ featureFlags: {} });
+      if (url.includes("/metadata"))
+        return json({
+          ...metadata,
+          pipelines: [
+            ...metadata.pipelines,
+            {
+              ...metadata.pipelines[0],
+              id: "22222222-2222-4222-8222-222222222222",
+              name: "Renewals",
+              isDefault: false,
+            },
+          ],
+        });
+      return json(overview);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SalesInsights />);
+    expect(await screen.findByText("Open opportunities")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Funnel" }));
+
+    expect(screen.getByText(/choose one pipeline/i)).toBeVisible();
+    expect(
+      within(screen.getByLabelText("Pipeline")).getByRole("option", {
+        name: "Select a pipeline",
+      }),
+    ).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/insights/sales/funnel"),
+      ),
+    ).toBe(false);
   });
 
   it("shows a safe retry state when the read model is unavailable", async () => {
@@ -313,10 +357,10 @@ describe("sales insights", () => {
     render(<SalesInsights />);
     expect(await screen.findByText("Open opportunities")).toBeVisible();
     expect(
-      screen.queryByRole("tab", { name: "Targets" }),
+      screen.queryByRole("button", { name: "Targets" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     expect(screen.queryByText("Active targets")).not.toBeInTheDocument();
@@ -346,8 +390,8 @@ describe("sales insights", () => {
     expect(
       await screen.findByRole("heading", { name: "Targets" }),
     ).toBeVisible();
-    expect(screen.getByRole("tab", { name: "Targets" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Targets" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     expect(
@@ -396,8 +440,8 @@ describe("sales insights", () => {
     render(<SalesInsights />);
 
     expect(await screen.findByText("Completed phone calls")).toBeVisible();
-    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Activity" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
     expect(screen.getByLabelText("Date range")).toHaveValue("custom");

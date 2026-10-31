@@ -129,9 +129,8 @@ export function OpportunityList() {
             Pipeline
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            See every open deal, its workflow stage and the next thing that
-            needs attention. Stage is workflow state—not customer Evidence or a
-            forecast.
+            See every open deal, where it sits and what needs attention next.
+            Open an opportunity for the supporting evidence and forecast view.
           </p>
         </div>
         <Link href="/opportunities/new" className="primary-button">
@@ -573,7 +572,7 @@ function OpportunityCard({
       </div>
       <p className="mt-3 text-sm text-slate-700">
         <span className="font-semibold">Next:</span>{" "}
-        {card.nextAction ?? "No next Action"}
+        {card.nextAction ?? "No next action"}
       </p>
       {card.attentionReasons.length ? (
         <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-950">
@@ -692,11 +691,14 @@ function PipelineList({
 
 function formatCurrency(value: string | null, currency: string | null) {
   if (!value || !currency) return "Value not set";
-  return new Intl.NumberFormat("en-AU", {
+  const currencyCode = currency.toUpperCase();
+  const amount = new Intl.NumberFormat("en-AU", {
     style: "currency",
-    currency,
+    currency: currencyCode,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 0,
   }).format(Number(value));
+  return `${currencyCode} ${amount}`;
 }
 
 function formatDate(value: string | null) {

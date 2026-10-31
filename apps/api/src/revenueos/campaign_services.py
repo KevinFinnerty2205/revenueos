@@ -280,7 +280,7 @@ class CampaignService:
         eligible = [item for item in audience if item.eligible and item.contact_id is not None]
         if not eligible:
             raise PublicAPIError(
-                "campaign_audience_empty", "No selected Contacts are currently eligible for launch.", 409
+                "campaign_audience_empty", "No selected People are currently eligible for launch.", 409
             )
         now = datetime.now(UTC)
         policy_fingerprint = self._policy_fingerprint(policy)
@@ -327,7 +327,7 @@ class CampaignService:
                 updated_at=now,
             )
             self.repository.add(enrollment)
-            await self._flush("A campaign Contact could not be enrolled.")
+            await self._flush("A campaign Person could not be enrolled.")
             self.repository.add(
                 EngageEnrollmentStep(
                     id=uuid.uuid4(),
@@ -536,14 +536,14 @@ class CampaignService:
         await self._flush("The campaign sequence could not be saved.")
         contacts = await self.repository.contacts(self.tenant.organisation_id, request.contact_ids)
         if len(contacts) != len(request.contact_ids):
-            raise PublicAPIError("contact_not_found", "One or more selected Contacts were not found.", 404)
+            raise PublicAPIError("contact_not_found", "One or more selected People were not found.", 404)
         if request.source_type == "event_attendees":
             if request.event_id is None or not await self.repository.event_accepts_contacts(
                 self.tenant.organisation_id, request.event_id, request.contact_ids
             ):
                 raise PublicAPIError(
                     "event_audience_invalid",
-                    "Every Event campaign recipient must be a canonical Contact linked to that Event.",
+                    "Every Event campaign recipient must be a saved Person linked to that Event.",
                     422,
                 )
         contact_map = {item.id: item for item in contacts}
@@ -595,13 +595,13 @@ class CampaignService:
             if item.contact_id is None:
                 item.eligible = False
                 item.eligibility_code = "contact_deleted"
-                item.eligibility_reason = "The selected Contact was deleted."
+                item.eligibility_reason = "The selected Person was deleted."
                 continue
             contact = await self.outreach_repository.contact(self.tenant.organisation_id, item.contact_id)
             if contact is None:
                 item.eligible = False
                 item.eligibility_code = "contact_deleted"
-                item.eligibility_reason = "The selected Contact was deleted."
+                item.eligibility_reason = "The selected Person was deleted."
                 continue
             eligible, code, trust, reason = await self._eligibility(contact, campaign, version)
             item.recipient_name = f"{contact.first_name} {contact.last_name}"
@@ -633,7 +633,7 @@ class CampaignService:
                 False,
                 "active_opportunity",
                 result.trust_state,
-                "This Contact's Account has an active Opportunity, so cold prospecting is blocked.",
+                "This Person's Account has an active Opportunity, so cold prospecting is blocked.",
             )
         if await self.repository.active_campaign_collision(
             self.tenant.organisation_id, contact.id, excluding_campaign_id=campaign.id
@@ -642,9 +642,9 @@ class CampaignService:
                 False,
                 "active_campaign_collision",
                 result.trust_state,
-                "This Contact is already enrolled in another active prospecting campaign.",
+                "This Person is already enrolled in another active prospecting campaign.",
             )
-        return True, "ready", result.trust_state, "Ready under current Contact, suppression and outreach policy."
+        return True, "ready", result.trust_state, "Ready under current Person, suppression and outreach policy."
 
     async def _response(self, record: CampaignRecord) -> CampaignResponse:
         campaign, version = record.campaign, record.version
@@ -818,7 +818,7 @@ class CampaignService:
     def _validate_draft_limits(self, request: CampaignDraftFields) -> None:
         self._timezone(request.sender_timezone)
         if len(request.contact_ids) > self.settings.private_beta_max_campaign_recipients:
-            raise PublicAPIError("campaign_recipient_limit", "A campaign may contain at most 50 Contacts.", 422)
+            raise PublicAPIError("campaign_recipient_limit", "A campaign may contain at most 50 People.", 422)
         enabled_steps = [item for item in request.steps if item.enabled]
         if not enabled_steps or len(enabled_steps) > self.settings.private_beta_max_campaign_steps:
             raise PublicAPIError("campaign_step_limit", "A campaign must contain one to four enabled steps.", 422)

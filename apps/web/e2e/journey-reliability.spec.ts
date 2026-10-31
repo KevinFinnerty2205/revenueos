@@ -936,7 +936,8 @@ function presentation() {
               ],
               required: false,
               modificationPolicy: "text_placeholders_only",
-              reviewState: "needs_review",
+              reviewState:
+                state.presentationState === "ready" ? "ready" : "needs_review",
               warningCodes: ["claim_review_required"],
             },
           ],
@@ -1617,7 +1618,7 @@ async function routeFlagship(page: Page) {
           route,
           {
             code: "company_not_in_sales",
-            message: "Save the Account before adding this Contact.",
+            message: "Save the Account before adding this Person.",
             requestId: "request-company-first",
           },
           409,
@@ -1631,7 +1632,7 @@ async function routeFlagship(page: Page) {
         companyId: ids.account,
         prospectPersonId: ids.person,
         message:
-          "The Contact was added to Sales with reviewed field provenance.",
+          "The Person was added to Sales with reviewed field provenance.",
       });
       return;
     }
@@ -2244,8 +2245,8 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     ).toBeVisible();
   });
   await test.step("06 Add Company to Sales with Company-first recovery", async () => {
-    await page.getByRole("button", { name: "Add to Sales as Contact" }).click();
-    await page.getByRole("button", { name: "Add Contact" }).click();
+    await page.getByRole("button", { name: "Add to Sales as Person" }).click();
+    await page.getByRole("button", { name: "Add Person" }).click();
     await expect(
       page.getByRole("link", { name: "Save Company first" }),
     ).toBeVisible();
@@ -2260,17 +2261,15 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     await expect(accountDialog).toBeVisible();
     await accountDialog.getByRole("button", { name: "Add account" }).click();
     await expect(
-      page.getByRole("link", { name: "Continue adding Contact" }),
+      page.getByRole("link", { name: "Continue adding person" }),
     ).toBeVisible();
   });
   await test.step("07 Add Contact to Sales", async () => {
-    await page.getByRole("link", { name: "Continue adding Contact" }).click();
+    await page.getByRole("link", { name: "Continue adding person" }).click();
     await expect(page).toHaveURL(`/find/${ids.target}/people/${ids.person}`);
-    await page.getByRole("button", { name: "Add to Sales as Contact" }).click();
-    await page.getByRole("button", { name: "Add Contact" }).click();
-    await expect(
-      page.getByRole("link", { name: "Open Contact" }),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Add to Sales as Person" }).click();
+    await page.getByRole("button", { name: "Add Person" }).click();
+    await expect(page.getByRole("link", { name: "Open Person" })).toBeVisible();
     expect(state.contactPromoted).toBe(true);
   });
   await test.step("08 Open canonical Account", async () => {
@@ -2279,7 +2278,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
       page.getByRole("heading", { level: 1, name: account.name }),
     ).toBeVisible();
   });
-  await test.step("09 Open canonical Contact", async () => {
+  await test.step("09 Open person record", async () => {
     await page.goto(`/contacts/${ids.contact}`);
     await expect(
       page.getByRole("heading", { level: 1, name: "Jane Smith" }),
@@ -2522,7 +2521,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
       .getByRole("combobox", { name: "Opportunity (optional)", exact: true })
       .selectOption(ids.opportunity);
     await page
-      .getByRole("combobox", { name: "Known Contact (optional)", exact: true })
+      .getByRole("combobox", { name: "Known Person (optional)", exact: true })
       .selectOption(ids.contact);
     await page
       .getByLabel("Template version")
@@ -2549,6 +2548,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     await expect(
       page.getByRole("button", { name: "Download PowerPoint" }),
     ).toBeVisible();
+    await expect(page.getByText("Needs review")).toHaveCount(0);
     expect(state.presentationState).toBe("ready");
     await captureFlagship(page, "create");
   });
@@ -2574,7 +2574,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     ).toBeVisible();
   });
   await test.step("34 Confirm Target", async () => {
-    await page.getByRole("tab", { name: "Targets" }).click();
+    await page.getByRole("button", { name: "Targets", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Targets", exact: true }),
     ).toBeVisible();
@@ -2584,7 +2584,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     await captureFlagship(page, "target");
   });
   await test.step("35 Open Forecast", async () => {
-    await page.getByRole("tab", { name: "Forecast" }).click();
+    await page.getByRole("button", { name: "Forecast", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Seller forecast range" }),
     ).toBeVisible();
@@ -2596,6 +2596,9 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
   });
   await test.step("37 Open Manager view as admin fixture", async () => {
     await page.goto(`/opportunities/${ids.opportunity}`);
+    await page
+      .getByText("Manager review and forecast", { exact: true })
+      .click();
     await expect(
       page.getByRole("heading", { name: "What matters for this deal" }),
     ).toBeVisible();
@@ -2629,12 +2632,12 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     ).toBeVisible();
     await page.goto("/insights");
     await expect(page.getByText("Open opportunities").first()).toBeVisible();
-    await expect(page.getByText("$420,000", { exact: true })).toBeVisible();
-    await page.getByRole("tab", { name: "Targets" }).click();
+    await expect(page.getByText("AUD $420,000", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Targets", exact: true }).click();
     await expect(
       page.getByRole("progressbar", { name: "Won value: 84% complete" }),
     ).toBeVisible();
-    await page.getByRole("tab", { name: "Forecast" }).click();
+    await page.getByRole("button", { name: "Forecast", exact: true }).click();
     await expect(page.getByText("Actual won")).toBeVisible();
     await expect(
       page.getByText("No open opportunities close in this period"),

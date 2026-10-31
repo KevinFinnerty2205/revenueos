@@ -522,7 +522,7 @@ def test_organisation_deletion_removes_handover_history_and_sources(app: FastAPI
                             source_version_id=None,
                             source_version=None,
                             authority_type="commercial_record",
-                            label="Canonical Opportunity record",
+                            label="Opportunity record",
                             snapshot_json={"schemaVersion": 1},
                             source_fingerprint="b" * 64,
                         ),

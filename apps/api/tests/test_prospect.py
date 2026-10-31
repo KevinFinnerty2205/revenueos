@@ -1040,7 +1040,7 @@ def test_promotion_is_explicit_idempotent_and_cannot_mutate_customer_truth(clien
     assert promoted.status_code == 200
     assert promoted.json()["status"] == "created"
     company_id = promoted.json()["companyId"]
-    assert promoted.json()["message"].endswith("No opportunity or contact was created.")
+    assert promoted.json()["message"].endswith("No opportunity or Person was created.")
     repeated = client.post(
         f"/api/v1/prospect/research/{target_id}/promote",
         json={"confirmed": True},

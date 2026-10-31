@@ -169,6 +169,14 @@ export function SellingProfileSettings() {
   async function transition(action: "approve" | "retire") {
     const revision = action === "approve" ? profile?.draft : profile?.current;
     if (!revision) return;
+    if (
+      action === "retire" &&
+      !window.confirm(
+        "Retire the current selling profile? Members will immediately stop receiving it as approved context. Its revision history will be preserved.",
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

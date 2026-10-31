@@ -123,7 +123,7 @@ describe("BillingSubscriptionSettings", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows honest no-card state and prepares server-priced hosted checkout", async () => {
+  it("shows honest no-card state and prepares securely priced hosted checkout", async () => {
     const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/v1/legal/terms-acceptance")) {
@@ -173,7 +173,8 @@ describe("BillingSubscriptionSettings", () => {
     expect(await screen.findByText("Choose a paid plan")).toBeVisible();
     expect(screen.getByText(/trial remains no-card/i)).toBeVisible();
     expect(screen.getByText(/Management Services Australia/i)).toBeVisible();
-    expect(screen.getByText(/test billing operations/i)).toBeVisible();
+    expect(screen.getByText(/test billing — no real charges/i)).toBeVisible();
+    expect(screen.getByText(/test mode · no real charges/i)).toBeVisible();
     expect(screen.queryByText(/Enterprise ·/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: /Core · annual/i }));
@@ -341,9 +342,7 @@ describe("BillingSubscriptionSettings", () => {
     expect(
       screen.getByRole("radio", { name: /Core · monthly/i }),
     ).toBeDisabled();
-    expect(
-      screen.getByRole("link", { name: "View provider invoice" }),
-    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "View invoice" })).toBeVisible();
   });
 
   it("distinguishes immediate upgrades from renewal changes", async () => {
@@ -382,11 +381,13 @@ describe("BillingSubscriptionSettings", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Growth · monthly/i }));
     expect(
       screen.getByText(
-        /takes effect immediately only after provider payment confirmation/i,
+        /takes effect immediately only after the payment service confirms payment/i,
       ),
     ).toBeVisible();
     expect(
-      screen.getByText(/provider calculates and invoices the proration/i),
+      screen.getByText(
+        /payment service calculates and charges any prorated amount/i,
+      ),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Confirm immediate upgrade" }),

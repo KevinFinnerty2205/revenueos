@@ -309,7 +309,7 @@ async function routePipeline(
                     code: "close_date_passed",
                     label: "Close date passed",
                     explanation:
-                      "The canonical expected close date is in the past while the Opportunity remains open.",
+                      "The expected close date has passed while the Opportunity remains open.",
                     detectedAt: "2026-08-30T01:00:00Z",
                     sources: [
                       {

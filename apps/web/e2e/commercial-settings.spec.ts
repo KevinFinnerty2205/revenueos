@@ -356,7 +356,7 @@ test("commercial settings are clear, keyboard reachable and responsive", async (
   await routeSettings(page);
   await page.goto("/settings");
 
-  const plan = page.getByRole("region", { name: "Billing & plan" });
+  const plan = page.getByRole("region", { name: "Plan access" });
   await expect(plan).toBeVisible();
   await expect(plan.getByText("Complete", { exact: true })).toBeVisible();
   await expect(plan.getByText("Trial active")).toBeVisible();
@@ -365,9 +365,7 @@ test("commercial settings are clear, keyboard reachable and responsive", async (
   await expect(
     plan.getByText(/operational provider is not available yet/i),
   ).toBeVisible();
-  await expect(
-    plan.getByText(/server-authoritative plan and entitlement view/i),
-  ).toBeVisible();
+  await expect(plan.getByText(/current plan records/i)).toBeVisible();
   await plan.screenshot({
     path: "../../docs/07-sprints/assets/wo-047-commercial-settings-desktop.png",
   });
@@ -393,7 +391,7 @@ test("test billing checkout preparation is keyboard reachable and responsive", a
 
   const billing = page.getByRole("region", { name: "Subscription & invoices" });
   await expect(billing).toBeVisible();
-  await expect(billing.getByText(/deterministic · test mode/i)).toBeVisible();
+  await expect(billing.getByText(/test mode · no real charges/i)).toBeVisible();
   await expect(billing.getByText(/Billing not configured/i)).toBeVisible();
   const annual = billing.getByRole("radio", { name: /Core · annual/i });
   await annual.focus();
@@ -515,7 +513,7 @@ test("commercial settings recovery is keyboard operable and restores focus", asy
   });
   await page.goto("/settings");
 
-  const plan = page.getByRole("region", { name: "Billing & plan" });
+  const plan = page.getByRole("region", { name: "Plan access" });
   const retry = plan.getByRole("button", { name: "Try again" });
   await expect(retry).toBeVisible();
   await retry.focus();
@@ -524,6 +522,6 @@ test("commercial settings recovery is keyboard operable and restores focus", asy
 
   await expect(plan.getByText("Complete", { exact: true })).toBeVisible();
   await expect(
-    plan.getByRole("heading", { name: "Billing & plan" }),
+    plan.getByRole("heading", { name: "Plan access" }),
   ).toBeFocused();
 });

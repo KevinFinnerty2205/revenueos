@@ -189,8 +189,9 @@ export function CreditsSettings() {
             Test catalogue — purchasing disabled
           </h3>
           <p className="mt-2 text-sm leading-6 text-amber-900">
-            These deterministic packs validate payment and ledger behaviour.
-            They are not public Oryntela prices and cannot be purchased here.
+            These test packs let the team check purchasing and Credit balance
+            updates safely. They are not public Oryntela prices and cannot be
+            purchased here.
           </p>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {credits.testPacks.map((pack) => (

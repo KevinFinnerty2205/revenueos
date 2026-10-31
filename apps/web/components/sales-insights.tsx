@@ -108,11 +108,14 @@ function formatMetric(value: string | number | null, suffix = ""): string {
 }
 
 function formatMoney(amount: string, currency: string): string {
-  return new Intl.NumberFormat("en-AU", {
+  const currencyCode = currency.toUpperCase();
+  const value = new Intl.NumberFormat("en-AU", {
     style: "currency",
-    currency,
+    currency: currencyCode,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 0,
   }).format(Number(amount));
+  return `${currencyCode} ${value}`;
 }
 
 function MetricCard({
@@ -396,9 +399,10 @@ function RateCard({ label, rate }: { label: string; rate: SalesFollowOnRate }) {
         />
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">
-        {rate.followedByOutcomeCount} of {rate.eligibleMatureCount} mature,
-        associated records · {rate.immatureCount} awaiting the {rate.windowDays}
-        -day window · {rate.excludedUnassociatedCount} unassociated.
+        {rate.followedByOutcomeCount} of {rate.eligibleMatureCount} eligible
+        records were followed by this outcome. {rate.immatureCount} still have
+        time remaining in the {rate.windowDays}-day follow-up window;{" "}
+        {rate.excludedUnassociatedCount} could not be linked.
       </p>
     </article>
   );
@@ -441,8 +445,14 @@ function ActivityPanel({ data }: { data: SalesActivity }) {
         />
       ) : null}
       <aside className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">
-        {data.associationDisclosure} These are temporal associations, not causal
-        attribution.
+        These patterns show what happened next in linked sales records. They do
+        not prove that one activity caused another.
+        <details className="mt-2">
+          <summary className="cursor-pointer font-semibold">
+            How activity links are counted
+          </summary>
+          <p className="mt-2">{data.associationDisclosure}</p>
+        </details>
       </aside>
     </div>
   );
@@ -595,6 +605,11 @@ export function SalesInsights() {
       (activeTab === "forecast" && !forecastEnabled))
       ? "overview"
       : activeTab;
+  const effectivePipelineId =
+    pipelineId ||
+    (effectiveActiveTab === "funnel" && metadata?.pipelines.length === 1
+      ? (metadata.pipelines[0]?.id ?? "")
+      : "");
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -674,7 +689,7 @@ export function SalesInsights() {
         setError(null);
         return;
       }
-      if (effectiveActiveTab === "funnel" && !pipelineId) {
+      if (effectiveActiveTab === "funnel" && !effectivePipelineId) {
         setData(null);
         setDataTab(null);
         setLoading(false);
@@ -684,7 +699,7 @@ export function SalesInsights() {
       setLoading(true);
       setError(null);
       const query = new URLSearchParams({ startDate, endDate, timezone });
-      if (pipelineId) query.set("pipelineId", pipelineId);
+      if (effectivePipelineId) query.set("pipelineId", effectivePipelineId);
       if (ownerUserId) query.set("ownerUserId", ownerUserId);
       try {
         const response = await apiRequest<InsightPayload>(
@@ -708,8 +723,8 @@ export function SalesInsights() {
       deepLinkApplied,
       endDate,
       effectiveActiveTab,
+      effectivePipelineId,
       ownerUserId,
-      pipelineId,
       startDate,
       timezone,
     ],
@@ -735,8 +750,12 @@ export function SalesInsights() {
     }
   }
 
+  function changeTab(nextTab: InsightTab) {
+    setActiveTab(nextTab);
+  }
+
   const selectedPipeline = metadata?.pipelines.find(
-    (pipeline) => pipeline.id === pipelineId,
+    (pipeline) => pipeline.id === effectivePipelineId,
   );
 
   return (
@@ -744,7 +763,7 @@ export function SalesInsights() {
       <PageHeader
         eyebrow="Sales analytics"
         title="Sales insights"
-        description="A bounded, deterministic view of pipeline progression, activity patterns and seller-reported outcomes."
+        description="See pipeline movement, sales activity and seller-reported outcomes for the selected period."
       />
       {effectiveActiveTab !== "targets" && effectiveActiveTab !== "forecast" ? (
         <section
@@ -771,11 +790,15 @@ export function SalesInsights() {
             <label className="text-sm font-semibold text-slate-700">
               Pipeline
               <select
-                value={pipelineId}
+                value={effectivePipelineId}
                 onChange={(event) => setPipelineId(event.target.value)}
                 className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               >
-                <option value="">All pipelines</option>
+                <option value="" disabled={effectiveActiveTab === "funnel"}>
+                  {effectiveActiveTab === "funnel"
+                    ? "Select a pipeline"
+                    : "All pipelines"}
+                </option>
                 {metadata?.pipelines.map((pipeline) => (
                   <option key={pipeline.id} value={pipeline.id}>
                     {displayPipelineName(pipeline.name)}
@@ -840,7 +863,7 @@ export function SalesInsights() {
         </section>
       ) : null}
       <div
-        role="tablist"
+        role="group"
         aria-label="Sales insight sections"
         className="mb-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1"
       >
@@ -854,16 +877,17 @@ export function SalesInsights() {
             <button
               key={tab.id}
               type="button"
-              role="tab"
-              aria-selected={effectiveActiveTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              aria-pressed={effectiveActiveTab === tab.id}
+              onClick={() => changeTab(tab.id)}
               className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus ${effectiveActiveTab === tab.id ? "bg-white text-brand-primary shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
               {tab.label}
             </button>
           ))}
       </div>
-      {effectiveActiveTab === "funnel" && !pipelineId ? (
+      {effectiveActiveTab === "funnel" &&
+      !effectivePipelineId &&
+      metadata?.pipelines.length !== 1 ? (
         <section className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
           <h2 className="text-lg font-semibold text-slate-900">
             Choose one pipeline to view its funnel
@@ -945,14 +969,18 @@ export function SalesInsights() {
         </p>
       ) : null}
       {effectiveActiveTab !== "targets" && effectiveActiveTab !== "forecast" ? (
-        <footer className="mt-8 text-xs leading-5 text-slate-500">
-          Inclusive local dates: {startDate} to {endDate}.{" "}
-          {selectedPipeline
-            ? `Pipeline: ${displayPipelineName(selectedPipeline.name)}. `
-            : "All pipelines. "}
-          Definitions use canonical Oryntela records and metric catalogue
-          version 1.
-        </footer>
+        <details className="mt-8 text-xs leading-5 text-slate-500">
+          <summary className="cursor-pointer font-semibold text-slate-600">
+            How these insights are calculated
+          </summary>
+          <p className="mt-2">
+            Dates include {startDate} to {endDate} in {timezone}.{" "}
+            {selectedPipeline
+              ? `Pipeline: ${displayPipelineName(selectedPipeline.name)}. `
+              : "All pipelines. "}
+            Figures use Oryntela sales records and metric definition version 1.
+          </p>
+        </details>
       ) : null}
     </div>
   );

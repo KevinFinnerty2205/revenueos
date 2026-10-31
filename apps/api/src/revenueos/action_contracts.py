@@ -76,9 +76,9 @@ class FollowUpEmailPayload(StrictActionModel):
     @model_validator(mode="after")
     def validate_recipient_pair(self) -> FollowUpEmailPayload:
         if (self.recipient_contact_id is None) != (self.recipient_email is None):
-            raise ValueError("Recipient contact and email must be supplied together.")
+            raise ValueError("A saved Person and email must be supplied together.")
         if self.recipient_confirmed and self.recipient_contact_id is None:
-            raise ValueError("A recipient cannot be confirmed until a validated contact is selected.")
+            raise ValueError("A recipient cannot be confirmed until a validated Person is selected.")
         return self
 
 

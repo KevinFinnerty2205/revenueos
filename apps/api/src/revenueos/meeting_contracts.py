@@ -47,7 +47,7 @@ class MeetingParticipantCreate(APIModel):
     @model_validator(mode="after")
     def require_identity(self) -> MeetingParticipantCreate:
         if self.contact_id is None and self.display_name is None and self.email is None:
-            raise ValueError("A contact, display name or email is required.")
+            raise ValueError("A Person, display name or email is required.")
         return self
 
 

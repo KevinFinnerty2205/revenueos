@@ -455,7 +455,9 @@ test("shows an explainable MEDDPICC deal view on desktop and mobile", async ({
   await expect(
     page.getByRole("button", { name: "View all 5 fields" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Methodology" })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Methodology", exact: true }),
+  ).toBeVisible();
   if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-025a-opportunity-mobile.png",
@@ -903,13 +905,11 @@ test("admin creates and selects bounded custom methodology without JSON or rules
   });
   await page.goto("/settings");
 
-  await expect(
-    page.getByRole("heading", { name: "Custom methodology builder" }),
-  ).toBeVisible();
+  await page.getByText("Custom methodology builder", { exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Mutual plan");
   await page.getByLabel("Purpose").fill("Understand the jointly agreed path.");
   await page.getByLabel("Display name").fill("Success outcome");
-  await page.getByLabel("Stable key").fill("success_outcome");
+  await page.getByLabel("Field key").fill("success_outcome");
   await page
     .getByLabel("What this field means")
     .fill("The outcome both teams agree matters.");
@@ -922,9 +922,9 @@ test("admin creates and selects bounded custom methodology without JSON or rules
   await page.getByRole("button", { name: "Create methodology" }).click();
   await expect(page.getByText(/Created Mutual plan/i)).toBeVisible();
   await expect(
-    page.getByText(/Guided fields only. This builder captures descriptive/i),
+    page.getByText(/Add the evidence fields and discovery questions/i),
   ).toBeVisible();
-  await expect(page.getByText("Mutual plan · v1")).toBeVisible();
+  await expect(page.getByText("Mutual plan · version 1")).toBeVisible();
   await page
     .locator("div.rounded-2xl")
     .filter({ hasText: "Mutual plan" })

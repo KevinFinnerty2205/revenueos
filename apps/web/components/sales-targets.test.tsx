@@ -139,6 +139,11 @@ describe("sales targets", () => {
     render(<SalesTargets />);
 
     expect(await screen.findByText("112.5%")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Target periods" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "current" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByText(/\$22,500\.00/)).toBeVisible();
     const progress = screen.getByRole("progressbar");
     expect(progress).toHaveAttribute("aria-valuenow", "100");
@@ -250,7 +255,9 @@ describe("sales targets", () => {
     });
     expect(screen.queryByLabelText(/Pipeline/u)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/more activity does not by itself mean better/u),
+      screen.getByText(
+        /activity measures effort, not sales quality or outcomes/iu,
+      ),
     ).toBeVisible();
     fireEvent.change(screen.getByLabelText("Goal"), {
       target: { value: "8" },
@@ -310,7 +317,7 @@ describe("sales targets", () => {
       await screen.findByRole("button", { name: "Change target" }),
     );
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The earlier target of $20,000.00 will remain in history",
+      "The earlier target of AUD $20,000.00 will remain in history",
     );
     fireEvent.change(screen.getByLabelText("New target"), {
       target: { value: "30000" },

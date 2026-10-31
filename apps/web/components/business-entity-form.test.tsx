@@ -246,7 +246,7 @@ describe("BusinessEntityForm", () => {
     fireEvent.change(screen.getByLabelText("Job title"), {
       target: { value: "Chief Technology Officer" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save person" }));
 
     await waitFor(() =>
       expect(
@@ -339,7 +339,7 @@ describe("BusinessEntityForm", () => {
     expect(
       screen.getByText("CRM controlled · read-only in Oryntela"),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save person" }));
 
     await waitFor(() =>
       expect(

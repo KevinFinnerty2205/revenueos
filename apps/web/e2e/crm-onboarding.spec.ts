@@ -358,7 +358,7 @@ test("admin imports Contacts and open Opportunities with explicit relationship m
     .getByRole("button", { name: "Import 1 new records" })
     .click();
   await expect(
-    importPanel.getByText(/1 Contact record imported/u),
+    importPanel.getByText(/1 Person record imported/u),
   ).toBeVisible();
 
   await importPanel.getByLabel("Record type").selectOption("opportunity");

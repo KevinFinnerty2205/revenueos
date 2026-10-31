@@ -1431,7 +1431,7 @@ def test_campaign_sequence_migration_schema_immutability_and_cycle(
             "(id, organisation_id, campaign_version_id, contact_id, company_id, recipient_name, "
             "recipient_email, recipient_trust, eligible, eligibility_code, eligibility_reason) "
             "VALUES (?, ?, ?, ?, ?, 'Casey Contact', 'casey@example.test', 'verified', 1, "
-            "'eligible', 'Eligible business Contact')",
+            "'eligible', 'Eligible business Person')",
             (audience_id, organisation_id, version_id, contact_id, company_id),
         )
         connection.execute(

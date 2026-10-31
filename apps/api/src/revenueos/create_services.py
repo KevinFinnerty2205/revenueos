@@ -904,6 +904,10 @@ class CreateService:
                 raise PublicAPIError("source_approval_changed", "Approved source content has changed.", 409)
         await self._revalidate_claim_sources(version)
         now = datetime.now(UTC)
+        slides = [dict(item) for item in version.generated_content_json if isinstance(item, dict)]
+        for generated_slide in slides:
+            generated_slide["reviewState"] = "ready"
+        version.generated_content_json = cast(list[object], slides)
         version.state = "ready"
         version.review_state = "approved"
         version.approved_by_user_id = self.tenant.user_id
@@ -1379,7 +1383,7 @@ class CreateService:
         if len(contacts_by_id) != len(set(contact_ids)) or any(
             contact.company_id != company.id for contact in contacts
         ):
-            raise PublicAPIError("audience_account_mismatch", "Audience Contacts must belong to the Account.", 422)
+            raise PublicAPIError("audience_account_mismatch", "Audience People must belong to the Account.", 422)
         audience: list[object] = []
         for item in request.audience:
             data = item.model_dump(mode="json", by_alias=True)

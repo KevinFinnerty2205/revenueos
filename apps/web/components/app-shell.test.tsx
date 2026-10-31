@@ -38,7 +38,7 @@ describe("application shell", () => {
       "Pipeline",
       "Insights",
       "Interactions",
-      "Search",
+      "Search & Ask",
       "Settings",
     ]) {
       expect(
@@ -62,10 +62,12 @@ describe("application shell", () => {
       within(navigation).getByRole("link", { name: "Pipeline" }),
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByText(/mock authentication is active/i)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Sign out" })).toHaveAttribute(
-      "href",
-      "/sign-out",
-    );
+    expect(screen.getAllByRole("link", { name: "Sign out" })).toHaveLength(2);
+    for (const signOutLink of screen.getAllByRole("link", {
+      name: "Sign out",
+    })) {
+      expect(signOutLink).toHaveAttribute("href", "/sign-out");
+    }
   });
 
   it("hides desktop Insights when the server explicitly disables it", async () => {

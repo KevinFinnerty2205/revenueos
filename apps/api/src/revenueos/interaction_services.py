@@ -498,7 +498,7 @@ class InteractionService:
         if relationship_company_id is not None and contact.company_id != relationship_company_id:
             raise PublicAPIError(
                 "inconsistent_relationship",
-                "The phone-call contact, company and opportunity must refer to the same company.",
+                "The phone-call Person, company and opportunity must refer to the same company.",
                 422,
             )
 
@@ -515,7 +515,7 @@ class InteractionService:
     async def _require_contact(self, contact_id: UUID) -> Contact:
         contact = await self.repository.get_contact(self.tenant.organisation_id, contact_id)
         if contact is None:
-            raise PublicAPIError("contact_not_found", "The requested contact was not found.", 404)
+            raise PublicAPIError("contact_not_found", "The requested Person was not found.", 404)
         return contact
 
     @staticmethod
@@ -530,7 +530,7 @@ class InteractionService:
         ):
             raise PublicAPIError(
                 "invalid_phone_metadata",
-                "Contact, call direction and call outcome are available only for phone calls.",
+                "Person, call direction and call outcome are available only for phone calls.",
                 422,
             )
 

@@ -401,7 +401,7 @@ export function InteractionForm({
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-bold text-slate-800">
-                Contact
+                Person
                 <select
                   className="form-control"
                   value={contactId}

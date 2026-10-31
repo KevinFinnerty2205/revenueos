@@ -328,7 +328,7 @@ class SalesForecastService:
         if opportunity.expected_close_date is None:
             raise PublicAPIError(
                 "expected_close_required",
-                "Add a canonical expected close date before reviewing this forecast.",
+                "Add an expected close date before reviewing this forecast.",
                 422,
             )
         if not period_start <= opportunity.expected_close_date <= period_end:
@@ -589,7 +589,7 @@ class SalesForecastService:
         if opportunity.expected_close_date is None:
             raise PublicAPIError(
                 "expected_close_required",
-                "Add a canonical expected close date before reviewing this forecast.",
+                "Add an expected close date before reviewing this forecast.",
                 422,
             )
         if not period_start <= opportunity.expected_close_date <= period_end:

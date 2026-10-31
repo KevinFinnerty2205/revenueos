@@ -479,7 +479,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         result,
         result.shareToken
           ? "Published. Copy the new secure link now; Oryntela will not display it again."
-          : "Published as a new immutable revision. The current secure link is unchanged.",
+          : "Published as a new version. The current secure link is unchanged.",
       );
     } catch (reason: unknown) {
       setError(
@@ -581,7 +581,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
 
   if (loading) {
     return (
-      <section role="status" className="form-card">
+      <section id="deal-room" role="status" className="form-card scroll-mt-6">
         Loading Deal Room…
       </section>
     );
@@ -589,7 +589,11 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
 
   if (!workspace) {
     return (
-      <section aria-labelledby="deal-room-title" className="form-card">
+      <section
+        id="deal-room"
+        aria-labelledby="deal-room-title"
+        className="form-card scroll-mt-6"
+      >
         <h2 id="deal-room-title" className="form-legend">
           Customer Deal Room
         </h2>
@@ -610,8 +614,9 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
   if (!workspace.room || !draft) {
     return (
       <section
+        id="deal-room"
         aria-labelledby="deal-room-title"
-        className="rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-6 shadow-sm sm:p-8"
+        className="scroll-mt-6 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-6 shadow-sm sm:p-8"
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Customer collaboration
@@ -673,9 +678,8 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             Opportunity Deal Room
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Buyers see only the immutable revision you explicitly publish. Keep
-            manager notes, forecasts, risks, sales methodology and private
-            evidence out of these fields.
+            Buyers see only the version you publish. Manager notes, forecasts,
+            risks, sales methodology and private evidence stay internal.
           </p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Deal Room status">
@@ -724,8 +728,9 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             New secure buyer link
           </p>
           <p className="mt-1 text-xs leading-5 text-emerald-900">
-            Copy it now. Only its hash is stored, so it cannot be recovered
-            later.
+            Copy it now. Oryntela stores only its hash, so this exact link
+            cannot be retrieved later. If you lose it, rotate the link; the
+            previous link will stop working.
           </p>
           <input
             aria-label="Secure buyer link"
@@ -874,6 +879,11 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             </ol>
           </details>
         ) : null}
+        <p className="mt-4 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-600">
+          A secure buyer link is displayed once when issued and cannot be
+          retrieved later. If it is lost, use Rotate link to issue a replacement
+          and invalidate the previous link.
+        </p>
       </div>
 
       <div className="mt-6 grid gap-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">

@@ -1,10 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BusinessCaseNew } from "@/components/business-case-new";
 import { BusinessCaseReview } from "@/components/business-case-review";
 import { ValueModelAdmin } from "@/components/value-model-admin";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/create/business-cases/case-1",
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () =>
+    new URLSearchParams("accountId=account-1&opportunityId=opportunity-1"),
 }));
 
 function jsonResponse(payload: object, status = 200) {
@@ -164,7 +168,7 @@ describe("ROI and Business Case Builder", () => {
         name: "Northstar Access Business Case",
       }),
     ).toBeVisible();
-    expect(screen.getAllByText("-29.2%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("−29.2%").length).toBeGreaterThan(0);
     expect(
       screen.getAllByText("Not achieved under these assumptions").length,
     ).toBeGreaterThan(0);
@@ -194,7 +198,77 @@ describe("ROI and Business Case Builder", () => {
       "href",
       expect.stringContaining("businessCaseVersionId=case-version-1"),
     );
+    expect(
+      screen.getByRole("link", { name: "Return to Account" }),
+    ).toHaveAttribute("href", "/companies/account-1");
+    expect(
+      screen.getByRole("link", { name: "Return to Opportunity" }),
+    ).toHaveAttribute("href", "/opportunities/opportunity-1");
     expect(screen.queryByText(/you will save/i)).not.toBeInTheDocument();
+  });
+
+  it("describes the initial Business Case action as creating a private draft", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({
+            items: [{ id: "account-1", name: "Northstar Facilities" }],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+            pages: 1,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            items: [
+              {
+                id: "opportunity-1",
+                companyId: "account-1",
+                name: "Access transformation",
+              },
+            ],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+            pages: 1,
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            items: [
+              {
+                id: "model-1",
+                name: "Multi-Site Access Efficiency",
+                description: "A bounded value model.",
+                latestVersion: {
+                  id: "model-version-1",
+                  version: 1,
+                  state: "approved",
+                  definition: { inputs: [inputDefinition], outputs: [] },
+                  formulaEngineVersion: "bounded_decimal_v1",
+                },
+              },
+            ],
+            canManage: true,
+            maxActiveModels: 50,
+          }),
+        ),
+    );
+
+    render(<BusinessCaseNew />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Create draft and review inputs",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/This saves a private draft/i)).toBeVisible();
+    expect(
+      screen.getByText(/does not calculate, approve or share/i),
+    ).toBeVisible();
   });
 
   it("gives administrators a bounded form builder rather than a spreadsheet or JSON editor", async () => {

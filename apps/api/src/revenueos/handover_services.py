@@ -395,7 +395,7 @@ class HandoverService:
         if opportunity.status != "won" or opportunity.archived_at is not None:
             raise PublicAPIError(
                 "handover_opportunity_not_won",
-                "A handover can be approved only while the canonical Opportunity status is Closed Won.",
+                "A handover can be approved only while the Opportunity status is Closed Won.",
                 409,
             )
         blockers = await self._approval_blockers(opportunity, revision)
@@ -621,7 +621,7 @@ class HandoverService:
             HandoverSourceType.OPPORTUNITY,
             opportunity.id,
             HandoverAuthorityType.COMMERCIAL_RECORD,
-            "Canonical Opportunity record",
+            "Opportunity record",
             opportunity_snapshot,
         )
 
@@ -691,7 +691,7 @@ class HandoverService:
                 HandoverSourceType.CONTACT,
                 contact.id,
                 HandoverAuthorityType.SYSTEM_DERIVED,
-                f"Canonical Contact: {full_name}",
+                f"Person: {full_name}",
                 snapshot,
             )
 
@@ -776,7 +776,8 @@ class HandoverService:
                 HandoverItem(
                     id=uuid.uuid4(),
                     text=(
-                        f"Canonical Opportunity value: {opportunity.currency} {_decimal(opportunity.estimated_value)}. "
+                        f"Recorded Opportunity value: {opportunity.currency} "
+                        f"{opportunity.estimated_value:,.2f}. "
                         "This is an Opportunity record, not a contract."
                     ),
                     authority_type=HandoverAuthorityType.COMMERCIAL_RECORD,

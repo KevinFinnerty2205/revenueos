@@ -225,6 +225,8 @@ describe("SellingProfileSettings", () => {
   });
 
   it("retires the approved projection without deleting its history", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
     const current = revision("approved");
     const retired = {
       ...current,
@@ -244,6 +246,9 @@ describe("SellingProfileSettings", () => {
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Retire current profile" }),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Retire the current selling profile?"),
     );
     await screen.findByText(/Members no longer receive it/i);
     fireEvent.click(screen.getByText(/Revision history/));

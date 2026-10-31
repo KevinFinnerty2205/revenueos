@@ -567,7 +567,7 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
   async function deleteEvent() {
     if (
       !window.confirm(
-        "Delete the Event workspace? Promoted Contacts, captured Interactions and Campaigns are preserved.",
+        "Delete the Event workspace? Saved People, captured Interactions and Campaigns are preserved.",
       )
     )
       return;
@@ -772,7 +772,7 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
                 onChange={(value) => setRelationship(value.target.value)}
               >
                 <option value="">All</option>
-                <option value="existing">Existing Contact</option>
+                <option value="existing">Existing Person</option>
                 <option value="new">New attendee</option>
               </select>
             </label>
@@ -836,12 +836,12 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
           <div className="rounded-3xl border border-slate-200 bg-white p-6">
             <h2 className="text-xl font-semibold">Campaign handoff</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Only promoted canonical Contacts can enter a Campaign. Existing
+              Only People already saved in Sales can enter a Campaign. Existing
               Engage suppression and contactability checks still apply.
             </p>
             <p className="mt-3 text-sm font-semibold">
-              {campaignContacts.length} Contact
-              {campaignContacts.length === 1 ? "" : "s"} selected
+              {campaignContacts.length}{" "}
+              {campaignContacts.length === 1 ? "Person" : "People"} selected
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               {campaignContacts.length ? (

@@ -12,15 +12,14 @@ from typing import cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.beta_maintenance import (
-    _delete_document_objects,
     _delete_interaction_batch,
     _delete_meeting_batch,
     _delete_source_database_rows,
-    _delete_visual_objects,
 )
 from revenueos.campaign_services import CampaignService
 from revenueos.config import Settings, get_settings
@@ -3025,7 +3024,7 @@ async def _seed_demo_campaign(
                     recipient_trust="unknown",
                     eligible=False,
                     eligibility_code="no_business_email",
-                    eligibility_reason="This synthetic Contact has no supported business email.",
+                    eligibility_reason="This synthetic Person has no supported business email.",
                     created_at=now - timedelta(days=1),
                 ),
             )
@@ -3240,7 +3239,6 @@ async def reset_demo_data(
     )
 
     _assert_private_demo_settings(active_settings)
-    await reset_owner_demo_extensions(session_factory, organisation_id, active_settings)
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     campaign_ids = demo_campaign_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
@@ -3254,10 +3252,30 @@ async def reset_demo_data(
     source_ids = demo_source_evidence_ids(organisation_id)
     document_ids = [source_ids[f"{label}:source"] for label in DEMO_DOCUMENTS]
     email_ids = [source_ids[f"{label}:source"] for label in DEMO_EMAILS]
-    async with session_factory() as session, session.begin():
-        await set_tenant_database_context(session, organisation_id)
-        if session.get_bind().dialect.name == "postgresql":
-            await session.execute(text("SELECT set_config('app.beta_maintenance', 'approved', true)"))
+
+    async def delete_base_rows(session: AsyncSession) -> tuple[str, ...]:
+        visual_storage_keys = tuple(
+            (
+                await session.scalars(
+                    select(VisualAsset.storage_key).where(
+                        VisualAsset.organisation_id == organisation_id,
+                        VisualAsset.interaction_id.in_(debrief_interaction_ids),
+                        VisualAsset.storage_status != "deleted",
+                    )
+                )
+            ).all()
+        )
+        document_storage_keys = tuple(
+            (
+                await session.scalars(
+                    select(DocumentSource.storage_key).where(
+                        DocumentSource.organisation_id == organisation_id,
+                        DocumentSource.id.in_(document_ids),
+                        DocumentSource.storage_status != "deleted",
+                    )
+                )
+            ).all()
+        )
         owner_manifest = await session.scalar(
             select(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
@@ -3279,10 +3297,8 @@ async def reset_demo_data(
             organisation_id,
             [*meeting_ids, *companion_meeting_ids, google_meeting_id, live_ids["meeting"]],
         )
-        await _delete_visual_objects(session, active_settings, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, list(analytics_interaction_ids))
-        await _delete_document_objects(session, active_settings, organisation_id, document_ids)
         await _delete_source_database_rows(session, organisation_id, document_ids, email_ids)
         await session.execute(
             delete(OpportunityAuditEvent).where(
@@ -3461,6 +3477,20 @@ async def reset_demo_data(
                 BetaSystemEvent.id == owner_demo_base_manifest_id(organisation_id),
             )
         )
+        return tuple(sorted({*visual_storage_keys, *document_storage_keys}))
+
+    try:
+        await reset_owner_demo_extensions(
+            session_factory,
+            organisation_id,
+            active_settings,
+            database_finalize=delete_base_rows,
+        )
+    except IntegrityError as exc:
+        raise ValueError(
+            "Owner demo reset refused because another local record references a manifest-owned "
+            "demo Account, Person or Opportunity. Remove or relink that local record before resetting."
+        ) from exc
     return {"status": "reset", "provider_calls": 0}
 
 

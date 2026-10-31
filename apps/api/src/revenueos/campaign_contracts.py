@@ -57,7 +57,7 @@ class CampaignDraftFields(StrictCampaignModel):
     @model_validator(mode="after")
     def validate_campaign(self) -> Self:
         if len(set(self.contact_ids)) != len(self.contact_ids):
-            raise ValueError("Campaign Contacts must be unique.")
+            raise ValueError("Campaign People must be unique.")
         if len(set(self.send_days)) != len(self.send_days) or any(day < 1 or day > 7 for day in self.send_days):
             raise ValueError("Send days must contain unique ISO weekdays from 1 to 7.")
         if self.send_window_start_minutes >= self.send_window_end_minutes:

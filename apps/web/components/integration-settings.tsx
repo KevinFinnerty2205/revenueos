@@ -273,8 +273,8 @@ export function IntegrationSettings() {
           ? "Simulation connector disconnected. Pending previews and queued simulations were invalidated."
           : connection.connectorKey === "microsoft_365" ||
               connection.connectorKey === "google_workspace"
-            ? `${connection.displayName} disconnected. Future email sending and calendar synchronisation have stopped; bounded historical Oryntela records remain under retention policy.`
-            : `${connection.displayName} disconnected. Provider revocation was attempted, local credentials were deleted, and pending work was cancelled.`,
+            ? `${connection.displayName} disconnected. Future email sending and calendar synchronisation have stopped. Previously saved Oryntela records remain under the retention policy.`
+            : `${connection.displayName} disconnected. Oryntela asked the service to revoke access, removed the saved sign-in and cancelled pending work.`,
       );
     } catch (reason: unknown) {
       setError(
@@ -335,15 +335,15 @@ export function IntegrationSettings() {
   return (
     <section className="form-card" aria-labelledby="integrations-title">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-        Reviewed execution boundary
+        Connection controls
       </p>
       <h2 id="integrations-title" className="mt-2 text-xl font-semibold">
         Integrations
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         Connect the work systems you choose. Oryntela sends customer email only
-        after the required review and approval, keeps mailbox access bounded to
-        Oryntela-managed conversations, and never sends a raw transcript.
+        after the required review and approval, limits mailbox access to
+        conversations managed by Oryntela and never sends a raw transcript.
       </p>
 
       {catalog.length ? (
@@ -400,8 +400,10 @@ export function IntegrationSettings() {
                   </p>
                 ) : (
                   <p className="mt-3 text-sm text-slate-600">
-                    Capabilities:{" "}
-                    {definition.supportedCapabilities.map(humanise).join(", ")}
+                    Available actions:{" "}
+                    {definition.supportedCapabilities
+                      .map(capabilityName)
+                      .join(", ")}
                   </p>
                 )}
                 {connection &&
@@ -438,8 +440,7 @@ export function IntegrationSettings() {
                   </div>
                 ) : connection?.externalAccountName ? (
                   <p className="mt-2 text-sm text-slate-600">
-                    Account: {connection.externalAccountName} (
-                    {connection.externalAccountId})
+                    Account: {connection.externalAccountName}
                   </p>
                 ) : null}
                 {connection?.lastVerifiedAt ? (
@@ -551,9 +552,9 @@ export function IntegrationSettings() {
                           {definition.connectorKey === "microsoft_365"
                             ? "Microsoft grants mail read access because its narrower metadata permission cannot provide reply content."
                             : "Google grants restricted Gmail read-only access because Gmail does not offer a narrower scope that can provide strongly correlated reply content."}{" "}
-                          Oryntela scans a bounded window of Inbox and Sent
-                          message metadata to identify emails tied to Oryntela
-                          sends, then reads the subject and body only for one
+                          Oryntela checks only a limited recent set of Inbox and
+                          Sent message details to find emails tied to Oryntela
+                          sends. It then reads the subject and body only for one
                           strongly matched reply. Unrelated mail content is not
                           read or stored.
                         </dd>
@@ -606,7 +607,7 @@ export function IntegrationSettings() {
                     <p className="mt-2 text-sm leading-6 text-slate-700">
                       {mailbox
                         ? `Disconnecting ${definition.displayName} will stop future Oryntela email sending and calendar synchronisation for this account. Historical Oryntela records will remain according to retention policy.`
-                        : "Disconnecting will cancel pending provider work and invalidate existing previews."}
+                        : "Disconnecting will cancel pending work with this service and invalidate existing previews."}
                     </p>
                     <div className="mt-3 flex gap-2">
                       <button
@@ -760,7 +761,7 @@ function CRMMappingSettings({
         },
       );
       await loadMappings();
-      onMessage(`${providerName} field authority and mapping saved.`);
+      onMessage(`${providerName} field match and update rule saved.`);
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
@@ -835,7 +836,7 @@ function CRMMappingSettings({
         },
       );
       await loadMappings();
-      onMessage(`${providerName} owner mapping saved. Writeback remains off.`);
+      onMessage(`${providerName} owner match saved. CRM updates remain off.`);
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
@@ -860,7 +861,7 @@ function CRMMappingSettings({
         },
       );
       await loadMappings();
-      onMessage("Mappings approved. CRM writeback is still off.");
+      onMessage("Field matches approved. Updates to the CRM are still off.");
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
@@ -888,14 +889,14 @@ function CRMMappingSettings({
       await loadMappings();
       onMessage(
         enabled
-          ? "Reviewed CRM writeback enabled. Every write still requires a preview and confirmation."
-          : "CRM writeback disabled immediately.",
+          ? "Reviewed CRM updates enabled. Every change still requires a preview and confirmation."
+          : "Updates to the CRM stopped immediately.",
       );
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
           ? reason.message
-          : "CRM writeback could not be changed.",
+          : "CRM updates could not be changed.",
       );
     }
   }
@@ -913,14 +914,14 @@ function CRMMappingSettings({
       await loadMappings();
       onMessage(
         enabled
-          ? `${providerName} sync enabled in read-only mapping mode.`
-          : `${providerName} sync and writeback stopped immediately.`,
+          ? `${providerName} sync enabled in read-only mode.`
+          : `${providerName} sync and CRM updates stopped immediately.`,
       );
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
           ? reason.message
-          : "The CRM connector kill switch could not be changed.",
+          : "The CRM connection could not be changed.",
       );
     }
   }
@@ -944,7 +945,7 @@ function CRMMappingSettings({
       await loadMappings();
       onMessage(
         resolution === "provider"
-          ? "The reviewed provider value was applied to Oryntela."
+          ? `The reviewed ${providerName} value was applied to Oryntela.`
           : "The current Oryntela value was kept.",
       );
     } catch (reason: unknown) {
@@ -959,7 +960,7 @@ function CRMMappingSettings({
   return (
     <details className="mt-4 border-t border-slate-100 pt-3">
       <summary className="cursor-pointer text-sm font-bold text-slate-800">
-        CRM sync, ownership and mappings
+        CRM data sync and field matching
       </summary>
       {!account ||
       !opportunity ||
@@ -975,8 +976,8 @@ function CRMMappingSettings({
           onClick={() => void loadMappings()}
         >
           {loading
-            ? `Loading ${providerName} configuration…`
-            : `Load ${providerName} configuration`}
+            ? `Loading ${providerName} settings…`
+            : `Load ${providerName} settings`}
         </button>
       ) : (
         <div className="mt-4 space-y-5">
@@ -988,11 +989,11 @@ function CRMMappingSettings({
               id={`crm-state-${connection.id}`}
               className="text-sm font-bold text-slate-950"
             >
-              Connector state
+              Connection status
             </h4>
             <dl className="mt-2 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
               <div>
-                <dt className="font-bold">Lifecycle</dt>
+                <dt className="font-bold">Setup status</dt>
                 <dd>{humanise(status.lifecycle)}</dd>
               </div>
               <div>
@@ -1012,14 +1013,15 @@ function CRMMappingSettings({
               <div>
                 <dt className="font-bold">Records</dt>
                 <dd>
-                  {status.recordsApplied} applied of {status.recordsSeen} seen
+                  {status.recordsApplied} updated of {status.recordsSeen}{" "}
+                  checked
                 </dd>
               </div>
             </dl>
             <p className="mt-3 text-xs leading-5 text-slate-600">
-              Initial and incremental sync are read-only. Writeback is off by
-              default and every enabled write still requires a fresh preview and
-              explicit confirmation.
+              The first sync and later updates only read from your CRM. Updates
+              back to the CRM are off by default, and every enabled change still
+              requires a fresh preview and confirmation.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -1064,15 +1066,15 @@ function CRMMappingSettings({
                 onClick={() => void setWriteback(!status.writebackEnabled)}
               >
                 {status.writebackEnabled
-                  ? "Turn writeback off"
-                  : "Enable reviewed writeback"}
+                  ? "Stop CRM updates"
+                  : "Enable reviewed CRM updates"}
               </button>
             </div>
           </section>
           <p className="text-xs leading-5 text-slate-600">
-            Mapping is explicit. “Review before update” requires a fresh CRM
-            read and final confirmation. “CRM is source of truth” blocks
-            Oryntela writes for that field.
+            Each field has a clear update rule. “Review before update” checks
+            the latest CRM value and asks for final confirmation. “CRM controls
+            this field” prevents Oryntela from changing it.
           </p>
           <FieldMappingGroup
             title="Account fields"
@@ -1089,7 +1091,7 @@ function CRMMappingSettings({
             onSave={saveField}
           />
           <FieldMappingGroup
-            title="Contact fields"
+            title="People fields"
             entityType="contact"
             fields={CONTACT_FIELDS}
             configuration={contact}
@@ -1207,7 +1209,7 @@ function CRMMappingSettings({
                         {String(conflict.providerValue ?? "Empty")}
                       </p>
                       <p className="mt-1 text-slate-600">
-                        Authority: {humanise(conflict.authority)} · observed{" "}
+                        Update rule: {humanise(conflict.authority)} · found{" "}
                         {new Date(conflict.observedAt).toLocaleString()}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -1305,7 +1307,7 @@ function FieldMappingGroup({
                 </select>
               </label>
               <label className="grid gap-1 text-xs font-bold text-slate-700">
-                Field authority
+                Which system controls this field
                 <select
                   className="text-input"
                   disabled={!current}
@@ -1333,10 +1335,10 @@ function FieldMappingGroup({
                     Review before update
                   </option>
                   <option value="crm_authoritative">
-                    CRM is source of truth
+                    CRM controls this field
                   </option>
                   <option value="revenueos_authoritative">
-                    Oryntela is source of truth
+                    Oryntela controls this field
                   </option>
                 </select>
               </label>
@@ -1346,4 +1348,16 @@ function FieldMappingGroup({
       </div>
     </fieldset>
   );
+}
+
+function capabilityName(capability: string): string {
+  const names: Record<string, string> = {
+    create_activity: "Record activity",
+    read_calendar: "Read calendar",
+    reconcile_email: "Track replies",
+    send_email: "Send email",
+    update_contact: "Update people",
+    update_opportunity: "Update opportunities",
+  };
+  return names[capability] ?? humanise(capability);
 }

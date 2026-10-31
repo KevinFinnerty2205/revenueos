@@ -42,11 +42,14 @@ function shiftAnchor(
 
 function formatMoney(amount: string | null, currency: string): string {
   if (amount === null) return "Unavailable";
-  return new Intl.NumberFormat("en-AU", {
+  const currencyCode = currency.toUpperCase();
+  const value = new Intl.NumberFormat("en-AU", {
     style: "currency",
-    currency,
+    currency: currencyCode,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 0,
   }).format(Number(amount));
+  return `${currencyCode} ${value}`;
 }
 
 function formatDate(value: string): string {
@@ -671,7 +674,8 @@ export function SalesForecast() {
             Next
           </button>
           <p className="ml-auto text-sm font-semibold text-slate-700">
-            {forecast?.period.periodLabel ?? "Selected period"} ·{" "}
+            {forecast?.period.periodLabel ?? "Selected period"} · organisation
+            timezone{" "}
             {forecast?.period.timezone ?? metadata?.organisationTimezone}
           </p>
         </div>
@@ -721,7 +725,7 @@ export function SalesForecast() {
                 value={formatMoney(forecast.actual.amount, forecast.currency)}
                 detail={
                   forecast.actual.calculatedThrough
-                    ? `Canonical won value through ${formatDate(forecast.actual.calculatedThrough)}.`
+                    ? `Closed Won value through ${formatDate(forecast.actual.calculatedThrough)}.`
                     : forecast.actual.state === "upcoming"
                       ? "Upcoming period; no actual yet."
                       : "Actual is unavailable."
@@ -872,7 +876,9 @@ export function SalesForecast() {
               Separate historical baseline
             </h2>
             <p className="mt-1 text-sm leading-6 text-sky-900">
-              {forecast.revenueosBaseline.disclosure}
+              A separate estimate based on how opportunities in the same
+              pipeline and stage have finished historically. Deals without
+              enough history are left out.
             </p>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
               <div>
@@ -900,21 +906,21 @@ export function SalesForecast() {
               <div>
                 <dt className="font-semibold text-sky-950">Method</dt>
                 <dd>
-                  {forecast.revenueosBaseline.lookbackDays}-day history ·
-                  minimum {forecast.revenueosBaseline.minimumSample} final
-                  outcomes per exact stage
+                  Last {forecast.revenueosBaseline.lookbackDays} days · at least{" "}
+                  {forecast.revenueosBaseline.minimumSample} closed outcomes in
+                  the same stage
                 </dd>
               </div>
             </dl>
           </section>
 
           <aside className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-            <strong>Input quality:</strong>{" "}
-            {forecast.inputQuality.eligibleOpportunityCount} eligible ·{" "}
-            {forecast.inputQuality.unvaluedOpportunityCount} unvalued ·{" "}
-            {forecast.inputQuality.missingExpectedCloseCount} missing expected
-            close date · {forecast.inputQuality.insufficientHistoryCount}{" "}
-            without sufficient comparable history.
+            <strong>Coverage:</strong>{" "}
+            {forecast.inputQuality.eligibleOpportunityCount} included ·{" "}
+            {forecast.inputQuality.unvaluedOpportunityCount} without a value ·{" "}
+            {forecast.inputQuality.missingExpectedCloseCount} without a close
+            date · {forecast.inputQuality.insufficientHistoryCount} without
+            enough history.
           </aside>
 
           <section aria-labelledby="deal-review-title">
@@ -980,10 +986,12 @@ export function SalesForecast() {
                 id="calibration-title"
                 className="text-lg font-semibold text-slate-950"
               >
-                Forecast calibration
+                Earlier forecast outcomes
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                {calibration.disclosure}
+                See how often opportunities in each seller category were later
+                won. This helps the team use categories consistently; it does
+                not score salespeople.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {calibration.categories.map((item) => (
@@ -995,18 +1003,36 @@ export function SalesForecast() {
                         ? "Not enough data"
                         : `${item.realisationRate}%`
                     }
-                    detail={`${item.realisedWonCount} realised won of ${item.assessedCount} assessed; rate shown from ${calibration.minimumRateSample}.`}
+                    detail={
+                      item.realisationRate === null
+                        ? `${item.realisedWonCount} of ${item.assessedCount} assessed ${item.assessedCount === 1 ? "opportunity was" : "opportunities were"} won. At least ${calibration.minimumRateSample} are needed before a percentage is shown.`
+                        : `${item.realisedWonCount} of ${item.assessedCount} assessed ${item.assessedCount === 1 ? "opportunity was" : "opportunities were"} won.`
+                    }
                   />
                 ))}
               </div>
             </section>
           ) : null}
 
-          <footer className="text-xs leading-5 text-slate-500">
-            Forecast model {forecast.revenueosBaseline.modelVersion}. This
-            deterministic view does not use AI, methodology scores, Revenue
-            Brain confidence or recommended-action weighting.
-          </footer>
+          <details className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+              How this is calculated
+            </summary>
+            <div className="mt-3 space-y-2">
+              {calibration ? <p>{calibration.disclosure}</p> : null}
+              <p>
+                Historical baseline model:{" "}
+                {forecast.revenueosBaseline.modelVersion};{" "}
+                {forecast.revenueosBaseline.lookbackDays}-day lookback with at
+                least {forecast.revenueosBaseline.minimumSample} final outcomes
+                per pipeline stage.
+              </p>
+              <p>
+                This deterministic view does not use AI, methodology scores,
+                Sales Brain confidence or recommended-action weighting.
+              </p>
+            </div>
+          </details>
         </>
       ) : null}
     </div>

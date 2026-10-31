@@ -8,7 +8,7 @@ import type {
   MethodologySelectionResponse,
   OpportunityStage,
 } from "@revenueos/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
@@ -104,6 +104,8 @@ export function SalesMethodologySettings() {
   const [editing, setEditing] = useState<MethodologyDefinitionSummary | null>(
     null,
   );
+  const builderRef = useRef<HTMLDetailsElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -201,7 +203,7 @@ export function SalesMethodologySettings() {
       );
       setMessage(
         editing
-          ? `Saved ${saved.name} as immutable definition version ${saved.version}.`
+          ? `Saved ${saved.name} as version ${saved.version}. Earlier versions remain available in the history.`
           : `Created ${saved.name}. Select it when your organisation is ready.`,
       );
       resetBuilder();
@@ -246,6 +248,8 @@ export function SalesMethodologySettings() {
     setName(definition.name);
     setDescription(definition.description);
     setFields(definition.fields.map(fromFieldDefinition));
+    if (builderRef.current) builderRef.current.open = true;
+    window.setTimeout(() => nameRef.current?.focus(), 0);
   }
 
   function resetBuilder() {
@@ -285,8 +289,8 @@ export function SalesMethodologySettings() {
         </h2>
         <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">
           Choose one organisation default or none. Methodologies structure
-          evidence; they do not score opportunities, block stages, or execute
-          rules.
+          evidence; they do not score opportunities, block stages or make
+          automatic changes.
         </p>
       </div>
       {error ? (
@@ -334,7 +338,7 @@ export function SalesMethodologySettings() {
               <MethodologyChoice
                 key={definition.id}
                 name={definition.name}
-                description={`${definition.description} · custom v${definition.version}`}
+                description={`${definition.description} · custom · version ${definition.version}`}
                 selected={
                   catalogue.current.customDefinitionId === definition.id
                 }
@@ -346,26 +350,25 @@ export function SalesMethodologySettings() {
         </div>
       </fieldset>
 
-      <div className="mt-8 border-t border-slate-200 pt-7">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-slate-950">
-              Custom methodology builder
-            </h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Guided fields only. This builder captures descriptive fields and
-              discovery questions; it does not automate deal rules.
-            </p>
-          </div>
+      <details ref={builderRef} className="mt-8 border-t border-slate-200 pt-7">
+        <summary className="cursor-pointer text-lg font-bold text-slate-950">
+          Custom methodology builder
+        </summary>
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            Add the evidence fields and discovery questions your team uses. This
+            does not automate or block deal work.
+          </p>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
             {catalogue.custom.length} of {catalogue.customMethodologyLimit}{" "}
-            definitions
+            custom methodologies
           </span>
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-bold text-slate-800">
             Name
             <input
+              ref={nameRef}
               className="form-control mt-2"
               maxLength={80}
               value={name}
@@ -463,12 +466,12 @@ export function SalesMethodologySettings() {
             </button>
           ) : null}
         </div>
-      </div>
+      </details>
 
       {catalogue.custom.length ? (
         <div className="mt-8 border-t border-slate-200 pt-7">
           <h3 className="text-lg font-bold text-slate-950">
-            Custom definitions
+            Custom methodologies
           </h3>
           <ul className="mt-4 space-y-3">
             {catalogue.custom.map((definition) => (
@@ -478,7 +481,7 @@ export function SalesMethodologySettings() {
               >
                 <div>
                   <p className="font-bold text-slate-950">
-                    {definition.name} · v{definition.version}
+                    {definition.name} · version {definition.version}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
                     {definition.fieldCount} fields ·{" "}
@@ -604,7 +607,7 @@ function FieldEditor({
         />
       </label>
       <label className="text-sm font-bold text-slate-800">
-        Stable key
+        Field key
         <input
           className="form-control mt-2"
           maxLength={64}

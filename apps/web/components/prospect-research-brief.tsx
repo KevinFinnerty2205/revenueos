@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  ProspectAvailability,
   ProspectPromotion,
   ProspectResearchBrief,
   ProspectResearchChange,
@@ -46,6 +47,26 @@ const developmentCategories = new Set([
   "trigger",
 ]);
 
+type ExecutionModeState =
+  | { status: "checking"; availability: null }
+  | {
+      status: "ready";
+      availability: ProspectAvailability;
+    }
+  | { status: "unknown"; availability: null };
+
+const supportedExecutionModes = new Set<ProspectAvailability["executionMode"]>([
+  "demo",
+  "credits",
+  "unavailable",
+]);
+const supportedAvailabilityStates = new Set<ProspectAvailability["state"]>([
+  "available",
+  "read_only",
+  "temporarily_unavailable",
+  "not_in_plan",
+]);
+
 function formatDate(value: string | null | undefined): string {
   if (!value) return "Date not available";
   return new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(
@@ -89,6 +110,8 @@ export function ProspectResearchBriefView({
   const [promotionOpen, setPromotionOpen] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [promotion, setPromotion] = useState<ProspectPromotion | null>(null);
+  const [executionModeState, setExecutionModeState] =
+    useState<ExecutionModeState>({ status: "checking", availability: null });
   const confirmationHeading = useRef<HTMLHeadingElement>(null);
   const promotionDialog = useRef<HTMLDivElement>(null);
   const promotionTrigger = useRef<HTMLButtonElement>(null);
@@ -130,6 +153,32 @@ export function ProspectResearchBriefView({
       });
     return () => controller.abort();
   }, [targetId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiRequest<ProspectAvailability>("/api/v1/prospect/availability", {
+      signal: controller.signal,
+    })
+      .then((availability) => {
+        if (
+          !supportedExecutionModes.has(availability.executionMode) ||
+          !supportedAvailabilityStates.has(availability.state)
+        ) {
+          setExecutionModeState({ status: "unknown", availability: null });
+          return;
+        }
+        setExecutionModeState({
+          status: "ready",
+          availability,
+        });
+      })
+      .catch((reason: unknown) => {
+        if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+          setExecutionModeState({ status: "unknown", availability: null });
+        }
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (brief?.status !== "pending" && brief?.status !== "researching") return;
@@ -262,6 +311,62 @@ export function ProspectResearchBriefView({
     );
   }
 
+  if (executionModeState.status === "checking") {
+    return (
+      <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-950">
+          Checking research mode…
+        </h1>
+        <p role="status" className="mt-3 text-sm leading-6 text-slate-600">
+          Research results and actions stay hidden until Oryntela confirms
+          whether this workspace uses the synthetic demo or Credit-backed
+          provider research.
+        </p>
+      </section>
+    );
+  }
+
+  if (executionModeState.status === "unknown") {
+    return (
+      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-7">
+        <h1 className="text-2xl font-semibold text-amber-950">
+          Research mode unavailable
+        </h1>
+        <p role="alert" className="mt-3 text-sm leading-6 text-amber-900">
+          Oryntela could not verify whether research is using the synthetic demo
+          or Credit-backed provider mode. Research results and actions are
+          hidden, and no provider request or Credit action is available.
+        </p>
+        <Link href="/find" className="secondary-button mt-5">
+          Back to Find
+        </Link>
+      </section>
+    );
+  }
+
+  const availability = executionModeState.availability;
+
+  if (
+    availability.executionMode === "unavailable" &&
+    availability.state !== "read_only"
+  ) {
+    return (
+      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-7">
+        <h1 className="text-2xl font-semibold text-amber-950">
+          Company research unavailable
+        </h1>
+        <p role="alert" className="mt-3 text-sm leading-6 text-amber-900">
+          The server reports that research execution is unavailable. Research
+          results and actions remain hidden until a supported mode is confirmed.
+          No provider request or Credit action is available.
+        </p>
+        <Link href="/find" className="secondary-button mt-5">
+          Back to Find
+        </Link>
+      </section>
+    );
+  }
+
   if (!brief) {
     return (
       <p role="status" className="text-sm text-slate-600">
@@ -303,6 +408,9 @@ export function ProspectResearchBriefView({
     brief.status === "pending" || brief.status === "researching";
   const promotedCompanyId =
     promotion?.companyId ?? brief.target.promotedCompanyId;
+  const executionMode = availability.executionMode;
+  const isReadOnly = availability.state === "read_only";
+  const isLocalDemo = executionMode === "demo";
 
   return (
     <article className="space-y-7">
@@ -319,6 +427,7 @@ export function ProspectResearchBriefView({
               Account Research
             </p>
             <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+              {isLocalDemo ? "[DEMO] " : ""}
               {brief.target.name}
             </h1>
             <p className="mt-2 break-all text-sm font-semibold text-brand-secondary">
@@ -338,7 +447,8 @@ export function ProspectResearchBriefView({
               >
                 Open account
               </Link>
-            ) : !isProcessing &&
+            ) : !isReadOnly &&
+              !isProcessing &&
               brief.status !== "failed" &&
               brief.status !== "no_result" &&
               brief.status !== "unknown" &&
@@ -352,25 +462,44 @@ export function ProspectResearchBriefView({
                 Add to Sales
               </button>
             ) : null}
-            {!isProcessing &&
+            {!isReadOnly &&
+            !isProcessing &&
             brief.status !== "failed" &&
+            brief.status !== "not_started" &&
             brief.status !== "unknown" ? (
               <ProspectCreditAction
                 actionCode="PROSPECT_COMPANY_RESEARCH"
+                executionMode={executionMode}
                 className="secondary-button"
                 disabled={refreshing}
-                label={
-                  brief.status === "not_started"
-                    ? "Research company"
-                    : "Refresh research"
-                }
+                label="Refresh research"
                 busyLabel="Starting…"
                 onAuthorised={refresh}
               />
             ) : null}
           </div>
         </div>
-        {brief.status === "failed" ? null : <ResearchStatus brief={brief} />}
+        {isLocalDemo ? (
+          <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">
+            <p className="font-bold">Simulation — no external provider call</p>
+            <p className="mt-1">
+              This owner demo uses deterministic synthetic research. It does not
+              contact a live research provider or consume Credits.
+            </p>
+          </div>
+        ) : null}
+        {isReadOnly ? (
+          <div
+            role="status"
+            className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
+          >
+            <p className="font-bold">Historical research — read only</p>
+            <p className="mt-1">{availability.message}</p>
+          </div>
+        ) : null}
+        {brief.status === "failed" || brief.status === "not_started" ? null : (
+          <ResearchStatus brief={brief} />
+        )}
         {brief.currentRun?.completedAt ? (
           <p className="mt-3 text-xs text-slate-500">
             Research updated {formatDate(brief.currentRun.completedAt)} ·{" "}
@@ -389,7 +518,7 @@ export function ProspectResearchBriefView({
                 href={`/find/${targetId}/people/${returnToPersonId}`}
                 className="primary-button mt-3"
               >
-                Continue adding Contact
+                Continue adding person
               </Link>
             ) : null}
           </div>
@@ -399,7 +528,7 @@ export function ProspectResearchBriefView({
             href={`/find/${targetId}/people/${returnToPersonId}`}
             className="primary-button mt-4"
           >
-            Continue adding Contact
+            Continue adding person
           </Link>
         ) : null}
         {error ? (
@@ -428,17 +557,20 @@ export function ProspectResearchBriefView({
             Ready to research
           </h2>
           <p className="mt-2 text-sm leading-6 text-brand-primary">
-            No research job has been started. Begin a bounded review of
-            permitted public business sources when you are ready.
+            No research job has been started. Review permitted public business
+            sources when you are ready.
           </p>
-          <ProspectCreditAction
-            actionCode="PROSPECT_COMPANY_RESEARCH"
-            className="primary-button mt-5"
-            disabled={refreshing}
-            label="Research company"
-            busyLabel="Starting research…"
-            onAuthorised={refresh}
-          />
+          {!isReadOnly ? (
+            <ProspectCreditAction
+              actionCode="PROSPECT_COMPANY_RESEARCH"
+              executionMode={executionMode}
+              className="primary-button mt-5"
+              disabled={refreshing}
+              label="Research company"
+              busyLabel="Starting research…"
+              onAuthorised={refresh}
+            />
+          ) : null}
         </section>
       ) : brief.status === "failed" ? (
         <section className="rounded-3xl border border-rose-200 bg-rose-50 p-7">
@@ -450,13 +582,16 @@ export function ProspectResearchBriefView({
             company.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <ProspectCreditAction
-              actionCode="PROSPECT_COMPANY_RESEARCH"
-              className="primary-button"
-              label="Try again"
-              busyLabel="Starting…"
-              onAuthorised={refresh}
-            />
+            {!isReadOnly ? (
+              <ProspectCreditAction
+                actionCode="PROSPECT_COMPANY_RESEARCH"
+                executionMode={executionMode}
+                className="primary-button"
+                label="Try again"
+                busyLabel="Starting…"
+                onAuthorised={refresh}
+              />
+            ) : null}
             <a
               href={brief.target.websiteUrl}
               target="_blank"
@@ -530,7 +665,7 @@ export function ProspectResearchBriefView({
             ) : null}
           </ResearchSection>
 
-          <ProspectPeopleSection targetId={targetId} />
+          <ProspectPeopleSection targetId={targetId} readOnly={isReadOnly} />
 
           {recent.length > 0 ? (
             <ResearchSection
@@ -600,7 +735,7 @@ export function ProspectResearchBriefView({
         </>
       )}
 
-      {promotionOpen ? (
+      {promotionOpen && !isReadOnly ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -624,7 +759,7 @@ export function ProspectResearchBriefView({
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {brief.existingCompanyMatch
                 ? `Attach this public research to ${brief.existingCompanyMatch.name}. No duplicate Account will be created.`
-                : "This creates an Oryntela CRM Account using the reviewed company details. It will not create an Opportunity or Contact automatically."}
+                : "This creates an Oryntela CRM Account using the reviewed company details. It will not create an Opportunity or add any people automatically."}
             </p>
             <dl className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm">
               <div>

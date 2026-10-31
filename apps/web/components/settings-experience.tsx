@@ -96,7 +96,7 @@ export function SettingsExperience() {
         title="Settings"
         description={
           isAdmin
-            ? "Manage sales methodology and the private-beta controls for your organisation."
+            ? "Manage your organisation, sales setup, integrations, commercial access and safety controls."
             : "Review your workspace identity and return to the guidance that helps you get started."
         }
       />
@@ -125,17 +125,68 @@ export function SettingsExperience() {
 
       {isAdmin ? (
         <>
+          <nav
+            aria-label="Settings sections"
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+              Go to
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  href: "#company-selling-profile",
+                  label: "Company profile",
+                  detail: "Approved company and offer context",
+                },
+                {
+                  href: "#commercial-settings",
+                  label: "Plan & billing",
+                  detail: "Access, billing and Credits",
+                },
+                {
+                  href: "#sales-settings",
+                  label: "Sales setup",
+                  detail: "Prospect, Engage, CRM and methodology",
+                },
+                {
+                  href: "#workspace-administration",
+                  label: "Team & safety",
+                  detail: "Members, data, integrations and diagnostics",
+                },
+              ].map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-focus"
+                >
+                  <span className="block font-semibold text-slate-950">
+                    {item.label}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    {item.detail}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </nav>
           <SellingProfileSettings />
-          <CommercialPlanSettings />
-          <BillingSubscriptionSettings />
-          <CreditsSettings />
-          <ProspectModuleSettings />
-          <EngageSettings />
-          <CRMSettings />
-          <CRMImportOnboarding />
-          <PipelineSettings />
-          <SalesMethodologySettings />
-          <BetaAdmin currentUserId={me.user.id} />
+          <div id="commercial-settings" className="scroll-mt-6 space-y-8">
+            <CommercialPlanSettings />
+            <BillingSubscriptionSettings />
+            <CreditsSettings />
+          </div>
+          <div id="sales-settings" className="scroll-mt-6 space-y-8">
+            <ProspectModuleSettings />
+            <EngageSettings />
+            <CRMSettings />
+            <CRMImportOnboarding />
+            <PipelineSettings />
+            <SalesMethodologySettings />
+          </div>
+          <div id="workspace-administration" className="scroll-mt-6 space-y-8">
+            <BetaAdmin currentUserId={me.user.id} />
+          </div>
         </>
       ) : (
         <section className="rounded-2xl border border-slate-200 bg-white p-6">

@@ -899,6 +899,7 @@ def test_create_template_plan_generation_review_approval_and_private_download(
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["currentVersion"]["downloadAvailable"] is True
+    assert all(slide["reviewState"] == "ready" for slide in approved.json()["currentVersion"]["slides"])
 
     grant = client.post(f"/api/v1/create/presentations/{presentation['id']}/download-grant")
     assert grant.status_code == 200, grant.text

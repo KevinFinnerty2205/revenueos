@@ -590,7 +590,7 @@ export function VisualEvidenceCapture({
             {visualType === "business_card" ? (
               <p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-950">
                 Business cards can suggest contact details only. Nothing is
-                saved to Contacts and no role is inferred until you confirm it.
+                saved to People and no role is inferred until you confirm it.
               </p>
             ) : null}
             <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">

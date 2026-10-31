@@ -249,7 +249,7 @@ test("reviews provenance, negative/no-payback results and approves the exact cas
   await expect(
     page.getByRole("heading", { name: "Northstar Access Business Case" }),
   ).toBeVisible();
-  await expect(page.getByText("-29.2%").first()).toBeVisible();
+  await expect(page.getByText("−29.2%").first()).toBeVisible();
   await expect(
     page.getByText("Not achieved under these assumptions").first(),
   ).toBeVisible();
@@ -266,7 +266,9 @@ test("reviews provenance, negative/no-payback results and approves the exact cas
     page.getByRole("heading", { name: "Conservative, base and upside" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "One-variable sensitivity" }),
+    page.getByRole("heading", {
+      name: "How one input changes the result",
+    }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Approve Business Case" }).click();
   await expect(
@@ -290,7 +292,7 @@ test("keeps Business Case review legible on a narrow mobile viewport", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/create/business-cases/case-1");
-  await expect(page.getByText("-29.2%").first()).toBeVisible();
+  await expect(page.getByText("−29.2%").first()).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Approve Business Case" }),
   ).toBeVisible();

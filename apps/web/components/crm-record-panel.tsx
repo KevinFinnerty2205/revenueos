@@ -6,6 +6,7 @@ import type {
   CRMRecord,
 } from "@revenueos/shared";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { CRMExternalWritebackPanel } from "@/components/crm-external-writeback-panel";
 import { CRMMergePanel } from "@/components/crm-merge-panel";
@@ -16,15 +17,21 @@ import { onOpportunityChanged } from "@/lib/opportunity-events";
 export function CRMRecordPanel({
   entityType,
   entityId,
+  headingLevel = 1,
+  children,
 }: {
   entityType: CRMEntityType;
   entityId: string;
+  headingLevel?: 1 | 2;
+  children?: ReactNode;
 }) {
   const [record, setRecord] = useState<CRMRecord | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string | boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const entityLabel =
+    entityType === "contact" ? "Person" : humanise(entityType);
 
   const load = useCallback(async () => {
     const next = await apiRequest<CRMRecord>(
@@ -131,22 +138,28 @@ export function CRMRecordPanel({
 
   if (error && !record)
     return (
-      <section className="form-card text-rose-900">
-        <p role="alert">{error}</p>
-        <button
-          type="button"
-          className="secondary-button mt-4"
-          onClick={() => setRetryKey((value) => value + 1)}
-        >
-          Try again
-        </button>
-      </section>
+      <div className="space-y-6">
+        <section className="form-card text-rose-900">
+          <p role="alert">{error}</p>
+          <button
+            type="button"
+            className="secondary-button mt-4"
+            onClick={() => setRetryKey((value) => value + 1)}
+          >
+            Try again
+          </button>
+        </section>
+        {children}
+      </div>
     );
   if (!record)
     return (
-      <p role="status" className="form-card text-sm text-slate-600">
-        Loading CRM record…
-      </p>
+      <div className="space-y-6">
+        <p role="status" className="form-card text-sm text-slate-600">
+          Loading {entityLabel.toLowerCase()} summary…
+        </p>
+        {children}
+      </div>
     );
 
   const editHref =
@@ -160,6 +173,7 @@ export function CRMRecordPanel({
       ? `/companies/${record.mergedIntoEntityId}`
       : `/contacts/${record.mergedIntoEntityId}`
     : null;
+  const RecordHeading = headingLevel === 1 ? "h1" : "h2";
 
   return (
     <div className="space-y-6">
@@ -170,14 +184,14 @@ export function CRMRecordPanel({
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
-              {humanise(entityType)} record
+              {entityLabel} record
             </p>
-            <h1
+            <RecordHeading
               id="crm-record-title"
               className="mt-2 text-3xl font-semibold tracking-tight text-slate-950"
             >
               {record.title}
-            </h1>
+            </RecordHeading>
             <p className="mt-2 text-sm text-slate-600">
               Owned by {record.ownerName} · {recordModeLabel(record.mode)}
             </p>
@@ -261,6 +275,8 @@ export function CRMRecordPanel({
         </dl>
       </section>
 
+      {children}
+
       <CRMMergePanel record={record} onMerged={load} />
 
       {record.mode === "external" &&
@@ -343,55 +359,69 @@ export function CRMRecordPanel({
         </div>
       </details>
 
-      <section className="form-card" aria-labelledby="activity-title">
-        <h2 id="activity-title" className="form-legend">
-          Relationship activity
-        </h2>
-        <p className="mt-2 text-sm text-slate-600">
-          A recent, bounded view of existing Interactions, Outreach, Tasks,
-          Events and linked Opportunities.
-        </p>
-        {record.activity.length ? (
-          <ol className="mt-5 divide-y divide-slate-100">
-            {record.activity.map((item) => (
-              <li key={item.id} className="py-4 first:pt-0">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
-                      {item.sourceLabel}
-                    </p>
-                    {item.href ? (
-                      <Link
-                        href={item.href}
-                        className="mt-1 block font-semibold text-slate-950 hover:text-brand-secondary"
-                      >
-                        {item.title}
-                      </Link>
-                    ) : (
-                      <p className="mt-1 font-semibold text-slate-950">
-                        {item.title}
+      <details className="form-card group">
+        <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
+          <span className="flex items-center justify-between gap-4">
+            <span>
+              Relationship activity
+              <span className="mt-1 block text-sm font-normal text-slate-600">
+                Recent Interactions, Outreach, Tasks, Events and linked
+                Opportunities.
+              </span>
+            </span>
+            <span aria-hidden="true" className="text-brand-secondary">
+              <span className="group-open:hidden">Show</span>
+              <span className="hidden group-open:inline">Hide</span>
+            </span>
+          </span>
+        </summary>
+        <section
+          className="mt-6 border-t border-slate-200 pt-6"
+          aria-labelledby="activity-title"
+        >
+          <h2 id="activity-title" className="sr-only">
+            Relationship activity
+          </h2>
+          {record.activity.length ? (
+            <ol className="divide-y divide-slate-100">
+              {record.activity.map((item) => (
+                <li key={item.id} className="py-4 first:pt-0">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
+                        {item.sourceLabel}
                       </p>
-                    )}
-                    <p className="mt-1 text-sm text-slate-600">
-                      {item.detail ?? "Recorded activity"}
-                    </p>
+                      {item.href ? (
+                        <Link
+                          href={item.href}
+                          className="mt-1 block font-semibold text-slate-950 hover:text-brand-secondary"
+                        >
+                          {item.title}
+                        </Link>
+                      ) : (
+                        <p className="mt-1 font-semibold text-slate-950">
+                          {item.title}
+                        </p>
+                      )}
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.detail ?? "Recorded activity"}
+                      </p>
+                    </div>
+                    <time
+                      className="shrink-0 text-xs text-slate-500"
+                      dateTime={item.occurredAt}
+                    >
+                      {formatDate(item.occurredAt)}
+                    </time>
                   </div>
-                  <time
-                    className="shrink-0 text-xs text-slate-500"
-                    dateTime={item.occurredAt}
-                  >
-                    {formatDate(item.occurredAt)}
-                  </time>
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="mt-4 text-sm text-slate-500">
-            No related activity yet.
-          </p>
-        )}
-      </section>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-slate-500">No related activity yet.</p>
+          )}
+        </section>
+      </details>
 
       <details className="form-card group">
         <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">

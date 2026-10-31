@@ -2,6 +2,7 @@
 
 import type {
   ContactProspectResearchLink,
+  ProspectAvailability,
   ProspectBuyingRoleHypothesis,
   ProspectPersonDiscovery,
   ProspectPersonPromotion,
@@ -29,7 +30,13 @@ function formatDate(value: string | null | undefined): string {
   );
 }
 
-export function ProspectPeopleSection({ targetId }: { targetId: string }) {
+export function ProspectPeopleSection({
+  targetId,
+  readOnly = false,
+}: {
+  targetId: string;
+  readOnly?: boolean;
+}) {
   const [discovery, setDiscovery] = useState<ProspectPersonDiscovery | null>(
     null,
   );
@@ -90,21 +97,23 @@ export function ProspectPeopleSection({ targetId }: { targetId: string }) {
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
             Public professional context for likely relevant functions. These
-            people are not Contacts until you explicitly add them to Sales.
+            people are not added to Sales until you explicitly save them.
           </p>
         </div>
-        <button
-          type="button"
-          className="secondary-button shrink-0"
-          disabled={discovering}
-          onClick={() => void discover()}
-        >
-          {discovering
-            ? "Finding people…"
-            : discovery?.people.length
-              ? "Refresh people"
-              : "Find relevant people"}
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            className="secondary-button shrink-0"
+            disabled={discovering}
+            onClick={() => void discover()}
+          >
+            {discovering
+              ? "Finding people…"
+              : discovery?.people.length
+                ? "Refresh people"
+                : "Find relevant people"}
+          </button>
+        ) : null}
       </div>
 
       {loading ? (
@@ -168,9 +177,11 @@ export function ProspectPeopleSection({ targetId }: { targetId: string }) {
                   href={`/find/${targetId}/people/${person.id}`}
                   className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
                 >
-                  {person.researchStatus === "not_started"
-                    ? "Research person"
-                    : "View professional research"}
+                  {readOnly
+                    ? "View person"
+                    : person.researchStatus === "not_started"
+                      ? "Research person"
+                      : "View professional research"}
                 </Link>
               </div>
             </article>
@@ -234,6 +245,18 @@ const contextCategories = new Set([
   "conversation_context",
 ]);
 
+type PersonAvailabilityState =
+  | { status: "checking"; availability: null }
+  | { status: "ready"; availability: ProspectAvailability }
+  | { status: "unknown"; availability: null };
+
+const supportedPersonExecutionModes = new Set<
+  ProspectAvailability["executionMode"]
+>(["demo", "credits", "unavailable"]);
+const supportedPersonAvailabilityStates = new Set<
+  ProspectAvailability["state"]
+>(["available", "read_only", "temporarily_unavailable", "not_in_plan"]);
+
 export function ProspectPersonResearchView({ personId }: { personId: string }) {
   const router = useRouter();
   const [brief, setBrief] = useState<ProspectPersonResearchBrief | null>(null);
@@ -245,6 +268,11 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   );
   const [companyPromotionRequired, setCompanyPromotionRequired] =
     useState(false);
+  const [availabilityState, setAvailabilityState] =
+    useState<PersonAvailabilityState>({
+      status: "checking",
+      availability: null,
+    });
   const dialogHeading = useRef<HTMLHeadingElement>(null);
   const promotionDialog = useRef<HTMLDivElement>(null);
   const promotionTrigger = useRef<HTMLButtonElement>(null);
@@ -295,6 +323,29 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   }, [personId]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    apiRequest<ProspectAvailability>("/api/v1/prospect/availability", {
+      signal: controller.signal,
+    })
+      .then((availability) => {
+        if (
+          !supportedPersonExecutionModes.has(availability.executionMode) ||
+          !supportedPersonAvailabilityStates.has(availability.state)
+        ) {
+          setAvailabilityState({ status: "unknown", availability: null });
+          return;
+        }
+        setAvailabilityState({ status: "ready", availability });
+      })
+      .catch((reason: unknown) => {
+        if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+          setAvailabilityState({ status: "unknown", availability: null });
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
     if (brief?.status !== "pending" && brief?.status !== "researching") return;
     const timer = window.setInterval(() => void load(), 1_500);
     return () => window.clearInterval(timer);
@@ -339,12 +390,18 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
     () => new Map(brief?.sources.map((source) => [source.id, source]) ?? []),
     [brief?.sources],
   );
+  const mutationsAllowed =
+    availabilityState.status === "ready" &&
+    availabilityState.availability.state === "available" &&
+    availabilityState.availability.enabled &&
+    availabilityState.availability.executionMode !== "unavailable";
 
   async function queueResearch(
     refresh: boolean,
     creditQuoteId: string | null,
     idempotencyKey: string,
   ): Promise<boolean> {
+    if (!mutationsAllowed) return false;
     setWorking(true);
     setError(null);
     setCompanyPromotionRequired(false);
@@ -382,7 +439,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
     hypothesis: ProspectBuyingRoleHypothesis,
     reviewState: "relevant" | "not_relevant",
   ) {
-    if (!brief) return;
+    if (!brief || !mutationsAllowed) return;
     setWorking(true);
     setError(null);
     try {
@@ -412,6 +469,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
     duplicateAction?: "attach_research" | "create_separate",
     existingContactId?: string,
   ) {
+    if (!mutationsAllowed) return;
     setWorking(true);
     setError(null);
     setCompanyPromotionRequired(false);
@@ -463,10 +521,10 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   }
 
   async function deleteResearch() {
-    if (!brief) return;
+    if (!brief || !mutationsAllowed) return;
     if (
       !window.confirm(
-        "Delete this public professional research? Any promoted Contact will be preserved.",
+        "Delete this public professional research? Any saved Person will be preserved.",
       )
     )
       return;
@@ -492,6 +550,57 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
         </h1>
         <p role="alert" className="mt-3 text-sm text-rose-900">
           {error}
+        </p>
+      </section>
+    );
+  }
+  if (availabilityState.status === "checking") {
+    return (
+      <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-950">
+          Checking research mode…
+        </h1>
+        <p role="status" className="mt-3 text-sm leading-6 text-slate-600">
+          Professional research and actions stay hidden until Oryntela confirms
+          this workspace’s research access.
+        </p>
+      </section>
+    );
+  }
+  if (availabilityState.status === "unknown") {
+    return (
+      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-7">
+        <h1 className="text-2xl font-semibold text-amber-950">
+          Research mode unavailable
+        </h1>
+        <p role="alert" className="mt-3 text-sm leading-6 text-amber-900">
+          Oryntela could not verify access to this professional research.
+          Historical results and actions are hidden, and no provider request or
+          Credit action is available.
+        </p>
+      </section>
+    );
+  }
+
+  const availability = availabilityState.availability;
+  const isReadOnly = availability.state === "read_only";
+
+  if (
+    !isReadOnly &&
+    (availability.state !== "available" ||
+      !availability.enabled ||
+      availability.executionMode === "unavailable")
+  ) {
+    return (
+      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-7">
+        <h1 className="text-2xl font-semibold text-amber-950">
+          Professional research unavailable
+        </h1>
+        <p role="alert" className="mt-3 text-sm leading-6 text-amber-900">
+          The server reports that professional research is unavailable.
+          Historical results and actions remain hidden until authorised read
+          access is confirmed. No provider request or Credit action is
+          available.
         </p>
       </section>
     );
@@ -551,9 +660,10 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!hasResearch && !outcomeRequiresResolution ? (
+            {mutationsAllowed && !hasResearch && !outcomeRequiresResolution ? (
               <ProspectCreditAction
                 actionCode="PROSPECT_PERSON_RESEARCH"
+                executionMode={availability.executionMode}
                 className="primary-button"
                 disabled={working}
                 label={
@@ -566,9 +676,13 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
                   queueResearch(false, creditQuoteId, idempotencyKey)
                 }
               />
-            ) : hasResearch && !processing && !outcomeRequiresResolution ? (
+            ) : mutationsAllowed &&
+              hasResearch &&
+              !processing &&
+              !outcomeRequiresResolution ? (
               <ProspectCreditAction
                 actionCode="PROSPECT_PERSON_RESEARCH"
+                executionMode={availability.executionMode}
                 className="secondary-button"
                 disabled={working}
                 label="Refresh research"
@@ -578,7 +692,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
                 }
               />
             ) : null}
-            {canPromote && !contactId ? (
+            {mutationsAllowed && canPromote && !contactId ? (
               <button
                 ref={promotionTrigger}
                 type="button"
@@ -586,16 +700,25 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
                 disabled={working}
                 onClick={() => setPromotionOpen(true)}
               >
-                Add to Sales as Contact
+                Add to Sales as Person
               </button>
             ) : null}
             {contactId ? (
               <Link href={`/contacts/${contactId}`} className="primary-button">
-                Open Contact
+                Open Person
               </Link>
             ) : null}
           </div>
         </div>
+        {isReadOnly ? (
+          <div
+            role="status"
+            className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
+          >
+            <p className="font-bold">Historical research — read only</p>
+            <p className="mt-1">{availability.message}</p>
+          </div>
+        ) : null}
         <div
           role="status"
           className={`mt-5 rounded-xl px-4 py-3 text-sm ${
@@ -632,10 +755,10 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
             {error}
           </p>
         ) : null}
-        {companyPromotionRequired ? (
+        {mutationsAllowed && companyPromotionRequired ? (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-semibold">
-              Save the Account first, then continue with this Contact.
+              Save the Account first, then continue with this Person.
             </p>
             <Link
               className="primary-button mt-3"
@@ -657,7 +780,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           </h2>
           <p className="mt-2 text-sm leading-6 text-brand-primary">
             Oryntela is checking permitted business sources. It will not create
-            a Contact, outreach or customer evidence.
+            a Person, outreach or customer evidence.
           </p>
         </section>
       ) : brief.status === "unknown" ? (
@@ -680,7 +803,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
             No reliable professional result
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-700">
-            No supported professional facts were returned, so no Contact,
+            No supported professional facts were returned, so no Person,
             buying-role claim or customer Evidence was created.
           </p>
         </section>
@@ -691,7 +814,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           </h2>
           <p className="mt-2 text-sm leading-6 text-rose-900">
             Oryntela could not establish reliable public professional context.
-            No Contact or outreach was created.
+            No Person or outreach was created.
           </p>
         </section>
       ) : hasResearch ? (
@@ -745,33 +868,37 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
                       sourceIds={hypothesis.sourceIds}
                       sourceById={sourceById}
                     />
-                    <div
-                      className="mt-4 flex flex-wrap gap-2"
-                      aria-label={`Review ${humanise(hypothesis.role)}`}
-                    >
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={
-                          working || hypothesis.reviewState === "relevant"
-                        }
-                        onClick={() => void reviewRole(hypothesis, "relevant")}
+                    {mutationsAllowed ? (
+                      <div
+                        className="mt-4 flex flex-wrap gap-2"
+                        aria-label={`Review ${humanise(hypothesis.role)}`}
                       >
-                        Mark relevant
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={
-                          working || hypothesis.reviewState === "not_relevant"
-                        }
-                        onClick={() =>
-                          void reviewRole(hypothesis, "not_relevant")
-                        }
-                      >
-                        Not relevant
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={
+                            working || hypothesis.reviewState === "relevant"
+                          }
+                          onClick={() =>
+                            void reviewRole(hypothesis, "relevant")
+                          }
+                        >
+                          Mark relevant
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={
+                            working || hypothesis.reviewState === "not_relevant"
+                          }
+                          onClick={() =>
+                            void reviewRole(hypothesis, "not_relevant")
+                          }
+                        >
+                          Not relevant
+                        </button>
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>
@@ -875,16 +1002,18 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
               ))}
             </div>
           </details>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className="text-sm font-bold text-rose-700 hover:text-rose-900"
-              disabled={working}
-              onClick={() => void deleteResearch()}
-            >
-              Delete professional research
-            </button>
-          </div>
+          {mutationsAllowed ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="text-sm font-bold text-rose-700 hover:text-rose-900"
+                disabled={working}
+                onClick={() => void deleteResearch()}
+              >
+                Delete professional research
+              </button>
+            </div>
+          ) : null}
         </>
       ) : (
         <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
@@ -893,12 +1022,12 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Start a bounded review of permitted public professional sources. No
-            Contact or outreach will be created.
+            Person or outreach will be created.
           </p>
         </section>
       )}
 
-      {promotionOpen ? (
+      {promotionOpen && mutationsAllowed ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -918,14 +1047,14 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
               Add {brief.person.displayName} to Sales?
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              This explicitly creates or links a canonical Contact. It will not
+              This explicitly creates or links a Person record. It will not
               create an Opportunity, stakeholder role, Methodology answer,
               Revenue Brain fact or outreach.
             </p>
             {brief.existingContactMatches.length ? (
               <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <p className="text-sm font-bold text-amber-950">
-                  Possible existing Contact
+                  Possible existing Person
                 </p>
                 <div className="mt-3 space-y-3">
                   {brief.existingContactMatches.map((match) => (
@@ -984,8 +1113,8 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
                 {working
                   ? "Saving…"
                   : brief.existingContactMatches.length
-                    ? "Create separate Contact"
-                    : "Add Contact"}
+                    ? "Create separate Person"
+                    : "Add Person"}
               </button>
             </div>
           </div>

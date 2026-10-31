@@ -72,7 +72,7 @@ const pipeline = {
 describe("PipelineSettings", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("shows bounded native configuration and creates a pipeline", async () => {
+  it("shows plain-language pipeline guidance and creates a pipeline", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (init?.method === "POST")
@@ -86,6 +86,9 @@ describe("PipelineSettings", () => {
 
     expect(
       await screen.findByRole("heading", { name: "Pipelines" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Changing these stages does not set win probabilities/i),
     ).toBeVisible();
     expect(screen.getByDisplayValue("Discovery")).toBeVisible();
     expect(screen.getByText("1 current opportunities")).toBeVisible();
@@ -124,7 +127,7 @@ describe("PipelineSettings", () => {
     });
   });
 
-  it("explains that externally managed pipeline definitions are read-only", async () => {
+  it("explains that externally managed pipeline history is read-only", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
@@ -168,7 +171,7 @@ describe("PipelineSettings", () => {
 
     expect(
       await screen.findByText(
-        "An organisation administrator manages native pipeline definitions.",
+        "Only an organisation administrator can change these pipelines.",
       ),
     ).toBeVisible();
     expect(

@@ -307,9 +307,12 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
         <h2 id="organisation-settings-title" className="text-2xl font-semibold">
           {overview.organisation.name}
         </h2>
-        <p className="mt-2 break-all text-xs text-slate-500">
-          Organisation ID: {overview.organisation.id}
-        </p>
+        <details className="mt-2 text-xs text-slate-500">
+          <summary className="w-fit cursor-pointer font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus">
+            Technical organisation identifier
+          </summary>
+          <p className="mt-2 break-all">{overview.organisation.id}</p>
+        </details>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <Metric
             label="Active members"
@@ -411,11 +414,28 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
         </ul>
       </section>
 
-      <section className="form-card" aria-labelledby="flags-title">
-        <h2 id="flags-title" className="text-xl font-semibold">
-          Server feature flags
-        </h2>
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+      <details className="form-card group">
+        <summary className="cursor-pointer list-none focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
+          <span className="flex items-center justify-between gap-4">
+            <span>
+              <span className="block text-xl font-semibold text-slate-950">
+                Technical diagnostics
+              </span>
+              <span className="mt-1 block text-sm font-normal text-slate-600">
+                Server capability flags for troubleshooting. Most administrators
+                do not need these details.
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-sm font-bold text-brand-secondary"
+            >
+              <span className="group-open:hidden">Show</span>
+              <span className="hidden group-open:inline">Hide</span>
+            </span>
+          </span>
+        </summary>
+        <dl className="mt-5 grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2">
           {Object.entries(overview.featureFlags).map(([name, enabled]) => (
             <div key={name} className="rounded-2xl bg-slate-50 p-4">
               <dt className="text-sm font-semibold">
@@ -427,7 +447,7 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
             </div>
           ))}
         </dl>
-      </section>
+      </details>
 
       <section className="form-card" aria-labelledby="data-requests-title">
         <h2 id="data-requests-title" className="text-xl font-semibold">
@@ -527,10 +547,26 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
         </section>
       ) : null}
 
-      <section className="form-card" aria-labelledby="events-title">
-        <h2 id="events-title" className="text-xl font-semibold">
-          Recent safe system events
-        </h2>
+      <details className="form-card group">
+        <summary className="cursor-pointer list-none focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
+          <span className="flex items-center justify-between gap-4">
+            <span>
+              <span className="block text-xl font-semibold text-slate-950">
+                Recent system events
+              </span>
+              <span className="mt-1 block text-sm font-normal text-slate-600">
+                Content-free administration history for troubleshooting.
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="text-sm font-bold text-brand-secondary"
+            >
+              <span className="group-open:hidden">Show</span>
+              <span className="hidden group-open:inline">Hide</span>
+            </span>
+          </span>
+        </summary>
         <ul className="mt-4 space-y-2 text-sm text-slate-600">
           {overview.recentEvents.length ? (
             overview.recentEvents.map((event) => (
@@ -543,7 +579,7 @@ export function BetaAdmin({ currentUserId }: { currentUserId: string }) {
             <li>No recent beta events.</li>
           )}
         </ul>
-      </section>
+      </details>
 
       {status ? (
         <p

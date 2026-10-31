@@ -95,7 +95,7 @@ export function ManagerPipelineView({
           Manager view · deals needing attention
         </h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">
-          Deal conditions are ordered by close date, Actions, evidence and
+          Deal conditions are ordered by close date, open actions, evidence and
           forecast state. There is no health score or people ranking.
         </p>
         {data.summaries.length ? (
@@ -181,7 +181,7 @@ export function ManagerPipelineView({
             No deals need attention
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Nothing currently matches the selected deal-attention conditions.
+            No deals need attention with these filters.
           </p>
         </div>
       )}
@@ -195,11 +195,14 @@ function forecast(category: SalesForecastCategory | undefined) {
 
 function formatMoney(value: string | null, currency: string | null) {
   if (value === null || currency === null) return "Value not set";
-  return new Intl.NumberFormat("en-AU", {
+  const currencyCode = currency.toUpperCase();
+  const amount = new Intl.NumberFormat("en-AU", {
     style: "currency",
-    currency,
+    currency: currencyCode,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 0,
   }).format(Number(value));
+  return `${currencyCode} ${amount}`;
 }
 
 function formatDate(value: string | null) {

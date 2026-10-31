@@ -17,7 +17,7 @@ export function AppShell({ children, authState }: AppShellProps) {
     <div className="min-h-screen bg-brand-background text-slate-950">
       {auth.mode === "mock" && auth.authenticated ? <DevAuthBanner /> : null}
       <div className="mx-auto flex min-h-[calc(100vh-33px)] max-w-[1440px] flex-col lg:flex-row">
-        <aside className="border-b border-slate-200 bg-white/80 px-5 py-4 lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:px-6 lg:py-8">
+        <aside className="border-b border-slate-200 bg-white/80 px-5 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-6 lg:py-8">
           <div className="flex items-center justify-between gap-4 lg:block">
             <Link
               href="/dashboard"

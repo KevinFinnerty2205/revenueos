@@ -55,7 +55,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
         setError(
           reason instanceof Error
             ? reason.message
-            : "The Contact workspace could not be loaded.",
+            : "The person workspace could not be loaded.",
         );
       })
       .finally(() => {
@@ -289,13 +289,13 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
       }
       setPreview(null);
       setNotice(
-        "Contact marked Do not contact. Approval and sending are now blocked.",
+        "Person marked Do not contact. Approval and sending are now blocked.",
       );
     } catch (reason: unknown) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The Contact could not be suppressed.",
+          : "The person could not be marked Do not contact.",
       );
     } finally {
       setBusy(null);
@@ -308,7 +308,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
         role="status"
         className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
       >
-        Loading Contact outreach…
+        Loading person outreach…
       </p>
     );
   }
@@ -317,13 +317,13 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
     return (
       <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6">
         <h2 className="text-xl font-semibold text-rose-950">
-          Contact unavailable
+          Person unavailable
         </h2>
         <p role="alert" className="mt-2 text-sm text-rose-900">
-          {error ?? "The Contact workspace could not be loaded."}
+          {error ?? "The person workspace could not be loaded."}
         </p>
         <Link href="/contacts" className="secondary-button mt-4">
-          Return to Contacts
+          Return to People
         </Link>
       </section>
     );
@@ -342,10 +342,10 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
-            Contact
+            Person
           </p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
-            Contact and outreach
+            Outreach
           </h2>
           <p className="mt-3 text-base text-slate-600">
             {workspace.jobTitle ? `${workspace.jobTitle} · ` : ""}
@@ -362,10 +362,10 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
             href={`/contacts/${contactId}/edit`}
             className="secondary-button"
           >
-            Edit Contact
+            Edit person
           </Link>
           <Link href="/contacts" className="secondary-button">
-            All Contacts
+            All people
           </Link>
         </div>
       </header>
@@ -391,7 +391,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
         <aside className="space-y-5">
           <section className="form-card" aria-labelledby="contactability-title">
             <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
-              Business contact
+              Person
             </p>
             <h2 id="contactability-title" className="form-legend mt-2">
               Contactability
@@ -861,7 +861,7 @@ function OutreachHistory({
       </h2>
       {items.length === 0 ? (
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          No outreach has been created for this Contact.
+          No outreach has been created for this person.
         </p>
       ) : (
         <ul className="mt-4 space-y-3">

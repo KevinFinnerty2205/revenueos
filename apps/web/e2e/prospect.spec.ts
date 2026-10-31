@@ -693,7 +693,9 @@ test("flagship account research path is sourced, refreshable and explicitly prom
 
   await page.getByRole("button", { name: "Add to Sales" }).click();
   await expect(
-    page.getByText(/will not create an Opportunity or Contact/i),
+    page.getByText(
+      /will not create an Opportunity or add any people automatically/i,
+    ),
   ).toBeVisible();
   if (process.env.CAPTURE_WO_026_SCREENSHOTS === "1") {
     await page.screenshot({
@@ -763,7 +765,7 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
             companyId: "company-northstar",
             prospectPersonId: prospectPerson.id,
             message:
-              "Public professional research was linked to the existing Contact. No canonical fields were overwritten.",
+              "Public professional research was linked to the existing Person. No saved fields were overwritten.",
           },
         });
         return;
@@ -849,7 +851,7 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
   await expect(
     page.getByRole("heading", { name: "People worth understanding" }),
   ).toBeVisible();
-  await expect(page.getByText(/not Contacts until/i)).toBeVisible();
+  await expect(page.getByText(/not added to Sales until/i)).toBeVisible();
   await page.getByRole("button", { name: "Find relevant people" }).click();
   await expect(page.getByText("Jane Smith")).toBeVisible();
   await expect(page.getByText(/No likely security stakeholder/i)).toBeVisible();
@@ -919,8 +921,8 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
 
-  await page.getByRole("button", { name: "Add to Sales as Contact" }).click();
-  await expect(page.getByText("Possible existing Contact")).toBeVisible();
+  await page.getByRole("button", { name: "Add to Sales as Person" }).click();
+  await expect(page.getByText("Possible existing Person")).toBeVisible();
   await expect(
     page.getByText(/will not create an Opportunity, stakeholder role/i),
   ).toBeVisible();
@@ -930,10 +932,10 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
     });
   }
   await page.getByRole("button", { name: "Attach research" }).click();
-  await expect(page.getByRole("link", { name: "Open Contact" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Person" })).toBeVisible();
   expect(promoted).toBe(true);
   expect(unexpectedMutations).toEqual([]);
-  await page.getByRole("link", { name: "Open Contact" }).click();
+  await page.getByRole("link", { name: "Open Person" }).click();
   await expect(page).toHaveURL("/contacts/contact-jane");
   await expect(
     page.getByRole("heading", { name: "Public professional research" }),

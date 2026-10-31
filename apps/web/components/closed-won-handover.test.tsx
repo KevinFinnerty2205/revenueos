@@ -85,7 +85,7 @@ function revision(overrides: Partial<HandoverRevision> = {}): HandoverRevision {
         sourceVersionId: null,
         sourceVersion: null,
         authorityType: "commercial_record",
-        label: "Canonical Opportunity record",
+        label: "Opportunity record",
         sourceFingerprint: "a".repeat(64),
         pinnedAt: "2026-09-08T00:00:00Z",
       },
@@ -159,6 +159,10 @@ describe("ClosedWonHandover", () => {
         name: "Prepare a Closed-Won Handover",
       }),
     ).toBeVisible();
+    expect(screen.getByText(/Handover readiness:/i)).toBeVisible();
+    expect(
+      screen.getByText(/Final approval remains unavailable/i),
+    ).toBeVisible();
     expect(screen.getByText(/does not call an AI provider/i)).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", { name: "Prepare handover draft" }),
@@ -173,6 +177,71 @@ describe("ClosedWonHandover", () => {
       "/api/v1/opportunities/opportunity-1/handover/prepare",
       { method: "POST" },
     );
+  });
+
+  it("shows Closed Won readiness and human-readable generated owners", async () => {
+    mockedApiRequest.mockResolvedValueOnce(
+      workspace({
+        opportunityStatus: "won",
+        activeRevision: revision({
+          status: "approved",
+          content: {
+            ...emptyContent,
+            nextActions: [
+              {
+                id: "action-1",
+                text: "Schedule the implementation kickoff.",
+                authorityType: "seller_confirmed",
+                sourceIds: [],
+                confirmedByUserId: "user-1",
+                confirmedAt: "2026-09-08T01:00:00Z",
+                owner: "our_team",
+                dueDate: "2026-09-15",
+                actionStatus: "in_progress",
+                riskKind: null,
+              },
+            ],
+          },
+        }),
+      }),
+    );
+
+    render(<ClosedWonHandover opportunityId="opportunity-1" />);
+
+    expect(await screen.findByText(/Closed Won:/i)).toBeVisible();
+    expect(screen.getByText("Our team")).toBeVisible();
+    expect(screen.getByText("In progress")).toBeVisible();
+    expect(screen.queryByText("our_team")).not.toBeInTheDocument();
+  });
+
+  it("keeps an unassigned editable action owner empty", async () => {
+    mockedApiRequest.mockResolvedValueOnce(
+      workspace({
+        activeRevision: revision({
+          content: {
+            ...emptyContent,
+            nextActions: [
+              {
+                id: "action-1",
+                text: "Schedule the implementation kickoff.",
+                authorityType: "seller_confirmed",
+                sourceIds: [],
+                confirmedByUserId: "user-1",
+                confirmedAt: "2026-09-08T01:00:00Z",
+                owner: null,
+                dueDate: null,
+                actionStatus: "open",
+                riskKind: null,
+              },
+            ],
+          },
+        }),
+      }),
+    );
+
+    render(<ClosedWonHandover opportunityId="opportunity-1" />);
+
+    expect(await screen.findByLabelText("Owner")).toHaveValue("");
   });
 
   it("requires explicit review confirmation before refreshing pinned sources", async () => {
@@ -255,7 +324,7 @@ describe("ClosedWonHandover", () => {
     );
   });
 
-  it("blocks approval for inference and while the canonical Opportunity remains open", async () => {
+  it("blocks approval for inference while the opportunity remains open", async () => {
     const inferredItem = {
       ...revision().content.executiveSummary[0]!,
       id: "inference-1",
@@ -283,7 +352,9 @@ describe("ClosedWonHandover", () => {
     ).toBeVisible();
     expect(screen.getByText(/confirm or remove the inference/i)).toBeVisible();
     expect(
-      screen.getByText(/canonical Opportunity status is Closed Won/i),
+      screen.getByText(
+        /^Approval is unavailable until the opportunity is Closed Won\.$/i,
+      ),
     ).toBeVisible();
     fireEvent.click(
       screen.getByRole("checkbox", { name: /I reviewed the claims/i }),

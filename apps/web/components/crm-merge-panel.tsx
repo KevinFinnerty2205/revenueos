@@ -174,10 +174,10 @@ export function CRMMergePanel({
             ) : (
               <>
                 <p className="mt-2 text-sm leading-6 text-amber-950">
-                  Related Opportunities, Contacts, Interactions, Actions,
-                  history and provenance move to the survivor. Suppression
-                  remains restrictive. The source becomes an archived tombstone
-                  with a survivor link.
+                  Related Opportunities, People, Interactions, Actions, history
+                  and provenance move to the survivor. Suppression remains
+                  restrictive. The source becomes an archived tombstone with a
+                  survivor link.
                 </p>
                 {preview.conflicts.length ? (
                   <fieldset className="mt-5 space-y-4">

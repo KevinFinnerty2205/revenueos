@@ -213,7 +213,7 @@ async def evaluate_contactability(
     if contact.email is None:
         return ContactabilityResult(
             OutreachContactability.NO_BUSINESS_EMAIL,
-            "This Contact does not have a supported business email address.",
+            "This Person does not have a supported business email address.",
             "unknown",
         )
     field_source = await repository.email_source(
@@ -229,7 +229,7 @@ async def evaluate_contactability(
     if trust == "unknown":
         return ContactabilityResult(
             OutreachContactability.EMAIL_TRUST_UNKNOWN,
-            "The exact Contact email does not have a sendable business-contact trust state.",
+            "The exact Person email does not have a sendable business-email trust state.",
             trust,
         )
     suppression = await repository.suppression(
@@ -238,14 +238,14 @@ async def evaluate_contactability(
     )
     if suppression is not None and suppression.active:
         labels = {
-            "manual_do_not_contact": "This Contact is marked Do not contact.",
+            "manual_do_not_contact": "This Person is marked Do not contact.",
             "recipient_opt_out": "This recipient opted out of outreach.",
             "complaint": "This address is suppressed after a complaint.",
             "permanent_bounce": "This address is suppressed after a permanent bounce.",
         }
         return ContactabilityResult(
             OutreachContactability.SUPPRESSED,
-            labels.get(suppression.reason, "This Contact is suppressed."),
+            labels.get(suppression.reason, "This Person is suppressed."),
             trust,
         )
     policy = await repository.policy(tenant.organisation_id)
@@ -277,7 +277,7 @@ async def evaluate_contactability(
         ):
             return ContactabilityResult(
                 OutreachContactability.COOLDOWN,
-                f"This Contact is within the organisation's {policy.cooldown_hours}-hour outreach cooldown.",
+                f"This Person is within the organisation's {policy.cooldown_hours}-hour outreach cooldown.",
                 trust,
             )
         start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
@@ -332,7 +332,7 @@ async def validate_personalized_outreach_action(
     ):
         raise PublicAPIError("outreach_not_approved", "Approve the current outreach version before sending.", 409)
     if message.contact_id is None:
-        raise PublicAPIError("outreach_contact_unavailable", "The outreach Contact is no longer available.", 409)
+        raise PublicAPIError("outreach_contact_unavailable", "The outreach Person is no longer available.", 409)
     if message.sender_user_id != tenant.user_id:
         raise PublicAPIError("outreach_sender_mismatch", "Only the message sender can send this outreach.", 403)
     contact = await repository.contact(tenant.organisation_id, message.contact_id)
@@ -907,7 +907,7 @@ class OutreachService:
         sender = await self.repository.user(message.sender_user_id)
         assert sender is not None
         if contact.email is None or contact.email.casefold() != current.recipient_email.casefold():
-            raise PublicAPIError("outreach_recipient_changed", "The Contact email changed. Create a new draft.", 409)
+            raise PublicAPIError("outreach_recipient_changed", "The Person's email changed. Create a new draft.", 409)
         now = datetime.now(UTC)
         next_number = message.current_version + 1
         next_id = uuid.uuid4()
@@ -1054,7 +1054,7 @@ class OutreachService:
                 409,
             )
         if contact.email is None or contact.email.casefold() != version.recipient_email.casefold():
-            raise PublicAPIError("outreach_recipient_changed", "The Contact email changed. Create a new draft.", 409)
+            raise PublicAPIError("outreach_recipient_changed", "The Person's email changed. Create a new draft.", 409)
         self._validate_copy(version.subject, version.body)
         now = datetime.now(UTC)
         action = await self.repository.action(
@@ -1117,7 +1117,7 @@ class OutreachService:
             raise PublicAPIError("forbidden", "Administrator access is required for this suppression reason.", 403)
         contact = await self._contact(contact_id)
         if contact.email is None:
-            raise PublicAPIError("no_business_email", "This Contact has no email address to suppress.", 409)
+            raise PublicAPIError("no_business_email", "This Person has no email address to suppress.", 409)
         fingerprint = suppression_fingerprint(self.settings, contact.email)
         existing = await self.repository.suppression(self.tenant.organisation_id, fingerprint)
         if existing is not None and existing.active:
@@ -1161,7 +1161,7 @@ class OutreachService:
             existing.created_at = now
             existing.revoked_by_user_id = None
             existing.revoked_at = None
-        await self._commit("The Contact suppression could not be saved.")
+        await self._commit("The Person suppression could not be saved.")
         logger.info(
             "contact_suppression_changed",
             extra={
@@ -1178,13 +1178,13 @@ class OutreachService:
         await self._require_entitled()
         contact = await self._contact(contact_id)
         if contact.email is None:
-            raise PublicAPIError("suppression_not_found", "No active Contact suppression was found.", 404)
+            raise PublicAPIError("suppression_not_found", "No active Person suppression was found.", 404)
         existing = await self.repository.suppression(
             self.tenant.organisation_id,
             suppression_fingerprint(self.settings, contact.email),
         )
         if existing is None or not existing.active:
-            raise PublicAPIError("suppression_not_found", "No active Contact suppression was found.", 404)
+            raise PublicAPIError("suppression_not_found", "No active Person suppression was found.", 404)
         if existing.reason != SuppressionReason.MANUAL_DO_NOT_CONTACT.value:
             raise PublicAPIError(
                 "suppression_not_overridable",
@@ -1487,7 +1487,7 @@ class OutreachService:
             if contact is not None
             else ContactabilityResult(
                 OutreachContactability.NO_BUSINESS_EMAIL,
-                "The original Contact is no longer available.",
+                "The original Person is no longer available.",
                 "unknown",
             )
         )
@@ -1501,7 +1501,9 @@ class OutreachService:
             self.tenant.organisation_id,
             contact.company_id,
         ):
-            relationship_warning = "This Contact already has active sales history. Check that the purpose and wording fit the relationship."
+            relationship_warning = (
+                "This Person already has active sales history. Check that the purpose and wording fit the relationship."
+            )
         user_edited = version.creation_type == "user_edited"
         prospect_sources = [
             item for item in sources if item.source_type in {"prospect_observation", "prospect_person_observation"}
@@ -1725,7 +1727,7 @@ class OutreachService:
 
     async def _sendable_trust(self, contact: Contact) -> Literal["verified", "provider_supplied"]:
         if contact.email is None:
-            raise PublicAPIError("no_business_email", "This Contact has no supported business email.", 409)
+            raise PublicAPIError("no_business_email", "This Person has no supported business email.", 409)
         source = await self.repository.email_source(
             self.tenant.organisation_id,
             contact.id,
@@ -1734,7 +1736,7 @@ class OutreachService:
         if source is None or source.trust_state not in _USABLE_TRUST:
             raise PublicAPIError(
                 "email_trust_unknown",
-                "The exact Contact email does not have a sendable business-contact trust state.",
+                "The exact Person email does not have a sendable business-email trust state.",
                 409,
             )
         return cast(Literal["verified", "provider_supplied"], source.trust_state)
@@ -1742,7 +1744,7 @@ class OutreachService:
     async def _contact(self, contact_id: UUID) -> Contact:
         contact = await self.repository.contact(self.tenant.organisation_id, contact_id)
         if contact is None:
-            raise PublicAPIError("contact_not_found", "The requested Contact was not found.", 404)
+            raise PublicAPIError("contact_not_found", "The requested Person was not found.", 404)
         return contact
 
     async def _message(self, outreach_id: UUID, *, for_update: bool = False) -> OutreachRecord:

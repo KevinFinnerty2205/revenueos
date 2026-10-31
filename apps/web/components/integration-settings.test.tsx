@@ -177,7 +177,8 @@ describe("IntegrationSettings", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<IntegrationSettings />);
-    expect(await screen.findByText("Mock Email")).toBeVisible();
+    expect(await screen.findByText("Connection controls")).toBeVisible();
+    expect(screen.getByText("Mock Email")).toBeVisible();
     expect(
       screen.getAllByText(/Simulation — no external action/i).length,
     ).toBeGreaterThan(0);
@@ -276,10 +277,10 @@ describe("IntegrationSettings", () => {
       screen.queryByRole("combobox", { name: "Estimated Value" }),
     ).toBeNull();
 
-    fireEvent.click(screen.getByText("CRM sync, ownership and mappings"));
+    fireEvent.click(screen.getByText("CRM data sync and field matching"));
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Load HubSpot configuration",
+        name: "Load HubSpot settings",
       }),
     );
     expect(
@@ -292,7 +293,9 @@ describe("IntegrationSettings", () => {
     expect(screen.getByRole("combobox", { name: "Phone" })).toBeVisible();
     expect(
       screen
-        .getAllByRole("combobox", { name: "Field authority" })
+        .getAllByRole("combobox", {
+          name: "Which system controls this field",
+        })
         .every((item) => item.hasAttribute("disabled")),
     ).toBe(true);
     expect(
@@ -383,7 +386,7 @@ describe("IntegrationSettings", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        /scans a bounded window of Inbox and Sent message metadata/i,
+        /checks only a limited recent set of Inbox and Sent message details/i,
       ),
     ).toBeVisible();
     expect(screen.getByText(/your primary work calendar/i)).toBeVisible();

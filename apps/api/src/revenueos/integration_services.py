@@ -2931,7 +2931,7 @@ class ActionExecutionService:
                 or contact.email is None
                 or contact.email.casefold() != payload.recipient_email.casefold()
             ):
-                raise PublicAPIError("unsupported_recipient", "The approved Contact recipient is unavailable.", 409)
+                raise PublicAPIError("unsupported_recipient", "The approved Person recipient is unavailable.", 409)
         if isinstance(payload, ScheduleInteractionPayload):
             contacts = list(
                 (
@@ -2976,7 +2976,7 @@ class ActionExecutionService:
                 or record.version.target_entity_type != "contact"
                 or record.version.target_entity_id != payload.contact_id
             ):
-                raise PublicAPIError("action_target_stale", "The approved Contact target is unavailable.", 409)
+                raise PublicAPIError("action_target_stale", "The approved Person target is unavailable.", 409)
         if isinstance(payload, CreateTaskPayload) and (
             payload.linked_opportunity_id != opportunity_id
             or record.version.target_entity_type != "opportunity"
@@ -3060,7 +3060,7 @@ class ActionExecutionService:
             if len(changes) != 1:
                 raise PublicAPIError(
                     "crm_change_not_atomic",
-                    "The approved Contact update must change exactly one mapped field.",
+                    "The approved Person update must change exactly one mapped field.",
                     409,
                 )
             field_name, proposed = changes[0]
@@ -3232,7 +3232,7 @@ class ActionExecutionService:
         if payload.recipient_contact_id is None or payload.recipient_email is None:
             raise PublicAPIError(
                 "unsupported_recipient",
-                "Select the exact canonical Contact recipient before sending.",
+                "Select the exact saved Person before sending.",
                 409,
             )
         contact = await self.session.scalar(
@@ -3242,7 +3242,7 @@ class ActionExecutionService:
             )
         )
         if contact is None or contact.email is None or contact.email.casefold() != payload.recipient_email.casefold():
-            raise PublicAPIError("unsupported_recipient", "The approved Contact recipient is unavailable.", 409)
+            raise PublicAPIError("unsupported_recipient", "The approved Person recipient is unavailable.", 409)
         contactability = await evaluate_contactability(
             OutreachRepository(self.session),
             self.tenant,
@@ -3436,7 +3436,7 @@ class ActionExecutionService:
             ConnectorCapability.SEND_EMAIL: "Simulate sending this approved email.",
             ConnectorCapability.CREATE_CALENDAR_EVENT: "Simulate creating this approved calendar event.",
             ConnectorCapability.UPDATE_OPPORTUNITY: "Simulate this approved opportunity update.",
-            ConnectorCapability.UPDATE_CONTACT: "Simulate this approved contact update.",
+            ConnectorCapability.UPDATE_CONTACT: "Simulate this approved Person update.",
             ConnectorCapability.CREATE_ACTIVITY: "Simulate logging this approved interaction summary.",
             ConnectorCapability.CREATE_TASK: "Simulate creating this approved task.",
         }

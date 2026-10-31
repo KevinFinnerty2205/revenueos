@@ -866,7 +866,7 @@ class BusinessService:
         if existing is not None and existing.id != excluding:
             raise PublicAPIError(
                 "duplicate_contact_email",
-                "A contact with this business email already exists.",
+                "A Person with this business email already exists.",
                 409,
                 details={"entityType": "contact", "entityId": str(existing.id)},
             )
@@ -952,9 +952,10 @@ class BusinessService:
 
     @staticmethod
     def _not_found(entity_name: str) -> PublicAPIError:
+        display_name = "Person" if entity_name == "contact" else entity_name
         return PublicAPIError(
             f"{entity_name}_not_found",
-            f"The requested {entity_name} was not found.",
+            f"The requested {display_name} was not found.",
             404,
         )
 

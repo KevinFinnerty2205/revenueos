@@ -105,7 +105,7 @@ describe("CommercialPlanSettings", () => {
       expect(
         await screen.findByText(
           status === "active"
-            ? "Active"
+            ? "Access active"
             : status[0].toUpperCase() + status.slice(1),
         ),
       ).toBeVisible();
@@ -179,8 +179,6 @@ describe("CommercialPlanSettings", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Complete")).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Billing & plan" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Plan access" })).toHaveFocus();
   });
 });

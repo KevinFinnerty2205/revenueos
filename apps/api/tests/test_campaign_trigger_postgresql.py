@@ -137,7 +137,7 @@ def test_postgresql_published_campaign_guard_handles_each_trigger_relation() -> 
                             recipient_trust="verified",
                             eligible=True,
                             eligibility_code="eligible",
-                            eligibility_reason="Eligible synthetic business Contact.",
+                            eligibility_reason="Eligible synthetic business Person.",
                         ),
                         EngageSequenceStep(
                             id=sequence_id,

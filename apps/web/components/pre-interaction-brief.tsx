@@ -244,7 +244,7 @@ function PhoneCallBriefContent({
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <BriefSection
-          title="Contact and role"
+          title="Person and role"
           empty={!content.stakeholderFocus.length}
         >
           <ul className="mt-3 space-y-3">

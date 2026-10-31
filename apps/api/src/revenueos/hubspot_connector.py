@@ -1405,7 +1405,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         if len(changed) != 1:
             raise PermanentExecutionFailure(
                 "crm_change_not_atomic",
-                "The approved Contact update must change exactly one mapped field.",
+                "The approved Person update must change exactly one mapped field.",
             )
         return changed[0]
 

@@ -9,6 +9,7 @@ overrides:
   browserslist: 4.28.7
   baseline-browser-mapping: 2.11.19
   js-yaml: 4.3.2
+  minimatch: 11.0.1
   nanoid: 3.3.18
   postcss: 8.5.23
   sharp: 0.35.5
@@ -17,7 +18,8 @@ overrides:
   zod: 4.6.6
 
 patchedDependencies:
-  minimatch@3.1.5: 93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f
+  eslint-plugin-import@2.32.0: e8f9370baabefec8ef3ddc8c7e18211a18704f8446fb1cf6bd9e66731fad3434
+  minimatch@11.0.1: de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994
 
 importers:
 
@@ -620,6 +622,9 @@ packages:
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [win32]
+
+  '@isaacs/nonrecursive-glob-match@1.0.3':
+    resolution: {integrity: sha512-SI7kyKHq4XXDRozw+r9GlRZkia1ZkFrpLW98r2IC2Bpr8YkFGE3fvjzmxCG0x78A++69HmDNrDvSMYBZmHGpKA==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2167,12 +2172,9 @@ packages:
     resolution: {integrity: sha512-I9jwMn07Sy/IwOj3zVkVik2JTvgpaykDZEigL6Rx6N9LbMywwUSMtxET+7lVoDLLd3O3IXwJwvuuns8UB/HeAg==}
     engines: {node: '>=4'}
 
-  minimatch@10.2.5:
-    resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
+  minimatch@11.0.1:
+    resolution: {integrity: sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==}
     engines: {node: 18 || 20 || >=22}
-
-  minimatch@3.1.5:
-    resolution: {integrity: sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w==}
 
   minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
@@ -3119,7 +3121,7 @@ snapshots:
     dependencies:
       '@eslint/object-schema': 2.1.7
       debug: 4.4.3(supports-color@7.2.0)
-      minimatch: 3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f)
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
     transitivePeerDependencies:
       - supports-color
 
@@ -3140,7 +3142,7 @@ snapshots:
       ignore: 5.3.2
       import-fresh: 3.3.1
       js-yaml: 4.3.2
-      minimatch: 3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f)
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
       - supports-color
@@ -3276,6 +3278,8 @@ snapshots:
 
   '@img/sharp-win32-x64@0.35.5':
     optional: true
+
+  '@isaacs/nonrecursive-glob-match@1.0.3': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -3639,7 +3643,7 @@ snapshots:
       '@typescript-eslint/types': 8.64.0
       '@typescript-eslint/visitor-keys': 8.64.0
       debug: 4.4.3(supports-color@7.2.0)
-      minimatch: 10.2.5
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
       semver: 7.8.5
       tinyglobby: 0.2.17
       ts-api-utils: 2.5.0(typescript@5.9.3)
@@ -4193,7 +4197,7 @@ snapshots:
       eslint: 9.39.5(jiti@2.7.0)(supports-color@7.2.0)
       eslint-import-resolver-node: 0.3.10(supports-color@7.2.0)
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.64.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)
+      eslint-plugin-import: 2.32.0(patch_hash=e8f9370baabefec8ef3ddc8c7e18211a18704f8446fb1cf6bd9e66731fad3434)(@typescript-eslint/parser@8.64.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))
       eslint-plugin-react-hooks: 7.1.1(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)
@@ -4226,7 +4230,7 @@ snapshots:
       tinyglobby: 0.2.17
       unrs-resolver: 1.12.2
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.64.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)
+      eslint-plugin-import: 2.32.0(patch_hash=e8f9370baabefec8ef3ddc8c7e18211a18704f8446fb1cf6bd9e66731fad3434)(@typescript-eslint/parser@8.64.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -4241,7 +4245,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.64.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0):
+  eslint-plugin-import@2.32.0(patch_hash=e8f9370baabefec8ef3ddc8c7e18211a18704f8446fb1cf6bd9e66731fad3434)(@typescript-eslint/parser@8.64.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -4256,7 +4260,7 @@ snapshots:
       hasown: 2.0.4
       is-core-module: 2.16.2
       is-glob: 4.0.3
-      minimatch: 3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f)
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
       object.fromentries: 2.0.8
       object.groupby: 1.0.3
       object.values: 1.2.1
@@ -4284,7 +4288,7 @@ snapshots:
       hasown: 2.0.4
       jsx-ast-utils: 3.3.5
       language-tags: 1.0.9
-      minimatch: 3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f)
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
       object.fromentries: 2.0.8
       safe-regex-test: 1.1.0
       string.prototype.includes: 2.0.1
@@ -4312,7 +4316,7 @@ snapshots:
       estraverse: 5.3.0
       hasown: 2.0.4
       jsx-ast-utils: 3.3.5
-      minimatch: 3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f)
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
       object.entries: 1.1.9
       object.fromentries: 2.0.8
       object.values: 1.2.1
@@ -4366,7 +4370,7 @@ snapshots:
       is-glob: 4.0.3
       json-stable-stringify-without-jsonify: 1.0.1
       lodash.merge: 4.6.2
-      minimatch: 3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f)
+      minimatch: 11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994)
       natural-compare: 1.4.0
       optionator: 0.9.4
     optionalDependencies:
@@ -4882,12 +4886,9 @@ snapshots:
 
   min-indent@1.0.1: {}
 
-  minimatch@10.2.5:
+  minimatch@11.0.1(patch_hash=de67ba5c648e6788cfa023d1dd23c9bee7b5c804dd354e6fc64f24ce613a6994):
     dependencies:
-      brace-expansion: 5.0.12
-
-  minimatch@3.1.5(patch_hash=93ec0a2748065689567b22bdb29f8812c5ea049810ba4a769dbdeccec5d7a88f):
-    dependencies:
+      '@isaacs/nonrecursive-glob-match': 1.0.3
       brace-expansion: 5.0.12
 
   minimist@1.2.8: {}

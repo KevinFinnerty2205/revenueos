@@ -57,7 +57,7 @@ export function AccountPeoplePanel({ companyId }: { companyId: string }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
-            Native CRM
+            People
           </p>
           <h2
             id="account-people-title"
@@ -66,7 +66,7 @@ export function AccountPeoplePanel({ companyId }: { companyId: string }) {
             People at this account
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Review the tenant-scoped contacts linked to this account.
+            Review the people linked to this account.
           </p>
         </div>
         <Link

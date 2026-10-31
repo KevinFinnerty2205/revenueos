@@ -244,7 +244,7 @@ describe("VisualEvidenceCapture", () => {
     fireEvent.change(screen.getByLabelText("Visual type"), {
       target: { value: "business_card" },
     });
-    expect(screen.getByText(/Nothing is saved to Contacts/i)).toBeVisible();
+    expect(screen.getByText(/Nothing is saved to People/i)).toBeVisible();
 
     rerender(
       <VisualEvidenceCapture

@@ -129,7 +129,7 @@ function presentation(
                 ],
                 required: false,
                 modificationPolicy: "text_placeholders_only",
-                reviewState: "needs_review",
+                reviewState: state === "ready" ? "ready" : "needs_review",
                 warningCodes: ["claim_review_required"],
               },
             ],
@@ -364,6 +364,7 @@ test("Create shows the studio, deterministic plan and claim approval gate", asyn
   await expect(
     page.getByRole("button", { name: "Download PowerPoint" }),
   ).toBeVisible();
+  await expect(page.getByText("Needs review")).toHaveCount(0);
 });
 
 test("Create does not add a fifth mobile navigation item", async ({ page }) => {

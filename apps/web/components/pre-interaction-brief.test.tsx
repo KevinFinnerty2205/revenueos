@@ -126,7 +126,7 @@ describe("PreInteractionBrief", () => {
     ).toBeVisible();
     expect(screen.getByText("Compact call brief")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Contact and role" }),
+      screen.getByRole("heading", { name: "Person and role" }),
     ).toBeVisible();
     expect(screen.getByText("Alex Morgan · champion")).toBeVisible();
     expect(

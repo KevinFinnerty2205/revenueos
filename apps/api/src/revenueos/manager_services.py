@@ -72,7 +72,7 @@ ATTENTION_LABELS: dict[ManagerAttentionCode, str] = {
     "forecast_needs_review": "Seller forecast needs review",
     "forecast_not_reviewed": "Seller forecast not reviewed",
     "methodology_priority_gap": "Methodology gap",
-    "no_next_action": "No next Action",
+    "no_next_action": "No next action",
     "stale_evidence": "Evidence needs revalidation",
     "customer_blocker": "Customer blocker",
 }
@@ -321,7 +321,7 @@ class ManagerIntelligenceService:
             reasons.append(
                 self._reason(
                     "close_date_passed",
-                    "The canonical expected close date is in the past while the Opportunity remains open.",
+                    "The expected close date has passed while the Opportunity remains open.",
                     [opportunity_source],
                     detected_at=now,
                 )

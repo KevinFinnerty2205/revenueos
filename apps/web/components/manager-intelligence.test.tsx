@@ -15,7 +15,7 @@ const reason = {
   code: "close_date_passed",
   label: "Close date passed",
   explanation:
-    "The canonical expected close date is in the past while the Opportunity remains open.",
+    "The expected close date has passed while the Opportunity remains open.",
   detectedAt: "2026-08-30T00:00:00Z",
   sources: [source],
 };
@@ -173,7 +173,19 @@ describe("manager intelligence", () => {
     expect(screen.getByText("Seller Likely")).toBeVisible();
     expect(screen.getByText("Manager Likely")).toBeVisible();
     expect(screen.getByText("Oryntela baseline")).toBeVisible();
-    expect(screen.getByText(/no blended final forecast/i)).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Q3 2026 · AUD" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Compare actual wins and targets with the seller/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent === "1 open deal needs attention now.",
+      ),
+    ).toBeVisible();
   });
 
   it("provides source-backed questions and saves only a manager forecast revision", async () => {
@@ -234,6 +246,11 @@ describe("manager intelligence", () => {
     );
     render(<ManagerDealReviewPanel opportunityId="opportunity-1" />);
 
+    fireEvent.click(
+      await screen.findByText("Manager review and forecast", {
+        selector: "summary",
+      }),
+    );
     expect(await screen.findByText("What matters for this deal")).toBeVisible();
     expect(screen.getByText("Questions to discuss")).toBeVisible();
     expect(

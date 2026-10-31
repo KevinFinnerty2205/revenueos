@@ -159,9 +159,10 @@ class _MeetingDomainService:
 
     @staticmethod
     def _not_found(entity_name: str) -> PublicAPIError:
+        display_name = "Person" if entity_name == "contact" else entity_name
         return PublicAPIError(
             f"{entity_name}_not_found",
-            f"The requested {entity_name} was not found.",
+            f"The requested {display_name} was not found.",
             404,
         )
 
@@ -634,7 +635,7 @@ class ParticipantService(_MeetingDomainService):
         if contact_id is None and display_name is None and email is None:
             raise PublicAPIError(
                 "invalid_participant",
-                "A participant must have a contact, display name or email.",
+                "A participant must have a Person, display name or email.",
                 422,
             )
         if contact_id is not None:

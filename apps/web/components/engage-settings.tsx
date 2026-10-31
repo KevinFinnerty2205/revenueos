@@ -105,6 +105,16 @@ export function EngageSettings() {
         )}
       </div>
 
+      <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">
+        <p className="font-bold">Sending boundary</p>
+        <p className="mt-1">
+          Saving this policy does not send email. Live Microsoft 365 or Google
+          Workspace sending still requires a connected work account and a
+          separately approved deployment. Local and test execution uses Mock
+          Email simulation only.
+        </p>
+      </div>
+
       {draft ? (
         <form
           onSubmit={savePolicy}
@@ -154,7 +164,7 @@ export function EngageSettings() {
             <div className="grid gap-5 sm:grid-cols-3">
               <NumberField
                 id="engage-cooldown"
-                label="Contact cooldown (hours)"
+                label="Outreach cooldown (hours)"
                 value={draft.cooldownHours}
                 min={0}
                 max={720}
@@ -192,7 +202,7 @@ export function EngageSettings() {
                 }
               />
               <Checkbox
-                label="Enable outbound execution"
+                label="Allow outbound execution after connection and approval"
                 checked={draft.outboundEnabled}
                 onChange={(checked) =>
                   setDraft({ ...draft, outboundEnabled: checked })

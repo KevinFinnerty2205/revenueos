@@ -664,13 +664,13 @@ class EventService:
         if attendee.contact_id is not None:
             contact = await self.repository.contact(self.tenant.organisation_id, attendee.contact_id)
             if contact is None:
-                raise PublicAPIError("event_contact_inconsistent", "The linked Contact could not be found.", 409)
+                raise PublicAPIError("event_contact_inconsistent", "The linked Person could not be found.", 409)
             return EventAttendeePromotionResponse(
                 status="already_promoted",
                 attendee_id=attendee.id,
                 contact_id=contact.id,
                 company_id=contact.company_id,
-                message="This attendee is already linked to a canonical Contact.",
+                message="This attendee is already linked to a saved Person.",
             )
         if attendee.business_email and is_strong_business_email(attendee.business_email):
             matches = await self.repository.contacts_by_emails(
@@ -681,13 +681,13 @@ class EventService:
                 attendee.contact_id = contact.id
                 attendee.company_id = contact.company_id
                 attendee.match_state = EventAttendeeMatchState.MATCHED_CONTACT.value
-                await self._commit("The attendee could not be linked to the existing Contact.")
+                await self._commit("The attendee could not be linked to the existing Person.")
                 return EventAttendeePromotionResponse(
                     status="linked",
                     attendee_id=attendee.id,
                     contact_id=contact.id,
                     company_id=contact.company_id,
-                    message="The exact business email matched an existing Contact. No fields were overwritten.",
+                    message="The exact business email matched an existing Person. No fields were overwritten.",
                 )
         if not attendee.first_name or not attendee.last_name:
             raise PublicAPIError(
@@ -1084,7 +1084,7 @@ class EventService:
         if opportunity is not None:
             reasons.append("An active Opportunity exists for this Account.")
         if contact is not None:
-            reasons.append("This attendee is an existing Contact.")
+            reasons.append("This attendee is an existing Person.")
         elif company is not None:
             reasons.append("This attendee's company is an existing Account.")
         target_priority = target_priorities.get(row.company_domain or "")
@@ -1095,7 +1095,7 @@ class EventService:
         if relevant_role:
             reasons.append("The supplied professional role is relevant to a business buying group.")
         if event.goal_type == "reconnect_existing_contacts" and contact is not None:
-            reasons.append("The Event goal is to reconnect with existing Contacts.")
+            reasons.append("The Event goal is to reconnect with existing People.")
         if event.goal_type == "find_partners" and any(term in role for term in ("partner", "alliance")):
             reasons.append("The role aligns with the Event's partner goal.")
         if opportunity is not None or (target_priority == "high" and relevant_role):

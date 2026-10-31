@@ -78,7 +78,7 @@ function campaign(overrides: Record<string, unknown> = {}) {
         recipientTrust: "unknown",
         eligible: false,
         eligibilityCode: "no_business_email",
-        eligibilityReason: "This Contact has no supported business email.",
+        eligibilityReason: "This Person has no supported business email.",
       },
     ],
     metrics: {
@@ -110,6 +110,7 @@ function campaign(overrides: Record<string, unknown> = {}) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   navigation.push.mockReset();
 });
 
@@ -137,12 +138,12 @@ describe("Campaign workspace", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Connected Microsoft 365 or Google Workspace mailboxes are never used by Campaigns/u,
+        /Connected Microsoft 365 or Google Workspace mailboxes are never used/u,
       ),
     ).toBeInTheDocument();
   });
 
-  it("builds an ordered campaign from exact canonical Contact IDs", async () => {
+  it("builds an ordered campaign from selected person IDs", async () => {
     const captured: { body?: Record<string, unknown> } = {};
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const path = new URL(String(input)).pathname;
@@ -199,12 +200,25 @@ describe("Campaign workspace", () => {
     });
 
     render(<CampaignBuilder />);
+    expect(
+      await screen.findByText("Mock Email simulation"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+    expect(screen.getByLabelText("Purpose")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Northstar introduction" },
+    });
+    fireEvent.change(screen.getByLabelText("Purpose"), {
+      target: { value: "Request a relevant first meeting" },
+    });
     fireEvent.click(await screen.findByLabelText(/Jane Smith/u));
     fireEvent.click(screen.getByRole("button", { name: "Review audience" }));
     await waitFor(() =>
       expect(navigation.push).toHaveBeenCalledWith("/campaigns/campaign-1"),
     );
     expect(captured.body).toMatchObject({
+      name: "Northstar introduction",
+      purpose: "Request a relevant first meeting",
       sourceType: "manual_contacts",
       contactIds: ["contact-1"],
       approvalMode: "review_each_send",
@@ -247,7 +261,7 @@ describe("Campaign workspace", () => {
     render(<CampaignDetail campaignId="campaign-1" />);
     expect(
       await screen.findAllByText(
-        "This Contact has no supported business email.",
+        "This Person has no supported business email.",
       ),
     ).toHaveLength(2);
     expect(
@@ -259,7 +273,7 @@ describe("Campaign workspace", () => {
       screen.getByText(/No real message will be sent/u),
     ).toBeInTheDocument();
     const launch = screen.getByRole("button", {
-      name: "Launch to 1 eligible Contact",
+      name: "Launch to 1 eligible person",
     });
     expect(launch).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/reviewed the exact audience/u));
@@ -275,5 +289,39 @@ describe("Campaign workspace", () => {
         autoSendConfirmed: true,
       }),
     );
+  });
+
+  it("confirms before permanently stopping an active campaign", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    let stopped = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/v1/engage/campaigns/campaign-1/stop") {
+        stopped = true;
+        return jsonResponse(campaign({ state: "stopped", canLaunch: false }));
+      }
+      if (path === "/api/v1/engage/campaigns/campaign-1/enrollments") {
+        return jsonResponse({ items: [], total: 0 });
+      }
+      if (path === "/api/v1/engage/campaigns/campaign-1" && !init?.method) {
+        return jsonResponse(
+          campaign({
+            state: stopped ? "stopped" : "active",
+            canLaunch: false,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    render(<CampaignDetail campaignId="campaign-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Stop campaign" }),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("Stop this campaign permanently?"),
+    );
+    await waitFor(() => expect(stopped).toBe(true));
   });
 });
