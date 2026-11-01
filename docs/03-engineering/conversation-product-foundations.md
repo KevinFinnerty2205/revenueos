@@ -3,7 +3,7 @@
 ## Current implementation
 
 Migrations `0067_conversation_foundations` through
-`0071_assignment_tombstones` add the durable foundations behind the
+`0076_briefing_source_observation` add the durable foundations behind the
 conversation-first interface. They do not activate live providers, outbound
 delivery or native capture.
 
@@ -37,10 +37,14 @@ and private user workspaces are never projected into shared thread memory.
 
 Live notes, enhanced notes and follow-up drafts are stored in
 `conversation_user_workspaces`. Briefing preferences are stored in
-`conversation_delivery_preferences`; exact generated previews are retained in
-`conversation_briefing_outbox`. Every row carries both organisation and user
-ownership. PostgreSQL RLS requires the transaction-local trusted organisation
-and user settings, while repository queries repeat both predicates.
+`conversation_delivery_preferences`; exact generated previews and scheduled
+deliveries are retained in `conversation_briefing_outbox` with an explicit
+`preview` or `scheduled` intent. Preview rows are excluded from discovery and
+claim queries and fail closed again before transport submission, so enabling a
+provider cannot turn a local preview into an email. Every row carries both
+organisation and user ownership. PostgreSQL RLS requires the transaction-local
+trusted organisation and user settings, while repository queries repeat both
+predicates.
 
 Updates use a positive lock version. A stale browser receives a conflict and
 must reload; the server never silently replaces another session's version.
@@ -56,6 +60,28 @@ Live notes require an explicit save and survive media-capture failures in the
 web interface. They remain separate from generated enhanced notes. Regeneration
 presents an explicit replacement choice and leaves the current private draft
 untouched until the user accepts the new generated version.
+
+Automatic post-conversation generation writes its private draft generation ID
+atomically into a nullable internal AI-job column only when it creates a job.
+Database triggers make that origin immutable, and the non-public creation audit
+must independently agree with the durable origin, requester and transcript
+trace. A missing, cleared, malformed, duplicated or mismatched audit therefore
+fails closed rather than making automatic work look manual. The private
+orchestrator reads only jobs and artefacts tagged with its exact generation;
+manual and organisation-shared reads accept only untagged work. Its deliberately
+neutral capability set is executive summary, decisions, action items, open
+questions and follow-up draft—never the sales-only extraction set or Next Best
+Action. Creation audits are revalidated before a completed prerequisite is
+consumed or materialised. Before an automatic job enters an executor, and again
+immediately before each provider request, the worker re-establishes the linked
+owner's private RLS context and rechecks the feature gate, completed/non-deleted
+Interaction, active membership, current data notice and immutable source
+recording/evidence authority. Transcript corrections inherit that source owner
+and consent lineage rather than falling back to the Interaction creator. A
+missing, mismatched or revoked source cancels only jobs carrying that durable
+automatic origin and its private generation, without cancelling unrelated
+manual AI work. Migration downgrade refuses to discard the origin column while
+any tagged AI job remains.
 
 Private workspace and preference records are deleted by their membership,
 interaction or organisation foreign-key lifecycle. A data export includes
@@ -87,9 +113,11 @@ retain explicit states and safe failure codes.
 
 Preferences are versioned and user-private. Morning and pre-meeting generation
 uses the existing Daily and pre-interaction brief contracts. The local outbox
-stores the exact subject, body, conversation link, intended time and source
-fingerprint. Identical requests are deduplicated, a changed meeting time
-supersedes the prior item, and a cancelled meeting cancels prepared items.
+stores the exact subject, body, conversation link, intended time, source
+fingerprint and delivery intent. Identical requests are deduplicated, a changed
+meeting time supersedes the prior item, and a cancelled meeting cancels prepared
+items. Exact-content preview rows are permanently non-deliverable and use a
+separate deduplication namespace from scheduled rows.
 Interaction updates and linked provider-calendar sync reconcile already
 prepared rows immediately; a second preview request is not required. When an
 authorised colleague changes a shared interaction, the server derives the
@@ -101,11 +129,43 @@ the preview. This reuses the existing bounded provider-calendar contract, so a
 synthetic connector reschedule or cancellation is reflected without a second
 scheduling model.
 
-This is a local test transport and preview boundary. It does not send email or
-perform an external connector action. The Google Workspace and Microsoft 365
-calendar/email adapters exist, but live OAuth, calendar access and email
-execution remain disabled. No due-outbox delivery worker connects conversation
-briefing rows to those adapters.
+The existing worker can now discover active owners with explicit saved
+preferences, materialise one date-scoped timezone-aware morning row plus bounded
+upcoming pre-meeting rows, discover due scheduled rows, claim them with a lease,
+and persist `queued`, `sending`, `sent`, `failed` or `cancelled` outcomes. Here,
+`sent` means the configured transport or provider accepted the submission; it
+does not prove inbox delivery or exactly-once receipt. New
+calendar items are picked up by the same polling worker; no parallel scheduler
+or queue was added. A first run after the configured morning time materialises
+that local date's deterministic row for same-day catch-up; its date-scoped key
+and any existing sent row prevent replay. It rechecks the membership, user,
+delivery preference,
+current meeting time/state, mailbox capability and allowlisted relative link
+while holding the row lock. Email content expands that path only against a
+configured trusted application origin; production provider mode requires the
+exact approved HTTPS Oryntela origin. Preference changes reschedule or cancel
+queued scheduled work. Retryable failures reuse one stable operation key; an
+uncertain provider response or an expired `sending` lease becomes terminal
+`failed` work and is never resubmitted automatically. This work order does not
+ship a manual ambiguity-resolution operation; that tooling is explicitly
+deferred, so operators must not clear or replay an ambiguous row by editing the
+database. Once a
+provider submission starts, its logical morning or interaction source remains a
+durable fence: a changed fingerprint waits for the receipt, and an ambiguous
+outcome blocks replacement delivery. This gives one automatic submission
+attempt under ambiguity, not exactly-once delivery.
+
+The feature and production launch profiles remain disabled by default. Local
+mode is rejected outside development/test and maps mock, Google Workspace and
+Microsoft 365 mailbox authority to the same deterministic no-network transport,
+so each connector-specific permission path is exercised without sending mail.
+Provider mode is an explicit configuration boundary that selects the existing
+bounded Google/Microsoft mail clients only when their integration flags,
+credentials and production approvals already pass. No live activation was
+performed. Cross-tenant scheduler discovery remains a revoked-by-default
+`SECURITY DEFINER` function; activation must grant only that exact function to
+the approved worker role. Logs retain identifiers and safe status codes only,
+never briefing bodies or addresses.
 
 ### Persistence acceptance
 

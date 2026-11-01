@@ -92,7 +92,7 @@ class RecordingRepository:
             conditions.append(RecordingSession.deleted_at.is_(None))
         statement = select(RecordingSession).where(*conditions)
         if for_update:
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         return cast(RecordingSession | None, await self.session.scalar(statement))
 
     async def list_recordings(self, organisation_id: UUID, interaction_id: UUID) -> list[RecordingSession]:

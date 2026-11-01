@@ -37,7 +37,7 @@ describe("ConversationDeliveryPreferences", () => {
         response({
           id: "outbox-1",
           kind: "morning_digest",
-          status: "prepared",
+          status: "queued",
           subject: "Your Oryntela briefing for 2026-10-31",
           bodyText:
             "Good morning, Kevin.\n\nToday’s conversations\n- Synthetic review",

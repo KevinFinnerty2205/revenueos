@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -24,6 +24,8 @@ from revenueos.models import (
     AIJob,
     AIUsageCounter,
     BetaSystemEvent,
+    LiveInteractionSession,
+    ProvisionalSignal,
     RecordingChunk,
     RecordingConsent,
     RecordingSession,
@@ -46,7 +48,7 @@ from revenueos.transcription_provider import (
     execute_recording_transcription,
 )
 
-from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL, TEST_VISUAL_STORAGE
+from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL, TEST_VISUAL_STORAGE
 from .test_business_api import create_company, create_opportunity
 from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
@@ -378,10 +380,56 @@ def test_batch_worker_creates_one_traceable_version_and_ordered_segments_without
     )
     assert duplicate.status_code == 200  # type: ignore[attr-defined]
 
-    async def run_worker() -> tuple[int, int, int, str]:
+    progressive_version_id = uuid4()
+
+    async def run_worker() -> tuple[int, int, int, int, str, UUID, str, str]:
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
         factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
+            async with factory() as session, session.begin():
+                session.add(
+                    TranscriptVersion(
+                        id=progressive_version_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=UUID(interaction_id),
+                        meeting_id=UUID(str(meeting["id"])),
+                        recording_session_id=UUID(recording_id),
+                        version=1,
+                        raw_text="Provisional customer words",
+                        language="en-AU",
+                        source="progressive",
+                        status="provisional",
+                        provider_name="local-progressive-fixture",
+                    )
+                )
+                session.add(
+                    TranscriptSegment(
+                        id=uuid4(),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        transcript_version_id=progressive_version_id,
+                        sequence_number=0,
+                        start_ms=0,
+                        end_ms=100,
+                        text="Provisional customer words",
+                    )
+                )
+                session.add(
+                    LiveInteractionSession(
+                        id=uuid4(),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=UUID(interaction_id),
+                        transcript_version_id=progressive_version_id,
+                        created_by_user_id=PRIMARY_USER_ID,
+                        status="active",
+                        source_kind="progressive_transcript",
+                        provider_name="mock",
+                        provider_uses_external_processing=False,
+                        last_processed_sequence=0,
+                        processed_character_count=len("Provisional customer words"),
+                        processing_request_count=1,
+                        retention_expires_at=datetime.now(UTC) + timedelta(days=1),
+                    )
+                )
             worker = RecordingWorkerService(factory, recording_settings())
             assert await worker.run_once() is True
             assert await worker.run_once() is False
@@ -403,17 +451,57 @@ def test_batch_worker_creates_one_traceable_version_and_ordered_segments_without
                     )
                     or 0
                 )
+                live_session_count = int(
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(LiveInteractionSession)
+                        .where(LiveInteractionSession.interaction_id == UUID(interaction_id))
+                    )
+                    or 0
+                )
                 current = await session.scalar(
                     select(Transcript).where(Transcript.meeting_id == UUID(str(meeting["id"])))
                 )
-                assert current is not None
-                return version_count, segment_count, transcript_count, current.source
+                promoted = await session.scalar(
+                    select(TranscriptVersion).where(TranscriptVersion.recording_session_id == UUID(recording_id))
+                )
+                assert current is not None and promoted is not None
+                return (
+                    version_count,
+                    segment_count,
+                    transcript_count,
+                    live_session_count,
+                    current.source,
+                    promoted.id,
+                    promoted.source,
+                    promoted.status,
+                )
         finally:
             await engine.dispose()
 
     with caplog.at_level(logging.INFO):
-        version_count, segment_count, transcript_count, source = asyncio.run(run_worker())
-    assert (version_count, segment_count, transcript_count, source) == (1, 2, 1, "recorded_audio")
+        (
+            version_count,
+            segment_count,
+            transcript_count,
+            live_session_count,
+            source,
+            version_id,
+            version_source,
+            version_status,
+        ) = asyncio.run(run_worker())
+    assert (version_count, segment_count, transcript_count, live_session_count, source) == (
+        1,
+        2,
+        1,
+        0,
+        "recorded_audio",
+    )
+    assert (version_id, version_source, version_status) == (
+        progressive_version_id,
+        "recorded_audio",
+        "final",
+    )
     assert secret_transcript not in caplog.text
 
     response = recording_client.get(f"/api/v1/interactions/{interaction_id}/recordings/{recording_id}/transcription")
@@ -425,7 +513,7 @@ def test_batch_worker_creates_one_traceable_version_and_ordered_segments_without
     assert payload["source"] == "recorded_audio"
 
 
-def test_flagged_auto_intelligence_handoff_is_requested_once_after_transcription() -> None:
+def test_flagged_automatic_draft_is_durably_requested_without_creating_ai_jobs() -> None:
     settings = recording_settings(feature_auto_generate_intelligence_after_transcription=True)
     app = create_app(settings)
     with TestClient(app) as client:
@@ -464,10 +552,10 @@ def test_flagged_auto_intelligence_handoff_is_requested_once_after_transcription
         finally:
             await engine.dispose()
 
-    assert asyncio.run(exercise()) == ("requested", 8)
+    assert asyncio.run(exercise()) == ("requested", 0)
 
 
-def test_intelligence_quota_failure_preserves_completed_transcript() -> None:
+def test_automatic_draft_request_does_not_consume_ai_quota_in_recording_worker() -> None:
     settings = recording_settings(
         feature_auto_generate_intelligence_after_transcription=True,
         private_beta_max_generations_per_day=1,
@@ -519,7 +607,7 @@ def test_intelligence_quota_failure_preserves_completed_transcript() -> None:
         finally:
             await engine.dispose()
 
-    assert asyncio.run(exercise()) == ("completed", "failed", 1)
+    assert asyncio.run(exercise()) == ("completed", "requested", 1)
 
 
 def test_recording_delete_is_object_first_and_reconciliation_removes_orphans(
@@ -676,6 +764,120 @@ def test_recording_storage_reconciliation_is_tenant_prefixed_and_metadata_only(
             await engine.dispose()
 
     assert asyncio.run(reconcile()) == (1, 1, 1)
+
+
+def test_abandoned_recording_reconciliation_removes_live_intelligence(
+    recording_client: TestClient,
+) -> None:
+    meeting = create_meeting(recording_client, title="Abandoned progressive recording")
+    interaction_id = UUID(str(meeting["interactionId"]))
+    recording = _create_recording(
+        recording_client,
+        str(interaction_id),
+        key="abandoned-progressive-recording",
+    )
+    recording_id = UUID(str(recording["id"]))
+    _start(recording_client, str(interaction_id), str(recording_id))
+
+    version_id = uuid4()
+    live_session_id = uuid4()
+    signal_id = uuid4()
+
+    async def reconcile() -> tuple[int, str, bool, bool, bool]:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        now = datetime.now(UTC)
+        try:
+            async with factory() as session, session.begin():
+                stored = await session.get(RecordingSession, recording_id)
+                assert stored is not None
+                stored.session_expires_at = now - timedelta(seconds=1)
+                session.add(
+                    TranscriptVersion(
+                        id=version_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction_id,
+                        meeting_id=UUID(str(meeting["id"])),
+                        recording_session_id=recording_id,
+                        version=1,
+                        raw_text="Provisional customer words",
+                        language="en-AU",
+                        source="progressive",
+                        status="provisional",
+                        provider_name="local-progressive-fixture",
+                    )
+                )
+                session.add(
+                    TranscriptSegment(
+                        id=uuid4(),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        transcript_version_id=version_id,
+                        sequence_number=0,
+                        start_ms=0,
+                        end_ms=100,
+                        text="Provisional customer words",
+                    )
+                )
+                session.add(
+                    LiveInteractionSession(
+                        id=live_session_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction_id,
+                        transcript_version_id=version_id,
+                        created_by_user_id=PRIMARY_USER_ID,
+                        status="active",
+                        source_kind="progressive_transcript",
+                        provider_name="mock",
+                        provider_uses_external_processing=False,
+                        last_processed_sequence=0,
+                        processed_character_count=len("Provisional customer words"),
+                        processing_request_count=1,
+                        retention_expires_at=now + timedelta(days=1),
+                    )
+                )
+                session.add(
+                    ProvisionalSignal(
+                        id=signal_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction_id,
+                        live_session_id=live_session_id,
+                        transcript_version_id=version_id,
+                        signal_type="risk",
+                        statement="Security review timing is unresolved.",
+                        lifecycle_status="detected",
+                        is_provisional=True,
+                        priority="normal",
+                        evidence_strength="customer_attributed",
+                        resolution_status="pending",
+                        signal_fingerprint=hashlib.sha256(b"abandoned-risk-signal").hexdigest(),
+                        subject_fingerprint=hashlib.sha256(b"abandoned-risk-subject").hexdigest(),
+                        source_sequence_start=0,
+                        source_sequence_end=0,
+                        detected_at=now,
+                        last_updated_at=now,
+                    )
+                )
+
+            report = await reconcile_recording_storage(
+                factory,
+                recording_settings(),
+                PRIMARY_ORGANISATION_ID,
+                repair=True,
+            )
+            async with factory() as session:
+                version = await session.get(TranscriptVersion, version_id)
+                assert version is not None
+                return (
+                    report.cleaned_abandoned_sessions,
+                    version.status,
+                    version.deleted_at is not None,
+                    await session.get(LiveInteractionSession, live_session_id) is None,
+                    await session.get(ProvisionalSignal, signal_id) is None,
+                )
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(reconcile()) == (1, "deleted", True, True, True)
 
 
 def test_local_recording_storage_handles_concurrent_idempotent_writes() -> None:

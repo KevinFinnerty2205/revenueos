@@ -75,10 +75,12 @@ export function PostInteractionCapture({
   interactionId,
   interactionType,
   restoreLatest = false,
+  workspaceRefreshKey = 0,
 }: {
   interactionId: string;
   interactionType: InteractionType;
   restoreLatest?: boolean;
+  workspaceRefreshKey?: number;
 }) {
   const [session, setSession] = useState<DebriefSession | null>(null);
   const [preference, setPreference] = useState<InputPreference>("guided");
@@ -660,6 +662,7 @@ export function PostInteractionCapture({
         <CompletedConversationReview
           interactionId={interactionId}
           session={session}
+          workspaceRefreshKey={workspaceRefreshKey}
         />
       ) : null}
     </section>
@@ -669,9 +672,11 @@ export function PostInteractionCapture({
 function CompletedConversationReview({
   interactionId,
   session,
+  workspaceRefreshKey,
 }: {
   interactionId: string;
   session: DebriefSession;
+  workspaceRefreshKey: number;
 }) {
   const accepted = session.candidates.filter(
     (candidate) => candidate.userReviewState === "accepted",
@@ -715,6 +720,7 @@ function CompletedConversationReview({
     interactionId,
     initialEnhancedNotes: initialEnhanced,
     initialFollowUpDraft: initialFollowUp,
+    refreshKey: workspaceRefreshKey,
   });
   const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
 

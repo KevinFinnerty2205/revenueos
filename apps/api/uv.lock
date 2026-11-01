@@ -1288,6 +1288,7 @@ dependencies = [
     { name = "python-pptx" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -1317,6 +1318,7 @@ requires-dist = [
     { name = "python-pptx", specifier = ">=1.0.2,<2.0.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36,<3.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
+    { name = "websockets", specifier = ">=16.0.0,<17.0.0" },
 ]
 
 [package.metadata.requires-dev]

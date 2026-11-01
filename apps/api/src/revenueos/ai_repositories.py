@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from revenueos.ai_follow_up_email import FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES
 from revenueos.ai_next_best_action import (
@@ -21,6 +22,14 @@ from revenueos.models import (
     MeetingAuditEvent,
     Transcript,
 )
+
+
+def _automatic_draft_origin_condition(
+    automatic_draft_generation_id: UUID | None,
+) -> ColumnElement[bool]:
+    if automatic_draft_generation_id is None:
+        return AIJob.automatic_draft_generation_id.is_(None)
+    return AIJob.automatic_draft_generation_id == automatic_draft_generation_id
 
 
 @dataclass(frozen=True)
@@ -134,11 +143,14 @@ class AIJobRepository:
         self,
         organisation_id: UUID,
         job_id: UUID,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> AIJob | None:
         result = await self.session.execute(
             select(AIJob).where(
                 AIJob.organisation_id == organisation_id,
                 AIJob.id == job_id,
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
         )
         return result.scalar_one_or_none()
@@ -147,12 +159,15 @@ class AIJobRepository:
         self,
         organisation_id: UUID,
         meeting_id: UUID,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> AIJob | None:
         result = await self.session.execute(
             select(AIJob)
             .where(
                 AIJob.organisation_id == organisation_id,
                 AIJob.meeting_id == meeting_id,
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
             .order_by(AIJob.created_at.desc(), AIJob.id.desc())
             .limit(1)
@@ -166,10 +181,12 @@ class AIJobRepository:
         *,
         page: int,
         page_size: int,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> PageResult[AIJob]:
         conditions = (
             AIJob.organisation_id == organisation_id,
             AIJob.meeting_id == meeting_id,
+            _automatic_draft_origin_condition(automatic_draft_generation_id),
         )
         total = await self.session.scalar(select(func.count()).select_from(AIJob).where(*conditions))
         result = await self.session.scalars(
@@ -187,6 +204,8 @@ class AIJobRepository:
         meeting_id: UUID,
         transcript_version: int,
         job_types: Sequence[str],
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> list[AIJob]:
         """Load current-version capability jobs in one tenant-scoped query."""
 
@@ -197,6 +216,7 @@ class AIJobRepository:
                 AIJob.meeting_id == meeting_id,
                 AIJob.transcript_version == transcript_version,
                 AIJob.job_type.in_(job_types),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
             .order_by(AIJob.created_at.desc(), AIJob.id.desc())
         )
@@ -231,20 +251,31 @@ class AIJobRepository:
         prompt_key: str,
         prompt_version: int,
         schema_version: int,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> AIJob | None:
+        conditions = [
+            AIJob.organisation_id == organisation_id,
+            AIJob.meeting_id == meeting_id,
+            AIJob.transcript_version == transcript_version,
+            AIJob.job_type == job_type,
+            AIJob.prompt_key == prompt_key,
+            AIJob.prompt_version == prompt_version,
+            AIJob.schema_version == schema_version,
+            _automatic_draft_origin_condition(automatic_draft_generation_id),
+        ]
+        tie_breakers = [
+            case(
+                (AIJob.status.in_(("pending", "running")), 0),
+                (AIJob.status == "completed", 1),
+                else_=2,
+            )
+        ]
         result = await self.session.execute(
             select(AIJob)
-            .where(
-                AIJob.organisation_id == organisation_id,
-                AIJob.meeting_id == meeting_id,
-                AIJob.transcript_version == transcript_version,
-                AIJob.job_type == job_type,
-                AIJob.prompt_key == prompt_key,
-                AIJob.prompt_version == prompt_version,
-                AIJob.schema_version == schema_version,
-            )
+            .where(*conditions)
             .order_by(
                 AIJob.created_at.desc(),
+                *tie_breakers,
                 func.length(AIJob.idempotency_key).desc(),
                 AIJob.idempotency_key.desc(),
                 AIJob.id.desc(),
@@ -263,6 +294,7 @@ class AIJobRepository:
         prompt_key: str,
         prompt_version: int,
         schema_version: int,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> int:
         count = await self.session.scalar(
             select(func.count())
@@ -276,6 +308,7 @@ class AIJobRepository:
                 AIJob.prompt_version == prompt_version,
                 AIJob.schema_version == schema_version,
                 AIJob.status.in_(("failed", "cancelled")),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
         )
         return int(count or 0)
@@ -290,6 +323,7 @@ class AIJobRepository:
         prompt_version: int,
         schema_version: int,
         composition_tone: str | None = None,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> AIJob | None:
         conditions = [
             AIJob.organisation_id == organisation_id,
@@ -299,11 +333,26 @@ class AIJobRepository:
             AIJob.prompt_key == prompt_key,
             AIJob.prompt_version == prompt_version,
             AIJob.schema_version == schema_version,
+            _automatic_draft_origin_condition(automatic_draft_generation_id),
         ]
         if composition_tone is not None:
             conditions.append(AIJob.composition_tone == composition_tone)
+        tie_breakers = [
+            case(
+                (AIJob.status.in_(("pending", "running")), 0),
+                (AIJob.status == "completed", 1),
+                else_=2,
+            )
+        ]
         result = await self.session.execute(
-            select(AIJob).where(*conditions).order_by(AIJob.created_at.desc(), AIJob.id.desc()).limit(1)
+            select(AIJob)
+            .where(*conditions)
+            .order_by(
+                AIJob.created_at.desc(),
+                *tie_breakers,
+                AIJob.id.desc(),
+            )
+            .limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -317,6 +366,7 @@ class AIJobRepository:
         prompt_version: int,
         schema_version: int,
         composition_tone: str,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> int:
         count = await self.session.scalar(
             select(func.count())
@@ -331,6 +381,7 @@ class AIJobRepository:
                 AIJob.schema_version == schema_version,
                 AIJob.composition_tone == composition_tone,
                 AIJob.status.in_(("completed", "failed", "cancelled")),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
         )
         return int(count or 0)
@@ -456,11 +507,19 @@ class AIArtifactRepository:
         self,
         organisation_id: UUID,
         artifact_id: UUID,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> AIArtifact | None:
         result = await self.session.execute(
-            select(AIArtifact).where(
+            select(AIArtifact)
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
+            .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.id == artifact_id,
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
         )
         return result.scalar_one_or_none()
@@ -471,14 +530,21 @@ class AIArtifactRepository:
         meeting_id: UUID,
         transcript_version: int,
         artifact_type: str,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> AIArtifact | None:
         result = await self.session.execute(
             select(AIArtifact)
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
             .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.meeting_id == meeting_id,
                 AIArtifact.transcript_version == transcript_version,
                 AIArtifact.artifact_type == artifact_type,
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
             .order_by(AIArtifact.artifact_version.desc(), AIArtifact.id.desc())
             .limit(1)
@@ -516,14 +582,22 @@ class AIArtifactRepository:
         self,
         organisation_id: UUID,
         meeting_id: UUID,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> int | None:
         version = await self.session.scalar(
-            select(func.max(AIArtifact.transcript_version)).where(
+            select(func.max(AIArtifact.transcript_version))
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
+            .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.meeting_id == meeting_id,
                 AIArtifact.artifact_type.in_(
                     FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
                 ),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
         )
         return int(version) if version is not None else None
@@ -533,9 +607,15 @@ class AIArtifactRepository:
         organisation_id: UUID,
         meeting_id: UUID,
         transcript_version: int,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> dict[str, AIArtifact]:
         result = await self.session.scalars(
             select(AIArtifact)
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
             .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.meeting_id == meeting_id,
@@ -543,6 +623,7 @@ class AIArtifactRepository:
                 AIArtifact.artifact_type.in_(
                     FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
                 ),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
             .order_by(
                 AIArtifact.artifact_type.asc(),
@@ -559,14 +640,22 @@ class AIArtifactRepository:
         self,
         organisation_id: UUID,
         meeting_id: UUID,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> int | None:
         version = await self.session.scalar(
-            select(func.max(AIArtifact.transcript_version)).where(
+            select(func.max(AIArtifact.transcript_version))
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
+            .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.meeting_id == meeting_id,
                 AIArtifact.artifact_type.in_(
                     NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
                 ),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
         )
         return int(version) if version is not None else None
@@ -576,9 +665,15 @@ class AIArtifactRepository:
         organisation_id: UUID,
         meeting_id: UUID,
         transcript_version: int,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> dict[str, AIArtifact]:
         result = await self.session.scalars(
             select(AIArtifact)
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
             .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.meeting_id == meeting_id,
@@ -586,6 +681,7 @@ class AIArtifactRepository:
                 AIArtifact.artifact_type.in_(
                     NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
                 ),
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
             .order_by(
                 AIArtifact.artifact_type.asc(),
@@ -604,14 +700,21 @@ class AIArtifactRepository:
         meeting_id: UUID,
         transcript_version: int,
         artifact_type: str,
+        *,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> list[AIArtifact]:
         result = await self.session.scalars(
             select(AIArtifact)
+            .join(
+                AIJob,
+                (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+            )
             .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIArtifact.meeting_id == meeting_id,
                 AIArtifact.transcript_version == transcript_version,
                 AIArtifact.artifact_type == artifact_type,
+                _automatic_draft_origin_condition(automatic_draft_generation_id),
             )
             .order_by(AIArtifact.artifact_version.desc(), AIArtifact.id.desc())
         )

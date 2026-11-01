@@ -1420,13 +1420,21 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
                 user_id=PRIMARY_USER_ID,
                 interaction_id=interaction.id,
                 kind="pre_meeting",
-                status="prepared",
+                delivery_intent="scheduled",
+                status="sending",
                 deduplication_key=f"provider-test:{interaction.id}",
                 source_fingerprint="a" * 64,
                 subject="Prepare",
                 body_text="Synthetic local preview",
                 href=f"/conversations/{interaction.id}#preparation",
                 prepared_for_at=now + timedelta(days=3),
+                attempt_count=2,
+                next_attempt_at=now + timedelta(minutes=5),
+                worker_id="abandoned-microsoft-briefing-worker",
+                lease_expires_at=now + timedelta(minutes=1),
+                connection_id=connection.id,
+                failed_at=now,
+                failure_code="provider_busy",
                 created_at=now,
                 updated_at=now,
             )
@@ -1454,6 +1462,13 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
             )
             assert changed == 1
             assert briefing.status == "cancelled"
+            assert briefing.attempt_count == 0
+            assert briefing.next_attempt_at is None
+            assert briefing.worker_id is None
+            assert briefing.lease_expires_at is None
+            assert briefing.connection_id is None
+            assert briefing.failed_at is None
+            assert briefing.failure_code is None
             assert customer.title == "Private event"
             assert customer.interaction_id is None
             assert customer.organiser_email is None

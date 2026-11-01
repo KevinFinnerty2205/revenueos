@@ -604,6 +604,47 @@ def test_gmail_send_is_sender_bound_plain_text_header_safe_and_acceptance_only()
     assert message.get_content().strip() == "Reviewed plain-text body"
 
 
+def test_malformed_successful_gmail_send_is_an_uncertain_provider_outcome() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/gmail/v1/users/me/messages/send"
+        # Gmail may already have accepted this write, but the missing threadId
+        # prevents the adapter from reconciling a trustworthy receipt.
+        return httpx.Response(200, json={"id": "gmail-message-with-malformed-receipt"})
+
+    async def run() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url="sqlite+aiosqlite://",
+            google_client_id="google-test-client-id",
+            google_client_secret=SecretStr("google-test-secret"),
+            google_oauth_redirect_uri="http://localhost/callback",
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            google = GoogleWorkspaceClient(
+                settings,
+                cast(CredentialStore, _StaticCredentialStore(_credential())),
+                http_client=http_client,
+            )
+            with pytest.raises(GoogleAPIError) as caught:
+                await google.send_mail(
+                    _context(),
+                    sender_name="Alex Morgan",
+                    sender_email="alex@example.test",
+                    recipient_name="Jordan Lee",
+                    recipient_email="jordan@example.com",
+                    subject="Reviewed subject",
+                    body="Reviewed plain-text body",
+                    operation_key="m" * 64,
+                )
+        assert caught.value.code == "provider_outcome_unknown"
+        assert caught.value.uncertain is True
+        assert caught.value.retryable is False
+
+    asyncio.run(run())
+
+
 def test_google_refresh_rate_limit_and_ambiguous_write_are_bounded() -> None:
     authorisations: list[str | None] = []
 
@@ -1124,13 +1165,21 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
                 user_id=PRIMARY_USER_ID,
                 interaction_id=interaction.id,
                 kind="pre_meeting",
-                status="prepared",
+                delivery_intent="scheduled",
+                status="sending",
                 deduplication_key=f"google-provider-reschedule:{interaction.id}",
                 source_fingerprint="a" * 64,
                 subject="Prepare",
                 body_text="Synthetic local preview",
                 href=f"/conversations/{interaction.id}#preparation",
                 prepared_for_at=now + timedelta(days=4),
+                attempt_count=2,
+                next_attempt_at=now + timedelta(minutes=5),
+                worker_id="abandoned-google-briefing-worker",
+                lease_expires_at=now + timedelta(minutes=1),
+                connection_id=connection.id,
+                failed_at=now,
+                failure_code="provider_busy",
                 created_at=now,
                 updated_at=now,
             )
@@ -1160,6 +1209,13 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
                 == 1
             )
             assert initial_briefing.status == "superseded"
+            assert initial_briefing.attempt_count == 0
+            assert initial_briefing.next_attempt_at is None
+            assert initial_briefing.worker_id is None
+            assert initial_briefing.lease_expires_at is None
+            assert initial_briefing.connection_id is None
+            assert initial_briefing.failed_at is None
+            assert initial_briefing.failure_code is None
             assert service._aware(customer.start_at) == rescheduled_at
             assert customer.provider_timezone == "Australia/Sydney"
 
@@ -1169,13 +1225,18 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
                 user_id=PRIMARY_USER_ID,
                 interaction_id=interaction.id,
                 kind="pre_meeting",
-                status="prepared",
+                delivery_intent="scheduled",
+                status="queued",
                 deduplication_key=f"google-provider-cancellation:{interaction.id}",
                 source_fingerprint="b" * 64,
                 subject="Prepare again",
                 body_text="Synthetic replacement preview",
                 href=f"/conversations/{interaction.id}#preparation",
                 prepared_for_at=now + timedelta(days=5),
+                attempt_count=1,
+                next_attempt_at=now + timedelta(minutes=5),
+                failed_at=now,
+                failure_code="provider_busy",
                 created_at=now,
                 updated_at=now,
             )
@@ -1191,6 +1252,10 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
                 == 1
             )
             assert cancellation_briefing.status == "cancelled"
+            assert cancellation_briefing.attempt_count == 0
+            assert cancellation_briefing.next_attempt_at is None
+            assert cancellation_briefing.failed_at is None
+            assert cancellation_briefing.failure_code is None
             assert customer.state == "deleted"
             assert customer.title == "Deleted event"
         await engine.dispose()

@@ -125,6 +125,7 @@ class RevenueBrainRepository:
                 AIArtifact.superseded_at.is_(None),
                 AIJob.status == "completed",
                 AIJob.job_type == AIArtifact.artifact_type,
+                AIJob.automatic_draft_generation_id.is_(None),
             )
             .order_by(
                 AIArtifact.artifact_type.asc(),

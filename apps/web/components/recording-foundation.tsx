@@ -27,6 +27,11 @@ import {
   type BrowserAudioInterruptionReason,
   type BrowserAudioSourceState,
 } from "@/lib/browser-audio-capture";
+import {
+  type ProgressiveTranscriptEvent,
+  type ProgressiveTranscriptionCapture,
+  startProgressiveTranscriptionCapture,
+} from "@/lib/progressive-transcription-capture";
 
 const MIME_PREFERENCES = [
   "audio/webm;codecs=opus",
@@ -39,6 +44,34 @@ const UPLOAD_RETRY_DELAYS_MS = [0, 300, 1_000] as const;
 const CANCELLABLE_RECORDING_STATES = new Set<
   RecordingSession["lifecycleStatus"]
 >(["created", "recording", "uploading", "failed"]);
+const MAX_VISIBLE_PROGRESSIVE_ITEMS = 120;
+
+export function reconcileProgressiveTranscriptEvents(
+  current: readonly ProgressiveTranscriptEvent[],
+  incoming: readonly ProgressiveTranscriptEvent[],
+): ProgressiveTranscriptEvent[] {
+  const byItem = new Map(current.map((event) => [event.itemId, event]));
+  for (const event of incoming) {
+    const prior = byItem.get(event.itemId);
+    if (
+      !prior ||
+      event.revision > prior.revision ||
+      (event.revision === prior.revision &&
+        event.kind === "final" &&
+        prior.kind !== "final")
+    ) {
+      byItem.set(event.itemId, event);
+    }
+  }
+  return [...byItem.values()]
+    .sort(
+      (left, right) =>
+        left.sourceAudioSequence - right.sourceAudioSequence ||
+        left.itemIndex - right.itemIndex ||
+        left.itemId.localeCompare(right.itemId),
+    )
+    .slice(-MAX_VISIBLE_PROGRESSIVE_ITEMS);
+}
 
 export type RecorderState =
   | "checking"
@@ -286,6 +319,10 @@ export function RecordingFoundation({
   const [draftLiveNotes, setDraftLiveNotes] = useState("");
   const [wakeLockActive, setWakeLockActive] = useState(false);
   const [pauseSupported, setPauseSupported] = useState(true);
+  const [progressiveTranscriptionEnabled, setProgressiveTranscriptionEnabled] =
+    useState(false);
+  const [progressiveTranscriptEvents, setProgressiveTranscriptEvents] =
+    useState<ProgressiveTranscriptEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioCaptureRef = useRef<BrowserAudioCaptureSession | null>(null);
@@ -310,6 +347,9 @@ export function RecordingFoundation({
   const locallyStartedSessionRef = useRef(false);
   const teardownCancellationStartedRef = useRef(false);
   const teardownCancellationKeyRef = useRef<string | null>(null);
+  const progressiveCaptureRef = useRef<ProgressiveTranscriptionCapture | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     const recordings = await apiRequest<RecordingSession[]>(
@@ -392,6 +432,26 @@ export function RecordingFoundation({
       cancelled = true;
     };
   }, [interactionType, load]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void apiRequest<{ featureFlags: Record<string, boolean> }>(
+      "/api/v1/beta/capabilities",
+      { signal: controller.signal },
+    )
+      .then((capabilities) => {
+        if (!controller.signal.aborted) {
+          setProgressiveTranscriptionEnabled(
+            capabilities.featureFlags.progressiveTranscription === true,
+          );
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setProgressiveTranscriptionEnabled(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setOnline(true);
@@ -549,6 +609,9 @@ export function RecordingFoundation({
         recorder.onstop = null;
         if (recorder.state !== "inactive") recorder.stop();
       }
+      const progressiveCapture = progressiveCaptureRef.current;
+      progressiveCaptureRef.current = null;
+      if (progressiveCapture) void progressiveCapture.cancel("capture_ended");
       const current = recordingRef.current;
       if (current && locallyStartedSessionRef.current) {
         cancelServerSessionOnTeardown(current);
@@ -709,6 +772,8 @@ export function RecordingFoundation({
     captureInterruptionMessageRef.current = null;
     interruptionHandledRef.current = false;
     let createdSession: RecordingSession | null = null;
+    let preparedProgressiveCapture: ProgressiveTranscriptionCapture | null =
+      null;
     try {
       const audioCapture = await acquireBrowserAudioCapture(captureMode);
       if (!mountedRef.current) {
@@ -791,6 +856,48 @@ export function RecordingFoundation({
       setPendingChunkCount(0);
       uploadQueueRef.current = Promise.resolve();
       controlQueueRef.current = Promise.resolve();
+      if (progressiveTranscriptionEnabled) {
+        setProgressiveTranscriptEvents([]);
+        try {
+          preparedProgressiveCapture =
+            await startProgressiveTranscriptionCapture({
+              interactionId,
+              recordingSessionId: started.id,
+              stream: audioCapture.recorderStream,
+              externalProcessingAcknowledged: consentConfirmed,
+              initiallyPaused: true,
+              onEvents: (events) => {
+                if (!mountedRef.current || cancelledRef.current) return;
+                setProgressiveTranscriptEvents((current) =>
+                  reconcileProgressiveTranscriptEvents(current, events),
+                );
+              },
+              onRecoverableError: () => {
+                progressiveCaptureRef.current = null;
+                if (mountedRef.current) {
+                  setSourceNotice(
+                    "Live transcription became unavailable. Recording continues for normal batch transcription.",
+                  );
+                }
+              },
+            });
+        } catch {
+          preparedProgressiveCapture = null;
+          if (mountedRef.current) {
+            setSourceNotice(
+              "Live transcription is unavailable. Recording continues for normal batch transcription.",
+            );
+          }
+        }
+      }
+      if (!mountedRef.current) {
+        await preparedProgressiveCapture?.cancel("capture_ended");
+        cancelServerSessionOnTeardown(started);
+        return;
+      }
+      if (captureInterruptedRef.current) {
+        throw new Error("An audio source ended before recording could start.");
+      }
       const recorder = new MediaRecorder(audioCapture.recorderStream, {
         mimeType,
         audioBitsPerSecond: 16_000,
@@ -807,6 +914,15 @@ export function RecordingFoundation({
       };
       recorder.onerror = () => {
         if (!mountedRef.current) return;
+        const progressiveCapture = progressiveCaptureRef.current;
+        progressiveCaptureRef.current = null;
+        if (progressiveCapture) {
+          void progressiveCapture
+            .cancel("capture_ended")
+            .catch(() => undefined);
+        }
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = null;
         setError(
           "Browser recording stopped unexpectedly. Completed chunks remain on the server for recovery.",
         );
@@ -817,6 +933,10 @@ export function RecordingFoundation({
       };
       startedAtRef.current = Date.now();
       pausedDurationRef.current = 0;
+      if (preparedProgressiveCapture) {
+        progressiveCaptureRef.current = preparedProgressiveCapture;
+        preparedProgressiveCapture.resume();
+      }
       recorder.start(CHUNK_INTERVAL_MS);
       timerRef.current = setInterval(updateElapsed, 1_000);
       setElapsedSeconds(1);
@@ -824,6 +944,12 @@ export function RecordingFoundation({
       void requestWakeLock();
       setState("recording");
     } catch (requestError: unknown) {
+      const progressiveCapture =
+        progressiveCaptureRef.current ?? preparedProgressiveCapture;
+      progressiveCaptureRef.current = null;
+      if (progressiveCapture) {
+        await progressiveCapture.cancel("capture_ended").catch(() => undefined);
+      }
       recorderRef.current = null;
       recorderActiveRef.current = false;
       await releaseAudioCapture(mountedRef.current);
@@ -884,6 +1010,7 @@ export function RecordingFoundation({
   function pause(event: ReactMouseEvent<HTMLButtonElement>) {
     if (recorderRef.current?.state !== "recording") return;
     recorderRef.current.pause();
+    progressiveCaptureRef.current?.pause();
     pausedAtRef.current = performance.timeOrigin + event.timeStamp;
     setState("paused");
     const current = recordingRef.current;
@@ -896,6 +1023,7 @@ export function RecordingFoundation({
   function resume(event: ReactMouseEvent<HTMLButtonElement>) {
     if (recorderRef.current?.state !== "paused") return;
     recorderRef.current.resume();
+    progressiveCaptureRef.current?.resume();
     if (pausedAtRef.current !== null)
       pausedDurationRef.current +=
         performance.timeOrigin + event.timeStamp - pausedAtRef.current;
@@ -944,7 +1072,22 @@ export function RecordingFoundation({
     setState("uploading");
     updateElapsed();
     try {
-      await Promise.all([uploadQueueRef.current, controlQueueRef.current]);
+      const progressiveCapture = progressiveCaptureRef.current;
+      progressiveCaptureRef.current = null;
+      const progressiveFinish = progressiveCapture
+        ? progressiveCapture.finish().catch(() => {
+            if (mountedRef.current) {
+              setSourceNotice(
+                "Live transcription did not finish cleanly. The complete recording remains queued for normal batch transcription.",
+              );
+            }
+          })
+        : Promise.resolve();
+      await Promise.all([
+        uploadQueueRef.current,
+        controlQueueRef.current,
+        progressiveFinish,
+      ]);
       if (!mountedRef.current || cancelledRef.current) return;
       if (pendingChunksRef.current.size > 0) {
         throw new Error(
@@ -1057,12 +1200,18 @@ export function RecordingFoundation({
     cancelledRef.current = true;
     setError(null);
     setSourceNotice(null);
+    setProgressiveTranscriptEvents([]);
     recorderActiveRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     const recorder = recorderRef.current;
     interruptionHandledRef.current = true;
     if (recorder && recorder.state !== "inactive") recorder.stop();
     recorderRef.current = null;
+    const progressiveCapture = progressiveCaptureRef.current;
+    progressiveCaptureRef.current = null;
+    if (progressiveCapture) {
+      await progressiveCapture.cancel("user_cancelled");
+    }
     await releaseAudioCapture();
     await releaseWakeLock();
     const current = recordingRef.current;
@@ -1110,6 +1259,10 @@ export function RecordingFoundation({
   const canRecord = ["planned", "in_progress"].includes(lifecycleStatus);
   const browserCaptureApplies = interactionType !== "phone_call";
   const currentLiveNotes = liveNotes ?? draftLiveNotes;
+  const progressiveTranscriptText = progressiveTranscriptEvents
+    .map((event) => event.text.trim())
+    .filter(Boolean)
+    .join("\n");
   const updateLiveNotes = (value: string) => {
     setDraftLiveNotes(value);
     onLiveNotesChange?.(value);
@@ -1439,9 +1592,27 @@ export function RecordingFoundation({
 
       {recording?.externalProcessing ? (
         <p className="mt-4 text-xs leading-5 text-slate-500">
-          External processing is configured for transcription. Oryntela sends
-          audio only after finalisation.
+          {progressiveTranscriptionEnabled
+            ? "External processing is configured for live transcription. Oryntela may send audio during capture, with final batch processing after finalisation."
+            : "External processing is configured for transcription. Oryntela sends audio only after finalisation."}
         </p>
+      ) : null}
+      {progressiveTranscriptText && !transcription?.text ? (
+        <div className="mt-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">
+            Live transcript · provisional
+          </p>
+          <p className="mt-2 text-xs leading-5 text-indigo-950">
+            Recent provider text may change. The complete recording is still
+            processed after finalisation.
+          </p>
+          <div
+            aria-live="polite"
+            className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-slate-800"
+          >
+            {progressiveTranscriptText}
+          </div>
+        </div>
       ) : null}
       {transcription ? (
         <div className="mt-5 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4">

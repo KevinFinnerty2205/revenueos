@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Callable
 
 from revenueos.ai_worker_services import AIWorkerService
+from revenueos.briefing_delivery import BriefingDeliveryWorkerService, configured_briefing_delivery_transports
 from revenueos.campaign_worker import CampaignWorkerService
 from revenueos.config import Settings, get_settings
 from revenueos.create_worker import CreateWorkerService
@@ -18,6 +19,7 @@ from revenueos.integration_worker import ActionExecutionWorkerService
 from revenueos.knowledge_ingestion import KnowledgeIngestionWorkerService
 from revenueos.microsoft_worker import MicrosoftSyncWorkerService
 from revenueos.observability import configure_logging
+from revenueos.post_conversation_drafts import PostConversationDraftWorkerService
 from revenueos.prospect_worker import ProspectWorkerService
 from revenueos.recording_worker import RecordingWorkerService
 
@@ -81,6 +83,7 @@ class AIWorker:
         settings: Settings,
         *,
         recording_service: RecordingWorkerService | None = None,
+        post_conversation_draft_service: PostConversationDraftWorkerService | None = None,
         execution_service: ActionExecutionWorkerService | None = None,
         prospect_service: ProspectWorkerService | None = None,
         campaign_service: CampaignWorkerService | None = None,
@@ -89,12 +92,14 @@ class AIWorker:
         google_service: GoogleSyncWorkerService | None = None,
         crm_connector_service: CRMConnectorWorkerService | None = None,
         knowledge_service: KnowledgeIngestionWorkerService | None = None,
+        briefing_delivery_service: BriefingDeliveryWorkerService | None = None,
         health_tick: Callable[[], None] | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._service = service
         self._settings = settings
         self._recording_service = recording_service
+        self._post_conversation_draft_service = post_conversation_draft_service
         self._execution_service = execution_service
         self._prospect_service = prospect_service
         self._campaign_service = campaign_service
@@ -103,6 +108,7 @@ class AIWorker:
         self._google_service = google_service
         self._crm_connector_service = crm_connector_service
         self._knowledge_service = knowledge_service
+        self._briefing_delivery_service = briefing_delivery_service
         self._health_tick = health_tick
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
@@ -135,6 +141,11 @@ class AIWorker:
             await self._prospect_service.run_once(self.worker_id) if self._prospect_service is not None else False
         )
         recording_processed = await self._recording_service.run_once() if self._recording_service is not None else False
+        post_conversation_draft_processed = (
+            await self._post_conversation_draft_service.run_once(self.worker_id)
+            if self._post_conversation_draft_service is not None
+            else False
+        )
         campaign_prepared = (
             await self._campaign_service.run_once(self.worker_id) if self._campaign_service is not None else False
         )
@@ -157,10 +168,16 @@ class AIWorker:
         knowledge_processed = (
             await self._knowledge_service.run_once(self.worker_id) if self._knowledge_service is not None else False
         )
+        briefing_delivery_processed = (
+            await self._briefing_delivery_service.run_once(self.worker_id)
+            if self._briefing_delivery_service is not None
+            else False
+        )
         organisations = await self._service.discover_eligible_organisations()
         processed = (
             prospect_processed
             or recording_processed
+            or post_conversation_draft_processed
             or campaign_prepared
             or execution_processed
             or campaign_reconciled
@@ -169,6 +186,7 @@ class AIWorker:
             or google_processed
             or crm_connector_processed
             or knowledge_processed
+            or briefing_delivery_processed
         )
         for organisation_id in organisations:
             cancelled = await self._service.cancel_pending_jobs(organisation_id)
@@ -209,6 +227,10 @@ async def run_worker(settings: Settings | None = None) -> None:
         AIWorkerService(session_factory, resolved_settings),
         resolved_settings,
         recording_service=RecordingWorkerService(session_factory, resolved_settings),
+        post_conversation_draft_service=PostConversationDraftWorkerService(
+            session_factory,
+            resolved_settings,
+        ),
         execution_service=ActionExecutionWorkerService(session_factory, resolved_settings),
         prospect_service=prospect_service,
         campaign_service=CampaignWorkerService(session_factory, resolved_settings),
@@ -217,6 +239,11 @@ async def run_worker(settings: Settings | None = None) -> None:
         google_service=GoogleSyncWorkerService(session_factory, resolved_settings),
         crm_connector_service=CRMConnectorWorkerService(session_factory, resolved_settings),
         knowledge_service=KnowledgeIngestionWorkerService(session_factory, resolved_settings),
+        briefing_delivery_service=BriefingDeliveryWorkerService(
+            session_factory,
+            resolved_settings,
+            configured_briefing_delivery_transports(session_factory, resolved_settings),
+        ),
         health_tick=health_server.tick if health_server is not None else None,
     )
     try:

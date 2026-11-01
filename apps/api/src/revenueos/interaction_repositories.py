@@ -14,6 +14,7 @@ from revenueos.models import (
     CaptureSession,
     Company,
     Contact,
+    ConversationDraftGeneration,
     ConversationUserWorkspace,
     DebriefSession,
     Interaction,
@@ -418,6 +419,51 @@ class InteractionRepository:
             ConversationUserWorkspace.organisation_id == organisation_id,
             ConversationUserWorkspace.interaction_id == interaction_id,
             ConversationUserWorkspace.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def latest_draft_generation(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        user_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ConversationDraftGeneration | None:
+        statement = (
+            select(ConversationDraftGeneration)
+            .where(
+                ConversationDraftGeneration.organisation_id == organisation_id,
+                ConversationDraftGeneration.interaction_id == interaction_id,
+                ConversationDraftGeneration.user_id == user_id,
+            )
+            .order_by(
+                ConversationDraftGeneration.transcript_version.desc(),
+                ConversationDraftGeneration.created_at.desc(),
+                ConversationDraftGeneration.id.desc(),
+            )
+            .limit(1)
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def draft_generation_by_id(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        user_id: UUID,
+        generation_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ConversationDraftGeneration | None:
+        statement = select(ConversationDraftGeneration).where(
+            ConversationDraftGeneration.organisation_id == organisation_id,
+            ConversationDraftGeneration.interaction_id == interaction_id,
+            ConversationDraftGeneration.user_id == user_id,
+            ConversationDraftGeneration.id == generation_id,
         )
         if for_update:
             statement = statement.with_for_update()

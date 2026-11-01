@@ -209,7 +209,7 @@ class BriefingPreviewRequest(APIModel):
 class BriefingPreviewResponse(APIModel):
     id: UUID
     kind: Literal["morning_digest", "pre_meeting"]
-    status: Literal["prepared", "superseded", "cancelled"]
+    status: Literal["queued", "sending", "sent", "failed", "superseded", "cancelled"]
     subject: str = Field(min_length=1, max_length=500)
     body_text: str = Field(min_length=1, max_length=100_000)
     href: str = Field(min_length=1, max_length=500, pattern=r"^/")

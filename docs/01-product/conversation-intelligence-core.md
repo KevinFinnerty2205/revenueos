@@ -59,14 +59,21 @@ reach.
   source evidence and intelligence adapters remain the local demonstration path.
   Production-capable OpenAI batch-transcription, structured-intelligence and
   live-signal adapters exist behind disabled server gates and fake-transport tests;
-  no live provider is activated by this refocus. Progressive transcription has a
-  provider-neutral ordered/retry boundary but no production streaming adapter.
+  no live provider is activated by this refocus. Progressive transcription now
+  has a disabled-by-default server-side OpenAI Realtime adapter, authenticated
+  application routes and browser PCM capture, verified only with deterministic
+  protocol fixtures and a synthetic real-browser source.
 - Settings stores timezone, morning-digest and pre-meeting preferences in the
-  authenticated user's private server scope. The exact generated content is
-  written to a local test outbox for preview only. Stable source fingerprints
-  suppress duplicates, rescheduling supersedes the old item and cancellation
-  cancels the prepared item. Linked provider-calendar projections supply the
-  latest reschedule/cancellation state for their owning user. No email is sent.
+  authenticated user's private server scope. The existing worker materialises
+  a date-scoped timezone-aware digest and bounded upcoming pre-meeting items into the
+  private outbox from those explicit preferences. Exact-content previews have a
+  separate, permanently non-deliverable intent. Stable source fingerprints
+  suppress duplicates, rescheduling supersedes the old scheduled item and
+  cancellation cancels queued work.
+  Linked provider-calendar projections supply the latest reschedule/cancellation
+  state for their owning user. A disabled-by-default worker proves due claims,
+  retries and authority rechecks through a deterministic local transport; no
+  real email transport is activated.
 - Conversation search matches titles, linked company/person names, current
   transcript text and accepted reported evidence within the active tenant.
   User-owned debrief evidence remains restricted to its creator in search,
@@ -119,16 +126,18 @@ trial terms.
   bounded ingestion pipeline is implemented and locally fixture-verified);
 - activation of live AI, batch transcription, email and connector execution (the
   production adapters listed in the capability status are implemented but not live);
-- a production progressive/realtime transcription adapter and capture-to-live-source
-  integration; provider-neutral ordering, deduplication, bounded buffering,
-  cancellation and reconnect/retry are locally verified;
-- real email transport or automatic external delivery (the private preferences,
-  exact-content local outbox and schedule metadata are implemented);
-- a due-outbox worker that connects conversation briefing previews to the existing
-  provider email adapters;
-- automatic final-transcript conversion into user-private reported debrief notes;
-  final transcript intelligence and the user-started reviewed debrief remain
-  separate provenance paths;
+- activation and live-provider verification of progressive/realtime transcription;
+  the production adapter and capture path are implemented, but provider credentials,
+  regional/privacy/cost approval, process affinity and graceful deployment drain
+  remain activation boundaries;
+- live-provider activation and verification for automatic briefing delivery;
+  private preferences, exact-content outbox, due worker and approval-gated
+  Google/Microsoft adapter wiring are implemented, while the default/test path
+  remains deterministic and no-network and the production flag remains off;
+- live-provider activation and verification for automatic private
+  post-conversation drafts; the current final-transcript path is implemented
+  and deterministic-worker verified, keeps generated drafts distinct from
+  user-reported debrief evidence, and never sends or shares them automatically;
 - native macOS and Windows capture, call detection, overlays and installers.
 
 Native clients should reuse the current conversation, capture and intelligence

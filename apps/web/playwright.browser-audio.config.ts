@@ -14,7 +14,7 @@ export default defineConfig({
   webServer: useExistingServer
     ? undefined
     : {
-        command: `pnpm exec next dev --port ${webPort}`,
+        command: `PLAYWRIGHT_PROGRESSIVE_PCM_HARNESS=1 pnpm exec next dev --hostname 127.0.0.1 --port ${webPort}`,
         url: baseURL,
       },
   projects: [

@@ -586,7 +586,7 @@ def test_delivery_preferences_and_local_outbox_are_versioned_deduplicated_and_re
     request = {"kind": "pre_meeting", "interactionId": seeded["interaction_id"]}
     first = client.post("/api/v1/daily/briefing-preview", json=request)
     assert first.status_code == 200, first.text
-    assert first.json()["status"] == "prepared"
+    assert first.json()["status"] == "queued"
     assert first.json()["duplicateSuppressed"] is False
     assert "No generated brief is available" in first.json()["bodyText"]
     repeated = client.post("/api/v1/daily/briefing-preview", json=request)
@@ -619,10 +619,10 @@ def test_delivery_preferences_and_local_outbox_are_versioned_deduplicated_and_re
     reactivated = client.post("/api/v1/daily/briefing-preview", json=request)
     assert reactivated.status_code == 200, reactivated.text
     assert reactivated.json()["id"] == first.json()["id"]
-    assert reactivated.json()["status"] == "prepared"
+    assert reactivated.json()["status"] == "queued"
     assert reactivated.json()["duplicateSuppressed"] is False
 
-    assert asyncio.run(statuses()) == ["prepared", "superseded"]
+    assert asyncio.run(statuses()) == ["queued", "superseded"]
 
     cancelled = client.patch(
         f"/api/v1/interactions/{seeded['interaction_id']}",

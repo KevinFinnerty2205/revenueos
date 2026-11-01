@@ -1341,7 +1341,7 @@ export interface DeliveryPreferenceResponse {
 export interface BriefingPreviewResponse {
   id: string;
   kind: "morning_digest" | "pre_meeting";
-  status: "prepared" | "superseded" | "cancelled";
+  status: "queued" | "sending" | "sent" | "failed" | "superseded" | "cancelled";
   subject: string;
   bodyText: string;
   href: string;
@@ -1358,6 +1358,13 @@ export interface ConversationWorkspaceResponse {
   followUpDraft: string | null;
   followUpReviewed: boolean;
   generationFingerprint: string | null;
+  generationState: "not_started" | "pending" | "processing" | "failed" | "ready";
+  generationId: string | null;
+  generationTranscriptVersion: number | null;
+  generationFailureCode: string | null;
+  generationRetryAvailable: boolean;
+  generationUpdateAvailable: boolean;
+  generationCompletedAt: string | null;
   importedFromBrowserAt: string | null;
   updatedAt: string | null;
 }

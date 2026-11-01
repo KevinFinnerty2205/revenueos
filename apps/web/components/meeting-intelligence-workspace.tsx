@@ -57,9 +57,11 @@ const overallLabels: Record<MeetingIntelligenceOverallState, string> = {
 export function MeetingIntelligenceWorkspace({
   meetingId,
   interactionId,
+  workspaceRefreshKey = 0,
 }: {
   meetingId: string;
   interactionId?: string;
+  workspaceRefreshKey?: number;
 }) {
   const [workspace, setWorkspace] =
     useState<MeetingIntelligenceResponse | null>(null);
@@ -466,6 +468,7 @@ export function MeetingIntelligenceWorkspace({
         <FollowUpEmailView
           meetingId={meetingId}
           interactionId={interactionId}
+          workspaceRefreshKey={workspaceRefreshKey}
           content={workspace.followUpEmail.content}
           tone={tone}
           busy={capabilityBusy === "follow_up_email"}
@@ -1173,6 +1176,7 @@ export function OpenQuestionsView({
 function FollowUpEmailView({
   meetingId,
   interactionId,
+  workspaceRefreshKey,
   content,
   tone,
   busy,
@@ -1183,6 +1187,7 @@ function FollowUpEmailView({
 }: {
   meetingId: string;
   interactionId?: string;
+  workspaceRefreshKey: number;
   content: FollowUpEmailContent | null;
   tone: FollowUpEmailTone;
   busy: boolean;
@@ -1196,6 +1201,7 @@ function FollowUpEmailView({
       <PersistedFollowUpEmailView
         meetingId={meetingId}
         interactionId={interactionId}
+        workspaceRefreshKey={workspaceRefreshKey}
         content={content}
         tone={tone}
         busy={busy}
@@ -1494,6 +1500,7 @@ function LegacyFollowUpEmailView({
 function PersistedFollowUpEmailView({
   meetingId,
   interactionId,
+  workspaceRefreshKey,
   content,
   tone,
   busy,
@@ -1504,6 +1511,7 @@ function PersistedFollowUpEmailView({
 }: {
   meetingId: string;
   interactionId: string;
+  workspaceRefreshKey: number;
   content: FollowUpEmailContent | null;
   tone: FollowUpEmailTone;
   busy: boolean;
@@ -1516,6 +1524,7 @@ function PersistedFollowUpEmailView({
   const workspace = useConversationWorkspace({
     interactionId,
     initialFollowUpDraft: generatedDraft,
+    refreshKey: workspaceRefreshKey,
   });
   const previousGeneratedDraft = useRef<string | null>(null);
   const [regeneratedDraft, setRegeneratedDraft] = useState<string | null>(null);

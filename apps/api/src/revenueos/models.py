@@ -1507,8 +1507,121 @@ class ConversationUserWorkspace(TimestampMixin, Base):
     follow_up_draft: Mapped[str | None] = mapped_column(Text)
     follow_up_reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     generation_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    user_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     imported_from_browser_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ConversationDraftGeneration(TimestampMixin, Base):
+    __tablename__ = "conversation_draft_generations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'ready', 'failed', 'cancelled')",
+            name="ck_conversation_draft_generations_status",
+        ),
+        CheckConstraint("transcript_version > 0", name="ck_conversation_draft_generations_version"),
+        CheckConstraint(
+            "attempt_count BETWEEN 0 AND max_attempts AND max_attempts BETWEEN 1 AND 20",
+            name="ck_conversation_draft_generations_attempts",
+        ),
+        CheckConstraint(
+            "orchestration_attempt_count BETWEEN 0 AND attempt_count",
+            name="ck_conversation_draft_gen_orchestration",
+        ),
+        CheckConstraint(
+            "lease_mode IS NULL OR lease_mode IN ('orchestrate', 'poll')",
+            name="ck_conversation_draft_gen_lease_mode",
+        ),
+        CheckConstraint(
+            "(status = 'ready' AND enhanced_notes IS NOT NULL AND follow_up_draft IS NOT NULL "
+            "AND content_fingerprint IS NOT NULL AND completed_at IS NOT NULL) OR status <> 'ready'",
+            name="ck_conversation_draft_generations_ready",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_conversation_draft_generations_interaction",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_conversation_draft_generations_meeting",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["transcript_versions.organisation_id", "transcript_versions.id"],
+            name="fk_conversation_draft_generations_transcript_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_recording_session_id"],
+            ["recording_sessions.organisation_id", "recording_sessions.id"],
+            name="fk_conversation_draft_generations_source_recording",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_conversation_draft_generations_source_evidence",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_conversation_draft_generations_user",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_conversation_draft_generations_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "transcript_version_id",
+            "user_id",
+            name="uq_conversation_draft_generations_source_owner",
+        ),
+        Index(
+            "ix_conversation_draft_generations_owner_status",
+            "organisation_id",
+            "user_id",
+            "status",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_recording_session_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    enhanced_notes: Mapped[str | None] = mapped_column(Text)
+    follow_up_draft: Mapped[str | None] = mapped_column(Text)
+    framework_included: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    orchestration_attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_mode: Mapped[str | None] = mapped_column(String(20))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    workspace_applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ConversationThread(TimestampMixin, Base):
@@ -1690,6 +1803,9 @@ class ConversationDeliveryPreference(TimestampMixin, Base):
     pre_meeting_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     pre_meeting_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
     imported_from_browser_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Internal durable fair-scheduling cursor. This is intentionally separate
+    # from ``updated_at`` so worker scans never look like user preference edits.
+    last_scheduler_discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
 
@@ -1701,8 +1817,17 @@ class ConversationBriefingOutbox(TimestampMixin, Base):
             name="ck_conversation_briefing_outbox_kind",
         ),
         CheckConstraint(
-            "status IN ('prepared', 'superseded', 'cancelled')",
+            "delivery_intent IN ('preview', 'scheduled')",
+            name="ck_conversation_briefing_outbox_delivery_intent",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'sending', 'sent', 'failed', 'superseded', 'cancelled')",
             name="ck_conversation_briefing_outbox_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_conversation_briefing_outbox_attempts"),
+        CheckConstraint(
+            "max_attempts BETWEEN 1 AND 20",
+            name="ck_conversation_briefing_outbox_max_attempts",
         ),
         ForeignKeyConstraint(
             ["organisation_id", "user_id"],
@@ -1715,6 +1840,12 @@ class ConversationBriefingOutbox(TimestampMixin, Base):
             ["interactions.organisation_id", "interactions.id"],
             name="fk_conversation_briefing_outbox_interaction",
             ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_conversation_briefing_outbox_connection",
+            ondelete="RESTRICT",
         ),
         UniqueConstraint("organisation_id", "id", name="uq_conversation_briefing_outbox_org_id"),
         UniqueConstraint(
@@ -1729,6 +1860,21 @@ class ConversationBriefingOutbox(TimestampMixin, Base):
             "user_id",
             "created_at",
         ),
+        Index(
+            "ix_conversation_briefing_outbox_due",
+            "organisation_id",
+            "user_id",
+            "status",
+            "prepared_for_at",
+            "next_attempt_at",
+        ),
+        Index(
+            "ix_conversation_briefing_outbox_lease",
+            "organisation_id",
+            "user_id",
+            "status",
+            "lease_expires_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1738,13 +1884,37 @@ class ConversationBriefingOutbox(TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="prepared", server_default="prepared")
+    delivery_intent: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="preview", server_default="preview"
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued", server_default="queued")
     deduplication_key: Mapped[str] = mapped_column(String(200), nullable=False)
     source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Source freshness is deliberately independent from TimestampMixin.updated_at:
+    # claims, retries and provider receipts must not make stale rendered content
+    # appear freshly materialised.
+    source_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
     body_text: Mapped[str] = mapped_column(Text, nullable=False)
     href: Mapped[str] = mapped_column(String(500), nullable=False)
     prepared_for_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivery_timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC", server_default="UTC")
+    operation_key: Mapped[str] = mapped_column(String(64), nullable=False, default=lambda: uuid.uuid4().hex)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    submission_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
 
 
 class SellingProfileRevision(TimestampMixin, Base):
@@ -11293,6 +11463,11 @@ class AIJob(TimestampMixin, Base):
         ),
         Index("ix_ai_jobs_organisation_meeting", "organisation_id", "meeting_id"),
         Index("ix_ai_jobs_organisation_status", "organisation_id", "status"),
+        Index(
+            "ix_ai_jobs_organisation_automatic_draft_generation",
+            "organisation_id",
+            "automatic_draft_generation_id",
+        ),
         Index("ix_ai_jobs_status_next_attempt", "status", "next_attempt_at"),
         Index("ix_ai_jobs_status_lease_expires", "status", "lease_expires_at"),
         Index(
@@ -11331,6 +11506,7 @@ class AIJob(TimestampMixin, Base):
     prompt_version: Mapped[int | None] = mapped_column(Integer)
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     idempotency_key: Mapped[str | None] = mapped_column(String(200))
+    automatic_draft_generation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     composition_tone: Mapped[str | None] = mapped_column(String(20))
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")

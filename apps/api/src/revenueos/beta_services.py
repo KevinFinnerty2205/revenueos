@@ -62,6 +62,7 @@ from revenueos.models import (
     SalesTarget,
     User,
 )
+from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
 from revenueos.tenant import TenantContext
 from revenueos.visual_storage import (
     S3CompatibleVisualStorage,
@@ -93,11 +94,13 @@ class BetaService:
         tenant: TenantContext,
         settings: Settings,
         session_revoker: SessionRevoker | None = None,
+        progressive_runtime: ProgressiveTranscriptionRegistry | None = None,
     ) -> None:
         self.session = session
         self.tenant = tenant
         self.settings = settings
         self.session_revoker = session_revoker or NoopSessionRevoker()
+        self.progressive_runtime = progressive_runtime
 
     def require_admin(self) -> None:
         if self.tenant.role != "admin":
@@ -609,6 +612,14 @@ class BetaService:
                 metadata={"target_count": archived_target_count},
             )
         await self._commit("The member status could not be changed.")
+
+        # Retire provider transports only after the membership revocation is
+        # durable and no membership row lock remains held by this transaction.
+        if self.progressive_runtime is not None:
+            await self.progressive_runtime.retire_user_sessions(
+                self.tenant.organisation_id,
+                user.id,
+            )
 
         result = await self._revoke_member_sessions(user.external_auth_id, external_organisation_id)
         await self._record_session_revocation_result(

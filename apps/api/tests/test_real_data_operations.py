@@ -92,6 +92,7 @@ def test_real_data_configuration_has_one_known_safe_restricted_profile() -> None
     assert settings.paid_customer_resilience_gate_ready is True
     assert settings.safe_feature_flags()["nativeCrm"] is True
     assert settings.safe_feature_flags()["revenueBrain"] is False
+    assert settings.safe_feature_flags()["briefingDelivery"] is False
 
 
 @pytest.mark.parametrize(

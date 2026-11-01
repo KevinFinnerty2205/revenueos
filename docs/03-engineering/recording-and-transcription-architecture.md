@@ -38,12 +38,14 @@ transcript versioning below. It does not add direct telephony capture or a secon
 pipeline.
 
 - **Status:** browser-first microphone/shared-audio recording, resumable private
-  upload and batch transcription are implemented. Provider-neutral progressive
-  ordering/reconnect orchestration is fixture-verified, but no production streaming
-  transcription adapter is implemented. Native and connector capture remain target
-  architecture.
-- **MVP posture:** Debrief remains first-class. Authorised recording uses finalised
-  sessions and batch transcription, not real-time infrastructure.
+  upload and batch transcription are implemented. An optional AudioWorklet PCM path,
+  authenticated progressive routes and server-only OpenAI Realtime transcription
+  adapter are implemented behind disabled gates. Protocol fixtures and synthetic
+  Chrome audio verify the local path; no live provider was called. Native and
+  connector capture remain target architecture.
+- **MVP posture:** Debrief remains first-class and batch transcription remains
+  authoritative. Progressive text is provisional, optional and never replaces the
+  final whole-recording pass.
 
 ## Decision summary
 
@@ -301,11 +303,15 @@ mismatch, transcript-only sources, missing speaker identity and provider deletio
 WO-020 implements the live intelligence aggregate over a deliberately supplied
 `progressive`/`provisional` transcript version. The provider-neutral progressive
 orchestrator now defines ordered audio delivery, stable deduplication, partial/final
-revisions, bounded buffering, cancellation and resumable retry, but it is not wired
-to a production provider or public capture route. It does not make the WO-015 batch
-provider stream, does not pretend WO-018 imports are live and stores no duplicate
-transcript window. Segment `speaker_role` is controlled and optional; a label remains
-different from identity.
+revisions, bounded buffering, cancellation and resumable retry. The deliberately
+armed browser capture is downmixed and statefully resampled to 24 kHz mono PCM16;
+authenticated server routes mediate the server-only provider credential. Final
+provider turns are durably upserted into one provisional version consumed by Live
+Intelligence, while browser partials remain bounded presentation state. On recording
+completion, the batch worker promotes that same version identity in place with the
+authoritative whole-recording transcript and segments. It does not pretend WO-018
+imports are live or create a second transcript system. Segment `speaker_role` is
+controlled and optional; a label remains different from identity.
 
 Live signals consume incomplete evidence and are labelled provisional with exact
 segment ranges. They cannot update Revenue Brain, trigger external action or be
@@ -313,14 +319,14 @@ presented as validated post-interaction intelligence. After final transcript and
 all sources arrive, the normal source-aware capability runs and the live aggregate
 reconciles separately. The final result may remove or contradict a live signal.
 
-Real-time transport becomes justified only when tests show that a specific
-in-session decision benefits from low latency and the benefit outweighs attention,
-privacy, cost and reliability risks. WebSockets/streaming are not architecture goals
-by themselves; live-signal reads still use bounded HTTP polling. Production
-progressive transcription is an implementation gap until an evaluated provider
-adapter and its consent/privacy/region/cost/operational controls are separately
-approved. The OpenAI live-signal Responses adapter is implemented and gated, but it
-consumes authorised progressive text rather than audio.
+WebSockets/streaming are not architecture goals by themselves; live-signal reads
+still use bounded HTTP polling. The OpenAI Realtime transcription adapter follows
+the current transcription session protocol, explicit PCM append/commit and provider
+item reconciliation, but has only been exercised with deterministic protocol
+fixtures. Production activation still requires provider/privacy/region/cost review,
+live reliability verification, API-process affinity and graceful rollout drain. The
+separate OpenAI live-signal Responses adapter consumes the authorised progressive
+text rather than audio and remains gated as well.
 
 ## Observability and failure UX
 

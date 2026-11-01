@@ -149,6 +149,18 @@ class ConversationWorkspaceUpdate(APIModel):
         return value
 
 
+class ConversationDraftGenerationApply(APIModel):
+    generation_id: UUID
+    expected_lock_version: int
+
+    @field_validator("expected_lock_version")
+    @classmethod
+    def lock_version_is_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("expectedLockVersion must be zero or greater.")
+        return value
+
+
 class ConversationWorkspaceResponse(APIModel):
     exists: bool
     owner_user_id: UUID
@@ -158,10 +170,17 @@ class ConversationWorkspaceResponse(APIModel):
     follow_up_draft: str | None = None
     follow_up_reviewed: bool = False
     generation_fingerprint: str | None = None
+    generation_state: Literal["not_started", "pending", "processing", "failed", "ready"] = "not_started"
+    generation_id: UUID | None = None
+    generation_transcript_version: int | None = None
+    generation_failure_code: str | None = None
+    generation_retry_available: bool = False
+    generation_update_available: bool = False
+    generation_completed_at: datetime | None = None
     imported_from_browser_at: datetime | None = None
     updated_at: datetime | None = None
 
-    @field_validator("imported_from_browser_at", "updated_at", mode="before")
+    @field_validator("generation_completed_at", "imported_from_browser_at", "updated_at", mode="before")
     @classmethod
     def workspace_timestamps_are_utc(cls, value: datetime | None) -> datetime | None:
         return normalise_api_datetime(value) if value is not None else None

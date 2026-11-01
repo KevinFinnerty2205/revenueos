@@ -32,6 +32,7 @@ from revenueos.domain import (
 )
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_contracts import (
+    ConversationDraftGenerationApply,
     ConversationWorkspaceResponse,
     ConversationWorkspaceUpdate,
     InteractionComplete,
@@ -256,6 +257,29 @@ async def save_personal_workspace(
     service: Interactions,
 ) -> ConversationWorkspaceResponse:
     return await service.save_personal_workspace(interaction_id, request)
+
+
+@router.post(
+    "/{interaction_id}/personal-workspace/generation/retry",
+    response_model=ConversationWorkspaceResponse,
+)
+async def retry_personal_workspace_generation(
+    interaction_id: UUID,
+    service: Interactions,
+) -> ConversationWorkspaceResponse:
+    return await service.retry_personal_workspace_generation(interaction_id)
+
+
+@router.post(
+    "/{interaction_id}/personal-workspace/generation/apply",
+    response_model=ConversationWorkspaceResponse,
+)
+async def apply_personal_workspace_generation(
+    interaction_id: UUID,
+    request: ConversationDraftGenerationApply,
+    service: Interactions,
+) -> ConversationWorkspaceResponse:
+    return await service.apply_personal_workspace_generation(interaction_id, request)
 
 
 @router.patch("/{interaction_id}", response_model=InteractionResponse)

@@ -24,6 +24,8 @@ from revenueos.errors import (
     validation_error_handler,
 )
 from revenueos.observability import configure_logging
+from revenueos.progressive_transcription_body_limit import ProgressiveAudioBodyLimitMiddleware
+from revenueos.progressive_transcription_runtime import ProgressiveTranscriptionRuntime
 from revenueos.routes import (
     accounts,
     actions,
@@ -54,6 +56,7 @@ from revenueos.routes import (
     opportunities,
     outreach,
     pipelines,
+    progressive_transcription,
     prospect,
     sales_forecast,
     sales_insights,
@@ -96,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(app_settings.log_level)
     app_engine = create_engine(app_settings)
     session_factory = create_session_factory(app_engine)
+    progressive_transcription_runtime = ProgressiveTranscriptionRuntime(app_settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -104,9 +108,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await ensure_development_identity(session_factory)
             except SQLAlchemyError:
                 logger.warning("development_identity_provisioning_failed")
-        yield
-        if app_engine is not None:
-            await app_engine.dispose()
+        try:
+            yield
+        finally:
+            await progressive_transcription_runtime.close_all()
+            if app_engine is not None:
+                await app_engine.dispose()
 
     app = FastAPI(
         title="Oryntela API",
@@ -119,7 +126,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.state.engine = app_engine
     app.state.session_factory = session_factory
+    app.state.progressive_transcription_runtime = progressive_transcription_runtime
     app.dependency_overrides[get_settings] = lambda: app_settings
+    # Register the body limiter before CORS so Starlette's reverse middleware
+    # wrapping gives even its direct 400/413 responses the normal CORS headers.
+    app.add_middleware(ProgressiveAudioBodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.cors_origin_list,
@@ -207,6 +218,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(selling_profile.router, dependencies=commercial_access)
     app.include_router(tasks.router, dependencies=commercial_access)
     app.include_router(interactions.router, dependencies=commercial_access)
+    app.include_router(progressive_transcription.router, dependencies=commercial_access)
     app.include_router(conversation_threads.router, dependencies=commercial_access)
     app.include_router(conversation_threads.interaction_router, dependencies=commercial_access)
     app.include_router(manager.router, dependencies=commercial_access)

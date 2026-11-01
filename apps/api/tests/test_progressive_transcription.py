@@ -44,6 +44,7 @@ class ScriptedConnection:
         self.finish_result = finish
         self.sent_sequences: list[int] = []
         self.finish_calls = 0
+        self.poll_calls = 0
         self.closed = False
 
     async def send_audio(
@@ -61,6 +62,10 @@ class ScriptedConnection:
         if isinstance(self.finish_result, Exception):
             raise self.finish_result
         return self.finish_result
+
+    async def poll(self) -> tuple[ProgressiveProviderUpdate, ...]:
+        self.poll_calls += 1
+        return ()
 
     async def close(self) -> None:
         self.closed = True
@@ -172,6 +177,82 @@ async def test_bounded_out_of_order_queue_applies_backpressure_but_accepts_missi
     assert [item.source_audio_sequence for item in drained] == [1, 2, 3]
     assert orchestrator.status.buffered_audio_segments == 0
     assert await orchestrator.finish() == ()
+
+
+@async_test
+async def test_long_session_segment_and_event_metadata_limits_fail_closed() -> None:
+    connection = ScriptedConnection(
+        sends={
+            0: (update(0),),
+            1: (update(1),),
+        }
+    )
+    segment_limited = ProgressiveTranscriptionOrchestrator(
+        provider=ScriptedProvider(connection),
+        stream_id="segment-limit",
+        mime_type="audio/webm",
+        max_accepted_audio_segments=1,
+    )
+    await segment_limited.start()
+    await segment_limited.submit_audio(audio(0))
+    with pytest.raises(ProgressiveTranscriptionBackpressureError):
+        await segment_limited.submit_audio(audio(1))
+    assert segment_limited.status.lifecycle == "capturing"
+
+    event_connection = ScriptedConnection(sends={0: (update(0),), 1: (update(1),)})
+    event_limited = ProgressiveTranscriptionOrchestrator(
+        provider=ScriptedProvider(event_connection),
+        stream_id="event-limit",
+        mime_type="audio/webm",
+        max_buffered_transcript_updates=1,
+        max_transcript_event_history=1,
+    )
+    await event_limited.start()
+    await event_limited.submit_audio(audio(0))
+    with pytest.raises(ProgressiveProviderContractError):
+        await event_limited.submit_audio(audio(1))
+    assert event_limited.status.lifecycle == "failed"
+
+    dense_updates = tuple(
+        update(
+            0,
+            revision=revision,
+            kind="final" if revision == 32 else "partial",
+        )
+        for revision in range(1, 33)
+    )
+    dense_connection = ScriptedConnection(sends={0: dense_updates})
+    dense = ProgressiveTranscriptionOrchestrator(
+        provider=ScriptedProvider(dense_connection),
+        stream_id="dense-event-boundary",
+        mime_type="audio/webm",
+        max_buffered_transcript_updates=32,
+        max_transcript_event_history=32,
+    )
+    await dense.start()
+    assert len(await dense.submit_audio(audio(0))) == 32
+    assert await dense.finish() == ()
+
+    overflow_updates = tuple(
+        update(
+            0,
+            revision=revision,
+            kind="final" if revision == 33 else "partial",
+        )
+        for revision in range(1, 34)
+    )
+    overflow_connection = ScriptedConnection(sends={0: overflow_updates})
+    overflow = ProgressiveTranscriptionOrchestrator(
+        provider=ScriptedProvider(overflow_connection),
+        stream_id="dense-event-overflow",
+        mime_type="audio/webm",
+        max_buffered_transcript_updates=32,
+        max_transcript_event_history=32,
+    )
+    await overflow.start()
+    with pytest.raises(ProgressiveProviderContractError):
+        await overflow.submit_audio(audio(0))
+    assert overflow.status.lifecycle == "failed"
 
 
 @async_test

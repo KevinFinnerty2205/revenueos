@@ -49,8 +49,16 @@ class ProgressiveProviderTransientError(ProgressiveProviderError):
     retryable = True
 
 
+class ProgressiveProviderTimeoutError(ProgressiveProviderTransientError):
+    code = "progressive_transcription_provider_timeout"
+
+
 class ProgressiveProviderRejectedError(ProgressiveProviderError):
     code = "progressive_transcription_provider_rejected"
+
+
+class ProgressiveProviderConsentRequiredError(ProgressiveProviderRejectedError):
+    code = "progressive_transcription_consent_required"
 
 
 class ProgressiveProviderContractError(ProgressiveProviderError):
@@ -144,6 +152,7 @@ class ProgressiveStreamRequest:
     stream_id: str
     mime_type: str
     resume_after_sequence: int
+    external_processing_consent_granted: bool = False
 
 
 class ProgressiveTranscriptionConnection(Protocol):
@@ -153,6 +162,8 @@ class ProgressiveTranscriptionConnection(Protocol):
     ) -> tuple[ProgressiveProviderUpdate, ...]: ...
 
     async def finish(self) -> tuple[ProgressiveProviderUpdate, ...]: ...
+
+    async def poll(self) -> tuple[ProgressiveProviderUpdate, ...]: ...
 
     async def close(self) -> None: ...
 
@@ -189,9 +200,10 @@ class _TranscriptItemState:
 class ProgressiveTranscriptionOrchestrator:
     """Orders bounded audio input around a resumable provider connection.
 
-    This is an internal provider boundary, not a production transcription
-    adapter. A concrete adapter must commit each successful ``send_audio`` call
-    before returning and honour ``resume_after_sequence`` when reconnecting.
+    This provider-neutral boundary is used by the authenticated runtime and its
+    concrete provider adapter. An adapter must commit each successful
+    ``send_audio`` call before returning and honour ``resume_after_sequence``
+    when reconnecting.
     """
 
     def __init__(
@@ -204,6 +216,9 @@ class ProgressiveTranscriptionOrchestrator:
         max_audio_segment_bytes: int = 1_000_000,
         max_buffered_transcript_updates: int = 120,
         max_reconnect_attempts: int = 3,
+        max_accepted_audio_segments: int = 4_096,
+        max_transcript_event_history: int = 16_384,
+        external_processing_consent_granted: bool = False,
     ) -> None:
         normalised_stream_id = stream_id.strip()
         normalised_mime_type = mime_type.strip()
@@ -222,6 +237,10 @@ class ProgressiveTranscriptionOrchestrator:
             raise ValueError("max_buffered_transcript_updates must be positive.")
         if max_reconnect_attempts < 1:
             raise ValueError("max_reconnect_attempts must be positive.")
+        if max_accepted_audio_segments < 1:
+            raise ValueError("max_accepted_audio_segments must be positive.")
+        if max_transcript_event_history < max_buffered_transcript_updates:
+            raise ValueError("max_transcript_event_history must cover the buffered update limit.")
 
         self._provider = provider
         self._stream_id = normalised_stream_id
@@ -231,6 +250,9 @@ class ProgressiveTranscriptionOrchestrator:
         self._max_audio_segment_bytes = max_audio_segment_bytes
         self._max_buffered_updates = max_buffered_transcript_updates
         self._max_reconnect_attempts = max_reconnect_attempts
+        self._max_accepted_audio_segments = max_accepted_audio_segments
+        self._max_transcript_event_history = max_transcript_event_history
+        self._external_processing_consent_granted = external_processing_consent_granted
 
         self._lifecycle: ProgressiveAudioLifecycle = "idle"
         self._connection: ProgressiveTranscriptionConnection | None = None
@@ -288,6 +310,8 @@ class ProgressiveTranscriptionOrchestrator:
                 if existing.deduplication_id == deduplication_id:
                     return ()
                 raise ProgressiveAudioConflictError
+            if len(self._accepted_audio_ids) + len(self._pending_audio) >= self._max_accepted_audio_segments:
+                raise ProgressiveTranscriptionBackpressureError
             if (
                 segment.sequence_number > self._next_audio_sequence
                 and self._out_of_order_audio_count() >= self._max_out_of_order
@@ -313,7 +337,8 @@ class ProgressiveTranscriptionOrchestrator:
             try:
                 await self._open_connection()
                 self._lifecycle = "capturing"
-                events = list(await self._drain_audio())
+                events = list(await self._poll_connection())
+                events.extend(await self._drain_audio())
                 if self._finish_requested:
                     events.extend(await self._complete_finish())
                 self._consecutive_reconnect_attempts = 0
@@ -325,6 +350,12 @@ class ProgressiveTranscriptionOrchestrator:
                     await self._fail(error)
                     raise error from exc
                 raise
+
+    async def poll(self) -> tuple[ProgressiveTranscriptEvent, ...]:
+        async with self._lock:
+            if self._lifecycle != "capturing" or self._finish_requested:
+                raise ProgressiveTranscriptionStateError
+            return await self._poll_connection()
 
     async def finish(self) -> tuple[ProgressiveTranscriptEvent, ...]:
         async with self._lock:
@@ -354,6 +385,7 @@ class ProgressiveTranscriptionOrchestrator:
             stream_id=self._stream_id,
             mime_type=self._mime_type,
             resume_after_sequence=self._next_audio_sequence - 1,
+            external_processing_consent_granted=self._external_processing_consent_granted,
         )
         try:
             self._connection = await self._provider.connect(request)
@@ -399,6 +431,30 @@ class ProgressiveTranscriptionOrchestrator:
                 await self._fail(exc)
                 raise
         return tuple(events)
+
+    async def _poll_connection(self) -> tuple[ProgressiveTranscriptEvent, ...]:
+        connection = self._connection
+        if connection is None:
+            error = ProgressiveProviderContractError()
+            await self._fail(error)
+            raise error
+        try:
+            updates = await connection.poll()
+        except ProgressiveProviderTransientError as exc:
+            await self._recover(exc)
+            raise
+        except ProgressiveProviderError as exc:
+            await self._fail(exc)
+            raise
+        except Exception as exc:
+            error = ProgressiveProviderContractError()
+            await self._fail(error)
+            raise error from exc
+        try:
+            return self._accept_updates(updates)
+        except ProgressiveProviderContractError as exc:
+            await self._fail(exc)
+            raise
 
     async def _complete_finish(self) -> tuple[ProgressiveTranscriptEvent, ...]:
         connection = self._connection
@@ -449,6 +505,8 @@ class ProgressiveTranscriptionOrchestrator:
                 if existing_fingerprint != fingerprint:
                     raise ProgressiveProviderContractError
                 continue
+            if len(self._update_fingerprints) >= self._max_transcript_event_history:
+                raise ProgressiveProviderContractError
             state = self._item_states.get(update.item_id)
             if state is None:
                 state = _TranscriptItemState(

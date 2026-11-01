@@ -619,6 +619,7 @@ class PreInteractionBriefRepository:
                 AIArtifact.transcript_version == current_transcript_version,
                 AIArtifact.superseded_at.is_(None),
                 AIJob.status == "completed",
+                AIJob.automatic_draft_generation_id.is_(None),
                 or_(*trace_conditions),
             )
             .order_by(

@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
+from typing import cast
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.beta_services import BetaService
@@ -9,6 +10,7 @@ from revenueos.config import Settings, get_settings
 from revenueos.database import get_db, set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.models import OrganisationMembership
+from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
@@ -17,6 +19,7 @@ def get_session_revoker(settings: Settings = Depends(get_settings)) -> SessionRe
 
 
 async def get_beta_service(
+    request: Request,
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
     settings: Settings = Depends(get_settings),
@@ -26,7 +29,17 @@ async def get_beta_service(
     membership = await session.get(OrganisationMembership, (tenant.organisation_id, tenant.user_id))
     if membership is None or membership.status != "active":
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
-    yield BetaService(session, tenant, settings, session_revoker)
+    progressive_runtime = cast(
+        ProgressiveTranscriptionRegistry,
+        request.app.state.progressive_transcription_runtime,
+    )
+    yield BetaService(
+        session,
+        tenant,
+        settings,
+        session_revoker=session_revoker,
+        progressive_runtime=progressive_runtime,
+    )
 
 
 async def require_data_notice_acknowledgement(

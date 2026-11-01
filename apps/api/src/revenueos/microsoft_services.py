@@ -9,7 +9,7 @@ from typing import Literal, cast
 from urllib.parse import quote, urlsplit
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -595,6 +595,7 @@ class MicrosoftSyncService:
             match_state, contact, company_id, opportunity_id = "private", None, None, None
         linked_interaction_id = existing.interaction_id if existing is not None else None
         previous_start = existing.start_at if existing is not None else None
+        previous_state = existing.state if existing is not None else None
         values: dict[str, object] = {
             "i_cal_uid": None if private else self._string(item.get("iCalUId"), 255),
             "series_master_id": None if private else self._string(item.get("seriesMasterId"), 255),
@@ -639,7 +640,12 @@ class MicrosoftSyncService:
                 briefing_status: Literal["superseded", "cancelled"] | None = (
                     "cancelled"
                     if private or values["state"] != "active"
-                    else ("superseded" if previous_start is not None and self._aware(previous_start) != start else None)
+                    else (
+                        "superseded"
+                        if previous_state != "active"
+                        or (previous_start is not None and self._aware(previous_start) != start)
+                        else None
+                    )
                 )
                 if briefing_status is not None:
                     await self._reconcile_linked_briefings(linked_interaction_id, briefing_status, now)
@@ -670,9 +676,38 @@ class MicrosoftSyncService:
                     ConversationBriefingOutbox.user_id == owner_user_id,
                     ConversationBriefingOutbox.interaction_id == interaction_id,
                     ConversationBriefingOutbox.kind == "pre_meeting",
-                    ConversationBriefingOutbox.status == "prepared",
+                    or_(
+                        ConversationBriefingOutbox.status == "queued",
+                        and_(
+                            ConversationBriefingOutbox.status == "sending",
+                            ConversationBriefingOutbox.submission_started_at.is_(None),
+                        ),
+                        ConversationBriefingOutbox.status == "cancelled",
+                        and_(
+                            ConversationBriefingOutbox.status == "failed",
+                            or_(
+                                ConversationBriefingOutbox.failure_code.is_(None),
+                                ConversationBriefingOutbox.failure_code.not_in(
+                                    ("delivery_outcome_unknown", "provider_outcome_unknown")
+                                ),
+                            ),
+                        ),
+                    ),
                 )
-                .values(status=status, updated_at=now)
+                .values(
+                    status=status,
+                    attempt_count=0,
+                    next_attempt_at=None,
+                    worker_id=None,
+                    lease_expires_at=None,
+                    connection_id=None,
+                    submission_started_at=None,
+                    provider_message_id=None,
+                    sent_at=None,
+                    failed_at=None,
+                    failure_code=None,
+                    updated_at=now,
+                )
             )
         finally:
             await set_private_user_database_context(self.session, self.tenant.user_id)

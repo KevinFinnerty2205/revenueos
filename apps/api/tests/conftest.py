@@ -54,6 +54,7 @@ from revenueos.models import (
     ContactSuppression,
     ConversationBriefingOutbox,
     ConversationDeliveryPreference,
+    ConversationDraftGeneration,
     ConversationThread,
     ConversationThreadAssignment,
     ConversationThreadAuditEvent,
@@ -227,9 +228,12 @@ def pytest_configure() -> None:
     os.environ.update(
         {
             "API_FEATURE_ACTION_EXECUTION_ENABLED": "false",
+            "API_FEATURE_BRIEFING_DELIVERY_ENABLED": "false",
             "API_FEATURE_ENGAGE_EVENTS_ENABLED": "false",
             "API_FEATURE_INTEGRATIONS_ENABLED": "false",
             "API_FEATURE_MOCK_CONNECTORS_ENABLED": "false",
+            "API_BRIEFING_DELIVERY_TRANSPORT_MODE": "local",
+            "API_BRIEFING_DELIVERY_APP_BASE_URL": "http://localhost:3000",
         }
     )
 
@@ -587,6 +591,7 @@ def clean_business_entities() -> Iterator[None]:
                 CompanyKnowledgeSource,
                 ConversationBriefingOutbox,
                 ConversationDeliveryPreference,
+                ConversationDraftGeneration,
                 ConversationThreadAuditEvent,
                 ConversationThreadAssignment,
                 ConversationThread,

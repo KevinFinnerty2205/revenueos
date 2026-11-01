@@ -1,9 +1,24 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  reconcileProgressiveTranscriptEvents,
   RecordingFoundation,
   selectSupportedRecordingMimeType,
 } from "@/components/recording-foundation";
+
+const startProgressiveTranscriptionCaptureMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/progressive-transcription-capture", async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import("@/lib/progressive-transcription-capture")
+    >();
+  return {
+    ...original,
+    startProgressiveTranscriptionCapture:
+      startProgressiveTranscriptionCaptureMock,
+  };
+});
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -40,6 +55,7 @@ const baseRecording = {
 
 class FakeMediaRecorder {
   static instances: FakeMediaRecorder[] = [];
+  static onStart: () => void = () => undefined;
 
   static isTypeSupported(mimeType: string): boolean {
     return mimeType === "audio/webm;codecs=opus";
@@ -59,6 +75,7 @@ class FakeMediaRecorder {
   }
 
   start(): void {
+    FakeMediaRecorder.onStart();
     this.state = "recording";
   }
 
@@ -174,6 +191,8 @@ function installSupportedBrowser(
 describe("RecordingFoundation", () => {
   afterEach(() => {
     FakeMediaRecorder.instances = [];
+    FakeMediaRecorder.onStart = () => undefined;
+    startProgressiveTranscriptionCaptureMock.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -184,6 +203,72 @@ describe("RecordingFoundation", () => {
       }),
     ).toBe("audio/mp4;codecs=mp4a.40.2");
     expect(selectSupportedRecordingMimeType(undefined)).toBeNull();
+  });
+
+  it("orders progressive text and replaces a partial with its final revision", () => {
+    const base = {
+      streamId: "stream-1",
+      providerName: "fixture",
+      itemIndex: 0,
+      startMs: 0,
+      endMs: 100,
+      speakerLabel: null,
+    } as const;
+    const reconciled = reconcileProgressiveTranscriptEvents(
+      [
+        {
+          ...base,
+          eventId: "partial-1",
+          itemId: "item-1",
+          sourceAudioSequence: 0,
+          revision: 1,
+          kind: "partial",
+          text: "First wor",
+        },
+      ],
+      [
+        {
+          ...base,
+          eventId: "item-2-final",
+          itemId: "item-2",
+          sourceAudioSequence: 1,
+          revision: 1,
+          kind: "final",
+          text: "Second words.",
+        },
+        {
+          ...base,
+          eventId: "item-1-final",
+          itemId: "item-1",
+          sourceAudioSequence: 0,
+          revision: 2,
+          kind: "final",
+          text: "First words.",
+        },
+      ],
+    );
+
+    expect(
+      reconciled.map(({ itemId, revision, kind, text }) => ({
+        itemId,
+        revision,
+        kind,
+        text,
+      })),
+    ).toEqual([
+      {
+        itemId: "item-1",
+        revision: 2,
+        kind: "final",
+        text: "First words.",
+      },
+      {
+        itemId: "item-2",
+        revision: 1,
+        kind: "final",
+        text: "Second words.",
+      },
+    ]);
   });
 
   it("shows an accessible Debrief fallback when browser recording is unsupported", async () => {
@@ -225,6 +310,85 @@ describe("RecordingFoundation", () => {
       screen.queryByRole("button", { name: "Start recording" }),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    {
+      progressiveTranscription: true,
+      disclosure:
+        "Oryntela may send audio during capture, with final batch processing after finalisation.",
+      excludedDisclosure: "Oryntela sends audio only after finalisation.",
+    },
+    {
+      progressiveTranscription: false,
+      disclosure: "Oryntela sends audio only after finalisation.",
+      excludedDisclosure: "Oryntela may send audio during capture",
+    },
+  ])(
+    "discloses external-processing timing when progressive transcription is $progressiveTranscription",
+    async ({ progressiveTranscription, disclosure, excludedDisclosure }) => {
+      installSupportedBrowser(() => Promise.reject(new Error("not requested")));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith("/api/v1/beta/capabilities")) {
+            return Promise.resolve(
+              jsonResponse({
+                featureFlags: { progressiveTranscription },
+              }),
+            );
+          }
+          if (url.endsWith("/recordings")) {
+            return Promise.resolve(
+              jsonResponse([
+                {
+                  ...baseRecording,
+                  lifecycleStatus: "completed",
+                  externalProcessing: true,
+                },
+              ]),
+            );
+          }
+          if (url.endsWith("/transcription")) {
+            return Promise.resolve(
+              jsonResponse({
+                recordingId: "recording-1",
+                status: "completed",
+                transcriptVersionId: "transcript-version-1",
+                transcriptId: "transcript-1",
+                meetingId: "meeting-1",
+                version: 1,
+                source: "recording",
+                language: "en-AU",
+                text: "Synthetic transcript.",
+                segments: [],
+                completedAt: "2026-08-15T00:05:00Z",
+                safeMessage: "Transcription is complete.",
+              }),
+            );
+          }
+          return Promise.resolve(
+            jsonResponse({ code: "unexpected", message: url }, 500),
+          );
+        }),
+      );
+
+      render(
+        <RecordingFoundation
+          interactionId="interaction-1"
+          interactionType="face_to_face_meeting"
+          lifecycleStatus="completed"
+        />,
+      );
+
+      expect(
+        await screen.findByText(disclosure, { exact: false }),
+      ).toBeVisible();
+      expect(
+        screen.queryByText(excludedDisclosure, { exact: false }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("offers microphone-only capture when shared meeting audio is unsupported", async () => {
     installSupportedBrowser(() => Promise.resolve(microphoneStream()));
@@ -506,6 +670,206 @@ describe("RecordingFoundation", () => {
       expect.stringContaining("/finalize"),
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("prepares progressive capture before synchronously arming it with the batch recorder", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    const lifecycle: string[] = [];
+    const resumeProgressiveCapture = vi.fn(() => {
+      lifecycle.push("progressive_armed");
+    });
+    let releasePreparation: () => void = () => undefined;
+    const preparation = new Promise<{
+      pause: () => void;
+      resume: () => void;
+      finish: () => Promise<object>;
+      cancel: () => Promise<void>;
+    }>((resolve) => {
+      releasePreparation = () => {
+        lifecycle.push("progressive_prepared");
+        resolve({
+          pause: vi.fn(),
+          resume: resumeProgressiveCapture,
+          finish: vi.fn(() => Promise.resolve({})),
+          cancel: vi.fn(() => Promise.resolve()),
+        });
+      };
+    });
+    startProgressiveTranscriptionCaptureMock.mockReturnValue(preparation);
+    FakeMediaRecorder.onStart = () => {
+      lifecycle.push("batch_armed");
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/api/v1/beta/capabilities")) {
+          return Promise.resolve(
+            jsonResponse({ featureFlags: { progressiveTranscription: true } }),
+          );
+        }
+        if (url.endsWith("/recordings") && method === "GET") {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/recordings") && method === "POST") {
+          return Promise.resolve(jsonResponse(baseRecording, 201));
+        }
+        if (url.endsWith("/start") && method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ code: "unexpected", message: url }, 500),
+        );
+      }),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    await waitFor(() =>
+      expect(startProgressiveTranscriptionCaptureMock).toHaveBeenCalledWith(
+        expect.objectContaining({ initiallyPaused: true }),
+      ),
+    );
+
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Pause" }),
+    ).not.toBeInTheDocument();
+
+    releasePreparation();
+
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    expect(resumeProgressiveCapture).toHaveBeenCalledTimes(1);
+    expect(lifecycle).toEqual([
+      "progressive_prepared",
+      "progressive_armed",
+      "batch_armed",
+    ]);
+  });
+
+  it("starts batch recording with a notice when progressive preparation fails", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    startProgressiveTranscriptionCaptureMock.mockRejectedValue(
+      new Error("Synthetic progressive setup failure."),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/api/v1/beta/capabilities")) {
+          return Promise.resolve(
+            jsonResponse({ featureFlags: { progressiveTranscription: true } }),
+          );
+        }
+        if (url.endsWith("/recordings") && method === "GET") {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/recordings") && method === "POST") {
+          return Promise.resolve(jsonResponse(baseRecording, 201));
+        }
+        if (url.endsWith("/start") && method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ code: "unexpected", message: url }, 500),
+        );
+      }),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Live transcription is unavailable. Recording continues for normal batch transcription.",
+      ),
+    ).toBeVisible();
+    expect(FakeMediaRecorder.instances[0]?.state).toBe("recording");
+  });
+
+  it("cancels progressive capture immediately when MediaRecorder fails", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    const cancelProgressiveCapture = vi.fn(() => Promise.resolve());
+    startProgressiveTranscriptionCaptureMock.mockResolvedValue({
+      pause: vi.fn(),
+      resume: vi.fn(),
+      finish: vi.fn(),
+      cancel: cancelProgressiveCapture,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/api/v1/beta/capabilities")) {
+          return Promise.resolve(
+            jsonResponse({ featureFlags: { progressiveTranscription: true } }),
+          );
+        }
+        if (url.endsWith("/recordings") && method === "GET") {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/recordings") && method === "POST") {
+          return Promise.resolve(jsonResponse(baseRecording, 201));
+        }
+        if (url.endsWith("/start") && method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ code: "unexpected", message: url }, 500),
+        );
+      }),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    await waitFor(() =>
+      expect(startProgressiveTranscriptionCaptureMock).toHaveBeenCalledTimes(1),
+    );
+
+    const recorder = FakeMediaRecorder.instances[0];
+    expect(recorder).toBeDefined();
+    recorder?.onerror?.(new Event("error"));
+    recorder?.onerror?.(new Event("error"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Browser recording stopped unexpectedly",
+    );
+    await waitFor(() =>
+      expect(cancelProgressiveCapture).toHaveBeenCalledWith("capture_ended"),
+    );
+    expect(cancelProgressiveCapture).toHaveBeenCalledTimes(1);
   });
 
   it("cancels its active server session and releases audio when unmounted", async () => {

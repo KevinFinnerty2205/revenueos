@@ -30,11 +30,13 @@ valid result. There is no score, forecast, confidence percentage or coaching scr
 
 - Face-to-face meetings, presentations, workshops, site visits and online meetings
   can use live processing only when an authorised progressive source exists.
-- The current deterministic source is suitable for synthetic/private-beta
-  evaluation. Provider-neutral audio ordering, partial/final revisions, bounded
-  buffering, cancellation and reconnect/retry are implemented and fixture-tested,
-  but no production progressive-transcription adapter feeds this source. WO-015
-  recording and WO-018 online import remain batch/post-interaction paths.
+- The browser can deliberately tap an authorised recording stream as 24 kHz mono
+  PCM16 and send it through authenticated server routes to the disabled-by-default
+  OpenAI Realtime transcription adapter. Final provider turns are persisted as a
+  provisional `progressive` transcript for this feature; partial and final text are
+  also reconciled in the recording UI. Ordering, bounded buffering, cancellation,
+  reconnect/retry and final drain are fixture- and synthetic-browser-tested only.
+  WO-015 batch processing remains the authoritative final transcript path.
 - Ordinary cellular calls have no same-device capture. Phone Live Intelligence is
   unavailable unless a separately authorised progressive source exists.
 - Executive lunches and other sensitive unsupported modes fall back to passive
@@ -69,8 +71,10 @@ customer intent.
   fails closed if runtime configuration no longer matches that binding. Live
   activation and verification remain disabled; the local deterministic detector
   remains the default.
-- Production progressive audio-to-text transport is an implementation gap, not an
-  activation-only boundary.
+- Progressive audio-to-text transport is implemented behind closed gates, but live
+  provider behaviour, regional processing, retention, cost, reliability and
+  production rollout/drain remain unverified activation boundaries. Fixture-tested
+  protocol compatibility is not live-provider verification.
 - Private-beta flags, quotas, consent, retention and production-data restrictions
   remain in force.
 

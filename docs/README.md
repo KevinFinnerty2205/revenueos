@@ -23,7 +23,7 @@ This is the canonical product and engineering documentation index. Documents dis
    - [Oryntela trade mark adviser shortlist](00-company/oryntela-trademark-adviser-shortlist.md) — parked adviser research; professional review and filing deferred by owner
 2. [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md) — authoritative public-brand, product and future-direction consolidation
    - [Conversation intelligence core](01-product/conversation-intelligence-core.md) — current conversation-first product surface, trust boundaries and legacy disposition
-   - [Conversation product foundations](03-engineering/conversation-product-foundations.md) — private workspace persistence, knowledge ingestion and local briefing-outbox boundaries
+   - [Conversation product foundations](03-engineering/conversation-product-foundations.md) — private workspace persistence, knowledge ingestion and disabled-by-default local briefing delivery boundaries
    - [Conversation experience capability status](03-engineering/conversation-experience-capability-status.md) — strict A/B/C/D implementation and activation matrix plus browser verification record
    - [ADR 0077: Conversation-first product surface](08-decisions/0077-conversation-first-product-surface.md)
    - [ADR 0081: Explicit conversation threads and browser shared audio](08-decisions/0081-explicit-conversation-threads-and-browser-shared-audio.md)
@@ -966,11 +966,12 @@ transcript already exists. PostgreSQL owns the cursor, bounded overlapping windo
 dedupe, provisional signals and brief progress. The quiet Companion can be collapsed,
 disabled or have one signal dismissed. Final reconciliation remains separate; no
 live result writes Opportunity Workspace final intelligence or Revenue Brain. The
-current detector remains deterministic/no-network. A production-capable gated
-OpenAI live-signal adapter and provider-neutral progressive ordering/reconnect
-orchestration are implemented with fixture transports. Production progressive
-transcription remains an implementation gap and no external live provider was
-activated.
+current detector remains deterministic/no-network. A gated server-only OpenAI
+Realtime transcription adapter, browser PCM capture, authenticated progressive
+routes and durable provisional transcript wiring are implemented alongside the
+OpenAI live-signal adapter. Protocol fixtures and synthetic browser audio verify the
+local path only; no external live provider was activated or verified, and batch
+transcription remains authoritative.
 
 WO-021 adds deterministic, typed Action proposals over final validated intelligence.
 Users can inspect sources, revise, approve, reject and manually complete safe internal

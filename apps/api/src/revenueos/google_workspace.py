@@ -226,7 +226,13 @@ class GoogleWorkspaceClient:
             json_body={"raw": raw},
             write=True,
         )
-        result = self._parse(_GmailSendResponse, response)
+        try:
+            result = self._parse(_GmailSendResponse, response)
+        except GoogleAPIError as exc:
+            # Gmail may have accepted the message before a malformed success
+            # body prevents receipt reconciliation. Never represent that as a
+            # safe retryable rejection.
+            raise GoogleAPIError("provider_outcome_unknown", uncertain=True) from exc
         return GoogleSendResult(
             message_id=result.id,
             thread_id=result.thread_id,

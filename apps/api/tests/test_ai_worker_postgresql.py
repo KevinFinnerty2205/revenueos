@@ -24,6 +24,71 @@ from revenueos.models import (
 from revenueos.operations import inspect_runtime_database
 
 
+def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for worker preflight tests.")
+
+    runtime_role = f"worker_preflight_runtime_{uuid.uuid4().hex}"
+    function_signatures = (
+        "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer)",
+        "public.revenueos_post_conversation_draft_worker_scopes(integer)",
+        "public.revenueos_briefing_worker_eligible_owners(timestamptz, integer)",
+    )
+
+    async def scenario() -> None:
+        admin_engine = create_async_engine(database_url)
+        runtime_engine = None
+        original_public_execute: dict[str, bool] = {}
+        try:
+            async with admin_engine.begin() as connection:
+                await connection.exec_driver_sql(f'CREATE ROLE "{runtime_role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
+                await connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{runtime_role}"')
+                await connection.exec_driver_sql(f'GRANT SELECT ON public.alembic_version TO "{runtime_role}"')
+                for signature in function_signatures:
+                    original_public_execute[signature] = bool(
+                        await connection.scalar(
+                            text("SELECT has_function_privilege('public', to_regprocedure(:signature), 'EXECUTE')"),
+                            {"signature": signature},
+                        )
+                    )
+                    await connection.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION {signature} FROM PUBLIC")
+                    await connection.exec_driver_sql(f'GRANT EXECUTE ON FUNCTION {signature} TO "{runtime_role}"')
+
+            runtime_engine = create_async_engine(
+                database_url,
+                connect_args={"server_settings": {"role": runtime_role}},
+            )
+            ready_checks = await inspect_runtime_database(runtime_engine)
+            assert next(check for check in ready_checks if check.name == "database_runtime_role").status == "pass"
+            assert (
+                next(check for check in ready_checks if check.name == "database_worker_discovery_authority").status
+                == "pass"
+            )
+
+            async with admin_engine.begin() as connection:
+                await connection.exec_driver_sql(
+                    f'REVOKE EXECUTE ON FUNCTION {function_signatures[1]} FROM "{runtime_role}"'
+                )
+            blocked_checks = await inspect_runtime_database(runtime_engine)
+            assert (
+                next(check for check in blocked_checks if check.name == "database_worker_discovery_authority").status
+                == "fail"
+            )
+        finally:
+            if runtime_engine is not None:
+                await runtime_engine.dispose()
+            async with admin_engine.begin() as connection:
+                await connection.exec_driver_sql(f'DROP OWNED BY "{runtime_role}"')
+                await connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{runtime_role}"')
+                for signature, public_could_execute in original_public_execute.items():
+                    if public_could_execute:
+                        await connection.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION {signature} TO PUBLIC")
+            await admin_engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -> None:
     database_url = os.getenv("DATABASE_URL", "")
     if not database_url.startswith(("postgresql", "postgres")):

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import String, and_, case, func, or_, select
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.models import (
@@ -99,9 +101,12 @@ class DailyRecommendationRecord:
 class DailyBriefingInteractionRecord:
     interaction: Interaction
     company_name: str | None
+    company_updated_at: datetime | None
     opportunity_name: str | None
+    opportunity_updated_at: datetime | None
     brief: PreInteractionBrief | None
     provider_event: ProviderCalendarEvent | None
+    provider_connection_status: str | None
 
 
 class DailyRepository:
@@ -150,7 +155,13 @@ class DailyRepository:
     ) -> DailyBriefingInteractionRecord | None:
         row = (
             await self.session.execute(
-                select(Interaction, Company.name, Opportunity.name)
+                select(
+                    Interaction,
+                    Company.name,
+                    Company.updated_at,
+                    Opportunity.name,
+                    Opportunity.updated_at,
+                )
                 .outerjoin(
                     Company,
                     and_(
@@ -187,9 +198,9 @@ class DailyRepository:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        provider_event = (
+        provider_row = (
             await self.session.execute(
-                select(ProviderCalendarEvent)
+                select(ProviderCalendarEvent, IntegrationConnection.connection_status)
                 .join(
                     IntegrationConnection,
                     and_(
@@ -208,13 +219,16 @@ class DailyRepository:
                 )
                 .limit(1)
             )
-        ).scalar_one_or_none()
+        ).one_or_none()
         return DailyBriefingInteractionRecord(
             interaction=row[0],
             company_name=row[1],
-            opportunity_name=row[2],
+            company_updated_at=row[2],
+            opportunity_name=row[3],
+            opportunity_updated_at=row[4],
             brief=brief,
-            provider_event=provider_event,
+            provider_event=provider_row[0] if provider_row is not None else None,
+            provider_connection_status=provider_row[1] if provider_row is not None else None,
         )
 
     async def briefing_by_key(
@@ -238,19 +252,443 @@ class DailyRepository:
         organisation_id: UUID,
         user_id: UUID,
         interaction_id: UUID,
+        *,
+        delivery_intent: str,
     ) -> list[ConversationBriefingOutbox]:
         return list(
             (
                 await self.session.scalars(
-                    select(ConversationBriefingOutbox).where(
+                    select(ConversationBriefingOutbox)
+                    .where(
                         ConversationBriefingOutbox.organisation_id == organisation_id,
                         ConversationBriefingOutbox.user_id == user_id,
                         ConversationBriefingOutbox.interaction_id == interaction_id,
-                        ConversationBriefingOutbox.status == "prepared",
+                        ConversationBriefingOutbox.delivery_intent == delivery_intent,
+                        or_(
+                            ConversationBriefingOutbox.status == "queued",
+                            and_(
+                                ConversationBriefingOutbox.status == "sending",
+                                ConversationBriefingOutbox.submission_started_at.is_(None),
+                            ),
+                        ),
                     )
+                    .order_by(
+                        ConversationBriefingOutbox.created_at,
+                        ConversationBriefingOutbox.id,
+                    )
+                    .with_for_update()
                 )
             ).all()
         )
+
+    async def active_morning_briefings(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        logical_key: str,
+        *,
+        delivery_intent: str,
+    ) -> list[ConversationBriefingOutbox]:
+        return list(
+            (
+                await self.session.scalars(
+                    select(ConversationBriefingOutbox)
+                    .where(
+                        ConversationBriefingOutbox.organisation_id == organisation_id,
+                        ConversationBriefingOutbox.user_id == user_id,
+                        ConversationBriefingOutbox.kind == "morning_digest",
+                        ConversationBriefingOutbox.delivery_intent == delivery_intent,
+                        ConversationBriefingOutbox.deduplication_key.startswith(f"{logical_key}:"),
+                        or_(
+                            ConversationBriefingOutbox.status == "queued",
+                            and_(
+                                ConversationBriefingOutbox.status == "sending",
+                                ConversationBriefingOutbox.submission_started_at.is_(None),
+                            ),
+                        ),
+                    )
+                    .order_by(
+                        ConversationBriefingOutbox.created_at,
+                        ConversationBriefingOutbox.id,
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+
+    async def scheduled_interaction_briefings(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        interaction_id: UUID,
+    ) -> list[ConversationBriefingOutbox]:
+        """Lock every scheduled row for one interaction delivery source."""
+
+        return list(
+            (
+                await self.session.scalars(
+                    select(ConversationBriefingOutbox)
+                    .where(
+                        ConversationBriefingOutbox.organisation_id == organisation_id,
+                        ConversationBriefingOutbox.user_id == user_id,
+                        ConversationBriefingOutbox.interaction_id == interaction_id,
+                        ConversationBriefingOutbox.delivery_intent == "scheduled",
+                    )
+                    .order_by(
+                        ConversationBriefingOutbox.created_at,
+                        ConversationBriefingOutbox.id,
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+
+    async def scheduled_morning_briefings(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        logical_key: str,
+    ) -> list[ConversationBriefingOutbox]:
+        """Lock every scheduled row for one local-date morning source."""
+
+        return list(
+            (
+                await self.session.scalars(
+                    select(ConversationBriefingOutbox)
+                    .where(
+                        ConversationBriefingOutbox.organisation_id == organisation_id,
+                        ConversationBriefingOutbox.user_id == user_id,
+                        ConversationBriefingOutbox.kind == "morning_digest",
+                        ConversationBriefingOutbox.delivery_intent == "scheduled",
+                        ConversationBriefingOutbox.deduplication_key.startswith(f"{logical_key}:"),
+                    )
+                    .order_by(
+                        ConversationBriefingOutbox.created_at,
+                        ConversationBriefingOutbox.id,
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+
+    async def active_owner_briefings(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        *,
+        kinds: tuple[str, ...],
+    ) -> list[ConversationBriefingOutbox]:
+        return list(
+            (
+                await self.session.scalars(
+                    select(ConversationBriefingOutbox)
+                    .where(
+                        ConversationBriefingOutbox.organisation_id == organisation_id,
+                        ConversationBriefingOutbox.user_id == user_id,
+                        ConversationBriefingOutbox.delivery_intent == "scheduled",
+                        ConversationBriefingOutbox.kind.in_(kinds),
+                        or_(
+                            ConversationBriefingOutbox.status == "queued",
+                            and_(
+                                ConversationBriefingOutbox.status == "sending",
+                                ConversationBriefingOutbox.submission_started_at.is_(None),
+                            ),
+                            ConversationBriefingOutbox.status == "cancelled",
+                            and_(
+                                ConversationBriefingOutbox.status == "failed",
+                                or_(
+                                    ConversationBriefingOutbox.failure_code.is_(None),
+                                    ConversationBriefingOutbox.failure_code.not_in(
+                                        ("delivery_outcome_unknown", "provider_outcome_unknown")
+                                    ),
+                                ),
+                            ),
+                        ),
+                    )
+                    .order_by(
+                        ConversationBriefingOutbox.created_at,
+                        ConversationBriefingOutbox.id,
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+
+    async def upcoming_briefing_interaction_ids(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        *,
+        starts_after: datetime,
+        starts_before: datetime,
+        delivery_connector_keys: Collection[str],
+        limit: int = 500,
+    ) -> list[UUID]:
+        """Return a bounded owner-private set for scheduled briefing materialisation.
+
+        The latest calendar event from a connection owned by this user is the
+        authoritative schedule when one exists. The detailed read resolves the
+        same event again and rechecks its state before an outbox row is written.
+        """
+
+        latest_provider_start = (
+            select(ProviderCalendarEvent.start_at)
+            .join(
+                IntegrationConnection,
+                and_(
+                    IntegrationConnection.organisation_id == ProviderCalendarEvent.organisation_id,
+                    IntegrationConnection.id == ProviderCalendarEvent.connection_id,
+                ),
+            )
+            .where(
+                ProviderCalendarEvent.organisation_id == Interaction.organisation_id,
+                ProviderCalendarEvent.interaction_id == Interaction.id,
+                IntegrationConnection.created_by_user_id == user_id,
+            )
+            .order_by(
+                ProviderCalendarEvent.last_synced_at.desc(),
+                ProviderCalendarEvent.id.desc(),
+            )
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_provider_state = (
+            select(ProviderCalendarEvent.state)
+            .join(
+                IntegrationConnection,
+                and_(
+                    IntegrationConnection.organisation_id == ProviderCalendarEvent.organisation_id,
+                    IntegrationConnection.id == ProviderCalendarEvent.connection_id,
+                ),
+            )
+            .where(
+                ProviderCalendarEvent.organisation_id == Interaction.organisation_id,
+                ProviderCalendarEvent.interaction_id == Interaction.id,
+                IntegrationConnection.created_by_user_id == user_id,
+            )
+            .order_by(
+                ProviderCalendarEvent.last_synced_at.desc(),
+                ProviderCalendarEvent.id.desc(),
+            )
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_provider_connection_status = (
+            select(IntegrationConnection.connection_status)
+            .join(
+                ProviderCalendarEvent,
+                and_(
+                    ProviderCalendarEvent.organisation_id == IntegrationConnection.organisation_id,
+                    ProviderCalendarEvent.connection_id == IntegrationConnection.id,
+                ),
+            )
+            .where(
+                ProviderCalendarEvent.organisation_id == Interaction.organisation_id,
+                ProviderCalendarEvent.interaction_id == Interaction.id,
+                IntegrationConnection.created_by_user_id == user_id,
+            )
+            .order_by(
+                ProviderCalendarEvent.last_synced_at.desc(),
+                ProviderCalendarEvent.id.desc(),
+            )
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_provider_synced_at = (
+            select(ProviderCalendarEvent.last_synced_at)
+            .join(
+                IntegrationConnection,
+                and_(
+                    IntegrationConnection.organisation_id == ProviderCalendarEvent.organisation_id,
+                    IntegrationConnection.id == ProviderCalendarEvent.connection_id,
+                ),
+            )
+            .where(
+                ProviderCalendarEvent.organisation_id == Interaction.organisation_id,
+                ProviderCalendarEvent.interaction_id == Interaction.id,
+                IntegrationConnection.created_by_user_id == user_id,
+            )
+            .order_by(
+                ProviderCalendarEvent.last_synced_at.desc(),
+                ProviderCalendarEvent.id.desc(),
+            )
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_brief_created_at = (
+            select(PreInteractionBrief.created_at)
+            .where(
+                PreInteractionBrief.organisation_id == Interaction.organisation_id,
+                PreInteractionBrief.interaction_id == Interaction.id,
+                PreInteractionBrief.status == "completed",
+            )
+            .order_by(
+                PreInteractionBrief.brief_version.desc(),
+                PreInteractionBrief.id.desc(),
+            )
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        company_updated_at = (
+            select(Company.updated_at)
+            .where(
+                Company.organisation_id == Interaction.organisation_id,
+                Company.id == Interaction.company_id,
+            )
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        opportunity_updated_at = (
+            select(Opportunity.updated_at)
+            .where(
+                Opportunity.organisation_id == Interaction.organisation_id,
+                Opportunity.id == Interaction.opportunity_id,
+            )
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        enabled_connector_keys = tuple(sorted(set(delivery_connector_keys)))
+        active_delivery_connection_exists = (
+            select(IntegrationConnection.id)
+            .where(
+                IntegrationConnection.organisation_id == Interaction.organisation_id,
+                IntegrationConnection.created_by_user_id == user_id,
+                IntegrationConnection.connector_key.in_(enabled_connector_keys),
+                IntegrationConnection.connection_status == "active",
+                sql_cast(IntegrationConnection.capability_state_json, String).like('%"send_email"%'),
+            )
+            .correlate(Interaction)
+            .exists()
+        )
+        effective_start = func.coalesce(latest_provider_start, Interaction.scheduled_start_at)
+        materialised_source_is_current = and_(
+            ConversationBriefingOutbox.source_observed_at >= Interaction.updated_at,
+            or_(
+                latest_provider_synced_at.is_(None),
+                ConversationBriefingOutbox.source_observed_at >= latest_provider_synced_at,
+            ),
+            or_(
+                latest_brief_created_at.is_(None),
+                ConversationBriefingOutbox.source_observed_at >= latest_brief_created_at,
+            ),
+            or_(
+                company_updated_at.is_(None),
+                ConversationBriefingOutbox.source_observed_at >= company_updated_at,
+            ),
+            or_(
+                opportunity_updated_at.is_(None),
+                ConversationBriefingOutbox.source_observed_at >= opportunity_updated_at,
+            ),
+        )
+        already_materialised = (
+            select(ConversationBriefingOutbox.id)
+            .where(
+                ConversationBriefingOutbox.organisation_id == Interaction.organisation_id,
+                ConversationBriefingOutbox.user_id == user_id,
+                ConversationBriefingOutbox.interaction_id == Interaction.id,
+                ConversationBriefingOutbox.delivery_intent == "scheduled",
+                or_(
+                    ConversationBriefingOutbox.status == "sent",
+                    and_(
+                        ConversationBriefingOutbox.status == "sending",
+                        ConversationBriefingOutbox.submission_started_at.is_not(None),
+                    ),
+                    and_(
+                        ConversationBriefingOutbox.status == "queued",
+                        materialised_source_is_current,
+                    ),
+                    and_(
+                        ConversationBriefingOutbox.status == "sending",
+                        ConversationBriefingOutbox.submission_started_at.is_(None),
+                        materialised_source_is_current,
+                    ),
+                    and_(
+                        ConversationBriefingOutbox.status == "failed",
+                        ConversationBriefingOutbox.failure_code.in_(
+                            ("delivery_outcome_unknown", "provider_outcome_unknown")
+                        ),
+                    ),
+                    and_(
+                        ConversationBriefingOutbox.status == "failed",
+                        or_(
+                            ConversationBriefingOutbox.failure_code.is_(None),
+                            ConversationBriefingOutbox.failure_code.not_in(
+                                ("delivery_outcome_unknown", "provider_outcome_unknown")
+                            ),
+                        ),
+                        materialised_source_is_current,
+                    ),
+                    and_(
+                        ConversationBriefingOutbox.status == "cancelled",
+                        ConversationBriefingOutbox.failure_code.is_not(None),
+                        or_(
+                            ConversationBriefingOutbox.failure_code.not_in(
+                                (
+                                    "delivery_authority_unavailable",
+                                    "delivery_connection_reauthorisation_required",
+                                    "delivery_provider_authority_unavailable",
+                                )
+                            ),
+                            ~active_delivery_connection_exists,
+                        ),
+                        materialised_source_is_current,
+                    ),
+                ),
+            )
+            .correlate(Interaction)
+            .exists()
+        )
+
+        return list(
+            (
+                await self.session.scalars(
+                    select(Interaction.id)
+                    .where(
+                        Interaction.organisation_id == organisation_id,
+                        Interaction.created_by_user_id == user_id,
+                        Interaction.deleted_at.is_(None),
+                        Interaction.lifecycle_status.not_in(("completed", "cancelled")),
+                        or_(
+                            latest_provider_start.is_(None),
+                            and_(
+                                latest_provider_state == "active",
+                                latest_provider_connection_status == "active",
+                            ),
+                        ),
+                        effective_start.is_not(None),
+                        effective_start > starts_after,
+                        effective_start <= starts_before,
+                        ~already_materialised,
+                    )
+                    .order_by(effective_start, Interaction.id)
+                    .limit(limit)
+                )
+            ).all()
+        )
+
+    async def has_active_delivery_connection(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        *,
+        delivery_connector_keys: Collection[str],
+    ) -> bool:
+        enabled_connector_keys = tuple(sorted(set(delivery_connector_keys)))
+        if not enabled_connector_keys:
+            return False
+        statement = select(IntegrationConnection).where(
+            IntegrationConnection.organisation_id == organisation_id,
+            IntegrationConnection.created_by_user_id == user_id,
+            IntegrationConnection.connector_key.in_(enabled_connector_keys),
+            IntegrationConnection.connection_status == "active",
+        )
+        connections = await self.session.scalars(statement)
+        return any("send_email" in item.capability_state_json for item in connections.all())
 
     async def interactions(
         self,
@@ -747,6 +1185,7 @@ class DailyRepository:
                     AIArtifact.artifact_type == "next_best_action",
                     AIArtifact.superseded_at.is_(None),
                     AIJob.status == "completed",
+                    AIJob.automatic_draft_generation_id.is_(None),
                     Meeting.status == "completed",
                     Meeting.deleted_at.is_(None),
                     Transcript.deleted_at.is_(None),

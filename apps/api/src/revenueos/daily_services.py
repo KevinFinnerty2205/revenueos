@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from datetime import UTC, date, datetime, time, timedelta
 from hashlib import sha256
 from typing import Literal, TypeVar, cast
@@ -42,6 +42,8 @@ from revenueos.daily_repositories import (
     DailyRecommendationRecord,
     DailyRepository,
 )
+from revenueos.database import set_private_user_database_context, set_tenant_database_context
+from revenueos.domain import ConnectorKey
 from revenueos.errors import PublicAPIError
 from revenueos.methodology_contracts import MethodologyProjectionContent
 from revenueos.models import (
@@ -59,6 +61,21 @@ logger = logging.getLogger("revenueos.daily")
 T = TypeVar("T")
 NEAR_TERM_INTERACTION_WINDOW = timedelta(hours=4)
 UPCOMING_INTERACTION_WINDOW = timedelta(days=7)
+AMBIGUOUS_BRIEFING_DELIVERY_FAILURE_CODES = frozenset({"delivery_outcome_unknown", "provider_outcome_unknown"})
+RESTORABLE_BRIEFING_AUTHORITY_FAILURE_CODES = frozenset(
+    {
+        "delivery_authority_unavailable",
+        "delivery_connection_reauthorisation_required",
+        "delivery_provider_authority_unavailable",
+    }
+)
+SUPPORTED_BRIEFING_DELIVERY_CONNECTOR_KEYS = frozenset(
+    {
+        ConnectorKey.MOCK_EMAIL.value,
+        ConnectorKey.GOOGLE_WORKSPACE.value,
+        ConnectorKey.MICROSOFT_365.value,
+    }
+)
 DEAL_CLOSE_ATTENTION_WINDOW = timedelta(days=14)
 DEAL_STALENESS_DAYS: dict[str, int] = {
     "qualification": 30,
@@ -94,13 +111,40 @@ NEGATIVE_REVENUE_BRAIN_CHANGES: dict[str, tuple[str, str]] = {
 }
 
 
+def enabled_briefing_delivery_connector_keys(settings: Settings) -> frozenset[str]:
+    """Return the connector keys for which this process can deliver briefings."""
+
+    if not settings.feature_briefing_delivery_enabled:
+        return frozenset()
+    if settings.briefing_delivery_transport_mode == "local":
+        return SUPPORTED_BRIEFING_DELIVERY_CONNECTOR_KEYS
+    enabled: set[str] = set()
+    if settings.feature_google_workspace_enabled:
+        enabled.add(ConnectorKey.GOOGLE_WORKSPACE.value)
+    if settings.feature_microsoft_365_enabled:
+        enabled.add(ConnectorKey.MICROSOFT_365.value)
+    return frozenset(enabled)
+
+
 class RevenueOSDailyService:
     """Deterministically compose the current user's bounded day plan."""
 
-    def __init__(self, session: AsyncSession, tenant: TenantContext, settings: Settings) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        tenant: TenantContext,
+        settings: Settings,
+        *,
+        delivery_connector_keys: Collection[str] | None = None,
+    ) -> None:
         self.session = session
         self.tenant = tenant
         self.settings = settings
+        self.delivery_connector_keys = frozenset(
+            delivery_connector_keys
+            if delivery_connector_keys is not None
+            else enabled_briefing_delivery_connector_keys(settings)
+        )
         self.repository = DailyRepository(session)
 
     async def get_delivery_preferences(self) -> DeliveryPreferenceResponse:
@@ -120,6 +164,9 @@ class RevenueOSDailyService:
             self.tenant.user_id,
             for_update=True,
         )
+        affected_kinds: set[Literal["morning_digest", "pre_meeting"]] = (
+            {"morning_digest", "pre_meeting"} if preference is None else set()
+        )
         if preference is None:
             if request.expected_lock_version != 0:
                 raise self._preference_conflict()
@@ -133,6 +180,18 @@ class RevenueOSDailyService:
         else:
             if preference.lock_version != request.expected_lock_version:
                 raise self._preference_conflict()
+            if preference.timezone != timezone.key:
+                affected_kinds.update(("morning_digest", "pre_meeting"))
+            if (
+                preference.morning_digest_enabled != request.morning_digest_enabled
+                or preference.morning_digest_time != request.morning_digest_time
+            ):
+                affected_kinds.add("morning_digest")
+            if (
+                preference.pre_meeting_enabled != request.pre_meeting_enabled
+                or preference.pre_meeting_minutes != request.pre_meeting_minutes
+            ):
+                affected_kinds.add("pre_meeting")
             preference.lock_version += 1
         preference.timezone = timezone.key
         preference.morning_digest_enabled = request.morning_digest_enabled
@@ -143,6 +202,8 @@ class RevenueOSDailyService:
             preference.imported_from_browser_at = datetime.now(UTC)
         try:
             await self.session.flush()
+            if affected_kinds:
+                await self._reconcile_delivery_schedule(preference, affected_kinds)
             await self.session.refresh(preference)
             await self.session.commit()
         except IntegrityError as exc:
@@ -156,6 +217,77 @@ class RevenueOSDailyService:
         *,
         now: datetime | None = None,
     ) -> BriefingPreviewResponse:
+        return await self._prepare_briefing_outbox(
+            request,
+            delivery_intent="preview",
+            now=now,
+        )
+
+    async def schedule_delivery_briefings(self, *, now: datetime | None = None) -> int:
+        """Materialise the next authorised rows from explicitly saved preferences.
+
+        This is invoked by the existing worker while its delivery feature gate is
+        enabled. It writes no row for implicit defaults and never selects a
+        transport; connector authority is rechecked only when a due row is claimed.
+        """
+
+        generated_at = (now or datetime.now(UTC)).astimezone(UTC)
+        preference = await self.repository.delivery_preference(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+        )
+        if preference is None:
+            return 0
+        created = 0
+        if preference.morning_digest_enabled:
+            response = await self._prepare_briefing_outbox(
+                BriefingPreviewRequest(kind="morning_digest"),
+                delivery_intent="scheduled",
+                now=generated_at,
+            )
+            created += int(not response.duplicate_suppressed)
+            await self._restore_worker_scope()
+        if preference.pre_meeting_enabled:
+            interaction_ids = await self.repository.upcoming_briefing_interaction_ids(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+                starts_after=generated_at,
+                starts_before=generated_at + UPCOMING_INTERACTION_WINDOW,
+                delivery_connector_keys=self.delivery_connector_keys,
+            )
+            for interaction_id in interaction_ids:
+                try:
+                    response = await self._prepare_briefing_outbox(
+                        BriefingPreviewRequest(kind="pre_meeting", interaction_id=interaction_id),
+                        delivery_intent="scheduled",
+                        now=generated_at,
+                    )
+                except PublicAPIError as exc:
+                    await self._restore_worker_scope()
+                    if exc.code in {
+                        "interaction_cancelled",
+                        "interaction_not_found",
+                        "interaction_not_scheduled",
+                    }:
+                        continue
+                    raise
+                created += int(not response.duplicate_suppressed)
+                await self._restore_worker_scope()
+        return created
+
+    async def _restore_worker_scope(self) -> None:
+        """Restore transaction-local RLS scope after an idempotent row commit."""
+
+        await set_tenant_database_context(self.session, self.tenant.organisation_id)
+        await set_private_user_database_context(self.session, self.tenant.user_id)
+
+    async def _prepare_briefing_outbox(
+        self,
+        request: BriefingPreviewRequest,
+        *,
+        delivery_intent: Literal["preview", "scheduled"],
+        now: datetime | None = None,
+    ) -> BriefingPreviewResponse:
         preference = await self.repository.delivery_preference(
             self.tenant.organisation_id,
             self.tenant.user_id,
@@ -166,6 +298,7 @@ class RevenueOSDailyService:
         pre_meeting_enabled = preference.pre_meeting_enabled if preference is not None else True
         pre_meeting_minutes = preference.pre_meeting_minutes if preference is not None else 30
         generated_at = (now or datetime.now(UTC)).astimezone(UTC)
+        source_observed_at: datetime | None = None
         if request.kind == "morning_digest":
             if not morning_digest_enabled:
                 raise PublicAPIError("briefing_disabled", "Morning briefing delivery is disabled.", 409)
@@ -178,13 +311,6 @@ class RevenueOSDailyService:
             )
             href = "/"
             interaction_id = None
-            source_parts: tuple[object, ...] = (
-                subject,
-                body,
-                prepared_for_at.isoformat(),
-                timezone_name,
-                morning_digest_time,
-            )
             logical_key = f"morning:{daily.local_date.isoformat()}"
         else:
             if not pre_meeting_enabled:
@@ -206,11 +332,14 @@ class RevenueOSDailyService:
                 self.tenant.organisation_id,
                 self.tenant.user_id,
                 request.interaction_id,
+                delivery_intent=delivery_intent,
             )
-            provider_cancelled = record.provider_event is not None and record.provider_event.state != "active"
+            provider_cancelled = record.provider_event is not None and (
+                record.provider_event.state != "active" or record.provider_connection_status != "active"
+            )
             if record.interaction.lifecycle_status == "cancelled" or provider_cancelled:
                 for item in prior:
-                    item.status = "cancelled"
+                    self._reset_explicit_delivery_state(item, status="cancelled")
                 await self.session.commit()
                 raise PublicAPIError("interaction_cancelled", "Cancelled interactions do not receive briefings.", 409)
             starts_at = (
@@ -226,7 +355,7 @@ class RevenueOSDailyService:
                 )
             aware_start = starts_at.replace(tzinfo=UTC) if starts_at.tzinfo is None else starts_at.astimezone(UTC)
             content = (
-                PreInteractionBriefContent.model_validate(record.brief.content_json)
+                PreInteractionBriefContent.model_validate_json(json.dumps(record.brief.content_json))
                 if record.brief is not None
                 else None
             )
@@ -240,59 +369,149 @@ class RevenueOSDailyService:
             prepared_for_at = aware_start - timedelta(minutes=pre_meeting_minutes)
             href = f"/conversations/{record.interaction.id}#preparation"
             interaction_id = record.interaction.id
-            source_parts = (
-                str(record.interaction.id),
-                aware_start.isoformat(),
-                record.brief.source_context_fingerprint if record.brief is not None else None,
-                pre_meeting_minutes,
-            )
             logical_key = f"pre:{record.interaction.id}"
+            source_timestamps = [record.interaction.updated_at]
+            if record.company_updated_at is not None:
+                source_timestamps.append(record.company_updated_at)
+            if record.opportunity_updated_at is not None:
+                source_timestamps.append(record.opportunity_updated_at)
+            if record.provider_event is not None:
+                source_timestamps.append(record.provider_event.last_synced_at)
+            if record.brief is not None:
+                source_timestamps.append(record.brief.created_at)
+            source_observed_at = max(self._aware_utc(value) for value in source_timestamps)
+        # The source fingerprint describes the complete immutable delivery
+        # envelope, not merely a subset of its upstream inputs. This ensures a
+        # title, linked context, rendering, schedule, timezone, or body change
+        # produces a distinct operation even when the upstream brief version is
+        # otherwise unchanged.
+        source_parts: tuple[object, ...] = (
+            subject,
+            body,
+            href,
+            prepared_for_at.isoformat(),
+            timezone_name,
+        )
         fingerprint = sha256(
             json.dumps(source_parts, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
         ).hexdigest()
-        deduplication_key = f"{logical_key}:{fingerprint[:24]}"
+        intent_prefix = "preview" if delivery_intent == "preview" else "delivery"
+        intent_logical_key = f"{intent_prefix}:{logical_key}"
+        deduplication_key = f"{intent_logical_key}:{fingerprint[:24]}"
+        operation_prefix = f"{intent_prefix}_"
+        operation_digest = sha256(
+            f"{self.tenant.organisation_id}:{self.tenant.user_id}:{deduplication_key}".encode()
+        ).hexdigest()
+        operation_key = f"{operation_prefix}{operation_digest[: 64 - len(operation_prefix)]}"
         existing = await self.repository.briefing_by_key(
             self.tenant.organisation_id,
             self.tenant.user_id,
             deduplication_key,
         )
         if existing is not None:
-            if existing.status != "prepared":
-                if interaction_id is not None:
-                    for item in await self.repository.active_interaction_briefings(
-                        self.tenant.organisation_id,
-                        self.tenant.user_id,
-                        interaction_id,
-                    ):
-                        item.status = "superseded"
-                existing.status = "prepared"
+            if existing.status in {"queued", "sending", "sent", "failed"}:
+                source_observation_needed = (
+                    source_observed_at is not None
+                    and self._aware_utc(existing.source_observed_at) < source_observed_at
+                    and (
+                        existing.status == "queued"
+                        or (existing.status == "sending" and existing.submission_started_at is None)
+                        or (
+                            existing.status == "failed"
+                            and existing.failure_code not in AMBIGUOUS_BRIEFING_DELIVERY_FAILURE_CODES
+                        )
+                    )
+                )
+                operation_key_changed = False
+                if existing.submission_started_at is None and existing.operation_key != operation_key:
+                    existing.operation_key = operation_key
+                    operation_key_changed = True
+                if source_observation_needed:
+                    # A source freshness change can be unrelated to the exact
+                    # delivery envelope. Advance only the observation cursor so
+                    # discovery does not hot-loop; retain attempts, Retry-After,
+                    # and the terminal failure itself.
+                    existing.source_observed_at = cast(datetime, source_observed_at)
+                if source_observation_needed or operation_key_changed:
+                    await self.session.commit()
+                return self._briefing_response(existing, duplicate_suppressed=True)
+            if existing.status in {"superseded", "cancelled"}:
+                if delivery_intent == "scheduled" and existing.failure_code is not None:
+                    # A worker cancellation records a durable authority/source
+                    # reason and must not become a tight recreate/claim loop.
+                    # Preference and calendar reconciliations leave no failure
+                    # code, so an explicit later change can still reactivate.
+                    authority_restored = (
+                        existing.failure_code in RESTORABLE_BRIEFING_AUTHORITY_FAILURE_CODES
+                        and await self.repository.has_active_delivery_connection(
+                            self.tenant.organisation_id,
+                            self.tenant.user_id,
+                            delivery_connector_keys=self.delivery_connector_keys,
+                        )
+                    )
+                    if not authority_restored:
+                        if (
+                            source_observed_at is not None
+                            and self._aware_utc(existing.source_observed_at) < source_observed_at
+                        ):
+                            existing.source_observed_at = source_observed_at
+                            await self.session.commit()
+                        return self._briefing_response(existing, duplicate_suppressed=True)
+                fence = await self._supersede_active_briefings(
+                    logical_key=intent_logical_key,
+                    interaction_id=interaction_id,
+                    delivery_intent=delivery_intent,
+                    except_id=existing.id,
+                )
+                if fence is not None:
+                    await self.session.commit()
+                    return self._briefing_response(fence, duplicate_suppressed=True)
+                existing.status = "queued"
                 existing.subject = subject
                 existing.body_text = body
                 existing.href = href
                 existing.prepared_for_at = prepared_for_at
+                existing.delivery_timezone = timezone_name
+                existing.attempt_count = 0
+                existing.next_attempt_at = None
+                existing.worker_id = None
+                existing.lease_expires_at = None
+                existing.connection_id = None
+                existing.submission_started_at = None
+                existing.provider_message_id = None
+                existing.sent_at = None
+                existing.failed_at = None
+                existing.failure_code = None
+                existing.operation_key = operation_key
+                existing.source_observed_at = source_observed_at or generated_at
                 await self.session.commit()
                 return self._briefing_response(existing, duplicate_suppressed=False)
-            return self._briefing_response(existing, duplicate_suppressed=True)
-        if interaction_id is not None:
-            for item in await self.repository.active_interaction_briefings(
-                self.tenant.organisation_id,
-                self.tenant.user_id,
-                interaction_id,
-            ):
-                item.status = "superseded"
+        fence = await self._supersede_active_briefings(
+            logical_key=intent_logical_key,
+            interaction_id=interaction_id,
+            delivery_intent=delivery_intent,
+        )
+        if fence is not None:
+            await self.session.commit()
+            return self._briefing_response(fence, duplicate_suppressed=True)
         outbox = ConversationBriefingOutbox(
             id=uuid4(),
             organisation_id=self.tenant.organisation_id,
             user_id=self.tenant.user_id,
             interaction_id=interaction_id,
             kind=request.kind,
-            status="prepared",
+            delivery_intent=delivery_intent,
+            status="queued",
             deduplication_key=deduplication_key,
             source_fingerprint=fingerprint,
+            source_observed_at=source_observed_at or generated_at,
             subject=subject,
             body_text=body,
             href=href,
             prepared_for_at=prepared_for_at,
+            delivery_timezone=timezone_name,
+            operation_key=operation_key,
+            max_attempts=self.settings.worker_default_max_attempts,
         )
         self.session.add(outbox)
         try:
@@ -300,6 +519,8 @@ class RevenueOSDailyService:
             await self.session.commit()
         except IntegrityError as exc:
             await self.session.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await set_private_user_database_context(self.session, self.tenant.user_id)
             existing = await self.repository.briefing_by_key(
                 self.tenant.organisation_id,
                 self.tenant.user_id,
@@ -313,6 +534,77 @@ class RevenueOSDailyService:
                 ) from exc
             return self._briefing_response(existing, duplicate_suppressed=True)
         return self._briefing_response(outbox, duplicate_suppressed=False)
+
+    async def _supersede_active_briefings(
+        self,
+        *,
+        logical_key: str,
+        interaction_id: UUID | None,
+        delivery_intent: Literal["preview", "scheduled"],
+        except_id: UUID | None = None,
+    ) -> ConversationBriefingOutbox | None:
+        if delivery_intent == "scheduled":
+            rows = (
+                await self.repository.scheduled_interaction_briefings(
+                    self.tenant.organisation_id,
+                    self.tenant.user_id,
+                    interaction_id,
+                )
+                if interaction_id is not None
+                else await self.repository.scheduled_morning_briefings(
+                    self.tenant.organisation_id,
+                    self.tenant.user_id,
+                    logical_key,
+                )
+            )
+            fence = next((row for row in rows if self._is_delivery_fence(row)), None)
+            if fence is not None:
+                return fence
+        else:
+            rows = (
+                await self.repository.active_interaction_briefings(
+                    self.tenant.organisation_id,
+                    self.tenant.user_id,
+                    interaction_id,
+                    delivery_intent=delivery_intent,
+                )
+                if interaction_id is not None
+                else await self.repository.active_morning_briefings(
+                    self.tenant.organisation_id,
+                    self.tenant.user_id,
+                    logical_key,
+                    delivery_intent=delivery_intent,
+                )
+            )
+        for row in rows:
+            if row.id == except_id:
+                continue
+            safe_terminal = row.status == "cancelled" or (
+                row.status == "failed" and row.failure_code not in AMBIGUOUS_BRIEFING_DELIVERY_FAILURE_CODES
+            )
+            if (
+                row.status != "queued"
+                and not (row.status == "sending" and row.submission_started_at is None)
+                and not safe_terminal
+            ):
+                continue
+            row.status = "superseded"
+            row.worker_id = None
+            row.lease_expires_at = None
+            row.connection_id = None
+            row.submission_started_at = None
+            row.next_attempt_at = None
+            row.failed_at = None
+            row.failure_code = None
+        return None
+
+    @staticmethod
+    def _is_delivery_fence(row: ConversationBriefingOutbox) -> bool:
+        return (
+            row.status == "sent"
+            or (row.status == "sending" and row.submission_started_at is not None)
+            or (row.status == "failed" and row.failure_code in AMBIGUOUS_BRIEFING_DELIVERY_FAILURE_CODES)
+        )
 
     @staticmethod
     def _preference_response(
@@ -357,13 +649,65 @@ class RevenueOSDailyService:
         return BriefingPreviewResponse(
             id=outbox.id,
             kind=cast(Literal["morning_digest", "pre_meeting"], outbox.kind),
-            status=cast(Literal["prepared", "superseded", "cancelled"], outbox.status),
+            status=cast(
+                Literal["queued", "sending", "sent", "failed", "superseded", "cancelled"],
+                outbox.status,
+            ),
             subject=outbox.subject,
             body_text=outbox.body_text,
             href=outbox.href,
             prepared_for_at=outbox.prepared_for_at,
             duplicate_suppressed=duplicate_suppressed,
         )
+
+    async def _reconcile_delivery_schedule(
+        self,
+        preference: ConversationDeliveryPreference,
+        affected_kinds: set[Literal["morning_digest", "pre_meeting"]],
+    ) -> None:
+        rows = await self.repository.active_owner_briefings(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            kinds=tuple(sorted(affected_kinds)),
+        )
+        for row in rows:
+            if row.kind == "morning_digest":
+                if not preference.morning_digest_enabled:
+                    self._reset_explicit_delivery_state(row, status="cancelled")
+                    continue
+                # Briefing rows are exact-content envelopes. A preference edit
+                # supersedes the old envelope so the scheduler rematerialises
+                # subject/body/fingerprint and due time atomically.
+                self._reset_explicit_delivery_state(row, status="superseded")
+                continue
+            if not preference.pre_meeting_enabled or row.interaction_id is None:
+                self._reset_explicit_delivery_state(row, status="cancelled")
+                continue
+            self._reset_explicit_delivery_state(row, status="superseded")
+
+    @staticmethod
+    def _reset_explicit_delivery_state(
+        row: ConversationBriefingOutbox,
+        *,
+        status: Literal["queued", "superseded", "cancelled"],
+    ) -> None:
+        """Clear retry/claim state after an explicit user or source transition."""
+
+        row.status = status
+        row.attempt_count = 0
+        row.next_attempt_at = None
+        row.worker_id = None
+        row.lease_expires_at = None
+        row.connection_id = None
+        row.submission_started_at = None
+        row.provider_message_id = None
+        row.sent_at = None
+        row.failed_at = None
+        row.failure_code = None
+
+    @staticmethod
+    def _aware_utc(value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
     @staticmethod
     def _morning_digest_body(daily: DailyResponse) -> str:
