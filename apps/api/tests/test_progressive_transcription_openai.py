@@ -36,7 +36,7 @@ from revenueos.progressive_transcription_openai import (
     _connect_realtime_socket,
 )
 
-TEST_KEY = "sk-test-progressive-server-only"
+TEST_KEY = "synthetic-openai-key"
 
 
 def async_test(function: Callable[[], Coroutine[None, None, None]]) -> Callable[[], None]:

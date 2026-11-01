@@ -58,7 +58,7 @@ def runtime_settings() -> Settings:
         feature_openai_provider_enabled=True,
         private_beta_external_ai_approved=True,
         transcription_provider_name="openai",
-        openai_api_key="sk-test-progressive-runtime",
+        openai_api_key="synthetic-openai-key",
     )
 
 
