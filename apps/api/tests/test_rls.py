@@ -420,6 +420,7 @@ def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
                         metadata_version=1,
                     )
                 )
+                await session.flush()
                 session.add(
                     ConversationBriefingOutbox(
                         id=uuid.uuid4(),
