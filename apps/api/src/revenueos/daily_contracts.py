@@ -62,6 +62,7 @@ class DailyInteraction(APIModel):
     company_name: SafeText | None
     opportunity_id: UUID | None
     opportunity_name: SafeText | None
+    participant_names: list[SafeText] = Field(default_factory=list, max_length=12)
     interaction_type: str = Field(min_length=1, max_length=40)
     lifecycle_status: str = Field(min_length=1, max_length=20)
     starts_at: datetime

@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  Company,
   DailyAction,
   DailyInteraction,
   DailyResponse,
@@ -9,6 +10,7 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AccountAvatar } from "@/components/account-avatar";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
@@ -22,6 +24,7 @@ function conversationHref(href: string): string {
 export function ConversationHome() {
   const [daily, setDaily] = useState<DailyResponse | null>(null);
   const [recent, setRecent] = useState<Interaction[]>([]);
+  const [accounts, setAccounts] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
@@ -39,8 +42,12 @@ export function ConversationHome() {
         "/api/v1/interactions?page=1&pageSize=6&status=completed&sortBy=start_at&sortOrder=desc",
         { signal: controller.signal },
       ),
+      apiRequest<EntityPage<Company>>(
+        "/api/v1/companies?page=1&pageSize=8&sortBy=name&sortOrder=asc",
+        { signal: controller.signal },
+      ),
     ])
-      .then(([dayResult, historyResult]) => {
+      .then(([dayResult, historyResult, accountResult]) => {
         if (dayResult.status === "rejected") throw dayResult.reason;
         setDaily(dayResult.value);
         setError(null);
@@ -51,6 +58,9 @@ export function ConversationHome() {
           setHistoryWarning(
             "Recent conversation history is temporarily unavailable. Your next conversation is still shown.",
           );
+        }
+        if (accountResult.status === "fulfilled") {
+          setAccounts(accountResult.value.items);
         }
       })
       .catch((reason: unknown) => {
@@ -144,6 +154,8 @@ export function ConversationHome() {
         <EmptyNextConversation />
       )}
 
+      {accounts.length ? <AccountDirectory accounts={accounts} /> : null}
+
       <div className="mt-7 grid gap-6 xl:grid-cols-2">
         <HomeSection
           eyebrow="Coming up"
@@ -223,6 +235,60 @@ export function ConversationHome() {
   );
 }
 
+function AccountDirectory({ accounts }: { accounts: Company[] }) {
+  return (
+    <section
+      className="mt-7 rounded-3xl border border-brand-primary/10 bg-white p-6 sm:p-7"
+      aria-labelledby="home-accounts-title"
+    >
+      <header className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+            Relationship memory
+          </p>
+          <h2
+            id="home-accounts-title"
+            className="mt-2 text-xl font-semibold text-slate-950"
+          >
+            Accounts
+          </h2>
+        </div>
+        <Link
+          className="text-sm font-bold text-brand-primary hover:underline"
+          href="/conversations"
+        >
+          View all
+        </Link>
+      </header>
+      <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {accounts.map((account) => (
+          <li key={account.id}>
+            <Link
+              className="flex min-h-16 items-center gap-3 rounded-2xl border border-brand-primary/10 px-3 py-2 transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
+              href={`/companies/${account.id}#conversations`}
+            >
+              <AccountAvatar
+                accountId={account.id}
+                name={account.name}
+                size="compact"
+                website={account.website}
+              />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-brand-primary">
+                  {account.name}
+                </span>
+                <span className="mt-0.5 block text-xs text-brand-muted">
+                  Open conversation memory
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function NextConversation({
   interaction,
   timezone,
@@ -235,21 +301,28 @@ function NextConversation({
       <div className="absolute -right-20 -top-24 size-72 rounded-full bg-brand-secondary/15 blur-3xl" />
       <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-highlight">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-primary-foreground/80">
             Next conversation · {formatTime(interaction.startsAt, timezone)}
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
             {interaction.title}
           </h2>
+          {interaction.companyName || interaction.participantNames.length ? (
+            <p className="mt-3 text-sm font-semibold text-white">
+              {[interaction.companyName, ...interaction.participantNames]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
           <p className="mt-3 text-sm leading-6 text-slate-300">
             {interaction.context}
           </p>
-          <p className="mt-4 text-sm font-semibold text-brand-highlight">
+          <p className="mt-4 text-sm font-semibold text-brand-primary-foreground">
             {preparationMessage(interaction.preparationState)}
           </p>
         </div>
         <Link
-          className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-white px-5 text-sm font-bold text-brand-primary transition hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-highlight focus:ring-offset-2 focus:ring-offset-brand-primary"
+          className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-white px-5 text-sm font-bold text-brand-primary transition hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:ring-offset-2 focus:ring-offset-brand-primary"
           href={conversationHref(interaction.href)}
         >
           {interaction.preparationState === "not_prepared"
@@ -339,6 +412,13 @@ function UpcomingRow({
           <span className="mt-1 block font-semibold text-slate-950">
             {item.title}
           </span>
+          {item.companyName || item.participantNames.length ? (
+            <span className="mt-1 block text-sm text-slate-500">
+              {[item.companyName, ...item.participantNames]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : null}
         </span>
         <span className="text-sm font-bold text-brand-primary">Open</span>
       </Link>

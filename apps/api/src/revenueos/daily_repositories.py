@@ -18,12 +18,14 @@ from revenueos.models import (
     AIArtifact,
     AIJob,
     Company,
+    Contact,
     ConversationBriefingOutbox,
     ConversationDeliveryPreference,
     IntegrationConnection,
     Interaction,
     InteractionIntelligenceSnapshot,
     Meeting,
+    MeetingParticipant,
     MethodologyDefinition,
     MethodologyProjection,
     Opportunity,
@@ -43,6 +45,7 @@ class DailyInteractionRecord:
     interaction: Interaction
     company_name: str | None
     opportunity_name: str | None
+    participant_names: tuple[str, ...]
     brief_generated_at: datetime | None
     intelligence_exists: bool
 
@@ -739,6 +742,8 @@ class DailyRepository:
                     Interaction,
                     Company.name,
                     Opportunity.name,
+                    Contact.first_name,
+                    Contact.last_name,
                     brief_summary.c.generated_at,
                     intelligence_summary.c.snapshot_count,
                 )
@@ -754,6 +759,13 @@ class DailyRepository:
                     and_(
                         Opportunity.organisation_id == Interaction.organisation_id,
                         Opportunity.id == Interaction.opportunity_id,
+                    ),
+                )
+                .outerjoin(
+                    Contact,
+                    and_(
+                        Contact.organisation_id == Interaction.organisation_id,
+                        Contact.id == Interaction.contact_id,
                     ),
                 )
                 .outerjoin(
@@ -787,13 +799,70 @@ class DailyRepository:
                 .limit(limit)
             )
         ).all()
+        participant_names: dict[UUID, list[str]] = {}
+        for row in rows:
+            direct_contact_name = " ".join(value.strip() for value in (row[3], row[4]) if value and value.strip())
+            participant_names[row[0].id] = [direct_contact_name] if direct_contact_name else []
+        interaction_ids = tuple(participant_names)
+        if interaction_ids:
+            participant_rows = (
+                await self.session.execute(
+                    select(
+                        Meeting.interaction_id,
+                        Contact.first_name,
+                        Contact.last_name,
+                        MeetingParticipant.display_name,
+                        MeetingParticipant.email,
+                    )
+                    .join(
+                        MeetingParticipant,
+                        and_(
+                            MeetingParticipant.organisation_id == Meeting.organisation_id,
+                            MeetingParticipant.meeting_id == Meeting.id,
+                        ),
+                    )
+                    .outerjoin(
+                        Contact,
+                        and_(
+                            Contact.organisation_id == MeetingParticipant.organisation_id,
+                            Contact.id == MeetingParticipant.contact_id,
+                        ),
+                    )
+                    .where(
+                        Meeting.organisation_id == organisation_id,
+                        Meeting.interaction_id.in_(interaction_ids),
+                        Meeting.deleted_at.is_(None),
+                        MeetingParticipant.deleted_at.is_(None),
+                        MeetingParticipant.role == "attendee",
+                        MeetingParticipant.attendance_status != "absent",
+                    )
+                    .order_by(
+                        Meeting.interaction_id.asc(),
+                        MeetingParticipant.created_at.asc(),
+                        MeetingParticipant.id.asc(),
+                    )
+                )
+            ).all()
+            for participant_row in participant_rows:
+                interaction_id = participant_row[0]
+                contact_name = " ".join(
+                    value.strip() for value in (participant_row[1], participant_row[2]) if value and value.strip()
+                )
+                name = contact_name or participant_row[3] or participant_row[4]
+                if not name:
+                    continue
+                cleaned = name.strip()
+                names = participant_names[interaction_id]
+                if cleaned and cleaned.casefold() not in {item.casefold() for item in names} and len(names) < 12:
+                    names.append(cleaned)
         return [
             DailyInteractionRecord(
                 interaction=row[0],
                 company_name=row[1],
                 opportunity_name=row[2],
-                brief_generated_at=row[3],
-                intelligence_exists=bool(row[4]),
+                participant_names=tuple(participant_names[row[0].id]),
+                brief_generated_at=row[5],
+                intelligence_exists=bool(row[6]),
             )
             for row in rows
         ]

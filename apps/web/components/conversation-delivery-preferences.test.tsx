@@ -38,9 +38,9 @@ describe("ConversationDeliveryPreferences", () => {
           id: "outbox-1",
           kind: "morning_digest",
           status: "queued",
-          subject: "Your Oryntela briefing for 2026-10-31",
+          subject: "Prep for today: Northstar Facilities Group",
           bodyText:
-            "Good morning, Kevin.\n\nToday’s conversations\n- Synthetic review",
+            "Good morning, Kevin.\n\nYou have 1 conversation today. Here’s what to know before each one.\n\n9:00 AM · Northstar Facilities Group\nSynthetic review",
           href: "/",
           preparedForAt: "2026-10-30T20:15:00Z",
           duplicateSuppressed: false,
@@ -66,9 +66,9 @@ describe("ConversationDeliveryPreferences", () => {
       screen.getByRole("button", { name: "Preview morning digest" }),
     );
     expect(
-      await screen.findByText("Your Oryntela briefing for 2026-10-31"),
+      await screen.findByText("Prep for today: Northstar Facilities Group"),
     ).toBeVisible();
-    expect(screen.getByText(/Today’s conversations/)).toBeVisible();
+    expect(screen.getByText(/1 conversation today/)).toBeVisible();
     expect(screen.getByText(/Nothing was sent/i)).toBeVisible();
   });
 

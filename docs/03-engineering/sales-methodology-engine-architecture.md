@@ -21,7 +21,7 @@ Evidence path.
 Oryntela supports multiple qualification and discovery methodologies without
 creating a separate intelligence system for each one. Canonical, tenant-owned
 Evidence remains the truth. A versioned Methodology Projection Engine interprets
-that Evidence for MEDDIC, MEDDPICC, BANT, SPICED or a safe organisation-defined
+that Evidence for MEDDIC, MEDDICC, MEDDPICC, BANT, SPIN, SPICED or a safe organisation-defined
 methodology. Other named methodologies remain possible configuration work, not
 implemented projections.
 
@@ -32,7 +32,8 @@ flowchart LR
     D["Versioned methodology definition"] --> P
     P --> M1["MEDDPICC projection"]
     P --> M2["BANT projection"]
-    P --> M3["SPICED projection"]
+    P --> M3["SPIN projection"]
+    P --> M4["SPICED projection"]
     P --> MC["Custom projection"]
     P --> G["Explainable gaps"]
     G --> W["Briefs, questions, debriefs, actions, coaching and forecasts"]

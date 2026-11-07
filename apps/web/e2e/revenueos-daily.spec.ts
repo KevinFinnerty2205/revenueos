@@ -10,6 +10,7 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
     companyName: "Northstar Facilities",
     opportunityId: null,
     opportunityName: null,
+    participantNames: ["Jordan Lee"],
     interactionType: "online_meeting",
     lifecycleStatus: "planned",
     startsAt: "2026-11-02T00:00:00Z",

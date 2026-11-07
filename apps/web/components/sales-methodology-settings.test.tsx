@@ -14,7 +14,7 @@ function response(body: object, status = 200) {
 }
 
 function standard(
-  key: "meddic" | "meddicc" | "meddpicc" | "bant" | "spiced",
+  key: "meddic" | "meddicc" | "meddpicc" | "bant" | "spin" | "spiced",
 ): MethodologyDefinitionSummary {
   return {
     id: null,
@@ -53,6 +53,7 @@ function catalogue(
       standard("meddicc"),
       standard("meddpicc"),
       standard("bant"),
+      standard("spin"),
       standard("spiced"),
     ],
     custom: [],
@@ -89,6 +90,7 @@ describe("SalesMethodologySettings", () => {
         /do not predict a win, block stages or make automatic changes/i,
       ),
     ).toBeVisible();
+    expect(screen.getByText("SPIN")).toBeVisible();
     const card = screen.getByText("MEDDPICC").closest("div.rounded-2xl");
     fireEvent.click(card!.querySelector("button")!);
 

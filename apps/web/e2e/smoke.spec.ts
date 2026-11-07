@@ -692,13 +692,13 @@ test("interaction timeline supports deliberate creation and completion without i
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/interactions");
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Conversations" }),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
-  await expect(page.getByText("Acme Australia")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Open Meeting Intelligence" }),
-  ).toHaveAttribute("href", "/meetings/meeting-1");
+    page.getByRole("link", { name: "View conversations and notes" }),
+  ).toHaveAttribute("href", "/companies/company-1#conversations");
 
   await page.getByRole("link", { name: "Add conversation" }).first().click();
   await page.getByLabel("Title").fill("Customer planning workshop");
@@ -728,6 +728,9 @@ test("interaction timeline supports deliberate creation and completion without i
   }
 
   await page.getByRole("link", { name: "Back to conversations" }).click();
+  await page
+    .getByRole("link", { name: "View conversations and notes" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Customer planning workshop" }),
   ).toBeVisible();
@@ -833,8 +836,8 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/interactions");
-  await expect(page.getByText("Brief ready").first()).toBeVisible();
-  await page.getByRole("link", { name: "Open brief" }).first().click();
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await page.getByRole("link", { name: "On-site pilot planning" }).click();
   await expect(
     page.getByRole("heading", { name: "Prepare for this interaction" }),
   ).toBeVisible();

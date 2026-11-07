@@ -53,7 +53,7 @@ reach.
   reject private/reserved destinations across redirects and enforce DNS,
   response-size, redirect and text limits. No source is retrieved into
   preparation or debrief context until an administrator approves it.
-- Framework definitions include BANT, SPICED, MEDDIC, MEDDICC and MEDDPICC,
+- Framework definitions include BANT, SPIN, SPICED, MEDDIC, MEDDICC and MEDDPICC,
   plus organisation-defined frameworks and notes-only operation.
 - Existing deterministic calendar, research, brief, debrief, transcription,
   source evidence and intelligence adapters remain the local demonstration path.
@@ -73,11 +73,20 @@ reach.
   Linked provider-calendar projections supply the latest reschedule/cancellation
   state for their owning user. A disabled-by-default worker proves due claims,
   retries and authority rechecks through a deterministic local transport; no
-  real email transport is activated.
+  real email transport is activated. Morning previews use account-led subjects,
+  local meeting times, preparation context and per-conversation paths so the
+  owner can review the exact useful content without sending it. Delivery
+  envelopes retain a plain-text fallback and a safely escaped, Oryntela-branded
+  HTML alternative with card-like conversation sections.
 - Conversation search matches titles, linked company/person names, current
   transcript text and accepted reported evidence within the active tenant.
   User-owned debrief evidence remains restricted to its creator in search,
   preparation and debrief context.
+- The conversation directory is account-first: each tenant-scoped account opens
+  its related conversation history and notes, while unassigned conversations
+  remain available separately. The synthetic demo may use bundled local account
+  marks; otherwise the interface renders deterministic initials. It does not
+  fetch third-party favicons, and this does not imply a production logo provider.
 
 ## Trust boundaries
 

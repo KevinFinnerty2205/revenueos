@@ -236,6 +236,10 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
 
   const companion = page.getByRole("region", { name: "Live Companion" });
   await expect(companion.getByText("Provisional · needs review")).toBeVisible();
+  await expect(companion.getByText("Suggested next question")).toBeVisible();
+  await expect(
+    companion.getByText(/Who owns security approval/).first(),
+  ).toBeVisible();
   await expect(
     companion.getByText("Agree the rollout plan. — Possibly addressed"),
   ).toBeVisible();

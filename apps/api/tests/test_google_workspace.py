@@ -604,6 +604,52 @@ def test_gmail_send_is_sender_bound_plain_text_header_safe_and_acceptance_only()
     assert message.get_content().strip() == "Reviewed plain-text body"
 
 
+def test_gmail_send_adds_html_as_a_multipart_alternative() -> None:
+    observed: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "gmail-message-2", "threadId": "gmail-thread-2"})
+
+    async def run() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url="sqlite+aiosqlite://",
+            google_client_id="google-test-client-id",
+            google_client_secret=SecretStr("google-test-secret"),
+            google_oauth_redirect_uri="http://localhost/callback",
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            google = GoogleWorkspaceClient(
+                settings,
+                cast(CredentialStore, _StaticCredentialStore(_credential())),
+                http_client=http_client,
+            )
+            await google.send_mail(
+                _context(),
+                sender_name="Alex Morgan",
+                sender_email="alex@example.test",
+                recipient_name="Jordan Lee",
+                recipient_email="jordan@example.com",
+                subject="Prep for today",
+                body="Plain fallback",
+                html_body="<p>Branded preparation</p>",
+                operation_key="c" * 64,
+            )
+
+    asyncio.run(run())
+    body = cast(dict[str, str], observed["body"])
+    padded = body["raw"] + "=" * (-len(body["raw"]) % 4)
+    message = BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(padded))
+    assert message.get_content_type() == "multipart/alternative"
+    alternatives = list(message.iter_parts())
+    assert [part.get_content_type() for part in alternatives] == ["text/plain", "text/html"]
+    assert alternatives[0].get_content().strip() == "Plain fallback"
+    assert alternatives[1].get_content().strip() == "<p>Branded preparation</p>"
+
+
 def test_malformed_successful_gmail_send_is_an_uncertain_provider_outcome() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/gmail/v1/users/me/messages/send"

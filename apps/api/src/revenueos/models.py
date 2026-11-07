@@ -4271,7 +4271,7 @@ class OrganisationMethodologySetting(TimestampMixin, Base):
     __tablename__ = "organisation_methodology_settings"
     __table_args__ = (
         CheckConstraint(
-            "selection IN ('none', 'meddic', 'meddicc', 'meddpicc', 'bant', 'spiced', 'custom')",
+            "selection IN ('none', 'meddic', 'meddicc', 'meddpicc', 'bant', 'spin', 'spiced', 'custom')",
             name="ck_methodology_settings_selection",
         ),
         CheckConstraint(

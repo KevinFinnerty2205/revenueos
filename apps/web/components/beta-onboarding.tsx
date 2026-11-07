@@ -36,7 +36,7 @@ const steps = [
   },
   {
     title: "Choose how conversations are guided",
-    body: "Select BANT, SPICED, MEDDIC, MEDDICC or MEDDPICC, adapt your own framework, or use notes only. Unknown information is not scored as a negative answer.",
+    body: "Select BANT, SPIN, SPICED, MEDDIC, MEDDICC or MEDDPICC, adapt your own framework, or use notes only. Unknown information is not scored as a negative answer.",
     href: "/frameworks",
     linkLabel: "Choose a Framework",
     action: "My framework is ready",

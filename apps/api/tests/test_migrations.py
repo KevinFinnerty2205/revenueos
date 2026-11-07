@@ -14,7 +14,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-MIGRATION_HEAD = "0076_briefing_source_observation"
+MIGRATION_HEAD = "0077_spin_methodology"
 MIGRATION_HEAD_ROW = (MIGRATION_HEAD,)
 POSTGRES_IDENTIFIER_MAX_BYTES = 63
 MIGRATION_NAMED_OBJECT_ARGUMENTS = {
@@ -44,6 +44,59 @@ POSTGRES_RAW_CONSTRAINT_IDENTIFIER_PATTERN = re.compile(
     r"\bADD\s+CONSTRAINT\s+[\"']?([A-Za-z_][A-Za-z0-9_$]*)",
     flags=re.IGNORECASE,
 )
+
+
+def test_spin_methodology_migration_constraint_and_cycle(tmp_path: Path, monkeypatch: object) -> None:
+    database_path = tmp_path / "spin-methodology.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+
+    command.upgrade(configuration, "0076_briefing_source_observation")
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'SPIN migration', ?)",
+            (organisation_id, f"spin-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Owner')",
+            (user_id, f"user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "INSERT INTO organisation_methodology_settings "
+                "(organisation_id, selection, updated_by_user_id) VALUES (?, 'spin', ?)",
+                (organisation_id, user_id),
+            )
+
+    command.upgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisation_methodology_settings "
+            "(organisation_id, selection, updated_by_user_id) VALUES (?, 'spin', ?)",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("spin",)
+
+    command.downgrade(configuration, "0076_briefing_source_observation")
+    with connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("none",)
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
 
 
 def test_post_conversation_draft_migration_schema_and_cycle(tmp_path: Path, monkeypatch: object) -> None:
@@ -3668,8 +3721,9 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:44] == [
+    assert [revision.revision for revision in script.walk_revisions()][:45] == [
         MIGRATION_HEAD,
+        "0076_briefing_source_observation",
         "0075_automatic_draft_job_origin",
         "0074_progressive_transcript",
         "0073_briefing_delivery_worker",

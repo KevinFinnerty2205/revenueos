@@ -5,7 +5,7 @@
 - Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest owner build-only boundary: 24 October 2026 (Australia/Sydney)
 - Pre-gate main baseline: `4facc04`
-- Current repository migration head: `0076_briefing_source_observation`
+- Current repository migration head: `0077_spin_methodology`
 - Deployed pre-build migration head: `0064_deauthorisation`
 - State: downsized synthetic-only production healthy; Stripe live configuration bound and verified;
   exact legal release owner-approved and published; OpenAI project funded and its
@@ -198,7 +198,7 @@ plane. Leave `oryntela.com` unchanged and do not enable HSTS preload as part of 
 work.
 
 Additional production expansion is paused. Alembic migrations through the current
-repository head `0076_briefing_source_observation` may reach production only through a
+repository head `0077_spin_methodology` may reach production only through a
 separately approved deployment. Do not resize
 services, add a standby, create paid
 test/restore resources, activate a provider, enable checkout/Credits, release real
@@ -209,7 +209,7 @@ customer data or begin WO-045 under this build instruction.
 1. Approve a fresh capacity, high-availability, bounded-load and recovery assessment
    plus the resulting fixed cost before the first paid customer or real customer data.
 2. Separately approve a reviewed production deployment of the eventual merged Git
-   revision containing Alembic head `0076_briefing_source_observation`; the owner-demo
+   revision containing Alembic head `0077_spin_methodology`; the owner-demo
    branch itself must not deploy.
 3. Separately approve the real-data release and named-customer/Clerk session evidence.
 4. Separately approve any OpenAI, Prospect, Microsoft, Google, HubSpot or Salesforce

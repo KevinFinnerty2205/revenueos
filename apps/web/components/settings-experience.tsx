@@ -135,7 +135,7 @@ export function SettingsExperience() {
                 {
                   href: "/frameworks",
                   label: "Frameworks",
-                  detail: "Notes-only, BANT, SPICED, MEDDICC or MEDDPICC",
+                  detail: "Notes-only, BANT, SPIN, SPICED, MEDDICC or MEDDPICC",
                 },
                 {
                   href: "#workspace-administration",

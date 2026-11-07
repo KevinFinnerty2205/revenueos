@@ -1,4 +1,9 @@
-import type { DailyResponse, EntityPage, Interaction } from "@revenueos/shared";
+import type {
+  Company,
+  DailyResponse,
+  EntityPage,
+  Interaction,
+} from "@revenueos/shared";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "@/app/(protected)/dashboard/page";
@@ -22,6 +27,7 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
       companyName: "Northstar Labs",
       opportunityId: null,
       opportunityName: null,
+      participantNames: ["Jordan Lee"],
       interactionType: "online_meeting",
       lifecycleStatus: "planned",
       startsAt: "2026-08-17T00:00:00Z",
@@ -120,9 +126,27 @@ const recent: Interaction = {
   updatedAt: "2026-08-16T00:30:00Z",
 };
 
+const account: Company = {
+  id: "company-1",
+  organisationId: "organisation-1",
+  name: "Northstar Labs",
+  website: "https://northstar.example.test",
+  industry: "Facilities",
+  location: "Sydney",
+  employeeCount: 120,
+  status: "prospect",
+  ownerUserId: "user-1",
+  archivedAt: null,
+  createdAt: "2026-08-15T00:00:00Z",
+  updatedAt: "2026-08-15T00:00:00Z",
+};
+
 function mockHome(day: DailyResponse = dailyFixture()) {
   mockedApiRequest.mockImplementation((path) => {
     if (String(path).startsWith("/api/v1/daily")) return Promise.resolve(day);
+    if (String(path).startsWith("/api/v1/companies")) {
+      return Promise.resolve({ items: [account] } as EntityPage<Company>);
+    }
     return Promise.resolve({ items: [recent] } as EntityPage<Interaction>);
   });
 }
@@ -142,6 +166,21 @@ describe("conversation-first Home", () => {
     expect(
       screen.getByRole("heading", { name: "Northstar discovery" }),
     ).toBeVisible();
+    expect(screen.getByText("Northstar Labs · Jordan Lee")).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/i,
+      }),
+    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    expect(
+      document.querySelector(
+        'img[src="/demo/account-logos/northstar-facilities.svg"]',
+      ),
+    ).toBeInTheDocument();
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      "/api/v1/companies?page=1&pageSize=8&sortBy=name&sortOrder=asc",
+      expect.any(Object),
+    );
     expect(screen.getByRole("link", { name: "Prepare now" })).toHaveAttribute(
       "href",
       "/conversations/interaction-1#preparation",

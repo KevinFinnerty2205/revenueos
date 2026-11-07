@@ -303,7 +303,7 @@ class RevenueOSDailyService:
             if not morning_digest_enabled:
                 raise PublicAPIError("briefing_disabled", "Morning briefing delivery is disabled.", 409)
             daily = await self.read(timezone_name, now=generated_at)
-            subject = f"Your Oryntela briefing for {daily.local_date.isoformat()}"
+            subject = self._morning_digest_subject(daily)
             body = self._morning_digest_body(daily)
             local_time = time.fromisoformat(morning_digest_time)
             prepared_for_at = datetime.combine(daily.local_date, local_time, self._timezone(timezone_name)).astimezone(
@@ -710,29 +710,94 @@ class RevenueOSDailyService:
         return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
     @staticmethod
+    def _morning_digest_subject(daily: DailyResponse) -> str:
+        account_names = list(
+            dict.fromkeys(
+                cleaned_name
+                for interaction in daily.today_interactions
+                if interaction.company_name and (cleaned_name := " ".join(interaction.company_name.split()))
+            )
+        )
+        truncated = daily.total_today_interactions > len(daily.today_interactions)
+        if not account_names:
+            suffix = " + more" if truncated else ""
+            return f"Prep for today: your conversations{suffix}"
+        visible_accounts = ", ".join(account_names[:2])
+        remaining = len(account_names) - 2
+        suffix = " + more" if truncated else (f" +{remaining}" if remaining > 0 else "")
+        return f"Prep for today: {visible_accounts}{suffix}"[:500]
+
+    @staticmethod
     def _morning_digest_body(daily: DailyResponse) -> str:
         lines = [f"Good morning, {daily.user_display_name}.", ""]
+        if daily.today_interactions:
+            count = daily.total_today_interactions
+            noun = "conversation" if count == 1 else "conversations"
+            shown_count = len(daily.today_interactions)
+            introduction = (
+                f"You have {count} {noun} today. Here are the next {shown_count}."
+                if count > shown_count
+                else f"You have {count} {noun} today. Here’s what to know before each one."
+            )
+            lines.extend(
+                (
+                    introduction,
+                    "",
+                )
+            )
+            timezone = ZoneInfo(daily.timezone)
+            for interaction in daily.today_interactions:
+                local_start = interaction.starts_at.astimezone(timezone)
+                local_time = local_start.strftime("%I:%M %p").lstrip("0")
+                account = interaction.company_name or "General conversation"
+                lines.extend(
+                    (
+                        f"{local_time} · {account}",
+                        interaction.title,
+                        *(
+                            (f"With: {RevenueOSDailyService._participant_summary(interaction.participant_names)}",)
+                            if interaction.participant_names
+                            else ()
+                        ),
+                        interaction.context,
+                        f"{interaction.cta_label}: {interaction.href}",
+                        "",
+                    )
+                )
+            remaining_conversations = count - shown_count
+            if remaining_conversations > 0:
+                remaining_noun = "conversation" if remaining_conversations == 1 else "conversations"
+                lines.extend(
+                    (
+                        f"Open Oryntela for {remaining_conversations} more {remaining_noun}.",
+                        "",
+                    )
+                )
+        else:
+            lines.extend(("You have no scheduled conversations today.", ""))
         if daily.top_priority is not None:
             lines.extend(
                 (
                     "Top priority",
                     f"{daily.top_priority.title} — {daily.top_priority.reason}",
+                    f"Open: {daily.top_priority.href}",
                     "",
                 )
             )
-        if daily.today_interactions:
-            lines.append("Today’s conversations")
-            for interaction in daily.today_interactions:
-                lines.append(f"- {interaction.title}: {interaction.context} ({interaction.cta_label})")
-            lines.append("")
         if daily.actions.attention_count:
             lines.append(f"Follow-up: {daily.actions.attention_count} item(s) need attention.")
         if daily.deal_attention.attention_count:
             lines.append(f"Deal attention: {daily.deal_attention.attention_count} opportunity item(s).")
         if daily.caught_up:
             lines.append("You’re caught up. No current conversation work needs attention.")
-        lines.extend(("", "Open Oryntela Daily to review the source records before acting."))
+        lines.extend(("", "Open Oryntela to review the source records before acting."))
         return "\n".join(lines)
+
+    @staticmethod
+    def _participant_summary(names: list[str]) -> str:
+        visible = ", ".join(names[:3])
+        remaining = len(names) - 3
+        return f"{visible} +{remaining}" if remaining > 0 else visible
 
     @staticmethod
     def _pre_meeting_body(
@@ -1013,6 +1078,7 @@ class RevenueOSDailyService:
                     company_name=record.company_name,
                     opportunity_id=interaction.opportunity_id,
                     opportunity_name=record.opportunity_name,
+                    participant_names=list(record.participant_names),
                     interaction_type=interaction.interaction_type,
                     lifecycle_status=interaction.lifecycle_status,
                     starts_at=starts_at,

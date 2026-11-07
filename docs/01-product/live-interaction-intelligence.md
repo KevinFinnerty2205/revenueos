@@ -16,15 +16,20 @@ the final Opportunity Workspace intelligence projection or Revenue Brain.
 1. Prepare and review the Pre-Interaction Brief.
 2. Start the Interaction and its separately authorised source capture.
 3. Explicitly choose **Enable Live Intelligence**.
-4. Review bounded objective/question progress and material emerging signals.
+4. Review the next unresolved preparation question, bounded
+   objective/question progress and material emerging signals.
 5. Collapse the panel, dismiss an individual signal or disable it for the Interaction.
 6. End the Interaction. Oryntela freezes live processing.
 7. Finalise the normal evidence path and run final Interaction Intelligence.
 8. Compare the frozen live state with final intelligence.
 9. Use AI Debrief for material ambiguity that final evidence did not resolve.
 
-The panel uses no audio, toast, modal, vibration or autonomous prompt. Silence is a
-valid result. There is no score, forecast, confidence percentage or coaching script.
+The panel uses no audio, toast, modal, vibration or autonomous prompt. When a reviewed
+preparation question remains unresolved, the panel may quietly surface that exact
+question as **Suggested next question**. It does not generate a new coaching script,
+interrupt, auto-speak or claim that the question is appropriate for the current
+moment. Silence is a valid result. There is no score, forecast or confidence
+percentage.
 
 ## Supported and fallback behaviour
 
@@ -48,7 +53,9 @@ valid result. There is no score, forecast, confidence percentage or coaching scr
 - possible objection, decision, action, risk or customer request;
 - possible timeline, procurement, security/legal or stakeholder change;
 - an objective as **Possibly addressed**; and
-- an open question as **Possibly answered**.
+- an open question as **Possibly answered**; and
+- the first still-unresolved preparation question as a quiet
+  **Suggested next question**.
 
 Buying, commercial-intent and customer-request signals require customer attribution.
 Unknown speakers can support only conservative, visibly uncertain operational

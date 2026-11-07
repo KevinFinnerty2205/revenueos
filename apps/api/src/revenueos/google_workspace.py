@@ -207,6 +207,7 @@ class GoogleWorkspaceClient:
         subject: str,
         body: str,
         operation_key: str,
+        html_body: str | None = None,
     ) -> GoogleSendResult:
         self._validate_headers(sender_name, sender_email, recipient_name, recipient_email, subject)
         internet_message_id = f"<oryntela-{operation_key}@mail.oryntela.invalid>"
@@ -218,6 +219,8 @@ class GoogleWorkspaceClient:
         message["Message-ID"] = internet_message_id
         message["X-Oryntela-Operation-Id"] = operation_key
         message.set_content(body, subtype="plain", charset="utf-8")
+        if html_body is not None:
+            message.add_alternative(html_body, subtype="html", charset="utf-8")
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         response = await self.google_request(
             context,

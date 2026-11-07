@@ -137,6 +137,7 @@ class AskIntentClassifier:
                 "meddicc",
                 "meddic",
                 "bant",
+                "spin",
                 "spiced",
                 "methodology",
                 "still unknown",
@@ -495,7 +496,7 @@ class AskRevenueOSService:
         opportunity_ids = tuple(item.id for item in opportunities)
         names = {item.id: item.name for item in opportunities}
         candidates: list[AskCandidate] = []
-        if any(term in lowered for term in ("economic buyer", "methodology", "meddpicc", "meddic")):
+        if any(term in lowered for term in ("economic buyer", "methodology", "meddpicc", "meddic", "spin")):
             methodologies = await self.repository.latest_methodology(self.tenant.organisation_id, opportunity_ids)
             candidates = self._portfolio_methodology_gaps(methodologies, names, lowered)
         elif any(term in lowered for term in ("security", "competitor", "timeline", "risk")):

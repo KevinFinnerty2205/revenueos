@@ -22,6 +22,7 @@ from revenueos.daily_contracts import (
     DailyDealReason,
     DailyInteraction,
     DailyRecommendation,
+    DailyResponse,
 )
 from revenueos.daily_repositories import DailyRecommendationRecord, DailyRepository
 from revenueos.daily_services import RevenueOSDailyService
@@ -34,9 +35,12 @@ from revenueos.models import (
     ActionProposal,
     ActionProposalVersion,
     Company,
+    Contact,
     ConversationBriefingOutbox,
     IntegrationConnection,
     Interaction,
+    Meeting,
+    MeetingParticipant,
     MethodologyProjection,
     Opportunity,
     OrganisationMembership,
@@ -77,6 +81,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
             end.astimezone(UTC) - remaining_today / 10,
         )
         company_id = uuid.uuid4()
+        contact_id = uuid.uuid4()
         opportunity_id = uuid.uuid4()
         next_interaction_id = uuid.uuid4()
         prepared_interaction_id = uuid.uuid4()
@@ -92,6 +97,18 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     id=company_id,
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     name="Qantas",
+                    status="active",
+                    owner_user_id=PRIMARY_USER_ID,
+                )
+            )
+            session.add(
+                Contact(
+                    id=contact_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    company_id=company_id,
+                    first_name="Priya",
+                    last_name="Rao",
+                    email="priya.rao@example.test",
                     status="active",
                     owner_user_id=PRIMARY_USER_ID,
                 )
@@ -144,7 +161,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     company_id=company_id,
                     opportunity_id=opportunity_id,
-                    interaction_type="workshop",
+                    interaction_type="online_meeting",
                     lifecycle_status="planned",
                     title="Technical review",
                     scheduled_start_at=next_interaction_at,
@@ -158,6 +175,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     company_id=company_id,
                     opportunity_id=opportunity_id,
+                    contact_id=contact_id,
                     interaction_type="phone_call",
                     lifecycle_status="planned",
                     title="Commercial follow-up",
@@ -197,6 +215,33 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
             )
             session.add_all(interactions)
             await session.flush()
+            meeting_id = uuid.uuid4()
+            session.add(
+                Meeting(
+                    id=meeting_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    interaction_id=next_interaction_id,
+                    title="Technical review",
+                    meeting_date=next_interaction_at,
+                    meeting_type="remote",
+                    status="scheduled",
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    owner_user_id=PRIMARY_USER_ID,
+                    created_by=PRIMARY_USER_ID,
+                    updated_by=PRIMARY_USER_ID,
+                )
+            )
+            await session.flush()
+            session.add(
+                MeetingParticipant(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    meeting_id=meeting_id,
+                    contact_id=contact_id,
+                    attendance_status="invited",
+                    role="attendee",
+                )
+            )
             session.add_all(
                 [
                     PreInteractionBrief(
@@ -563,6 +608,11 @@ def test_delivery_preferences_and_local_outbox_are_versioned_deduplicated_and_re
     assert stale.json()["code"] == "delivery_preference_conflict"
     morning = client.post("/api/v1/daily/briefing-preview", json={"kind": "morning_digest"})
     assert morning.status_code == 200, morning.text
+    assert morning.json()["subject"] == "Prep for today: Qantas"
+    assert "You have 2 conversations today" in morning.json()["bodyText"]
+    assert "Qantas" in morning.json()["bodyText"]
+    assert morning.json()["bodyText"].count("With: Priya Rao") == 2
+    assert "/conversations/" in morning.json()["bodyText"]
     repeated_morning = client.post("/api/v1/daily/briefing-preview", json={"kind": "morning_digest"})
     assert repeated_morning.status_code == 200, repeated_morning.text
     assert repeated_morning.json()["id"] == morning.json()["id"]
@@ -1132,7 +1182,25 @@ def test_daily_bounds_lists_and_query_count_does_not_scale_per_item(client: Test
     assert len(body["todayInteractions"]) == 5
     assert len(body["actions"]["items"]) == 5
     assert body["actions"]["truncated"] is True
-    assert select_count <= 15
+    daily = DailyResponse.model_validate(body)
+    digest = RevenueOSDailyService._morning_digest_body(daily)
+    assert "Here are the next 5" in digest
+    assert "more conversations" in digest
+    assert RevenueOSDailyService._morning_digest_subject(daily).endswith("+ more")
+    unsafe_subject_daily = daily.model_copy(
+        update={
+            "today_interactions": [
+                daily.today_interactions[0].model_copy(update={"company_name": "Qantas\r\nBcc: attacker@example.test"})
+            ],
+            "total_today_interactions": 1,
+        }
+    )
+    safe_subject = RevenueOSDailyService._morning_digest_subject(unsafe_subject_daily)
+    assert safe_subject == "Prep for today: Qantas Bcc: attacker@example.test"
+    assert "\r" not in safe_subject and "\n" not in safe_subject
+    # The final bounded query batches attendee names for all surfaced
+    # interactions; it does not scale with the number of conversations.
+    assert select_count <= 16
 
 
 def test_daily_degrades_one_source_failure_without_exposing_error(

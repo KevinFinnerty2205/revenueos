@@ -1204,6 +1204,7 @@ export interface DailyInteraction {
   companyName: string | null;
   opportunityId: string | null;
   opportunityName: string | null;
+  participantNames: string[];
   interactionType: string;
   lifecycleStatus: string;
   startsAt: string;
@@ -1358,7 +1359,8 @@ export interface ConversationWorkspaceResponse {
   followUpDraft: string | null;
   followUpReviewed: boolean;
   generationFingerprint: string | null;
-  generationState: "not_started" | "pending" | "processing" | "failed" | "ready";
+  generationState:
+    "not_started" | "pending" | "processing" | "failed" | "ready";
   generationId: string | null;
   generationTranscriptVersion: number | null;
   generationFailureCode: string | null;
@@ -2887,7 +2889,7 @@ export interface OnlineMeetingTranscriptImport {
 }
 
 export type MethodologyKey =
-  "meddic" | "meddicc" | "meddpicc" | "bant" | "spiced";
+  "meddic" | "meddicc" | "meddpicc" | "bant" | "spin" | "spiced";
 export type MethodologySelection = "none" | MethodologyKey | "custom";
 export type MethodologyState =
   "confirmed" | "partially_supported" | "unknown" | "conflicting" | "stale";

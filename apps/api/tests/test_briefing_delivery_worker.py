@@ -810,6 +810,12 @@ def test_due_claim_is_exclusive_and_retry_reuses_stable_operation_key() -> None:
         engine = create_async_engine(TEST_DB_URL)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         outbox = _outbox(now, operation_key="stable-operation-key")
+        linked_interaction_id = uuid4()
+        outbox.body_text = (
+            "Northstar & Partners\n\n"
+            f"Prepare: /conversations/{linked_interaction_id}#preparation\n"
+            "Open: /daily#priority"
+        )
         async with session_factory() as session:
             session.add_all([outbox, _connection(now, connector_key="google_workspace"), _preference()])
             await session.commit()
@@ -851,6 +857,19 @@ def test_due_claim_is_exclusive_and_retry_reuses_stable_operation_key() -> None:
             "stable-operation-key",
         ]
         assert all(message.href == "/" for message in transport.messages)
+        assert all(
+            f"http://localhost:3000/conversations/{linked_interaction_id}#preparation" in message.body
+            for message in transport.messages
+        )
+        assert all("Open: http://localhost:3000/daily#priority" in message.body for message in transport.messages)
+        assert all(message.html_body is not None for message in transport.messages)
+        assert all("ORYNTELA" in (message.html_body or "") for message in transport.messages)
+        assert all("Northstar &amp; Partners" in (message.html_body or "") for message in transport.messages)
+        assert all(
+            f'href="http://localhost:3000/conversations/{linked_interaction_id}#preparation"'
+            in (message.html_body or "")
+            for message in transport.messages
+        )
         assert all("Open Oryntela: http://localhost:3000/" in message.body for message in transport.messages)
         await engine.dispose()
 
@@ -1630,6 +1649,8 @@ def test_pre_meeting_materialisation_progresses_beyond_five_hundred_interactions
                         scheduled_end_at=now + timedelta(days=1, hours=1, seconds=index),
                         creation_origin="manual",
                         created_by_user_id=PRIMARY_USER_ID,
+                        created_at=now - timedelta(hours=1),
+                        updated_at=now - timedelta(hours=1),
                     )
                     for index, interaction_id in enumerate(interaction_ids)
                 ]

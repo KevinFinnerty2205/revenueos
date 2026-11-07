@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
+from html import escape
 from typing import Protocol, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -39,6 +41,11 @@ from revenueos.tenant import TenantContext
 logger = logging.getLogger("revenueos.briefing_delivery")
 DISCOVERY_LIMIT = 1000
 REAUTHORISATION_REQUIRED_CODES = frozenset({"connection_reauthorisation_required", "provider_permission_denied"})
+INTERNAL_APP_PATH = re.compile(
+    r"(?m)(?P<path>/(?:conversations|daily|tasks|opportunities|companies)"
+    r"(?:/[A-Za-z0-9-]+)?(?:/workspace|#[A-Za-z0-9-]+)?)$"
+)
+ABSOLUTE_URL = re.compile(r"https?://[^\s<>]+")
 
 
 @dataclass(frozen=True)
@@ -68,6 +75,7 @@ class BriefingDeliveryMessage:
     recipient_email: str
     subject: str
     body: str
+    html_body: str | None
     href: str
     operation_key: str
     credential_reference: str | None = None
@@ -144,6 +152,7 @@ class GoogleBriefingDeliveryTransport:
                     subject=message.subject,
                     body=message.body,
                     operation_key=message.operation_key,
+                    html_body=message.html_body,
                 )
         except GoogleAPIError as exc:
             raise BriefingDeliveryError(
@@ -185,6 +194,7 @@ class MicrosoftBriefingDeliveryTransport:
                     subject=message.subject,
                     body=message.body,
                     operation_key=message.operation_key,
+                    html_body=message.html_body,
                 )
         except MicrosoftAPIError as exc:
             raise BriefingDeliveryError(
@@ -564,6 +574,8 @@ class BriefingDeliveryWorkerService:
             row.lease_expires_at = submission_started_at + timedelta(
                 seconds=self._settings.worker_lease_duration_seconds
             )
+            absolute_body = self._absolute_body_links(row.body_text)
+            absolute_href = self._absolute_href(row.href)
             message = BriefingDeliveryMessage(
                 outbox_id=row.id,
                 organisation_id=row.organisation_id,
@@ -575,7 +587,8 @@ class BriefingDeliveryWorkerService:
                 recipient_name=user.display_name,
                 recipient_email=user.email.strip().casefold(),
                 subject=row.subject,
-                body=f"{row.body_text}\n\nOpen Oryntela: {self._absolute_href(row.href)}",
+                body=f"{absolute_body}\n\nOpen Oryntela: {absolute_href}",
+                html_body=self._html_body(row.subject, absolute_body, absolute_href),
                 href=row.href,
                 operation_key=row.operation_key,
                 credential_reference=connection.credential_reference,
@@ -1006,6 +1019,56 @@ class BriefingDeliveryWorkerService:
 
     def _absolute_href(self, href: str) -> str:
         return f"{self._settings.briefing_delivery_app_base_url.rstrip('/')}{href}"
+
+    def _absolute_body_links(self, body: str) -> str:
+        return INTERNAL_APP_PATH.sub(
+            lambda match: self._absolute_href(match.group("path")),
+            body,
+        )
+
+    @staticmethod
+    def _html_body(subject: str, body: str, open_href: str) -> str:
+        blocks = [block.strip() for block in body.split("\n\n") if block.strip()]
+        rendered_blocks = "".join(
+            (
+                '<div style="background:#FFFFFF;border:1px solid #D8D4CB;'
+                'border-radius:16px;margin:0 0 14px;padding:18px 20px;">'
+                f"{'<br>'.join(BriefingDeliveryWorkerService._linkify_html(line) for line in block.splitlines())}"
+                "</div>"
+            )
+            for block in blocks
+        )
+        safe_subject = escape(subject)
+        safe_href = escape(open_href, quote=True)
+        return (
+            '<!doctype html><html><body style="margin:0;background:#F6F4EF;'
+            'color:#0E1B32;font-family:Arial,Helvetica,sans-serif;">'
+            '<div style="margin:0 auto;max-width:680px;padding:32px 20px 40px;">'
+            '<div style="color:#204E5A;font-size:13px;font-weight:700;'
+            'letter-spacing:0.18em;margin-bottom:18px;">ORYNTELA</div>'
+            f'<h1 style="font-size:28px;line-height:1.2;margin:0 0 24px;">{safe_subject}</h1>'
+            f"{rendered_blocks}"
+            f'<a href="{safe_href}" style="background:#0E1B32;border-radius:12px;'
+            "color:#FFFFFF;display:inline-block;font-size:15px;font-weight:700;"
+            'margin-top:6px;padding:13px 18px;text-decoration:none;">'
+            "Open Oryntela →</a>"
+            '<p style="color:#5E6876;font-size:12px;line-height:1.5;margin:24px 0 0;">'
+            "Review source records before acting on generated preparation.</p>"
+            "</div></body></html>"
+        )
+
+    @staticmethod
+    def _linkify_html(value: str) -> str:
+        parts: list[str] = []
+        cursor = 0
+        for match in ABSOLUTE_URL.finditer(value):
+            parts.append(escape(value[cursor : match.start()]))
+            url = match.group(0)
+            safe_url = escape(url, quote=True)
+            parts.append(f'<a href="{safe_url}" style="color:#204E5A;font-weight:700;">{escape(url)}</a>')
+            cursor = match.end()
+        parts.append(escape(value[cursor:]))
+        return "".join(parts)
 
     @staticmethod
     def _safe_email(value: str) -> bool:

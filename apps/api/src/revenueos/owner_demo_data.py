@@ -1201,7 +1201,7 @@ def _validated_base_reservation(
     created_at_raw = raw_original.get("createdAt")
     updated_at_raw = raw_original.get("updatedAt")
     if (
-        selection not in {"none", "meddic", "meddicc", "meddpicc", "bant", "spiced", "custom"}
+        selection not in {"none", "meddic", "meddicc", "meddpicc", "bant", "spin", "spiced", "custom"}
         or (selection == "custom") != (custom_definition_id_raw is not None)
         or (custom_definition_id_raw is not None and not isinstance(custom_definition_id_raw, str))
         or not isinstance(updated_by_user_id_raw, str)
