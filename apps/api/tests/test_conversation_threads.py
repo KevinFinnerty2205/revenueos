@@ -235,6 +235,34 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
     assert source_dates["January expansion discovery"].startswith("2026-01-15")
     assert source_dates["April expansion follow-up"].startswith("2026-04-21")
 
+    # Preparation for April may use January, but not the April conversation
+    # itself or a separate initiative at the same company.
+    from revenueos.conversation_thread_services import ConversationThreadService
+    from revenueos.tenant import TenantContext
+
+    async def preparation_sources() -> set[UUID]:
+        async with app.state.session_factory() as session:
+            gaps = await ConversationThreadService(
+                session,
+                TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin"),
+                app.state.settings,
+            ).preparation_gaps(UUID(str(april["id"])))
+            assert gaps
+            assert all(gap.projection_id is None for gap in gaps)
+            source_ids = {source.source_id for gap in gaps for source in gap.sources}
+            return set(
+                await session.scalars(
+                    select(InteractionIntelligenceSnapshot.interaction_id).where(
+                        InteractionIntelligenceSnapshot.organisation_id == PRIMARY_ORGANISATION_ID,
+                        InteractionIntelligenceSnapshot.id.in_(source_ids),
+                    )
+                )
+            )
+
+    sources = asyncio.run(preparation_sources())
+    assert UUID(str(february["id"])) not in sources
+    assert UUID(str(april["id"])) not in sources
+
     corrected = client.put(
         f"/api/v1/interactions/{april['id']}/thread-assignment",
         json={"threadId": renewal.json()["id"], "expectedLockVersion": 1},

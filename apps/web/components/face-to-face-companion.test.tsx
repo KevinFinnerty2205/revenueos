@@ -213,8 +213,8 @@ describe("FaceToFaceCompanion", () => {
     ).toBeVisible();
     fireEvent.click(screen.getByText("More options"));
     expect(
-      screen.getByRole("link", { name: "Open Revenue Brain" }),
-    ).toHaveAttribute("href", "/companies/company-1");
+      screen.getByRole("link", { name: "Open conversation history" }),
+    ).toHaveAttribute("href", "/conversations/accounts/company-1");
     expect(screen.getByText("1", { selector: "dd" })).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/complete"),

@@ -8,6 +8,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { suggestConversationQuestion } from "@/lib/conversation-guidance";
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -266,10 +267,7 @@ export function LiveInteractionIntelligence({
     (signal) =>
       !["dismissed", "superseded", "expired"].includes(signal.lifecycleStatus),
   );
-  const suggestedQuestion =
-    live.openQuestions.find(
-      (question) => question.progressStatus === "unresolved",
-    ) ?? null;
+  const suggestedQuestion = suggestConversationQuestion(live);
 
   return (
     <section
@@ -317,12 +315,26 @@ export function LiveInteractionIntelligence({
                 Suggested next question
               </p>
               <p className="mt-2 text-base font-semibold leading-6 text-slate-950">
-                {suggestedQuestion.label}
+                {suggestedQuestion.question}
               </p>
               <p className="mt-2 text-xs leading-5 text-slate-600">
-                From your preparation. Consider it only if it fits the
-                conversation; Oryntela will not interrupt or speak for you.
+                {suggestedQuestion.reason} Oryntela will not interrupt or speak
+                for you.
               </p>
+              {suggestedQuestion.signal ? (
+                <details className="mt-3 text-xs text-slate-600">
+                  <summary className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-focus">
+                    Why this question?
+                  </summary>
+                  <p className="mt-2">{suggestedQuestion.signal.statement}</p>
+                  <p className="mt-1">
+                    Transcript segments{" "}
+                    {suggestedQuestion.signal.source.sequenceStart}–
+                    {suggestedQuestion.signal.source.sequenceEnd}. This signal
+                    is provisional; check it before relying on it.
+                  </p>
+                </details>
+              ) : null}
             </div>
           ) : null}
 

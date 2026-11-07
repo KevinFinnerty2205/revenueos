@@ -170,6 +170,9 @@ class ExecutiveSummarySource(BaseModel):
     ]
     meeting_date: datetime
     transcript_text: str
+    # Only an audited, owner-private generation may populate this context.
+    # It guides emphasis; it is not transcript evidence or buyer confirmation.
+    private_notes: str = Field(default="", max_length=12_000)
 
     @field_validator("transcript_text")
     @classmethod

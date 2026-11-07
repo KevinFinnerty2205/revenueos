@@ -337,8 +337,8 @@ def test_unavailable_notice_feature_and_tenant_fail_closed(
     no_context = create_interaction(client, interaction_type="manual_interaction")
     unavailable = client.get(_brief_url(str(no_context["id"])))
     assert unavailable.status_code == 200
-    assert unavailable.json()["state"] == "unavailable"
-    assert unavailable.json()["generationAvailable"] is False
+    assert unavailable.json()["state"] == "not_generated"
+    assert unavailable.json()["generationAvailable"] is True
 
     company_id = str(create_company(client)["id"])
     opportunity_id = str(create_opportunity(client, company_id)["id"])
@@ -816,7 +816,7 @@ def test_company_only_partial_context_and_terminal_states_are_product_safe(clien
     partial = create_interaction(client, interaction_type="executive_lunch", company_id=company_id)
     generated = client.post(_brief_url(str(partial["id"])))
     assert generated.status_code == 200
-    assert "No linked opportunity" in generated.json()["brief"]["accountContext"]
+    assert "confirm the people’s priorities" in generated.json()["brief"]["accountContext"]
     assert generated.json()["brief"]["stakeholderFocus"] == []
     assert generated.json()["brief"]["risksToWatch"] == []
 
@@ -875,3 +875,16 @@ def test_quota_exhaustion_is_safe_and_equivalent_reuse_is_free(client: TestClien
         exhausted = quota_client.post(_brief_url(str(second["id"])))
         assert exhausted.status_code == 429
         assert exhausted.json()["code"] == "daily_generation_limit_exceeded"
+
+
+@pytest.mark.parametrize("framework", ["bant", "spin", "spiced", "meddic", "meddicc", "meddpicc"])
+def test_preparation_uses_selected_framework_without_crm_opportunity(client: TestClient, framework: str) -> None:
+    selection = client.patch("/api/v1/methodologies/current", json={"selection": framework})
+    assert selection.status_code == 200, selection.text
+    interaction = create_interaction(client, title="First discovery", interaction_type="face_to_face_meeting")
+    assert interaction["opportunityId"] is None
+    prepared = client.post(_brief_url(str(interaction["id"])))
+    assert prepared.status_code == 200, prepared.text
+    questions = prepared.json()["brief"]["questionsToAsk"]
+    assert any("evidence gap" in question["purpose"] for question in questions)
+    assert "Sales framework gaps" in prepared.json()["sourceLabels"]

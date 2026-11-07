@@ -91,13 +91,19 @@ describe("InteractionList", () => {
     ).toBeVisible();
     expect(
       screen.getAllByRole("link", { name: "Acme Australia" })[0],
-    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    ).toHaveAttribute(
+      "href",
+      "/conversations/accounts/company-1#conversations",
+    );
     expect(
       screen.getByRole("link", { name: "Acme discovery" }),
     ).toHaveAttribute("href", "/conversations/interaction-1");
     expect(
       screen.getByRole("link", { name: "View conversations and notes" }),
-    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    ).toHaveAttribute(
+      "href",
+      "/conversations/accounts/company-1#conversations",
+    );
     expect(
       screen.queryByText(/prompt|provider|worker/i),
     ).not.toBeInTheDocument();
@@ -376,10 +382,16 @@ describe("InteractionList", () => {
       screen.getByRole("link", {
         name: "Acme Australia 2 conversations",
       }),
-    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    ).toHaveAttribute(
+      "href",
+      "/conversations/accounts/company-1#conversations",
+    );
     expect(
       screen.getByRole("link", { name: "Acme Australia" }),
-    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    ).toHaveAttribute(
+      "href",
+      "/conversations/accounts/company-1#conversations",
+    );
     expect(
       screen.queryByRole("heading", { name: "Acme follow-up" }),
     ).not.toBeInTheDocument();

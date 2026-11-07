@@ -85,6 +85,41 @@ describe("InteractionForm", () => {
     });
   });
 
+  it("starts a conversation without loading CRM opportunities, even when a legacy opportunity URL is supplied", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("opportunities"))
+        throw new Error("CRM must not be queried");
+      return Promise.resolve(
+        jsonResponse(
+          init?.method === "POST" ? { id: "conversation-1" } : emptyPage,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <InteractionForm
+        conversationOnly
+        initialOpportunityId="old-opportunity"
+      />,
+    );
+    await screen.findByRole("heading", { name: "Add conversation" });
+    expect(screen.queryByLabelText("Opportunity")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Discovery" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith("/conversations/conversation-1"),
+    );
+    const posted = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(JSON.parse(String(posted?.[1]?.body))).toMatchObject({
+      title: "Discovery",
+      opportunityId: null,
+    });
+  });
+
   it("shows a safe options-loading error without exposing a partial form", async () => {
     vi.stubGlobal(
       "fetch",

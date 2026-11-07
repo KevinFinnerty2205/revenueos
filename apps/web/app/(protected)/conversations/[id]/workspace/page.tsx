@@ -1,5 +1,4 @@
-import { BetaFeatureGate } from "@/components/beta-feature-gate";
-import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
+import { redirect } from "next/navigation";
 
 export default async function ConversationWorkspacePage({
   params,
@@ -7,9 +6,5 @@ export default async function ConversationWorkspacePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return (
-    <BetaFeatureGate feature="aiCompanion">
-      <FaceToFaceCompanion interactionId={id} />
-    </BetaFeatureGate>
-  );
+  redirect(`/conversations/${id}?view=capture`);
 }

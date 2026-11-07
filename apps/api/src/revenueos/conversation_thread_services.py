@@ -30,7 +30,7 @@ from revenueos.conversation_thread_repositories import (
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_repositories import InteractionRepository
-from revenueos.methodology_contracts import MethodologyFieldDefinition, MethodologyStateCounts
+from revenueos.methodology_contracts import MethodologyFieldDefinition, MethodologyGapContext, MethodologyStateCounts
 from revenueos.methodology_services import (
     FactCandidate,
     SalesMethodologyProjectionService,
@@ -330,6 +330,51 @@ class ConversationThreadService:
             current_conversation=current,
             confirmed_thread=cumulative,
             generated_at=now,
+        )
+
+    async def preparation_gaps(self, interaction_id: UUID, *, limit: int = 8) -> tuple[MethodologyGapContext, ...]:
+        """Use the chosen framework and confirmed history without a CRM opportunity."""
+        interaction = await self._require_interaction(interaction_id)
+        selection = await self.methodology.current_selection()
+        definition = selection.effective_definition
+        if definition is None or selection.selection == "none":
+            return ()
+        assignment = await self.repository.assignment_record(self.tenant.organisation_id, interaction_id)
+        now = datetime.now(UTC)
+        before_at = min(interaction.actual_start_at or interaction.scheduled_start_at or now, now)
+        records = (
+            []
+            if assignment is None or assignment.thread is None
+            else await self.repository.thread_snapshot_records(
+                self.tenant.organisation_id,
+                assignment.thread.thread.id,
+                before_at=before_at,
+            )
+        )
+        # No company-wide fallback and no evidence from the target or future calls.
+        coverage = self._coverage(
+            definition.fields, [record for record in records if record.interaction.id != interaction_id], now
+        )
+        ranked = sorted(
+            (item for item in coverage.items if item.state != "confirmed"),
+            key=lambda item: (
+                {"conflicting": 0, "stale": 1, "unknown": 2, "partially_supported": 3}[item.state],
+                not item.required,
+            ),
+        )
+        return tuple(
+            MethodologyGapContext(
+                projection_id=None,
+                methodology_key=definition.key,
+                field_key=item.field_key,
+                display_name=item.display_name,
+                state=cast(Literal["partially_supported", "unknown", "conflicting", "stale"], item.state),
+                conclusion=item.conclusion,
+                suggested_question=item.suggested_question
+                or f"What should we confirm about {item.display_name.lower()}?",
+                sources=item.sources[:6],
+            )
+            for item in ranked[:limit]
         )
 
     async def _suggestions(

@@ -171,7 +171,10 @@ describe("conversation-first Home", () => {
       screen.getByRole("link", {
         name: /Northstar Labs.*conversation memory/i,
       }),
-    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    ).toHaveAttribute(
+      "href",
+      "/conversations/accounts/company-1#conversations",
+    );
     expect(
       document.querySelector(
         'img[src="/demo/account-logos/northstar-facilities.svg"]',

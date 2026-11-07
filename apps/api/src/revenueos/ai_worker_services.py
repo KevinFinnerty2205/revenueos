@@ -101,6 +101,7 @@ from revenueos.errors import PublicAPIError
 from revenueos.models import (
     AIJob,
     ConversationDraftGeneration,
+    ConversationUserWorkspace,
     Interaction,
     MeetingAuditEvent,
     OrganisationMembership,
@@ -919,6 +920,16 @@ class AIWorkerService:
     ) -> ExecutiveSummarySource:
         """Load the exact current tenant transcript pinned by the claimed job."""
 
+        if (
+            job.automatic_draft_generation_id is not None
+            and not await self._automatic_draft_execution_authority_is_current(job)
+        ):
+            raise WorkerExecutionError(
+                "automatic_draft_authority_revoked",
+                "Private notes are unavailable for this generation.",
+                retryable=False,
+            )
+        private_notes = ""
         async with self._session_factory() as session, session.begin():
             await set_tenant_database_context(session, job.organisation_id)
             source = await AIWorkerRepository(session).get_executive_summary_source(
@@ -927,6 +938,35 @@ class AIWorkerService:
                 job.transcript_id,
                 job.transcript_version,
             )
+            if job.automatic_draft_generation_id is not None and (job.prompt_version or 1) >= 2:
+                origin = await self._automatic_draft_origin(session, job)
+                if origin is None or not origin.audit_is_valid:
+                    raise WorkerExecutionError(
+                        "automatic_draft_source_audit_invalid",
+                        "The private note source could not be verified.",
+                        retryable=False,
+                    )
+                await set_private_user_database_context(session, origin.user_id)
+                # Join through the immutable generation, not a client-selected owner
+                # or meeting. Ordinary/shared summaries never query private notes.
+                saved_notes = await session.scalar(
+                    select(ConversationUserWorkspace.live_notes)
+                    .join(
+                        ConversationDraftGeneration,
+                        (ConversationDraftGeneration.organisation_id == ConversationUserWorkspace.organisation_id)
+                        & (ConversationDraftGeneration.user_id == ConversationUserWorkspace.user_id)
+                        & (ConversationDraftGeneration.interaction_id == ConversationUserWorkspace.interaction_id),
+                    )
+                    .where(
+                        ConversationDraftGeneration.organisation_id == job.organisation_id,
+                        ConversationDraftGeneration.user_id == origin.user_id,
+                        ConversationDraftGeneration.id == origin.generation_id,
+                        ConversationDraftGeneration.meeting_id == job.meeting_id,
+                        ConversationUserWorkspace.organisation_id == job.organisation_id,
+                        ConversationUserWorkspace.user_id == origin.user_id,
+                    )
+                )
+                private_notes = (saved_notes or "")[:12_000]
         if source is None:
             raise WorkerExecutionError(
                 "executive_summary_source_unavailable",
@@ -951,6 +991,7 @@ class AIWorkerService:
             meeting_title=meeting_title,
             meeting_date=meeting_date,
             transcript_text=normalised_transcript,
+            private_notes=private_notes,
         )
 
     async def load_decisions_source(

@@ -134,7 +134,7 @@ describe("PreInteractionBrief", () => {
     ).toBeVisible();
     expect(screen.getByText("Latest commitment")).toBeVisible();
     expect(screen.getByText("Objection or timeline issue")).toBeVisible();
-    expect(screen.getByText(/Recent Revenue Brain change:/)).toBeVisible();
+    expect(screen.getByText(/Recent conversation context:/)).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Recommended questions" }),
     ).toBeVisible();
