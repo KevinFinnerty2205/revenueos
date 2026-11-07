@@ -49,7 +49,8 @@ export function ConversationWorkspace({
               ? "review"
               : next.lifecycleStatus === "completed"
                 ? "review"
-                : next.lifecycleStatus === "in_progress"
+                : next.lifecycleStatus === "in_progress" ||
+                    next.interactionType === "manual_interaction"
                   ? "capture"
                   : "prepare");
         setView(selected);
@@ -159,6 +160,7 @@ export function ConversationWorkspace({
               interactionId={interaction.id}
               embedded
               onInteractionChange={setInteraction}
+              onOpenPreparation={() => select("prepare")}
             />
           </BetaFeatureGate>
         </div>

@@ -100,6 +100,33 @@ describe("ConversationWorkspace", () => {
     expect(state.stopped).not.toHaveBeenCalled();
   });
 
+  it("opens a simple note directly in the editor without requiring a CRM record", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: "call-1",
+              title: "Event notes",
+              companyId: null,
+              interactionType: "manual_interaction",
+              lifecycleStatus: "planned",
+              actualStartAt: null,
+              scheduledStartAt: null,
+            }),
+            { status: 200 },
+          ),
+        ),
+      ),
+    );
+    render(<ConversationWorkspace interactionId="call-1" />);
+    expect(await screen.findByLabelText("Private rough notes")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Notes & capture" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("opens completed conversations in review and honours an explicit preparation link", async () => {
     vi.stubGlobal(
       "fetch",

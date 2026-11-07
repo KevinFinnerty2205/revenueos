@@ -1,5 +1,7 @@
 # Oryntela master product blueprint
 
+> **Owner direction update, November 2026:** The current product is meeting notes and sales conversation intelligence, inspired by Backdrop + Granola, for GTM teams and startups. The [conversation product acceptance contract](conversation-product-acceptance.md) supersedes the broad CRM-led scope and launch conclusions below. The daily product must support preparation, capture, notes, guidance and follow-up without CRM administration. Native desktop capture and live-provider acceptance remain outstanding milestones. The September strategy below is retained as historical context, not the current completion standard.
+
 - **Status:** Authoritative forward-looking product and commercial direction
 - **Consolidated:** 4 September 2026 (Australia/Sydney)
 - **Implementation name:** RevenueOS remains the current technical/internal name

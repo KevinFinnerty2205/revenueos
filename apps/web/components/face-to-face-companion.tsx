@@ -71,10 +71,12 @@ export function FaceToFaceCompanion({
   interactionId,
   embedded = false,
   onInteractionChange,
+  onOpenPreparation,
 }: {
   interactionId: string;
   embedded?: boolean;
   onInteractionChange?: (interaction: Interaction) => void;
+  onOpenPreparation?: () => void;
 }) {
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [brief, setBrief] = useState<PreInteractionBriefResponse | null>(null);
@@ -415,6 +417,20 @@ export function FaceToFaceCompanion({
         </p>
       ) : null}
 
+      {embedded && phase === "BEFORE" ? (
+        <ConversationLiveNotes
+          inputId={`companion-prepared-notes-${interactionId}`}
+          liveNotes={liveNotes}
+          onLiveNotesChange={updateLiveNotes}
+          onSave={() => void personalWorkspace.save()}
+          saveDisabled={
+            personalWorkspace.loading ||
+            personalWorkspace.saveState === "saving"
+          }
+          status={liveNotesStatus}
+        />
+      ) : null}
+
       {interaction.lifecycleStatus === "cancelled" ? (
         <section className="form-card mt-5">
           <h2 className="text-xl font-semibold">Interaction cancelled</h2>
@@ -429,6 +445,7 @@ export function FaceToFaceCompanion({
           working={working}
           onPrepare={() => void prepareBrief()}
           onStart={() => void startInteraction()}
+          onOpenPreparation={onOpenPreparation}
         />
       ) : phase === "DURING" ? (
         <>
@@ -638,12 +655,14 @@ function BeforePhase({
   working,
   onPrepare,
   onStart,
+  onOpenPreparation,
 }: {
   interaction: Interaction;
   brief: PreInteractionBriefResponse | null;
   working: boolean;
   onPrepare(): void;
   onStart(): void;
+  onOpenPreparation?: () => void;
 }) {
   const content = brief?.state === "completed" ? brief.brief : null;
   return (
@@ -760,12 +779,22 @@ function BeforePhase({
             Open meeting
           </a>
         ) : null}
-        <Link
-          className="secondary-button min-h-14 text-center text-base"
-          href={`/conversations/${interaction.id}#preparation`}
-        >
-          Open full brief
-        </Link>
+        {onOpenPreparation ? (
+          <button
+            type="button"
+            className="secondary-button min-h-14 text-base"
+            onClick={onOpenPreparation}
+          >
+            Open full brief
+          </button>
+        ) : (
+          <Link
+            className="secondary-button min-h-14 text-center text-base"
+            href={`/conversations/${interaction.id}#preparation`}
+          >
+            Open full brief
+          </Link>
+        )}
       </div>
     </section>
   );

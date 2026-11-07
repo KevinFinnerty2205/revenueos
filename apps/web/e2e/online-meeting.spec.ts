@@ -116,6 +116,10 @@ test("online meeting offers deliberate audio capture and persists transcript imp
         await route.fulfill({ json: [] });
         return;
       }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
+        return;
+      }
       if (path.endsWith("/visual-evidence") && request.method() === "GET") {
         await route.fulfill({ json: [] });
         return;
@@ -231,6 +235,9 @@ test("online meeting offers deliberate audio capture and persists transcript imp
     page.getByRole("heading", { name: "No recording or listening" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "End meeting" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Conversation ended" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Review & follow-up" }).click();
   await page.getByText("More capture options", { exact: true }).click();
   const captureMeeting = page.getByRole("region", {

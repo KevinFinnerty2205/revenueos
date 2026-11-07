@@ -147,14 +147,25 @@ test("account history opens one conversation workspace without CRM and preserves
       'a[href^="/opportunities"], a[href^="/companies"], a[href^="/create"]',
     ),
   ).toHaveCount(0);
+  await page.screenshot({
+    path: testInfo.outputPath("account-conversations.png"),
+    fullPage: true,
+  });
   await testInfo.attach("account-conversations", {
-    body: await page.screenshot({ fullPage: true }),
+    path: testInfo.outputPath("account-conversations.png"),
     contentType: "image/png",
   });
   await page.getByRole("link", { name: /Northstar discovery/ }).click();
   await expect(
     page.getByRole("navigation", { name: "Conversation sections" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Notes & capture", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Open full brief" }).click();
+  await expect(
+    page.getByRole("button", { name: "Preparation", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page
     .getByRole("button", { name: "Notes & capture", exact: true })
     .click();
@@ -169,6 +180,10 @@ test("account history opens one conversation workspace without CRM and preserves
     .getByRole("button", { name: "Notes & capture", exact: true })
     .click();
   await expect(notes).toHaveValue("Ask about the rollout timeline.");
+  await page.screenshot({
+    path: testInfo.outputPath("conversation-notes-desktop.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "End interaction" }).click();
   await expect(
     page.getByRole("heading", { name: "Conversation ended" }),
@@ -186,8 +201,12 @@ test("account history opens one conversation workspace without CRM and preserves
     page.getByRole("heading", { name: "Northstar discovery", exact: true }),
   ).toHaveCount(1);
   expect(requests.some((path) => path.includes("/opportunities"))).toBe(false);
+  await page.screenshot({
+    path: testInfo.outputPath("conversation-review-desktop.png"),
+    fullPage: true,
+  });
   await testInfo.attach("conversation-review-desktop", {
-    body: await page.screenshot({ fullPage: true }),
+    path: testInfo.outputPath("conversation-review-desktop.png"),
     contentType: "image/png",
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -199,8 +218,12 @@ test("account history opens one conversation workspace without CRM and preserves
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("conversation-review-mobile.png"),
+    fullPage: true,
+  });
   await testInfo.attach("conversation-review-mobile", {
-    body: await page.screenshot({ fullPage: true }),
+    path: testInfo.outputPath("conversation-review-mobile.png"),
     contentType: "image/png",
   });
 });

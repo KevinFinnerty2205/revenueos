@@ -341,7 +341,10 @@ class ConversationThreadService:
             return ()
         assignment = await self.repository.assignment_record(self.tenant.organisation_id, interaction_id)
         now = datetime.now(UTC)
-        before_at = min(interaction.actual_start_at or interaction.scheduled_start_at or now, now)
+        cutoff = interaction.actual_start_at or interaction.scheduled_start_at or now
+        # SQLite returns naive values for timezone-aware SQL columns; storage is UTC.
+        cutoff = cutoff.replace(tzinfo=UTC) if cutoff.tzinfo is None else cutoff.astimezone(UTC)
+        before_at = min(cutoff, now)
         records = (
             []
             if assignment is None or assignment.thread is None
