@@ -109,14 +109,6 @@ export function InteractionCard({
             Open live workspace
           </Link>
         ) : null}
-        {interaction.meetingId ? (
-          <Link
-            className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-            href={`/meetings/${interaction.meetingId}`}
-          >
-            Open Meeting Intelligence
-          </Link>
-        ) : null}
         {interaction.briefState !== "unavailable" ? (
           <Link
             className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"

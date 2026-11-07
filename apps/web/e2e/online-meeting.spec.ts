@@ -279,8 +279,11 @@ test("online meeting offers deliberate audio capture and persists transcript imp
     .click();
   await expect(page.getByText("Transcript ready")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Generate Interaction Intelligence" }),
-  ).toHaveAttribute("href", "/meetings/meeting-online");
+    page.getByRole("link", { name: "Review notes and follow-up" }),
+  ).toHaveAttribute("href", "/conversations/interaction-online#enhanced-notes");
+  await expect(
+    page.locator('a[href^="/meetings/"], a[href^="/opportunities/"]'),
+  ).toHaveCount(0);
 
   if (process.env.CAPTURE_WO_018_SCREENSHOT === "1") {
     await page.screenshot({

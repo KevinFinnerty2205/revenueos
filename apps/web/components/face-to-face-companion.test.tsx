@@ -96,12 +96,46 @@ const completedBrief: PreInteractionBriefResponse = {
   },
 };
 
-function installApi(initialInteraction: Interaction) {
+function installApi(
+  initialInteraction: Interaction,
+  options: { failWorkspaceSave?: boolean; workspaceReady?: Promise<void> } = {},
+) {
   let currentInteraction = initialInteraction;
+  let workspace = {
+    exists: false,
+    ownerUserId: "user-1",
+    lockVersion: 0,
+    liveNotes: "",
+    enhancedNotes: "",
+    followUpDraft: "",
+    followUpReviewed: false,
+    generationState: "not_available",
+    generationFingerprint: null,
+  };
   const markers: object[] = [];
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
+    if (url.endsWith("/personal-workspace")) {
+      if (method === "PUT") {
+        if (options.failWorkspaceSave)
+          return Promise.resolve(
+            jsonResponse(
+              { code: "unavailable", message: "Please retry saving." },
+              503,
+            ),
+          );
+        workspace = {
+          ...workspace,
+          ...JSON.parse(String(init?.body)),
+          exists: true,
+          lockVersion: workspace.lockVersion + 1,
+        };
+      }
+      return options.workspaceReady
+        ? options.workspaceReady.then(() => jsonResponse(workspace))
+        : Promise.resolve(jsonResponse(workspace));
+    }
     if (url.endsWith("/beta/capabilities")) {
       return Promise.resolve(
         jsonResponse({
@@ -242,5 +276,60 @@ describe("FaceToFaceCompanion", () => {
       screen.queryByRole("button", { name: "Record interaction" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Recording status")).not.toBeInTheDocument();
+  });
+
+  it("waits for saved notes before allowing edits, so initial loading cannot overwrite typing", async () => {
+    let finishLoading!: () => void;
+    const workspaceReady = new Promise<void>((resolve) => {
+      finishLoading = resolve;
+    });
+    installApi(interaction(), { workspaceReady });
+    render(<FaceToFaceCompanion interactionId="interaction-1" embedded />);
+    const notes = await screen.findByLabelText("Private live notes");
+    expect(notes).toBeDisabled();
+    finishLoading();
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, {
+      target: { value: "Keep this preparation note." },
+    });
+    expect(notes).toHaveValue("Keep this preparation note.");
+  });
+
+  it("keeps unsaved notes and blocks completion when saving fails, then allows a retry", async () => {
+    const options = { failWorkspaceSave: true };
+    const fetchMock = installApi(
+      interaction({ lifecycleStatus: "in_progress" }),
+      options,
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" embedded />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue without recording" }),
+    );
+    const notes = screen.getByLabelText("Private live notes");
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, {
+      target: { value: "Confirm the next step on Friday." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+    expect(
+      await screen.findByText(/Save your private notes before ending/),
+    ).toBeVisible();
+    expect(notes).toHaveValue("Confirm the next step on Friday.");
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/complete"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    options.failWorkspaceSave = false;
+    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+    expect(
+      await screen.findByRole("heading", { name: "Conversation ended" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/personal-workspace"),
+      expect.objectContaining({
+        method: "PUT",
+        body: expect.stringContaining("Confirm the next step on Friday."),
+      }),
+    );
   });
 });

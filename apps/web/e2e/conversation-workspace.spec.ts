@@ -144,7 +144,7 @@ test("account history opens one conversation workspace without CRM and preserves
   await expect(page.getByText("CRM details")).toHaveCount(0);
   await expect(
     page.locator(
-      'a[href^="/opportunities"], a[href^="/companies"], a[href^="/create"]',
+      'a[href^="/opportunities"], a[href^="/companies"], a[href^="/create"], a[href^="/meetings/"]',
     ),
   ).toHaveCount(0);
   await page.screenshot({

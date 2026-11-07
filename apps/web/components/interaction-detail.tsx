@@ -519,7 +519,16 @@ export function InteractionDetail({
           </p>
           <div className="mt-5" id="recording">
             {interaction.interactionType === "online_meeting" ? (
-              <OnlineMeetingCapture interaction={interaction} />
+              <OnlineMeetingCapture
+                interaction={interaction}
+                onTranscriptImported={(result) =>
+                  setInteraction((current) =>
+                    current
+                      ? { ...current, meetingId: result.meetingId }
+                      : current,
+                  )
+                }
+              />
             ) : interaction.interactionType === "phone_call" ? (
               <BetaFeatureGate feature="recordingCapture">
                 <ImportedCallRecording interactionId={interaction.id} />
@@ -540,6 +549,7 @@ export function InteractionDetail({
                   onSaveLiveNotes={() => void personalWorkspace.save()}
                   liveNotesSaveDisabled={
                     personalWorkspace.loading ||
+                    !personalWorkspace.workspace ||
                     personalWorkspace.saveState === "saving"
                   }
                   liveNotesStatus={liveNotesStatus}

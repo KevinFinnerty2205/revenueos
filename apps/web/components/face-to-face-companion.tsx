@@ -197,7 +197,7 @@ export function FaceToFaceCompanion({
     window.sessionStorage.setItem(captureStorageKey(interactionId), choice);
     setMessage(
       choice === "passive"
-        ? "Passive Companion is active. Oryntela is not recording or listening."
+        ? null
         : interaction?.interactionType === "online_meeting"
           ? "Meeting audio controls are ready. Choose shared audio plus microphone or microphone only, then confirm consent before access is requested."
           : "Recording controls are ready. Consent must be confirmed before microphone access is requested.",
@@ -425,6 +425,7 @@ export function FaceToFaceCompanion({
           onSave={() => void personalWorkspace.save()}
           saveDisabled={
             personalWorkspace.loading ||
+            !personalWorkspace.workspace ||
             personalWorkspace.saveState === "saving"
           }
           status={liveNotesStatus}
@@ -473,6 +474,7 @@ export function FaceToFaceCompanion({
                 onSaveLiveNotes={() => void personalWorkspace.save()}
                 liveNotesSaveDisabled={
                   personalWorkspace.loading ||
+                  !personalWorkspace.workspace ||
                   personalWorkspace.saveState === "saving"
                 }
                 liveNotesStatus={liveNotesStatus}
@@ -492,11 +494,25 @@ export function FaceToFaceCompanion({
 
           {effectiveCaptureChoice === "passive" ? (
             <>
-              <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-                  Passive Companion
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+              <section
+                className={
+                  embedded
+                    ? "mt-5 border-b border-brand-primary/10 pb-4"
+                    : "mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5"
+                }
+              >
+                {!embedded ? (
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+                    Passive Companion
+                  </p>
+                ) : null}
+                <h2
+                  className={
+                    embedded
+                      ? "text-base font-semibold text-brand-primary"
+                      : "mt-2 text-2xl font-semibold text-slate-950"
+                  }
+                >
                   No recording or listening
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-700">
@@ -504,7 +520,7 @@ export function FaceToFaceCompanion({
                     ? "This browser cannot reliably record the same phone call, so no recording or listening has started."
                     : interaction.interactionType === "online_meeting"
                       ? "You chose not to capture this meeting, so no recording or listening has started."
-                      : "Add a photo or marker only when it is safe and appropriate. Markers contain a type and timestamp, never a note."}
+                      : "Take a few notes below. You can add more detail after the conversation."}
                 </p>
               </section>
               <ConversationLiveNotes
@@ -514,6 +530,7 @@ export function FaceToFaceCompanion({
                 onSave={() => void personalWorkspace.save()}
                 saveDisabled={
                   personalWorkspace.loading ||
+                  !personalWorkspace.workspace ||
                   personalWorkspace.saveState === "saving"
                 }
                 status={liveNotesStatus}

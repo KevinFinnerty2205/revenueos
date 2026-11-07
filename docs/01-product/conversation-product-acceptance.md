@@ -7,6 +7,7 @@ This contract supersedes earlier CRM-led navigation requirements. Existing tenan
 ## Web workflow in this change
 
 - Home, account directory and Search lead to `/conversations/accounts/[id]`, a conversation-history page. It does not contain CRM details, ownership, custom fields, pipeline or opportunity controls.
+- Conversation cards and successful transcript imports keep review inside the conversation workspace; they do not route users into the legacy meeting details and opportunity fields.
 - `/conversations/[id]` is one workspace with Preparation, Notes & capture, Review & follow-up and Relationship history. The old `/workspace` URL redirects to its capture section. Visited sections stay mounted so changing section does not stop capture or discard local text. Completed capture no longer opens a second debrief editor in the capture section.
 - Adding a conversation requires a title and conversation type. Company is optional; scheduled time is collapsed. A simple note opens directly in the editor, and rough notes can be saved before starting capture. The core form neither loads nor assigns opportunities. Legacy forms remain available only in their existing legacy routes.
 - Preparation works without a company or opportunity. When a sales framework is selected, its unanswered fields provide questions. Confirmed initiative history contributes reviewed evidence from earlier conversations; a different initiative at the same company is not silently combined. Event notes do not automatically receive sales qualification questions.

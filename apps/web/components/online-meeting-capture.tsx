@@ -32,8 +32,10 @@ function base64(bytes: Uint8Array): string {
 
 export function OnlineMeetingCapture({
   interaction,
+  onTranscriptImported,
 }: {
   interaction: Interaction;
+  onTranscriptImported?: (result: OnlineMeetingTranscriptImport) => void;
 }) {
   const [capabilities, setCapabilities] =
     useState<OnlineMeetingCapabilities | null>(null);
@@ -142,6 +144,7 @@ export function OnlineMeetingCapture({
         result,
         ...current.filter((item) => item.id !== result.id),
       ]);
+      onTranscriptImported?.(result);
     } catch (requestError: unknown) {
       setError(
         requestError instanceof Error
@@ -220,7 +223,7 @@ export function OnlineMeetingCapture({
           {interaction.meetingId ? (
             <Link
               className="secondary-button"
-              href={`/meetings/${interaction.meetingId}`}
+              href={`/conversations/${interaction.id}#enhanced-notes`}
             >
               Open Interaction Intelligence
             </Link>
@@ -252,9 +255,9 @@ export function OnlineMeetingCapture({
               </p>
               <Link
                 className="secondary-button mt-4"
-                href={`/meetings/${completed.meetingId}`}
+                href={`/conversations/${interaction.id}#enhanced-notes`}
               >
-                Generate Interaction Intelligence
+                Review notes and follow-up
               </Link>
             </div>
           ) : (

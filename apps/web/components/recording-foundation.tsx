@@ -129,13 +129,13 @@ export function ConversationLiveNotes({
       </label>
       <p id={descriptionId} className="mt-1 text-sm leading-6 text-slate-600">
         Capture details in your own words while the conversation continues.
-        Audio permission or source failures do not clear this field.
       </p>
       <textarea
         id={inputId}
         rows={5}
         className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-3 text-base text-slate-950 shadow-inner focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/30"
         maxLength={20_000}
+        disabled={saveDisabled}
         value={liveNotes}
         onChange={(event) => onLiveNotesChange(event.target.value)}
         aria-describedby={
