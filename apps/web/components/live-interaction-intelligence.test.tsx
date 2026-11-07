@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { LiveIntelligenceResponse } from "@revenueos/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { suggestConversationQuestion } from "@/lib/conversation-guidance";
 import { LiveInteractionIntelligence } from "@/components/live-interaction-intelligence";
 
 function jsonResponse(body: object, status = 200): Response {
@@ -117,10 +118,15 @@ describe("LiveInteractionIntelligence", () => {
       screen.getByRole("heading", { name: "Live Companion" }),
     ).toBeVisible();
     expect(screen.getByText("Suggested next question")).toBeVisible();
-    expect(screen.getAllByText("Who owns security approval?")[0]).toBeVisible();
-    expect(screen.getByText(/From your preparation/i)).toBeVisible();
     expect(
-      screen.getByText("Customer asked about an October rollout."),
+      screen.getByText("Who owns security approval? — Unresolved"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/What would be the most useful next step for you/),
+    ).toBeVisible();
+    expect(screen.getByText("Why this question?")).toBeVisible();
+    expect(
+      screen.getAllByText("Customer asked about an October rollout.").at(-1),
     ).toBeVisible();
     expect(
       screen.getByText(
@@ -229,5 +235,47 @@ describe("LiveInteractionIntelligence", () => {
       />,
     );
     expect(await screen.findByText(/1 confirmed · 1 revised/i)).toBeVisible();
+  });
+});
+
+describe("source-grounded conversation guidance", () => {
+  it("adapts to an objection and cites its source without treating the suggestion as evidence", () => {
+    const live = liveResponse();
+    live.signals[0] = {
+      ...live.signals[0]!,
+      signalType: "objection",
+      statement: "Customer is concerned about the price.",
+    };
+    const guidance = suggestConversationQuestion(live);
+    expect(guidance?.question).toContain("main concern");
+    expect(guidance?.signal?.source.sequenceStart).toBe(2);
+    expect(guidance?.reason).toContain("possible customer signal");
+  });
+
+  it("selects a related unanswered framework question and moves on when it has possibly been answered", () => {
+    const live = liveResponse();
+    live.signals[0] = {
+      ...live.signals[0]!,
+      signalType: "security_legal",
+      statement: "Customer asked about security approval.",
+    };
+    expect(suggestConversationQuestion(live)?.question).toBe(
+      "Who owns security approval?",
+    );
+    live.openQuestions[0]!.progressStatus = "possibly_answered";
+    expect(suggestConversationQuestion(live)?.question).toContain(
+      "review need to cover",
+    );
+  });
+
+  it("does not coach from dismissed, uncertain or unsupported signals, or after capture ends", () => {
+    const live = liveResponse();
+    live.signals[0]!.lifecycleStatus = "dismissed";
+    expect(suggestConversationQuestion(live)?.signal).toBeNull();
+    live.signals[0]!.lifecycleStatus = "detected";
+    live.signals[0]!.resolutionStatus = "unsupported";
+    expect(suggestConversationQuestion(live)?.signal).toBeNull();
+    live.state = "completed";
+    expect(suggestConversationQuestion(live)).toBeNull();
   });
 });

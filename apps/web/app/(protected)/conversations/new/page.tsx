@@ -19,7 +19,7 @@ export default async function NewConversationPage({
   return (
     <InteractionForm
       initialCompanyId={parameters.companyId}
-      initialOpportunityId={parameters.opportunityId}
+      conversationOnly
       initialContactId={parameters.contactId}
       initialInteractionType={interactionType}
     />

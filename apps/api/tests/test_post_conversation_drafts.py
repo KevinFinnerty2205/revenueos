@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
@@ -689,7 +690,25 @@ def test_failed_capability_waits_for_explicit_retry_before_replacement_job(
     asyncio.run(assert_one_replacement_attempt())
 
 
-def test_recording_finalization_flows_through_transcription_to_one_ready_private_draft() -> None:
+def test_recording_finalization_flows_through_transcription_to_one_ready_private_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from revenueos.ai_contracts import ExecutiveSummarySource
+
+    original_load = AIWorkerService.load_executive_summary_source
+    private_inputs: list[ExecutiveSummarySource] = []
+
+    async def checked_load(worker: AIWorkerService, job: ClaimedAIJob) -> ExecutiveSummarySource:
+        source = await original_load(worker, job)
+        assert job.automatic_draft_generation_id is not None
+        assert source.private_notes == "Private live notes written before transcription completed."
+        # The same transcript requested as a shared summary must never read notes.
+        shared_source = await original_load(worker, replace(job, automatic_draft_generation_id=None))
+        assert shared_source.private_notes == ""
+        private_inputs.append(source)
+        return source
+
+    monkeypatch.setattr(AIWorkerService, "load_executive_summary_source", checked_load)
     settings = _settings()
     app = create_app(settings)
     with TestClient(app) as client:
@@ -762,6 +781,7 @@ def test_recording_finalization_flows_through_transcription_to_one_ready_private
     assert ai_jobs_executed > 0
     assert generation.interaction_id == UUID(interaction_id)
     assert generation.status == "ready"
+    assert len(private_inputs) == 1
     assert generation.enhanced_notes is not None
     assert generation.follow_up_draft is not None
     with TestClient(app) as client:

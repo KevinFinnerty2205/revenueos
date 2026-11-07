@@ -675,7 +675,10 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
                 "The queued job is not an Executive Summary job.",
                 retryable=False,
             )
-        if job.prompt_key != EXECUTIVE_SUMMARY_PROMPT_KEY or job.prompt_version != EXECUTIVE_SUMMARY_PROMPT_VERSION:
+        if job.prompt_key != EXECUTIVE_SUMMARY_PROMPT_KEY or job.prompt_version not in {
+            1,
+            EXECUTIVE_SUMMARY_PROMPT_VERSION,
+        }:
             raise WorkerExecutionError(
                 "invalid_prompt_configuration",
                 "The Executive Summary prompt configuration is invalid.",
@@ -711,6 +714,11 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
                     "meeting_date": json.dumps(
                         source.meeting_date.isoformat(),
                         ensure_ascii=False,
+                    ),
+                    **(
+                        {"private_notes": json.dumps(source.private_notes, ensure_ascii=False)}
+                        if job.prompt_version >= 2
+                        else {}
                     ),
                     "transcript_text": json.dumps(
                         source.transcript_text,

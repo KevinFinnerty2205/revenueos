@@ -265,7 +265,7 @@ function AccountDirectory({ accounts }: { accounts: Company[] }) {
           <li key={account.id}>
             <Link
               className="flex min-h-16 items-center gap-3 rounded-2xl border border-brand-primary/10 px-3 py-2 transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
-              href={`/companies/${account.id}#conversations`}
+              href={`/conversations/accounts/${account.id}#conversations`}
             >
               <AccountAvatar
                 accountId={account.id}

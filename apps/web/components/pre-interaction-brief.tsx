@@ -299,7 +299,7 @@ function PhoneCallBriefContent({
       </div>
       {content.recentChanges.length ? (
         <p className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
-          <strong>Recent Revenue Brain change:</strong>{" "}
+          <strong>Recent conversation context:</strong>{" "}
           {content.recentChanges[0].change}
         </p>
       ) : null}

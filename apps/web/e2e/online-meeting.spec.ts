@@ -116,6 +116,10 @@ test("online meeting offers deliberate audio capture and persists transcript imp
         await route.fulfill({ json: [] });
         return;
       }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
+        return;
+      }
       if (path.endsWith("/visual-evidence") && request.method() === "GET") {
         await route.fulfill({ json: [] });
         return;
@@ -216,13 +220,10 @@ test("online meeting offers deliberate audio capture and persists transcript imp
   await expect(openMeeting).toHaveAttribute("rel", /noopener/);
   await expect(page.getByRole("heading", { name: "Objectives" })).toBeVisible();
 
+  await page
+    .getByRole("button", { name: "Notes & capture", exact: true })
+    .click();
   await page.getByRole("button", { name: "Start meeting" }).click();
-  await expect(
-    page
-      .getByRole("region", { name: "Use your meeting platform" })
-      .getByText(/nothing starts in the background/i),
-  ).toBeVisible();
-  await page.getByRole("link", { name: "Continue in Companion" }).click();
   await expect(page.getByText("Live Intelligence unavailable")).toBeVisible();
   await expect(
     page.getByRole("button", { name: /capture meeting audio/i }),
@@ -234,6 +235,11 @@ test("online meeting offers deliberate audio capture and persists transcript imp
     page.getByRole("heading", { name: "No recording or listening" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "End meeting" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Conversation ended" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review & follow-up" }).click();
+  await page.getByText("More capture options", { exact: true }).click();
   const captureMeeting = page.getByRole("region", {
     name: "Capture this meeting",
     exact: true,
@@ -273,8 +279,11 @@ test("online meeting offers deliberate audio capture and persists transcript imp
     .click();
   await expect(page.getByText("Transcript ready")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Generate Interaction Intelligence" }),
-  ).toHaveAttribute("href", "/meetings/meeting-online");
+    page.getByRole("link", { name: "Review notes and follow-up" }),
+  ).toHaveAttribute("href", "/conversations/interaction-online#enhanced-notes");
+  await expect(
+    page.locator('a[href^="/meetings/"], a[href^="/opportunities/"]'),
+  ).toHaveCount(0);
 
   if (process.env.CAPTURE_WO_018_SCREENSHOT === "1") {
     await page.screenshot({
@@ -284,6 +293,7 @@ test("online meeting offers deliberate audio capture and persists transcript imp
   }
 
   await page.reload();
+  await page.getByText("More capture options", { exact: true }).click();
   await expect(
     page.getByText("1 authorised transcript version imported."),
   ).toBeVisible();

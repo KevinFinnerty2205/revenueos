@@ -389,7 +389,7 @@ class MethodologyReviewResponse(APIModel):
 
 
 class MethodologyGapContext(StrictMethodologyModel):
-    projection_id: UUID
+    projection_id: UUID | None
     methodology_key: str
     field_key: StableKey
     display_name: SafeName

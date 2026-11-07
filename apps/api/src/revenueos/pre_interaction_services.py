@@ -25,6 +25,7 @@ from revenueos.ai_contracts import (
 )
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
+from revenueos.conversation_thread_services import ConversationThreadService
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.methodology_contracts import MethodologyGapContext
@@ -57,7 +58,7 @@ from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightConte
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.pre_interaction_briefs")
-PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 6
+PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 7
 PRE_INTERACTION_BRIEF_HISTORY_LIMIT = 6
 ValidatedModel = TypeVar("ValidatedModel", bound=BaseModel)
 
@@ -164,19 +165,6 @@ class PreInteractionBriefService:
                 "interaction_type": records.interaction.interaction_type,
             },
         )
-        if records.company is None and records.opportunity is None and records.confirmed_thread_id is None:
-            logger.info(
-                "insufficient_context",
-                extra={
-                    "organisation_id": str(self.tenant.organisation_id),
-                    "interaction_id": str(interaction_id),
-                    "interaction_type": records.interaction.interaction_type,
-                },
-            )
-            return PreInteractionBriefRequestResponse(
-                **self._empty_response(records).model_dump(),
-                created=False,
-            )
         context = await self._build_context(records)
         existing = await self.repository.get_equivalent_brief(
             self.tenant.organisation_id,
@@ -414,19 +402,24 @@ class PreInteractionBriefService:
             if value is not None and capability in artifacts
         }
         methodology_gaps: tuple[MethodologyGapContext, ...] = ()
-        if (
+        sales_preparation = (
             self.settings.feature_sales_methodology_enabled
-            and records.opportunity is not None
-            and records.confirmed_thread_id is None
-        ):
+            and records.interaction.interaction_type not in {"conference_interaction", "trade_show_interaction"}
+            and records.interaction.event_id is None
+        )
+        if sales_preparation and records.opportunity is not None and records.confirmed_thread_id is None:
             methodology_gaps = await self.methodology.gap_context(records.opportunity.id, limit=8)
+        elif sales_preparation:
+            methodology_gaps = await ConversationThreadService(
+                self.session, self.tenant, self.settings
+            ).preparation_gaps(records.interaction.id)
         references = self._source_references(records, validated_artifacts, revenue_brain is not None)
         references += tuple(
             PreInteractionSourceReference(
                 section="questions_to_ask",
                 capability="sales_methodology",
-                source_id=gap.projection_id,
-                scope="opportunity",
+                source_id=gap.projection_id or records.interaction.id,
+                scope="opportunity" if gap.projection_id is not None else "interaction",
                 source_classification="methodology_gap",
                 validation_status="completed",
             )
@@ -674,11 +667,18 @@ class PreInteractionBriefService:
             elif not context.records.artifacts:
                 value = f"{value} Limited validated interaction intelligence is currently available."
             return self._bounded(self._with_approved_knowledge(value, records), 1_000)
-        assert records.company is not None
+        if records.company is None:
+            return self._bounded(
+                self._with_approved_knowledge(
+                    "No company context has been added. Use these preparation questions to learn about the people, their priorities and a useful next step.",
+                    records,
+                ),
+                1_000,
+            )
         return self._bounded(
             self._with_approved_knowledge(
                 f"Preparation is based on company metadata for {records.company.name}. "
-                "No linked opportunity or prior validated opportunity intelligence is available.",
+                "Use the conversation to confirm the people’s priorities and next steps.",
                 records,
             ),
             1_000,
@@ -744,7 +744,7 @@ class PreInteractionBriefService:
             ),
             "online_meeting": (
                 "Clarify the most important outcome and agree the next step.",
-                "A focused objective keeps the meeting grounded in the current opportunity context.",
+                "A focused objective keeps the meeting grounded in the conversation context.",
             ),
             "manual_interaction": (
                 "Clarify the purpose and desired outcome of this interaction.",
@@ -1490,19 +1490,6 @@ class PreInteractionBriefService:
 
     @staticmethod
     def _empty_response(records: PreInteractionSourceRecords) -> PreInteractionBriefResponse:
-        if records.company is None and records.opportunity is None and records.confirmed_thread_id is None:
-            return PreInteractionBriefResponse(
-                state="unavailable",
-                generation_available=False,
-                unavailable_reason="Link a company or opportunity to prepare a grounded brief.",
-                safe_message=None,
-                brief=None,
-                generated_at=None,
-                reviewed=False,
-                reviewed_at=None,
-                prior_versions=[],
-                source_labels=[],
-            )
         return PreInteractionBriefResponse(
             state="not_generated",
             generation_available=True,
@@ -1520,6 +1507,8 @@ class PreInteractionBriefService:
     def _source_labels(references: tuple[PreInteractionSourceReference, ...]) -> list[str]:
         capabilities = {reference.capability for reference in references}
         labels: list[str] = ["Interaction details"]
+        if "sales_methodology" in capabilities:
+            labels.append("Sales framework gaps")
         if "company_metadata" in capabilities:
             labels.append("Company record")
         if "opportunity_metadata" in capabilities:

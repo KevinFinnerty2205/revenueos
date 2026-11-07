@@ -533,7 +533,8 @@ test("interaction timeline supports deliberate creation and completion without i
     id: "interaction-2",
     meetingId: null,
     title: "Customer planning workshop",
-    interactionType: "workshop",
+    interactionType: "face_to_face_meeting",
+    opportunityId: null,
   });
 
   await page.route(
@@ -698,27 +699,35 @@ test("interaction timeline supports deliberate creation and completion without i
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "View conversations and notes" }),
-  ).toHaveAttribute("href", "/companies/company-1#conversations");
+  ).toHaveAttribute("href", "/conversations/accounts/company-1#conversations");
 
   await page.getByRole("link", { name: "Add conversation" }).first().click();
   await page.getByLabel("Title").fill("Customer planning workshop");
-  await page.getByLabel("Conversation type").selectOption("workshop");
+  await page
+    .getByLabel("Conversation type")
+    .selectOption("face_to_face_meeting");
   await page.getByLabel("Company").selectOption("company-1");
-  await page.getByLabel("Opportunity").selectOption("opportunity-1");
+  await expect(page.getByLabel("Opportunity", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Add conversation" }).click();
   await expect(page).toHaveURL(/\/conversations\/interaction-2$/);
   expect(created).toBe(true);
   expect(createPayload).toMatchObject({
     title: "Customer planning workshop",
-    interactionType: "workshop",
+    interactionType: "face_to_face_meeting",
     companyId: "company-1",
-    opportunityId: "opportunity-1",
+    opportunityId: null,
   });
+  await page
+    .getByRole("button", { name: "Notes & capture", exact: true })
+    .click();
   await page.getByRole("button", { name: "Start interaction" }).click();
-  await page.getByRole("button", { name: "Finish interaction" }).click();
+  await page
+    .getByRole("button", { name: "Continue without recording" })
+    .click();
+  await page.getByRole("button", { name: "End interaction" }).click();
   await expect(
-    page.getByRole("status", { name: "Conversation lifecycle status" }),
-  ).toHaveText("Completed");
+    page.getByRole("heading", { name: "Conversation ended" }),
+  ).toBeVisible();
   expect(completed).toBe(true);
   if (process.env.CAPTURE_WO_011_SCREENSHOT === "1") {
     await page.screenshot({
@@ -728,9 +737,8 @@ test("interaction timeline supports deliberate creation and completion without i
   }
 
   await page.getByRole("link", { name: "Back to conversations" }).click();
-  await page
-    .getByRole("link", { name: "View conversations and notes" })
-    .click();
+  await expect(page).toHaveURL(/\/conversations\/accounts\/company-1$/);
+  await expect(page.getByText("CRM details")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Customer planning workshop" }),
   ).toBeVisible();
@@ -1070,6 +1078,12 @@ test("a presentation supports browser image upload, explicit review and intellig
         await route.fulfill({ status: 201, json: debrief });
         return;
       }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({
+          json: debrief.lifecycleStatus === "completed" ? debrief : null,
+        });
+        return;
+      }
       if (path.endsWith("/response")) {
         debrief = debriefSession("collecting", {
           interactionId: "interaction-visual",
@@ -1281,7 +1295,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
   await page.getByRole("link", { name: "Prepare and start" }).click();
   await expect(page).toHaveURL(
-    /\/conversations\/interaction-visual\/workspace$/,
+    /\/conversations\/interaction-visual\?view=capture$/,
   );
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page
@@ -1297,24 +1311,19 @@ test("a presentation supports browser image upload, explicit review and intellig
     });
   }
   await page.getByRole("button", { name: "End interaction" }).click();
-  await expect(page.getByText("AFTER", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversation ended" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review & follow-up" }).click();
   if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
-    await page.getByRole("link", { name: "Back", exact: true }).click();
-    await expect(
-      page.getByRole("status", { name: "Conversation lifecycle status" }),
-    ).toHaveText("Completed");
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-025a-interaction-after-desktop.png",
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page
-      .getByRole("link", { name: "Review capture in Companion" })
-      .click();
   }
-  await page.getByText("More options").click();
-  await page.getByRole("button", { name: "Add visual evidence" }).click();
+  await page.getByText("More capture options", { exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Visual evidence" }),
   ).toBeVisible();
@@ -1411,8 +1420,8 @@ test("a presentation supports browser image upload, explicit review and intellig
   });
 
   await page.reload();
-  await page.getByText("More options").click();
-  await page.getByRole("button", { name: "Add visual evidence" }).click();
+  await page.getByRole("button", { name: "Review & follow-up" }).click();
+  await page.getByText("More capture options", { exact: true }).click();
   await expect(
     page.getByText("Accepted · AI-interpreted, user-reviewed"),
   ).toBeVisible();

@@ -3,10 +3,8 @@
 import type {
   AskScopeType,
   Company,
-  Contact,
   EntityPage,
   Interaction,
-  OpportunityListItem,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useState } from "react";
@@ -15,15 +13,11 @@ import { AskRevenueOS } from "@/components/ask-revenueos";
 
 interface SearchResults {
   companies: Company[];
-  contacts: Contact[];
-  opportunities: OpportunityListItem[];
   interactions: Interaction[];
 }
 
 const emptyResults: SearchResults = {
   companies: [],
-  contacts: [],
-  opportunities: [],
   interactions: [],
 };
 
@@ -57,25 +51,16 @@ export function CoreSearch({
     setError(null);
     const encoded = encodeURIComponent(value);
     try {
-      const [companies, contacts, opportunities, interactions] =
-        await Promise.all([
-          apiRequest<EntityPage<Company>>(
-            `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
-          ),
-          apiRequest<EntityPage<Contact>>(
-            `/api/v1/contacts?page=1&pageSize=6&search=${encoded}`,
-          ),
-          apiRequest<EntityPage<OpportunityListItem>>(
-            `/api/v1/opportunities?page=1&pageSize=6&search=${encoded}`,
-          ),
-          apiRequest<EntityPage<Interaction>>(
-            `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
-          ),
-        ]);
+      const [companies, interactions] = await Promise.all([
+        apiRequest<EntityPage<Company>>(
+          `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
+        ),
+        apiRequest<EntityPage<Interaction>>(
+          `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
+        ),
+      ]);
       setResults({
         companies: companies.items,
-        contacts: contacts.items,
-        opportunities: opportunities.items,
         interactions: interactions.items,
       });
       setSubmittedQuery(value);
@@ -90,11 +75,7 @@ export function CoreSearch({
     }
   }
 
-  const resultCount =
-    results.companies.length +
-    results.contacts.length +
-    results.opportunities.length +
-    results.interactions.length;
+  const resultCount = results.companies.length + results.interactions.length;
 
   if (mode === "ask") {
     return (
@@ -125,8 +106,7 @@ export function CoreSearch({
             Search your workspace
           </label>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Find a conversation, company or person. Supporting opportunity
-            records remain searchable, but stay out of the primary journey.
+            Find a conversation or an account’s conversation history.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <input
@@ -135,7 +115,7 @@ export function CoreSearch({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="form-input flex-1"
-              placeholder="Try a conversation, company or person"
+              placeholder="Try a conversation or account"
               autoComplete="off"
             />
             <button type="submit" className="primary-button" disabled={loading}>
@@ -185,29 +165,11 @@ export function CoreSearch({
                   }))}
                 />
                 <ResultGroup
-                  title="People"
-                  items={results.contacts.map((contact) => ({
-                    href: `/contacts/${contact.id}`,
-                    title: `${contact.firstName} ${contact.lastName}`,
-                    detail: contact.email ?? contact.jobTitle ?? "Person",
-                  }))}
-                />
-                <ResultGroup
                   title="Accounts"
                   items={results.companies.map((company) => ({
-                    href: `/companies/${company.id}`,
+                    href: `/conversations/accounts/${company.id}`,
                     title: company.name,
                     detail: company.industry ?? "Account",
-                  }))}
-                />
-                <ResultGroup
-                  title="Opportunities"
-                  items={results.opportunities.map((opportunity) => ({
-                    href: `/opportunities/${opportunity.id}`,
-                    title: opportunity.name,
-                    detail: opportunity.companyName
-                      ? `${opportunity.companyName} · ${humanise(opportunity.stage)}`
-                      : humanise(opportunity.stage),
                   }))}
                 />
               </div>

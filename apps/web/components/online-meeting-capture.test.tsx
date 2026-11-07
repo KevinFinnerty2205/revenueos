@@ -111,7 +111,13 @@ describe("OnlineMeetingCapture", () => {
         throw new Error(`Unexpected request: ${url}`);
       });
 
-    render(<OnlineMeetingCapture interaction={interaction} />);
+    const onTranscriptImported = vi.fn();
+    render(
+      <OnlineMeetingCapture
+        interaction={interaction}
+        onTranscriptImported={onTranscriptImported}
+      />,
+    );
 
     expect(
       await screen.findByRole("heading", { name: "Capture this meeting" }),
@@ -130,8 +136,14 @@ describe("OnlineMeetingCapture", () => {
 
     expect(await screen.findByText("Transcript ready")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Generate Interaction Intelligence" }),
-    ).toHaveAttribute("href", "/meetings/meeting-1");
+      screen.getByRole("link", { name: "Review notes and follow-up" }),
+    ).toHaveAttribute(
+      "href",
+      "/conversations/interaction-online-1#enhanced-notes",
+    );
+    expect(onTranscriptImported).toHaveBeenCalledWith(
+      expect.objectContaining({ meetingId: "meeting-1" }),
+    );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 

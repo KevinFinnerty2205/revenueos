@@ -29,26 +29,6 @@ describe("CoreSearch", () => {
       .mockImplementationOnce(() =>
         response([
           {
-            id: "contact-1",
-            firstName: "Avery",
-            lastName: "Stone",
-            email: "avery@acme.example",
-          },
-        ]),
-      )
-      .mockImplementationOnce(() =>
-        response([
-          {
-            id: "opportunity-1",
-            name: "Acme expansion",
-            companyName: "Acme",
-            stage: "proposal",
-          },
-        ]),
-      )
-      .mockImplementationOnce(() =>
-        response([
-          {
             id: "interaction-1",
             title: "Acme workshop",
             interactionType: "workshop",
@@ -67,25 +47,23 @@ describe("CoreSearch", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
-    expect(screen.getByRole("link", { name: /Avery Stone/i })).toHaveAttribute(
-      "href",
-      "/contacts/contact-1",
-    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(
       screen.getByRole("link", { name: /Acme Technology/i }),
-    ).toHaveAttribute("href", "/companies/company-1");
-    expect(
-      screen.getByRole("link", { name: /Acme expansion/i }),
-    ).toHaveAttribute("href", "/opportunities/opportunity-1");
+    ).toHaveAttribute("href", "/conversations/accounts/company-1");
     expect(
       screen.getByRole("link", { name: /Acme workshop/i }),
     ).toHaveAttribute("href", "/conversations/interaction-1");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("search=Acme");
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/api/v1/contacts");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      "/api/v1/interactions",
+    );
     expect(
-      screen.getByText(/supporting opportunity records remain searchable/i),
-    ).toBeVisible();
+      fetchMock.mock.calls.some(([url]) =>
+        /opportunities|contacts/.test(String(url)),
+      ),
+    ).toBe(false);
+    expect(screen.getByText(/account’s conversation history/i)).toBeVisible();
   });
 
   it("does not send a one-character search", () => {

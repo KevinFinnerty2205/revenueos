@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  CallOutcome,
   Interaction,
   InteractionMarker,
   InteractionMarkerType,
@@ -68,8 +69,14 @@ function durationLabel(seconds: number | null): string {
 
 export function FaceToFaceCompanion({
   interactionId,
+  embedded = false,
+  onInteractionChange,
+  onOpenPreparation,
 }: {
   interactionId: string;
+  embedded?: boolean;
+  onInteractionChange?: (interaction: Interaction) => void;
+  onOpenPreparation?: () => void;
 }) {
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [brief, setBrief] = useState<PreInteractionBriefResponse | null>(null);
@@ -107,7 +114,7 @@ export function FaceToFaceCompanion({
             ? "These notes changed in another session. Your local text is still visible; reload before saving again."
             : personalWorkspace.saveState === "failed"
               ? "Private notes could not be saved. Your local text is still visible."
-              : "Private to you until you deliberately include something in review.";
+              : "Private to you. When automatic summaries are enabled, saved notes help shape your private summary.";
 
   const fetchCompanion = useCallback(async () => {
     const [loadedInteraction, loadedBrief, loadedMarkers, loadedCapabilities] =
@@ -146,6 +153,7 @@ export function FaceToFaceCompanion({
   const applyLoaded = useCallback(
     (loaded: Awaited<ReturnType<typeof fetchCompanion>>) => {
       setInteraction(loaded.interaction);
+      onInteractionChange?.(loaded.interaction);
       setBrief(loaded.brief);
       setMarkers(loaded.markers);
       setRecordings(loaded.recordings);
@@ -158,7 +166,7 @@ export function FaceToFaceCompanion({
         setCaptureChoice(stored);
       }
     },
-    [interactionId],
+    [interactionId, onInteractionChange],
   );
 
   useEffect(() => {
@@ -189,7 +197,7 @@ export function FaceToFaceCompanion({
     window.sessionStorage.setItem(captureStorageKey(interactionId), choice);
     setMessage(
       choice === "passive"
-        ? "Passive Companion is active. Oryntela is not recording or listening."
+        ? null
         : interaction?.interactionType === "online_meeting"
           ? "Meeting audio controls are ready. Choose shared audio plus microphone or microphone only, then confirm consent before access is requested."
           : "Recording controls are ready. Consent must be confirmed before microphone access is requested.",
@@ -208,6 +216,7 @@ export function FaceToFaceCompanion({
         },
       );
       setInteraction(started);
+      onInteractionChange?.(started);
       setMessage(
         started.interactionType === "online_meeting"
           ? "Meeting started. Choose whether to capture meeting audio or continue without recording."
@@ -297,7 +306,7 @@ export function FaceToFaceCompanion({
     }
   }
 
-  async function endInteraction() {
+  async function endInteraction(callOutcome?: CallOutcome) {
     if (recordingActivity?.blocksInteractionCompletion) {
       setError(
         "Stop and finish the recording upload before ending the interaction.",
@@ -307,11 +316,26 @@ export function FaceToFaceCompanion({
     setWorking(true);
     setError(null);
     try {
+      if (
+        personalWorkspace.workspace &&
+        liveNotes !== (personalWorkspace.workspace.liveNotes ?? "")
+      ) {
+        if (!(await personalWorkspace.save())) {
+          setError(
+            "Save your private notes before ending the conversation. Your text is still here.",
+          );
+          return;
+        }
+      }
       const completed = await apiRequest<Interaction>(
         `/api/v1/interactions/${interactionId}/complete`,
-        { method: "POST", body: "{}" },
+        {
+          method: "POST",
+          body: JSON.stringify(callOutcome ? { callOutcome } : {}),
+        },
       );
       setInteraction(completed);
+      onInteractionChange?.(completed);
       setMessage(
         completed.interactionType === "online_meeting"
           ? "Meeting ended. Choose an authorised capture path while the context is fresh."
@@ -329,7 +353,7 @@ export function FaceToFaceCompanion({
     }
   }
 
-  if (loading) return <p role="status">Loading mobile Companion…</p>;
+  if (loading) return <p role="status">Loading notes & capture…</p>;
   if (!interaction) {
     return (
       <div role="alert" className="rounded-2xl bg-red-50 p-5 text-red-900">
@@ -353,26 +377,28 @@ export function FaceToFaceCompanion({
     : "passive";
 
   return (
-    <main className="mx-auto max-w-3xl pb-24" aria-labelledby="companion-title">
-      <div className="-mx-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:mx-0 sm:rounded-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <Link
-            className="text-sm font-bold text-brand-secondary"
-            href={`/interactions/${interactionId}`}
+    <div className="mx-auto max-w-3xl pb-12">
+      {!embedded ? (
+        <div className="-mx-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:mx-0 sm:rounded-2xl">
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              className="text-sm font-bold text-brand-secondary"
+              href={`/conversations/${interactionId}`}
+            >
+              Back
+            </Link>
+            <span className="rounded-full bg-brand-primary px-3 py-1 text-xs font-bold tracking-[0.16em] text-white">
+              {phase}
+            </span>
+          </div>
+          <h1
+            id="companion-title"
+            className="mt-2 truncate text-xl font-semibold text-slate-950"
           >
-            Back
-          </Link>
-          <span className="rounded-full bg-brand-primary px-3 py-1 text-xs font-bold tracking-[0.16em] text-white">
-            {phase}
-          </span>
+            {interaction.title}
+          </h1>
         </div>
-        <h1
-          id="companion-title"
-          className="mt-2 truncate text-xl font-semibold text-slate-950"
-        >
-          {interaction.title}
-        </h1>
-      </div>
+      ) : null}
 
       {message ? (
         <p
@@ -391,6 +417,21 @@ export function FaceToFaceCompanion({
         </p>
       ) : null}
 
+      {embedded && phase === "BEFORE" ? (
+        <ConversationLiveNotes
+          inputId={`companion-prepared-notes-${interactionId}`}
+          liveNotes={liveNotes}
+          onLiveNotesChange={updateLiveNotes}
+          onSave={() => void personalWorkspace.save()}
+          saveDisabled={
+            personalWorkspace.loading ||
+            !personalWorkspace.workspace ||
+            personalWorkspace.saveState === "saving"
+          }
+          status={liveNotesStatus}
+        />
+      ) : null}
+
       {interaction.lifecycleStatus === "cancelled" ? (
         <section className="form-card mt-5">
           <h2 className="text-xl font-semibold">Interaction cancelled</h2>
@@ -405,6 +446,7 @@ export function FaceToFaceCompanion({
           working={working}
           onPrepare={() => void prepareBrief()}
           onStart={() => void startInteraction()}
+          onOpenPreparation={onOpenPreparation}
         />
       ) : phase === "DURING" ? (
         <>
@@ -432,6 +474,7 @@ export function FaceToFaceCompanion({
                 onSaveLiveNotes={() => void personalWorkspace.save()}
                 liveNotesSaveDisabled={
                   personalWorkspace.loading ||
+                  !personalWorkspace.workspace ||
                   personalWorkspace.saveState === "saving"
                 }
                 liveNotesStatus={liveNotesStatus}
@@ -451,11 +494,25 @@ export function FaceToFaceCompanion({
 
           {effectiveCaptureChoice === "passive" ? (
             <>
-              <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-                  Passive Companion
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+              <section
+                className={
+                  embedded
+                    ? "mt-5 border-b border-brand-primary/10 pb-4"
+                    : "mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5"
+                }
+              >
+                {!embedded ? (
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+                    Passive Companion
+                  </p>
+                ) : null}
+                <h2
+                  className={
+                    embedded
+                      ? "text-base font-semibold text-brand-primary"
+                      : "mt-2 text-2xl font-semibold text-slate-950"
+                  }
+                >
                   No recording or listening
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-700">
@@ -463,7 +520,7 @@ export function FaceToFaceCompanion({
                     ? "This browser cannot reliably record the same phone call, so no recording or listening has started."
                     : interaction.interactionType === "online_meeting"
                       ? "You chose not to capture this meeting, so no recording or listening has started."
-                      : "Add a photo or marker only when it is safe and appropriate. Markers contain a type and timestamp, never a note."}
+                      : "Take a few notes below. You can add more detail after the conversation."}
                 </p>
               </section>
               <ConversationLiveNotes
@@ -473,6 +530,7 @@ export function FaceToFaceCompanion({
                 onSave={() => void personalWorkspace.save()}
                 saveDisabled={
                   personalWorkspace.loading ||
+                  !personalWorkspace.workspace ||
                   personalWorkspace.saveState === "saving"
                 }
                 status={liveNotesStatus}
@@ -490,17 +548,54 @@ export function FaceToFaceCompanion({
               onToggleVisuals={() => setShowVisuals((value) => !value)}
               onAddMarker={(type) => void addMarker(type)}
               onDeleteMarker={(marker) => void deleteMarker(marker)}
-              onEnd={() => void endInteraction()}
+              onEnd={() =>
+                void endInteraction(
+                  interaction.interactionType === "phone_call"
+                    ? "connected"
+                    : undefined,
+                )
+              }
               endLabel={
                 interaction.interactionType === "online_meeting"
                   ? "End meeting"
-                  : "End interaction"
+                  : interaction.interactionType === "phone_call"
+                    ? "End connected call"
+                    : "End interaction"
               }
               endDisabled={
                 working ||
                 recordingActivity?.blocksInteractionCompletion === true
               }
             />
+          ) : null}
+
+          {interaction.interactionType === "phone_call" ? (
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={working}
+                onClick={() => void endInteraction("no_answer")}
+              >
+                No answer
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={working}
+                onClick={() => void endInteraction("voicemail")}
+              >
+                Left voicemail
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={working}
+                onClick={() => void endInteraction("cancelled")}
+              >
+                Cancel call
+              </button>
+            </div>
           ) : null}
 
           {showVisuals && visualEnabled ? (
@@ -513,6 +608,13 @@ export function FaceToFaceCompanion({
             </div>
           ) : null}
         </>
+      ) : embedded ? (
+        <section className="form-card mt-5">
+          <h2 className="text-lg font-semibold">Conversation ended</h2>
+          <p className="mt-2 text-sm text-brand-muted">
+            Open Review & follow-up for your notes, summary and next steps.
+          </p>
+        </section>
       ) : (
         <AfterPhase
           interaction={interaction}
@@ -526,7 +628,7 @@ export function FaceToFaceCompanion({
         />
       )}
 
-      {phase === "AFTER" && showVisuals && visualEnabled ? (
+      {!embedded && phase === "AFTER" && showVisuals && visualEnabled ? (
         <div className="mt-5">
           <VisualEvidenceCapture
             interactionId={interactionId}
@@ -535,14 +637,17 @@ export function FaceToFaceCompanion({
           />
         </div>
       ) : null}
-      {phase === "AFTER" &&
+      {!embedded &&
+      phase === "AFTER" &&
       interaction.interactionType === "online_meeting" &&
       capabilities?.featureFlags.onlineMeetingCapture === true ? (
         <div className="mt-5" id="online-meeting-capture">
           <OnlineMeetingCapture interaction={interaction} />
         </div>
       ) : null}
-      {phase === "AFTER" && capabilities?.featureFlags.aiDebrief === true ? (
+      {!embedded &&
+      phase === "AFTER" &&
+      capabilities?.featureFlags.aiDebrief === true ? (
         <div className="mt-5" id="companion-debrief">
           <PostInteractionCapture
             interactionId={interactionId}
@@ -557,7 +662,7 @@ export function FaceToFaceCompanion({
           interactionCompleted={phase === "AFTER"}
         />
       ) : null}
-    </main>
+    </div>
   );
 }
 
@@ -567,12 +672,14 @@ function BeforePhase({
   working,
   onPrepare,
   onStart,
+  onOpenPreparation,
 }: {
   interaction: Interaction;
   brief: PreInteractionBriefResponse | null;
   working: boolean;
   onPrepare(): void;
   onStart(): void;
+  onOpenPreparation?: () => void;
 }) {
   const content = brief?.state === "completed" ? brief.brief : null;
   return (
@@ -674,7 +781,9 @@ function BeforePhase({
             ? "Starting…"
             : interaction.interactionType === "online_meeting"
               ? "Start meeting"
-              : "Start interaction"}
+              : interaction.interactionType === "phone_call"
+                ? "Start call"
+                : "Start interaction"}
         </button>
         {interaction.interactionType === "online_meeting" &&
         interaction.meetingUrl ? (
@@ -687,12 +796,22 @@ function BeforePhase({
             Open meeting
           </a>
         ) : null}
-        <Link
-          className="secondary-button min-h-14 text-center text-base"
-          href={`/interactions/${interaction.id}#preparation`}
-        >
-          Open full brief
-        </Link>
+        {onOpenPreparation ? (
+          <button
+            type="button"
+            className="secondary-button min-h-14 text-base"
+            onClick={onOpenPreparation}
+          >
+            Open full brief
+          </button>
+        ) : (
+          <Link
+            className="secondary-button min-h-14 text-center text-base"
+            href={`/conversations/${interaction.id}#preparation`}
+          >
+            Open full brief
+          </Link>
+        )}
       </div>
     </section>
   );
@@ -968,12 +1087,12 @@ function AfterPhase({
         ) : null}
         <Link
           className="secondary-button min-h-14 text-center text-base"
-          href={`/interactions/${interaction.id}`}
+          href={`/conversations/${interaction.id}`}
         >
           Finish
         </Link>
       </div>
-      {visualEnabled || interaction.opportunityId || interaction.companyId ? (
+      {visualEnabled || interaction.companyId ? (
         <details className="mt-4 rounded-2xl border border-slate-200 p-4">
           <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
             More options
@@ -988,23 +1107,16 @@ function AfterPhase({
                 {showVisuals ? "Hide photo capture" : "Add visual evidence"}
               </button>
             ) : null}
-            {interaction.opportunityId ? (
-              <Link
-                className="secondary-button min-h-14 text-center text-base"
-                href={`/opportunities/${interaction.opportunityId}`}
-              >
-                Open opportunity workspace
-              </Link>
-            ) : null}
+
             <Link
               className="secondary-button min-h-14 text-center text-base"
               href={
                 interaction.companyId
-                  ? `/companies/${interaction.companyId}`
-                  : "/companies"
+                  ? `/conversations/accounts/${interaction.companyId}`
+                  : "/conversations"
               }
             >
-              Open Revenue Brain
+              Open conversation history
             </Link>
           </div>
         </details>

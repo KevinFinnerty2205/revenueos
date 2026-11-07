@@ -517,6 +517,12 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
       });
       return;
     }
+    if (
+      path === "/api/v1/interactions/interaction-methodology/companion/markers"
+    ) {
+      await route.fulfill({ json: [] });
+      return;
+    }
     if (path === "/api/v1/interactions/interaction-methodology/start") {
       interaction = methodologyInteraction({
         lifecycleStatus: "in_progress",
@@ -699,8 +705,12 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
     ),
   ).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await page
+    .getByRole("button", { name: "Notes & capture", exact: true })
+    .click();
   await page.getByRole("button", { name: "Start call" }).click();
   await page.getByRole("button", { name: "End connected call" }).click();
+  await page.getByRole("button", { name: "Review & follow-up" }).click();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
   await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(
