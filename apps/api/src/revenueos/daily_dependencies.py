@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.config import Settings, get_settings
 from revenueos.daily_repositories import DailyRepository
 from revenueos.daily_services import RevenueOSDailyService
-from revenueos.database import get_db, set_tenant_database_context
+from revenueos.database import get_db, set_private_user_database_context, set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.tenant import TenantContext, get_tenant_context
 
@@ -17,6 +17,7 @@ async def get_daily_service(
     settings: Settings = Depends(get_settings),
 ) -> AsyncIterator[RevenueOSDailyService]:
     await set_tenant_database_context(session, tenant.organisation_id)
+    await set_private_user_database_context(session, tenant.user_id)
     if not await DailyRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError(
             "forbidden",

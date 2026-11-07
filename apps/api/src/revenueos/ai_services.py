@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -82,6 +83,9 @@ from revenueos.ai_prompt_registry import (
 from revenueos.ai_repositories import (
     AIArtifactRepository,
     AIJobRepository,
+)
+from revenueos.automatic_draft_authority import (
+    AUTOMATIC_DRAFT_GENERATION_METADATA_KEY,
 )
 from revenueos.business_repositories import PageResult
 from revenueos.database import set_tenant_database_context
@@ -219,14 +223,20 @@ class _AIDomainService:
         job_repository: AIJobRepository | None = None,
         generation_limiter: Callable[[], Awaitable[None]] | None = None,
         default_max_attempts: int | None = None,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> None:
         self.repository = job_repository or AIJobRepository(session)
         self.repository.set_generation_limiter(generation_limiter)
         self.repository.set_default_max_attempts(default_max_attempts)
         self.tenant = tenant
+        self._automatic_draft_generation_id = automatic_draft_generation_id
 
     async def _get_job(self, job_id: UUID) -> AIJob:
-        job = await self.repository.get_job(self.tenant.organisation_id, job_id)
+        job = await self.repository.get_job(
+            self.tenant.organisation_id,
+            job_id,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
+        )
         if job is None:
             raise PublicAPIError(
                 "ai_job_not_found",
@@ -286,10 +296,16 @@ class _AIDomainService:
         entity_type: MeetingAuditEntityType,
         transcript_version: int,
         metadata: Mapping[str, object | None],
+        internal_metadata: Mapping[str, object | None] | None = None,
     ) -> MeetingAuditEvent:
         safe_metadata = {
             key: str(value) if isinstance(value, UUID) else value
             for key, value in metadata.items()
+            if value is not None
+        }
+        safe_internal_metadata = {
+            key: str(value) if isinstance(value, UUID) else value
+            for key, value in (internal_metadata or {}).items()
             if value is not None
         }
         return MeetingAuditEvent(
@@ -300,7 +316,7 @@ class _AIDomainService:
             entity_type=entity_type.value,
             entity_id=entity_id,
             changed_fields=sorted(safe_metadata),
-            metadata_json=safe_metadata,
+            metadata_json={**safe_metadata, **safe_internal_metadata},
             version=transcript_version,
         )
 
@@ -336,7 +352,7 @@ class AIJobService(_AIDomainService):
         transcript_version: int,
         idempotency_key: str,
     ) -> AIJob:
-        normalised_key = self._normalise_idempotency_key(idempotency_key)
+        normalised_key = self._automatic_draft_idempotency_key(self._normalise_idempotency_key(idempotency_key))
         await self._validate_trace(
             meeting_id=meeting_id,
             transcript_id=transcript_id,
@@ -366,7 +382,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=normalised_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -454,6 +470,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=EXECUTIVE_SUMMARY_PROMPT_KEY,
                 prompt_version=EXECUTIVE_SUMMARY_PROMPT_VERSION,
                 schema_version=EXECUTIVE_SUMMARY_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -474,7 +491,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -600,6 +617,7 @@ class AIJobService(_AIDomainService):
             prompt_key=EXECUTIVE_SUMMARY_PROMPT_KEY,
             prompt_version=EXECUTIVE_SUMMARY_PROMPT_VERSION,
             schema_version=EXECUTIVE_SUMMARY_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def request_decisions(
@@ -654,6 +672,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=DECISIONS_PROMPT_KEY,
                 prompt_version=DECISIONS_PROMPT_VERSION,
                 schema_version=DECISIONS_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -672,7 +691,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -789,6 +808,7 @@ class AIJobService(_AIDomainService):
             prompt_key=DECISIONS_PROMPT_KEY,
             prompt_version=DECISIONS_PROMPT_VERSION,
             schema_version=DECISIONS_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -863,6 +883,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=ACTION_ITEMS_PROMPT_KEY,
                 prompt_version=ACTION_ITEMS_PROMPT_VERSION,
                 schema_version=ACTION_ITEMS_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -881,7 +902,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -1001,6 +1022,7 @@ class AIJobService(_AIDomainService):
             prompt_key=ACTION_ITEMS_PROMPT_KEY,
             prompt_version=ACTION_ITEMS_PROMPT_VERSION,
             schema_version=ACTION_ITEMS_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -1080,6 +1102,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=RISKS_BLOCKERS_PROMPT_KEY,
                 prompt_version=RISKS_BLOCKERS_PROMPT_VERSION,
                 schema_version=RISKS_BLOCKERS_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -1100,7 +1123,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -1220,6 +1243,7 @@ class AIJobService(_AIDomainService):
             prompt_key=RISKS_BLOCKERS_PROMPT_KEY,
             prompt_version=RISKS_BLOCKERS_PROMPT_VERSION,
             schema_version=RISKS_BLOCKERS_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -1299,6 +1323,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=OPEN_QUESTIONS_PROMPT_KEY,
                 prompt_version=OPEN_QUESTIONS_PROMPT_VERSION,
                 schema_version=OPEN_QUESTIONS_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -1319,7 +1344,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -1439,6 +1464,7 @@ class AIJobService(_AIDomainService):
             prompt_key=OPEN_QUESTIONS_PROMPT_KEY,
             prompt_version=OPEN_QUESTIONS_PROMPT_VERSION,
             schema_version=OPEN_QUESTIONS_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -1518,6 +1544,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=BUYING_SIGNALS_PROMPT_KEY,
                 prompt_version=BUYING_SIGNALS_PROMPT_VERSION,
                 schema_version=BUYING_SIGNALS_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -1538,7 +1565,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -1658,6 +1685,7 @@ class AIJobService(_AIDomainService):
             prompt_key=BUYING_SIGNALS_PROMPT_KEY,
             prompt_version=BUYING_SIGNALS_PROMPT_VERSION,
             schema_version=BUYING_SIGNALS_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -1740,6 +1768,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
                 prompt_version=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
                 schema_version=OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -1762,7 +1791,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -1888,6 +1917,7 @@ class AIJobService(_AIDomainService):
             prompt_key=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
             prompt_version=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
             schema_version=OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -1970,6 +2000,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
                 prompt_version=STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
                 schema_version=STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -1992,7 +2023,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -2115,6 +2146,7 @@ class AIJobService(_AIDomainService):
             prompt_key=STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
             prompt_version=STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
             schema_version=STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     @staticmethod
@@ -2197,6 +2229,7 @@ class AIJobService(_AIDomainService):
                 prompt_key=NEXT_BEST_ACTION_PROMPT_KEY,
                 prompt_version=NEXT_BEST_ACTION_PROMPT_VERSION,
                 schema_version=NEXT_BEST_ACTION_SCHEMA_VERSION,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -2217,7 +2250,7 @@ class AIJobService(_AIDomainService):
             idempotency_key=idempotency_key,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(
             self._job_audit(
                 job,
@@ -2343,6 +2376,7 @@ class AIJobService(_AIDomainService):
             prompt_key=NEXT_BEST_ACTION_PROMPT_KEY,
             prompt_version=NEXT_BEST_ACTION_PROMPT_VERSION,
             schema_version=NEXT_BEST_ACTION_SCHEMA_VERSION,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def _load_next_best_action_source_trace(
@@ -2355,6 +2389,7 @@ class AIJobService(_AIDomainService):
         source_version = await artifacts_repository.get_latest_next_best_action_source_version(
             self.tenant.organisation_id,
             meeting_id,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         if source_version is None:
             return None
@@ -2368,6 +2403,7 @@ class AIJobService(_AIDomainService):
             self.tenant.organisation_id,
             meeting_id,
             source_version,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         if set(artifacts) != set(NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES):
             return None
@@ -2505,6 +2541,7 @@ class AIJobService(_AIDomainService):
                 prompt_version=FOLLOW_UP_EMAIL_PROMPT_VERSION,
                 schema_version=FOLLOW_UP_EMAIL_SCHEMA_VERSION,
                 composition_tone=tone.value,
+                automatic_draft_generation_id=self._automatic_draft_generation_id,
             )
             + 1
         )
@@ -2527,7 +2564,7 @@ class AIJobService(_AIDomainService):
             composition_tone=tone.value,
             requested_by_user_id=self.tenant.user_id,
         )
-        self.repository.create_job(job)
+        self._create_job(job)
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
         try:
@@ -2651,6 +2688,7 @@ class AIJobService(_AIDomainService):
             prompt_version=FOLLOW_UP_EMAIL_PROMPT_VERSION,
             schema_version=FOLLOW_UP_EMAIL_SCHEMA_VERSION,
             composition_tone=composition_tone,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def _load_follow_up_email_source_trace(
@@ -2662,6 +2700,7 @@ class AIJobService(_AIDomainService):
         source_version = await artifacts_repository.get_latest_follow_up_email_source_version(
             self.tenant.organisation_id,
             meeting_id,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         if source_version is None:
             return None
@@ -2675,6 +2714,7 @@ class AIJobService(_AIDomainService):
             self.tenant.organisation_id,
             meeting_id,
             source_version,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         if set(artifacts) != set(FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES):
             return None
@@ -2773,6 +2813,7 @@ class AIJobService(_AIDomainService):
         return await self.repository.get_latest_job_for_meeting(
             self.tenant.organisation_id,
             meeting_id,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def list_jobs_for_meeting(
@@ -2793,6 +2834,7 @@ class AIJobService(_AIDomainService):
             meeting_id,
             page=page,
             page_size=page_size,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def transition_job(
@@ -2839,29 +2881,56 @@ class AIJobService(_AIDomainService):
         self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
         await self._commit(job)
 
+    def _create_job(self, job: AIJob) -> None:
+        """Attach the durable automatic origin before the atomic job/audit write."""
+
+        job.automatic_draft_generation_id = self._automatic_draft_generation_id
+        if job.idempotency_key is not None:
+            job.idempotency_key = self._automatic_draft_idempotency_key(job.idempotency_key)
+        self.repository.create_job(job)
+
+    def _automatic_draft_idempotency_key(self, idempotency_key: str) -> str:
+        generation_id = self._automatic_draft_generation_id
+        if generation_id is None:
+            return idempotency_key
+        prefix = f"automatic-draft:{generation_id}:"
+        if idempotency_key.startswith(prefix):
+            return idempotency_key
+        digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:24]
+        return f"{prefix}{digest}"
+
     def _job_audit(
         self,
         job: AIJob,
         action: MeetingAuditAction,
     ) -> MeetingAuditEvent:
+        metadata: dict[str, object | None] = {
+            "job_id": job.id,
+            "job_type": job.job_type,
+            "new_status": job.status,
+            "transcript_version": job.transcript_version,
+            "prompt_key": job.prompt_key,
+            "prompt_version": job.prompt_version,
+            "schema_version": job.schema_version,
+            "composition_tone": job.composition_tone,
+            "provider_key": job.provider_key,
+            "model_name": job.model_name,
+        }
+        internal_metadata = (
+            {
+                AUTOMATIC_DRAFT_GENERATION_METADATA_KEY: job.automatic_draft_generation_id,
+            }
+            if action is MeetingAuditAction.AI_JOB_CREATED and job.automatic_draft_generation_id is not None
+            else None
+        )
         return self._audit(
             meeting_id=job.meeting_id,
             entity_id=job.id,
             action=action,
             entity_type=MeetingAuditEntityType.AI_JOB,
             transcript_version=job.transcript_version,
-            metadata={
-                "job_id": job.id,
-                "job_type": job.job_type,
-                "new_status": job.status,
-                "transcript_version": job.transcript_version,
-                "prompt_key": job.prompt_key,
-                "prompt_version": job.prompt_version,
-                "schema_version": job.schema_version,
-                "composition_tone": job.composition_tone,
-                "provider_key": job.provider_key,
-                "model_name": job.model_name,
-            },
+            metadata=metadata,
+            internal_metadata=internal_metadata,
         )
 
     @staticmethod
@@ -2892,11 +2961,13 @@ class AIArtifactService(_AIDomainService):
         *,
         job_repository: AIJobRepository | None = None,
         artifact_repository: AIArtifactRepository | None = None,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> None:
         super().__init__(
             session,
             tenant,
             job_repository=job_repository,
+            automatic_draft_generation_id=automatic_draft_generation_id,
         )
         self.artifacts = artifact_repository or AIArtifactRepository(session)
 
@@ -4226,6 +4297,7 @@ class AIArtifactService(_AIDomainService):
         artifact = await self.artifacts.get_artifact(
             self.tenant.organisation_id,
             artifact_id,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         if artifact is None:
             raise PublicAPIError(
@@ -4246,6 +4318,7 @@ class AIArtifactService(_AIDomainService):
             meeting_id,
             transcript_version,
             AIArtifactType.INFRASTRUCTURE_TEST.value,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def list_artifact_versions(
@@ -4259,9 +4332,11 @@ class AIArtifactService(_AIDomainService):
             meeting_id,
             transcript_version,
             AIArtifactType.INFRASTRUCTURE_TEST.value,
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
 
     async def list_artifacts_for_job(self, job_id: UUID) -> list[AIArtifact]:
+        await self._get_job(job_id)
         return await self.artifacts.list_artifacts_for_job(
             self.tenant.organisation_id,
             job_id,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CRMRecordPanel } from "@/components/crm-record-panel";
 import { AccountPeoplePanel } from "@/components/account-people-panel";
 import { AccountOpportunityPanel } from "@/components/account-opportunity-panel";
+import { AccountConversationPanel } from "@/components/account-conversation-panel";
 
 export default async function CompanyAccountPage({
   params,
@@ -20,6 +21,7 @@ export default async function CompanyAccountPage({
           <AccountOpportunityPanel companyId={id} />
         </div>
       </CRMRecordPanel>
+      <AccountConversationPanel companyId={id} />
       <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
@@ -41,10 +43,10 @@ export default async function CompanyAccountPage({
             Create opportunity
           </Link>
           <Link
-            href={`/interactions/new?companyId=${id}`}
+            href={`/conversations/new?companyId=${id}`}
             className="secondary-button"
           >
-            Plan interaction
+            Add conversation
           </Link>
           <Link
             href={`/create/business-cases/new?accountId=${id}`}

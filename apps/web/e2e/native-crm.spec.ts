@@ -93,7 +93,7 @@ test("admin deliberately selects Oryntela as the CRM system of record", async ({
     },
   );
 
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
   const nativeButton = page.getByRole("button", {
     name: "Use Oryntela CRM",
   });

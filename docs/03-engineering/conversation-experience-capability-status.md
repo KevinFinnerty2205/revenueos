@@ -1,0 +1,90 @@
+# Conversation experience capability status
+
+**Reviewed:** 1 November 2026
+**Scope:** PR #109 local implementation. No live provider, connector, email or
+customer-data execution was performed.
+
+The labels in this document are deliberately strict:
+
+- **A — Implementation locally verified.** The implemented path ran against
+  local services, deterministic transports or the stated real browser fixture.
+- **B — Production adapter implemented; live activation/verification pending.**
+  Adapter code exists, but credentials, provider calls and production approval
+  remain outside this change.
+- **C — Implementation missing.** A contract, deterministic double or UI copy
+  does not count as the production execution path.
+- **D — Native desktop work deliberately deferred.**
+
+## Capability matrix
+
+| Area                                                                  | Class | Evidence and exact boundary                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Explicit conversation initiatives without an Opportunity              | A     | Tenant/RLS-scoped threads, explicit user assignment/correction, company/participant suggestions that never auto-assign, optimistic locks and audit events.                                                                                                                                                  |
+| Current-conversation versus cumulative framework coverage             | A     | Only validated Interaction Intelligence snapshots from completed, non-deleted interactions in the confirmed thread are projected. Source conversation titles and dates remain visible; conflicting and stale states reuse the framework projection rules.                                                   |
+| Preparation from approved knowledge and authorised history            | A     | Approved organisation knowledge plus the latest completed, non-deleted conversation in the confirmed thread; no company-wide fallback. First outbound calls and later confirmed-thread meetings receive different objectives/questions.                                                                     |
+| Private live notes                                                    | A     | User-and-tenant private server workspace, explicit save, optimistic conflict protection, separate from enhanced notes; capture errors do not unmount or clear the field.                                                                                                                                    |
+| Microphone-only browser recording                                     | A     | Explicit permission, one verified live audio track, chunk upload/finalisation and failure cleanup. Automated media tests use mocked tracks.                                                                                                                                                                 |
+| Shared tab/display audio plus microphone                              | A     | Explicit `getDisplayMedia` then `getUserMedia`, audio-track presence check, Web Audio mixing, duplicate microphone suppression, audio-only recorder stream, track/device interruption handling. Actually verified only on Chrome 156.0.8078.74 on macOS 15.6 with a synthetic tab tone and fake microphone. |
+| Authorised recording/transcript import                                | A     | Existing bounded upload/import, provenance and immutable transcript version paths remain available as alternatives.                                                                                                                                                                                         |
+| Batch audio transcription orchestration                               | A     | Durable worker, bounded manifest assembly, idempotent final transcript/segments and deterministic provider fixtures.                                                                                                                                                                                        |
+| OpenAI batch transcription adapter                                    | B     | Server-only adapter and safe error mapping exist; live key/model/region/cost/retention verification remains disabled.                                                                                                                                                                                       |
+| Browser progressive PCM capture                                       | A     | The deliberately armed recording stream is tapped through AudioWorklet, downmixed and statefully resampled to 24 kHz mono little-endian PCM16. A real Chrome worklet boundary fixture proves the final sequenced render quantum is emitted before acknowledgement/disconnect and is neither lost nor duplicated; no live provider call was made.                 |
+| Provider-neutral progressive transcription orchestration              | A     | Authenticated user-and-tenant-bound server routes exercise ordered and deduplicated audio, stable transcript events, bounded replay/journals, cancellation, reconnect/resume, final drain and retry exhaustion against deterministic fixtures. Final turns feed one durable provisional transcript/segment path for Live Intelligence; browser partials remain bounded UI state. |
+| Production progressive transcription adapter                          | B     | A server-only OpenAI Realtime WebSocket adapter implements transcription `session.update`, 24 kHz PCM16 append/explicit commit, `item_id` reconciliation and bounded reconnect replay behind disabled gates. The batch worker later promotes the same provisional version identity to the authoritative final transcript. Only fixtures/local browser transport ran; live provider, region, cost, retention and reliability verification remain pending. |
+| Deterministic contextual Live Intelligence                            | A     | Bounded progressive-text windows, ordered cursor, deduplication, approved brief objective/question context, conservative speaker attribution, repetitive-signal suppression and recoverable failure tests.                                                                                                  |
+| OpenAI live-signal adapter                                            | B     | Strict non-retained Responses request (`store=false`, no tools), schema/source validation, durable per-session provider/acknowledgement binding and safe retry/failure mapping are implemented with fake transport tests. Live activation is off.                                                           |
+| Final transcript to structured Interaction Intelligence               | A     | Final transcript persistence can request the existing ten source-aware intelligence jobs through the local deterministic worker path.                                                                                                                                                                       |
+| User-started debrief to enhanced notes and follow-up                  | A     | Original personal answers remain private and separate; accepted reviewed items generate editable private enhanced notes and a review-only follow-up draft.                                                                                                                                                  |
+| Automatic final transcript to a private post-conversation draft       | A     | A persisted current final `TranscriptVersion` creates one owner-private, transcript-versioned generation through the real API/database/worker path and deterministic intelligence provider. Its exact-generation jobs are isolated from manual/shared reads and request only summary, decisions, actions, open questions and follow-up—not sales extractors or Next Best Action. Database-immutable origin plus a revalidated non-public creation audit, current feature gate, completed Interaction, data notice, membership and immutable recording/evidence lineage fence executor entry, each provider request and materialisation. Revocation cancels only that automatic scope. Live notes and edited drafts survive, corrections remain explicit edit-safe versions with the original source owner/consent lineage, optional evidence-backed methodology projection is included only when applicable, and nothing is sent or shared automatically. |
+| Local briefing scheduling/outbox                                      | A     | Explicit saved preferences materialise timezone-aware morning and bounded upcoming pre-meeting rows through the existing worker. Fingerprints, duplicate suppression, reschedule supersession and cancellation are fixture-tested; exact-content previews use a separate, permanently non-deliverable intent. |
+| Google Workspace and Microsoft 365 calendar/email adapters            | B     | Production-capable OAuth/read/send/reconciliation adapters and durable sync workers exist. Live OAuth, calendar access and email execution remain off.                                                                                                                                                      |
+| Due briefing-email delivery worker                                    | A     | Private-owner scheduling/discovery, leased claims, preference/authority rechecks, reschedule/cancel reconciliation, stable-operation retries and persistent logical-source fences for in-flight or ambiguous outcomes are deterministic-transport tested. Discovery and claims accept scheduled intent only. The default and production profiles are off; local mode is no-network. |
+| Native macOS/Windows capture, call detection, overlays and installers | D     | Deliberately deferred; the web product does not claim these capabilities.                                                                                                                                                                                                                                   |
+
+## Browser verification record
+
+The release fixture in
+`apps/web/e2e/actual-browser-media/browser-audio.spec.ts` launched the installed
+Google Chrome 156.0.8078.74 on macOS 15.6. Chrome auto-selected a controlled
+local browser tab playing a low-volume Web Audio oscillator and supplied its
+fake microphone device. The test verified one shared audio track, one microphone
+track, non-zero energy from both, one mixed audio-only recorder track, no video
+track in the recorder stream and a non-empty recorded blob.
+
+Vitest media doubles separately cover permission denial, a display share with no
+audio, unsupported APIs, duplicate microphone identity, source mute/end,
+`devicechange`, stop and idempotent cleanup. Playwright product acceptance uses
+mocked media for deterministic capture state and upload behaviour. Edge, Safari,
+Windows, screen/system-audio sharing, mobile browsers and physical microphone
+hardware were not actually verified in this change.
+
+The progressive fixture in
+`apps/web/e2e/actual-browser-media/progressive-pcm.spec.ts` routes a 48 kHz Web
+Audio oscillator through the production `MediaStream`/AudioWorklet capture path
+and a local intercepted API transport. It verifies 24 kHz mono little-endian
+PCM16 duration and energy, ordered final drain, and deduplicated transcript events.
+It does not contact OpenAI.
+
+## Activation boundaries
+
+The B items are not C merely because activation is off: their production adapter
+code exists. They still require the existing owner, security/privacy, variable-cost,
+credential, regional-processing and target-environment approvals before any live
+call. No activation was performed here. Briefing provider mode reuses those
+approval-gated adapters, while the selected local/test mode maps both connector
+authorities to a deterministic no-network transport.
+
+Progressive sessions are deliberately process-local while their provider
+WebSocket is open. Activation therefore also requires session request affinity
+to the owning API process plus graceful rollout/shutdown drain (stop admitting
+new sessions, allow bounded finishes, then cancel any remainder). This is a
+deployment boundary, not a missing adapter; a durable distributed session owner
+would require a separate approved architecture change. The implemented wire
+contract follows the official [Realtime transcription guide](https://developers.openai.com/api/docs/guides/realtime-transcription)
+and [Realtime client-event reference](https://developers.openai.com/api/reference/resources/realtime/client-events).
+
+The two new cross-tenant worker-discovery functions revoke PostgreSQL's default
+`PUBLIC` execution grant. A future approved activation must grant only those
+exact functions to the deployed least-privilege runtime role and verify the
+locked search path, bounded results and non-public execution. No runtime-role or
+production grant was changed in this work.

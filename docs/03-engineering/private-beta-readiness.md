@@ -137,15 +137,21 @@ Admins queue a versioned JSON export in Settings. An operator runs:
 uv --directory apps/api run revenueos-beta-maintenance export --organisation-id <UUID> --request-id <UUID>
 ```
 
-Export version 9 has deterministic sections/order and a safe UUID filename. It may
+Export version 42 has deterministic sections/order and a safe UUID filename. It may
 contain authorised transcripts and validated intelligence, so store it only in
 the restricted directory configured by `API_PRIVATE_BETA_EXPORT_DIRECTORY`.
 It includes Interaction, Capture Session, Evidence, Interaction audit metadata and
-Pre-Interaction Brief content plus safe typed source references.
-It excludes credentials, provider request IDs, worker leases, retry errors and
-other internal execution fields. API responses never expose the filesystem
-path. Downloads expire after 24 hours and validate both the configured root and
-exact filename.
+Pre-Interaction Brief content plus safe typed source references. Version 42 also
+includes conversation threads, assignment/audit history, the requesting user's
+private workspace/live notes, transcript-versioned private draft generations,
+briefing preferences/outbox lifecycle and the consent-safe live-session provider
+binding. Private sections are limited to the user who requested the export; they
+do not disclose another member's drafts, automatic-generation traces or briefing
+content. Safe failure codes and attempt counts are included where they explain a
+requester's draft or briefing state. Credentials, provider request IDs, worker
+identifiers, leases, raw provider errors and other internal execution fields are
+excluded. API responses never expose the filesystem path. Downloads expire after
+24 hours and validate both the configured root and exact filename.
 
 After expiry, remove files and clear their paths in bounded tenant batches:
 
@@ -415,7 +421,9 @@ and one Google Meet Debrief fallback; no external call or credential is used.
 
 - Both live flags are independent server-side kill switches and default off. The
   external-live flag requires the base flag, acknowledgement and a separately
-  configured adapter; no such adapter is implemented in WO-020.
+  configured adapter. WO-020 originally shipped without that adapter; the current
+  repository now includes a gated OpenAI Responses adapter, while live activation
+  and target-environment verification remain pending.
 - Default cadence/limits are 15 seconds, two new segments or 160 characters, 12
   segments/8,000 characters per window, four requests/minute, 120
   requests/Interaction, 200,000 processed characters/Interaction, three concurrent

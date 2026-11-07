@@ -1,9 +1,24 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  reconcileProgressiveTranscriptEvents,
   RecordingFoundation,
   selectSupportedRecordingMimeType,
 } from "@/components/recording-foundation";
+
+const startProgressiveTranscriptionCaptureMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/progressive-transcription-capture", async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import("@/lib/progressive-transcription-capture")
+    >();
+  return {
+    ...original,
+    startProgressiveTranscriptionCapture:
+      startProgressiveTranscriptionCaptureMock,
+  };
+});
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -39,6 +54,9 @@ const baseRecording = {
 };
 
 class FakeMediaRecorder {
+  static instances: FakeMediaRecorder[] = [];
+  static onStart: () => void = () => undefined;
+
   static isTypeSupported(mimeType: string): boolean {
     return mimeType === "audio/webm;codecs=opus";
   }
@@ -47,13 +65,17 @@ class FakeMediaRecorder {
   ondataavailable: ((event: BlobEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   onstop: ((event: Event) => void) | null = null;
+  stopCalls = 0;
 
   constructor(
     readonly stream: MediaStream,
     readonly options?: MediaRecorderOptions,
-  ) {}
+  ) {
+    FakeMediaRecorder.instances.push(this);
+  }
 
   start(): void {
+    FakeMediaRecorder.onStart();
     this.state = "recording";
   }
 
@@ -66,6 +88,7 @@ class FakeMediaRecorder {
   }
 
   stop(): void {
+    this.stopCalls += 1;
     this.state = "inactive";
     const bytes = new TextEncoder().encode("MOCK_TRANSCRIPT:Browser test.");
     const content = new Uint8Array(4 + bytes.length);
@@ -80,20 +103,98 @@ class FakeMediaRecorder {
   }
 }
 
+class FakeMediaStreamTrack extends EventTarget {
+  readonly id = "microphone-track";
+  readonly kind = "audio";
+  muted = false;
+  readyState: MediaStreamTrackState = "live";
+
+  constructor(private readonly onStop: () => void = () => undefined) {
+    super();
+  }
+
+  getSettings(): MediaTrackSettings {
+    return {};
+  }
+
+  stop(): void {
+    this.readyState = "ended";
+    this.onStop();
+  }
+}
+
+class FakeVideoTrack extends EventTarget {
+  readonly id = "display-video-track";
+  readonly kind = "video";
+  muted = false;
+  readyState: MediaStreamTrackState = "live";
+
+  constructor(private readonly onStop: () => void = () => undefined) {
+    super();
+  }
+
+  getSettings(): MediaTrackSettings {
+    return { displaySurface: "browser" };
+  }
+
+  stop(): void {
+    this.readyState = "ended";
+    this.onStop();
+  }
+}
+
+class FakeMediaStream {
+  constructor(private readonly tracks: MediaStreamTrack[] = []) {}
+
+  getTracks(): MediaStreamTrack[] {
+    return [...this.tracks];
+  }
+
+  getAudioTracks(): MediaStreamTrack[] {
+    return this.tracks.filter((track) => track.kind === "audio");
+  }
+
+  getVideoTracks(): MediaStreamTrack[] {
+    return this.tracks.filter((track) => track.kind === "video");
+  }
+}
+
+function microphoneStream(onStop?: () => void): MediaStream {
+  return new FakeMediaStream([
+    new FakeMediaStreamTrack(onStop) as unknown as MediaStreamTrack,
+  ]) as unknown as MediaStream;
+}
+
 function installSupportedBrowser(
   getUserMedia: () => Promise<MediaStream>,
+  getDisplayMedia?: () => Promise<MediaStream>,
 ): void {
   vi.stubGlobal(
     "MediaRecorder",
     FakeMediaRecorder as unknown as typeof MediaRecorder,
   );
+  vi.stubGlobal(
+    "MediaStream",
+    FakeMediaStream as unknown as typeof MediaStream,
+  );
+  if (getDisplayMedia) {
+    vi.stubGlobal("AudioContext", class FakeAudioContext {});
+  }
   vi.stubGlobal("navigator", {
-    mediaDevices: { getUserMedia },
+    mediaDevices: Object.assign(
+      new EventTarget(),
+      getDisplayMedia ? { getUserMedia, getDisplayMedia } : { getUserMedia },
+    ),
   });
 }
 
 describe("RecordingFoundation", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    FakeMediaRecorder.instances = [];
+    FakeMediaRecorder.onStart = () => undefined;
+    startProgressiveTranscriptionCaptureMock.mockReset();
+    vi.unstubAllGlobals();
+  });
 
   it("feature-detects the safest supported MIME type in preference order", () => {
     expect(
@@ -102,6 +203,72 @@ describe("RecordingFoundation", () => {
       }),
     ).toBe("audio/mp4;codecs=mp4a.40.2");
     expect(selectSupportedRecordingMimeType(undefined)).toBeNull();
+  });
+
+  it("orders progressive text and replaces a partial with its final revision", () => {
+    const base = {
+      streamId: "stream-1",
+      providerName: "fixture",
+      itemIndex: 0,
+      startMs: 0,
+      endMs: 100,
+      speakerLabel: null,
+    } as const;
+    const reconciled = reconcileProgressiveTranscriptEvents(
+      [
+        {
+          ...base,
+          eventId: "partial-1",
+          itemId: "item-1",
+          sourceAudioSequence: 0,
+          revision: 1,
+          kind: "partial",
+          text: "First wor",
+        },
+      ],
+      [
+        {
+          ...base,
+          eventId: "item-2-final",
+          itemId: "item-2",
+          sourceAudioSequence: 1,
+          revision: 1,
+          kind: "final",
+          text: "Second words.",
+        },
+        {
+          ...base,
+          eventId: "item-1-final",
+          itemId: "item-1",
+          sourceAudioSequence: 0,
+          revision: 2,
+          kind: "final",
+          text: "First words.",
+        },
+      ],
+    );
+
+    expect(
+      reconciled.map(({ itemId, revision, kind, text }) => ({
+        itemId,
+        revision,
+        kind,
+        text,
+      })),
+    ).toEqual([
+      {
+        itemId: "item-1",
+        revision: 2,
+        kind: "final",
+        text: "First words.",
+      },
+      {
+        itemId: "item-2",
+        revision: 1,
+        kind: "final",
+        text: "Second words.",
+      },
+    ]);
   });
 
   it("shows an accessible Debrief fallback when browser recording is unsupported", async () => {
@@ -144,6 +311,155 @@ describe("RecordingFoundation", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([
+    {
+      progressiveTranscription: true,
+      disclosure:
+        "Oryntela may send audio during capture, with final batch processing after finalisation.",
+      excludedDisclosure: "Oryntela sends audio only after finalisation.",
+    },
+    {
+      progressiveTranscription: false,
+      disclosure: "Oryntela sends audio only after finalisation.",
+      excludedDisclosure: "Oryntela may send audio during capture",
+    },
+  ])(
+    "discloses external-processing timing when progressive transcription is $progressiveTranscription",
+    async ({ progressiveTranscription, disclosure, excludedDisclosure }) => {
+      installSupportedBrowser(() => Promise.reject(new Error("not requested")));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith("/api/v1/beta/capabilities")) {
+            return Promise.resolve(
+              jsonResponse({
+                featureFlags: { progressiveTranscription },
+              }),
+            );
+          }
+          if (url.endsWith("/recordings")) {
+            return Promise.resolve(
+              jsonResponse([
+                {
+                  ...baseRecording,
+                  lifecycleStatus: "completed",
+                  externalProcessing: true,
+                },
+              ]),
+            );
+          }
+          if (url.endsWith("/transcription")) {
+            return Promise.resolve(
+              jsonResponse({
+                recordingId: "recording-1",
+                status: "completed",
+                transcriptVersionId: "transcript-version-1",
+                transcriptId: "transcript-1",
+                meetingId: "meeting-1",
+                version: 1,
+                source: "recording",
+                language: "en-AU",
+                text: "Synthetic transcript.",
+                segments: [],
+                completedAt: "2026-08-15T00:05:00Z",
+                safeMessage: "Transcription is complete.",
+              }),
+            );
+          }
+          return Promise.resolve(
+            jsonResponse({ code: "unexpected", message: url }, 500),
+          );
+        }),
+      );
+
+      render(
+        <RecordingFoundation
+          interactionId="interaction-1"
+          interactionType="face_to_face_meeting"
+          lifecycleStatus="completed"
+        />,
+      );
+
+      expect(
+        await screen.findByText(disclosure, { exact: false }),
+      ).toBeVisible();
+      expect(
+        screen.queryByText(excludedDisclosure, { exact: false }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("offers microphone-only capture when shared meeting audio is unsupported", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    );
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="online_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+
+    const shared = await screen.findByRole("radio", {
+      name: /shared meeting audio \+ microphone/i,
+    });
+    expect(shared).toBeDisabled();
+    expect(
+      screen.getByRole("radio", { name: /microphone only/i }),
+    ).toBeChecked();
+    expect(
+      screen.getByText(/shared meeting audio is unsupported/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Start microphone capture" }),
+    ).toBeDisabled();
+  });
+
+  it("distinguishes a selected share that has no audio and stops its video", async () => {
+    const stopDisplayVideo = vi.fn();
+    const getUserMedia = vi.fn(() => Promise.resolve(microphoneStream()));
+    installSupportedBrowser(getUserMedia, () =>
+      Promise.resolve(
+        new FakeMediaStream([
+          new FakeVideoTrack(stopDisplayVideo) as unknown as MediaStreamTrack,
+        ]) as unknown as MediaStream,
+      ),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    );
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="online_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+
+    const liveNotes = await screen.findByLabelText("Private live notes");
+    fireEvent.change(liveNotes, {
+      target: { value: "Customer needs security approval by Friday." },
+    });
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start shared audio capture" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "selected share did not include audio",
+    );
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(stopDisplayVideo).toHaveBeenCalledTimes(1);
+    expect(liveNotes).toHaveValue(
+      "Customer needs security approval by Friday.",
+    );
+  });
+
   it("does not begin until consent succeeds and reports denied microphone permission", async () => {
     installSupportedBrowser(() =>
       Promise.reject(new DOMException("Denied", "NotAllowedError")),
@@ -174,13 +490,9 @@ describe("RecordingFoundation", () => {
     ).toBeVisible();
   });
 
-  it("starts, pauses, resumes, uploads a chunk and enters transcription processing", async () => {
+  it("safely finalises captured audio when an audio device changes", async () => {
     const stopTrack = vi.fn();
-    installSupportedBrowser(() =>
-      Promise.resolve({
-        getTracks: () => [{ stop: stopTrack }],
-      } as unknown as MediaStream),
-    );
+    installSupportedBrowser(() => Promise.resolve(microphoneStream(stopTrack)));
     const releaseWakeLock = vi.fn(() => Promise.resolve());
     const requestWakeLock = vi.fn(() =>
       Promise.resolve({
@@ -317,18 +629,27 @@ describe("RecordingFoundation", () => {
         lifecycleStatus="planned"
       />,
     );
+    const liveNotes = await screen.findByLabelText("Private live notes");
+    fireEvent.change(liveNotes, {
+      target: { value: "Do not lose this note if the microphone changes." },
+    });
     fireEvent.click(await screen.findByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
     const pause = await screen.findByRole("button", { name: "Pause" });
     fireEvent.click(pause);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
-    fireEvent.click(screen.getByRole("button", { name: "Stop and upload" }));
+    navigator.mediaDevices.dispatchEvent(new Event("devicechange"));
+
+    expect(await screen.findByText(/an audio device changed/i)).toBeVisible();
 
     expect(
       await screen.findByText(
         "The recording is queued for batch transcription.",
       ),
     ).toBeVisible();
+    expect(liveNotes).toHaveValue(
+      "Do not lose this note if the microphone changes.",
+    );
     await waitFor(() => expect(stopTrack).toHaveBeenCalled());
     expect(requestWakeLock).toHaveBeenCalledWith("screen");
     expect(releaseWakeLock).toHaveBeenCalled();
@@ -349,6 +670,288 @@ describe("RecordingFoundation", () => {
       expect.stringContaining("/finalize"),
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("prepares progressive capture before synchronously arming it with the batch recorder", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    const lifecycle: string[] = [];
+    const resumeProgressiveCapture = vi.fn(() => {
+      lifecycle.push("progressive_armed");
+    });
+    let releasePreparation: () => void = () => undefined;
+    const preparation = new Promise<{
+      pause: () => void;
+      resume: () => void;
+      finish: () => Promise<object>;
+      cancel: () => Promise<void>;
+    }>((resolve) => {
+      releasePreparation = () => {
+        lifecycle.push("progressive_prepared");
+        resolve({
+          pause: vi.fn(),
+          resume: resumeProgressiveCapture,
+          finish: vi.fn(() => Promise.resolve({})),
+          cancel: vi.fn(() => Promise.resolve()),
+        });
+      };
+    });
+    startProgressiveTranscriptionCaptureMock.mockReturnValue(preparation);
+    FakeMediaRecorder.onStart = () => {
+      lifecycle.push("batch_armed");
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/api/v1/beta/capabilities")) {
+          return Promise.resolve(
+            jsonResponse({ featureFlags: { progressiveTranscription: true } }),
+          );
+        }
+        if (url.endsWith("/recordings") && method === "GET") {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/recordings") && method === "POST") {
+          return Promise.resolve(jsonResponse(baseRecording, 201));
+        }
+        if (url.endsWith("/start") && method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ code: "unexpected", message: url }, 500),
+        );
+      }),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    await waitFor(() =>
+      expect(startProgressiveTranscriptionCaptureMock).toHaveBeenCalledWith(
+        expect.objectContaining({ initiallyPaused: true }),
+      ),
+    );
+
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Pause" }),
+    ).not.toBeInTheDocument();
+
+    releasePreparation();
+
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    expect(resumeProgressiveCapture).toHaveBeenCalledTimes(1);
+    expect(lifecycle).toEqual([
+      "progressive_prepared",
+      "progressive_armed",
+      "batch_armed",
+    ]);
+  });
+
+  it("starts batch recording with a notice when progressive preparation fails", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    startProgressiveTranscriptionCaptureMock.mockRejectedValue(
+      new Error("Synthetic progressive setup failure."),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/api/v1/beta/capabilities")) {
+          return Promise.resolve(
+            jsonResponse({ featureFlags: { progressiveTranscription: true } }),
+          );
+        }
+        if (url.endsWith("/recordings") && method === "GET") {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/recordings") && method === "POST") {
+          return Promise.resolve(jsonResponse(baseRecording, 201));
+        }
+        if (url.endsWith("/start") && method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ code: "unexpected", message: url }, 500),
+        );
+      }),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Live transcription is unavailable. Recording continues for normal batch transcription.",
+      ),
+    ).toBeVisible();
+    expect(FakeMediaRecorder.instances[0]?.state).toBe("recording");
+  });
+
+  it("cancels progressive capture immediately when MediaRecorder fails", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    const cancelProgressiveCapture = vi.fn(() => Promise.resolve());
+    startProgressiveTranscriptionCaptureMock.mockResolvedValue({
+      pause: vi.fn(),
+      resume: vi.fn(),
+      finish: vi.fn(),
+      cancel: cancelProgressiveCapture,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/api/v1/beta/capabilities")) {
+          return Promise.resolve(
+            jsonResponse({ featureFlags: { progressiveTranscription: true } }),
+          );
+        }
+        if (url.endsWith("/recordings") && method === "GET") {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/recordings") && method === "POST") {
+          return Promise.resolve(jsonResponse(baseRecording, 201));
+        }
+        if (url.endsWith("/start") && method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ code: "unexpected", message: url }, 500),
+        );
+      }),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    await waitFor(() =>
+      expect(startProgressiveTranscriptionCaptureMock).toHaveBeenCalledTimes(1),
+    );
+
+    const recorder = FakeMediaRecorder.instances[0];
+    expect(recorder).toBeDefined();
+    recorder?.onerror?.(new Event("error"));
+    recorder?.onerror?.(new Event("error"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Browser recording stopped unexpectedly",
+    );
+    await waitFor(() =>
+      expect(cancelProgressiveCapture).toHaveBeenCalledWith("capture_ended"),
+    );
+    expect(cancelProgressiveCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels its active server session and releases audio when unmounted", async () => {
+    const stopTrack = vi.fn();
+    installSupportedBrowser(() => Promise.resolve(microphoneStream(stopTrack)));
+    let serverLifecycle = "none";
+    const noteChanges = vi.fn();
+    const activityChanges = vi.fn();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/recordings") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith("/recordings") && method === "POST") {
+        serverLifecycle = "created";
+        return Promise.resolve(jsonResponse(baseRecording, 201));
+      }
+      if (url.endsWith("/start") && method === "POST") {
+        serverLifecycle = "recording";
+        return Promise.resolve(
+          jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+        );
+      }
+      if (url.endsWith("/cancel") && method === "POST") {
+        serverLifecycle = "cancelled";
+        return Promise.resolve(
+          jsonResponse({ ...baseRecording, lifecycleStatus: "cancelled" }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: url }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        liveNotes="Keep the agreed renewal date."
+        onLiveNotesChange={noteChanges}
+        onActivityChange={activityChanges}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    expect(serverLifecycle).toBe("recording");
+    expect(screen.getByLabelText("Private live notes")).toHaveValue(
+      "Keep the agreed renewal date.",
+    );
+    const activityCountBeforeUnmount = activityChanges.mock.calls.length;
+
+    view.unmount();
+
+    await waitFor(() => expect(serverLifecycle).toBe("cancelled"));
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+    expect(FakeMediaRecorder.instances[0]?.stopCalls).toBe(1);
+    expect(
+      FakeMediaRecorder.instances[0]?.stream.getVideoTracks(),
+    ).toHaveLength(0);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+    const cancelCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/cancel") && init?.method === "POST",
+    );
+    expect(cancelCalls).toHaveLength(1);
+    expect(cancelCalls[0]?.[1]).toEqual(
+      expect.objectContaining({ keepalive: true }),
+    );
+    expect(JSON.parse(String(cancelCalls[0]?.[1]?.body))).toMatchObject({
+      idempotencyKey: expect.stringMatching(/^recording-unmount-cancel-/u),
+    });
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        /\/(chunks|stop|finalize)$/u.test(String(input)),
+      ),
+    ).toBe(false);
+    expect(noteChanges).not.toHaveBeenCalled();
+    expect(activityChanges).toHaveBeenCalledTimes(activityCountBeforeUnmount);
   });
 
   it("restores verified chunks and retries finalisation after an interrupted upload", async () => {

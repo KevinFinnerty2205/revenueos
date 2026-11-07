@@ -262,7 +262,7 @@ export function SalesMethodologySettings() {
   if (loading)
     return (
       <div role="status" className="form-card">
-        Loading Sales Methodology settings…
+        Loading conversation frameworks…
       </div>
     );
   if (!catalogue)
@@ -271,7 +271,7 @@ export function SalesMethodologySettings() {
         role="alert"
         className="form-card border-rose-200 bg-rose-50 text-sm text-rose-900"
       >
-        {error ?? "Sales Methodology settings are unavailable."}
+        {error ?? "Conversation frameworks are unavailable."}
       </div>
     );
 
@@ -282,15 +282,15 @@ export function SalesMethodologySettings() {
     >
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-          Admin control
+          Organisation guidance
         </p>
         <h2 id="sales-methodology-settings-title" className="form-legend mt-2">
-          Sales Methodology
+          Conversation Frameworks
         </h2>
         <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">
-          Choose one organisation default or none. Methodologies structure
-          evidence; they do not score opportunities, block stages or make
-          automatic changes.
+          Choose one organisation default or use notes only. Frameworks organise
+          evidence and missing information; they do not predict a win, block
+          stages or make automatic changes.
         </p>
       </div>
       {error ? (

@@ -19,6 +19,7 @@ ProspectResearchProviderName = Literal["mock", "apollo"]
 VisualStorageBackend = Literal["local", "s3_compatible"]
 BillingProviderName = Literal["deterministic", "stripe"]
 DatabaseTLSMode = Literal["disable", "verify_full_system", "verify_full_custom_ca"]
+BriefingDeliveryTransportMode = Literal["local", "provider"]
 
 
 class Settings(BaseSettings):
@@ -272,12 +273,17 @@ class Settings(BaseSettings):
     feature_presentation_mode_enabled: bool = True
     feature_recording_capture_enabled: bool = False
     feature_transcription_enabled: bool = False
+    feature_progressive_transcription_enabled: bool = False
     feature_auto_generate_intelligence_after_transcription: bool = False
     feature_online_meeting_capture_enabled: bool = True
     feature_online_meeting_import_enabled: bool = True
     feature_online_meeting_native_integration_enabled: bool = False
     feature_online_meeting_auto_ingest_enabled: bool = False
     feature_document_evidence_enabled: bool = True
+    feature_knowledge_website_fetch_enabled: bool = False
+    knowledge_website_connect_timeout_seconds: float = Field(default=3.0, gt=0, le=10)
+    knowledge_website_read_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
+    knowledge_website_max_response_bytes: int = Field(default=2_000_000, ge=10_000, le=5_000_000)
     feature_email_evidence_enabled: bool = True
     feature_sales_methodology_enabled: bool = True
     feature_ask_revenueos_enabled: bool = True
@@ -296,6 +302,11 @@ class Settings(BaseSettings):
     microsoft_production_activation_approved: bool = False
     feature_google_workspace_enabled: bool = False
     google_workspace_production_activation_approved: bool = False
+    # Disabled by default. Local mode cannot run outside development/test;
+    # provider mode inherits the existing connector credential/approval gates.
+    feature_briefing_delivery_enabled: bool = False
+    briefing_delivery_transport_mode: BriefingDeliveryTransportMode = "local"
+    briefing_delivery_app_base_url: str = "http://localhost:3000"
     feature_native_crm_enabled: bool = True
     feature_native_pipeline_enabled: bool = True
     feature_sales_analytics_enabled: bool = True
@@ -445,6 +456,21 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
     )
     transcription_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    progressive_transcription_model_identifier: str = Field(
+        default="gpt-live-transcribe",
+        min_length=1,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
+    progressive_transcription_event_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    progressive_transcription_final_drain_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    progressive_transcription_max_replay_bytes: int = Field(default=4_000_000, ge=48_000, le=15_000_000)
+    progressive_transcription_max_event_bytes: int = Field(default=262_144, ge=4_096, le=1_000_000)
+    progressive_transcription_max_queued_events: int = Field(default=32, ge=4, le=256)
+    progressive_transcription_segment_duration_seconds: Literal[4] = 4
+    progressive_transcription_max_turns: int = Field(default=4_096, ge=1, le=4_096)
+    progressive_transcription_session_ttl_seconds: int = Field(default=14_400, ge=60, le=43_200)
+    private_beta_max_concurrent_progressive_transcriptions: int = Field(default=3, ge=1, le=20)
     visual_provider_name: VisualProviderName = "mock"
     visual_provider_model_identifier: str = Field(
         default="mock-visual-evidence-v1",
@@ -722,6 +748,42 @@ class Settings(BaseSettings):
             raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
         if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
             raise ValueError("Worker base retry delay cannot exceed the maximum retry delay.")
+        if self.feature_briefing_delivery_enabled:
+            briefing_origin = urlsplit(self.briefing_delivery_app_base_url)
+            if (
+                briefing_origin.username is not None
+                or briefing_origin.password is not None
+                or briefing_origin.query
+                or briefing_origin.fragment
+                or briefing_origin.path not in {"", "/"}
+                or briefing_origin.hostname is None
+            ):
+                raise ValueError("Briefing links require a trusted origin without credentials, path or query.")
+            if self.briefing_delivery_transport_mode == "local" and self.environment not in {
+                "development",
+                "test",
+            }:
+                raise ValueError("The local briefing transport is restricted to development and test.")
+            if self.briefing_delivery_transport_mode == "local" and not (
+                briefing_origin.scheme == "https"
+                or (briefing_origin.scheme == "http" and briefing_origin.hostname in {"localhost", "127.0.0.1"})
+            ):
+                raise ValueError("Local briefing links require HTTPS or an exact localhost HTTP origin.")
+            if self.briefing_delivery_transport_mode == "provider" and not (
+                self.feature_integrations_enabled
+                and (self.feature_microsoft_365_enabled or self.feature_google_workspace_enabled)
+            ):
+                raise ValueError(
+                    "Provider briefing delivery requires Integrations and an enabled Microsoft or Google adapter."
+                )
+            if self.briefing_delivery_transport_mode == "provider" and briefing_origin.scheme != "https":
+                raise ValueError("Provider briefing links require an HTTPS application origin.")
+            if (
+                self.environment == "production"
+                and self.briefing_delivery_transport_mode == "provider"
+                and (self.briefing_delivery_app_base_url.rstrip("/") != "https://oryntela.com.au")
+            ):
+                raise ValueError("Production briefing links require the exact approved Oryntela origin.")
         if self.hsts_enabled and self.environment != "production":
             raise ValueError("HSTS may be enabled only in production after HTTPS is stable.")
         if self.private_beta_default_retention_days not in {30, 90, 180}:
@@ -774,6 +836,28 @@ class Settings(BaseSettings):
                 raise ValueError("Production binary evidence requires a deployment-specific signing secret.")
         if self.feature_auto_generate_intelligence_after_transcription and not self.feature_transcription_enabled:
             raise ValueError("Automatic intelligence after transcription requires transcription to be enabled.")
+        if self.feature_auto_generate_intelligence_after_transcription and self.worker_default_max_attempts < 2:
+            raise ValueError(
+                "Automatic post-conversation drafts require at least two worker attempts for the "
+                "prerequisite and follow-up generation phases."
+            )
+        if self.feature_progressive_transcription_enabled and not (
+            self.feature_recording_capture_enabled
+            and self.feature_transcription_enabled
+            and self.feature_openai_provider_enabled
+            and self.transcription_provider_name == "openai"
+            and self.private_beta_external_ai_approved
+        ):
+            raise ValueError(
+                "Progressive transcription requires recording, transcription, the server-side OpenAI gate, "
+                "the OpenAI transcription provider and explicit external-AI approval."
+            )
+        if (
+            self.feature_progressive_transcription_enabled
+            and self.progressive_transcription_max_turns * self.progressive_transcription_segment_duration_seconds
+            < self.progressive_transcription_session_ttl_seconds
+        ):
+            raise ValueError("Progressive transcription turn capacity must cover the configured session TTL.")
         if self.feature_online_meeting_import_enabled and not self.feature_online_meeting_capture_enabled:
             raise ValueError("Online-meeting import requires online-meeting capture to be enabled.")
         if self.feature_online_meeting_native_integration_enabled and not self.feature_online_meeting_capture_enabled:
@@ -1068,6 +1152,8 @@ class Settings(BaseSettings):
             "presentationMode": self.feature_presentation_mode_enabled,
             "recordingCapture": self.feature_recording_capture_enabled,
             "transcription": self.feature_transcription_enabled,
+            "progressiveTranscription": self.feature_progressive_transcription_enabled,
+            "briefingDelivery": self.feature_briefing_delivery_enabled,
             "autoGenerateIntelligenceAfterTranscription": (self.feature_auto_generate_intelligence_after_transcription),
             "onlineMeetingCapture": self.feature_online_meeting_capture_enabled,
             "onlineMeetingImport": self.feature_online_meeting_import_enabled,

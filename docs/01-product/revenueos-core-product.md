@@ -62,9 +62,9 @@ and forecasts while preserving source and historical interpretation.
 ## Sales Methodology
 
 Methodology is included in Core. Evidence remains canonical. WO-024 implements
-MEDDIC, MEDDPICC, BANT, SPICED and safe bounded custom definitions as projections over
-the same Evidence. SPIN, Challenger, Sandler, GAP Selling and Solution Selling remain
-possible future configuration, not implemented standards.
+MEDDIC, MEDDICC, MEDDPICC, BANT, SPIN, SPICED and safe bounded custom definitions
+as projections over the same Evidence. Challenger, Sandler, GAP Selling and
+Solution Selling remain possible future configuration, not implemented standards.
 
 Each item is `confirmed`, `partially_supported`, `unknown`, `conflicting` or `stale`.
 The user sees what Oryntela believes, why, the evidence, last support date,

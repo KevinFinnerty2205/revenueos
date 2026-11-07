@@ -44,6 +44,7 @@ from revenueos.integration_executors import (
 )
 from revenueos.integration_worker import ActionExecutionWorkerService
 from revenueos.models import (
+    ConversationBriefingOutbox,
     EncryptedConnectorCredential,
     IntegrationConnection,
     Interaction,
@@ -52,6 +53,7 @@ from revenueos.models import (
     ProviderCalendarEvent,
     ProviderOutboundOperation,
     ProviderReply,
+    ProviderSyncState,
     User,
 )
 from revenueos.tenant import TenantContext
@@ -602,6 +604,93 @@ def test_gmail_send_is_sender_bound_plain_text_header_safe_and_acceptance_only()
     assert message.get_content().strip() == "Reviewed plain-text body"
 
 
+def test_gmail_send_adds_html_as_a_multipart_alternative() -> None:
+    observed: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "gmail-message-2", "threadId": "gmail-thread-2"})
+
+    async def run() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url="sqlite+aiosqlite://",
+            google_client_id="google-test-client-id",
+            google_client_secret=SecretStr("google-test-secret"),
+            google_oauth_redirect_uri="http://localhost/callback",
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            google = GoogleWorkspaceClient(
+                settings,
+                cast(CredentialStore, _StaticCredentialStore(_credential())),
+                http_client=http_client,
+            )
+            await google.send_mail(
+                _context(),
+                sender_name="Alex Morgan",
+                sender_email="alex@example.test",
+                recipient_name="Jordan Lee",
+                recipient_email="jordan@example.com",
+                subject="Prep for today",
+                body="Plain fallback",
+                html_body="<p>Branded preparation</p>",
+                operation_key="c" * 64,
+            )
+
+    asyncio.run(run())
+    body = cast(dict[str, str], observed["body"])
+    padded = body["raw"] + "=" * (-len(body["raw"]) % 4)
+    message = BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(padded))
+    assert message.get_content_type() == "multipart/alternative"
+    alternatives = list(message.iter_parts())
+    assert [part.get_content_type() for part in alternatives] == ["text/plain", "text/html"]
+    assert alternatives[0].get_content().strip() == "Plain fallback"
+    assert alternatives[1].get_content().strip() == "<p>Branded preparation</p>"
+
+
+def test_malformed_successful_gmail_send_is_an_uncertain_provider_outcome() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/gmail/v1/users/me/messages/send"
+        # Gmail may already have accepted this write, but the missing threadId
+        # prevents the adapter from reconciling a trustworthy receipt.
+        return httpx.Response(200, json={"id": "gmail-message-with-malformed-receipt"})
+
+    async def run() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url="sqlite+aiosqlite://",
+            google_client_id="google-test-client-id",
+            google_client_secret=SecretStr("google-test-secret"),
+            google_oauth_redirect_uri="http://localhost/callback",
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            google = GoogleWorkspaceClient(
+                settings,
+                cast(CredentialStore, _StaticCredentialStore(_credential())),
+                http_client=http_client,
+            )
+            with pytest.raises(GoogleAPIError) as caught:
+                await google.send_mail(
+                    _context(),
+                    sender_name="Alex Morgan",
+                    sender_email="alex@example.test",
+                    recipient_name="Jordan Lee",
+                    recipient_email="jordan@example.com",
+                    subject="Reviewed subject",
+                    body="Reviewed plain-text body",
+                    operation_key="m" * 64,
+                )
+        assert caught.value.code == "provider_outcome_unknown"
+        assert caught.value.uncertain is True
+        assert caught.value.retryable is False
+
+    asyncio.run(run())
+
+
 def test_google_refresh_rate_limit_and_ambiguous_write_are_bounded() -> None:
     authorisations: list[str | None] = []
 
@@ -1108,6 +1197,113 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
             assert linked.interaction_id == interaction.id
             with pytest.raises(PublicAPIError, match="Private Google calendar events"):
                 await service.link_interaction(private.id, interaction.id)
+            calendar_state = await session.scalar(
+                select(ProviderSyncState).where(
+                    ProviderSyncState.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProviderSyncState.connection_id == connection.id,
+                    ProviderSyncState.resource_kind == "calendar",
+                )
+            )
+            assert calendar_state is not None
+            initial_briefing = ConversationBriefingOutbox(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=PRIMARY_USER_ID,
+                interaction_id=interaction.id,
+                kind="pre_meeting",
+                delivery_intent="scheduled",
+                status="sending",
+                deduplication_key=f"google-provider-reschedule:{interaction.id}",
+                source_fingerprint="a" * 64,
+                subject="Prepare",
+                body_text="Synthetic local preview",
+                href=f"/conversations/{interaction.id}#preparation",
+                prepared_for_at=now + timedelta(days=4),
+                attempt_count=2,
+                next_attempt_at=now + timedelta(minutes=5),
+                worker_id="abandoned-google-briefing-worker",
+                lease_expires_at=now + timedelta(minutes=1),
+                connection_id=connection.id,
+                failed_at=now,
+                failure_code="provider_busy",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(initial_briefing)
+            await session.flush()
+            rescheduled_at = now + timedelta(days=6)
+            assert (
+                await service._retain_calendar_event(
+                    connection,
+                    {
+                        "id": "customer-event",
+                        "summary": "Customer planning meeting — rescheduled",
+                        "start": {"dateTime": rescheduled_at.isoformat(), "timeZone": "Australia/Sydney"},
+                        "end": {
+                            "dateTime": (rescheduled_at + timedelta(hours=1)).isoformat(),
+                            "timeZone": "Australia/Sydney",
+                        },
+                        "organizer": {"email": "alex@example.test"},
+                        "attendees": [{"email": "jordan@example.com"}],
+                        "visibility": "default",
+                        "status": "confirmed",
+                        "updated": (now + timedelta(minutes=10)).isoformat(),
+                    },
+                    now + timedelta(minutes=10),
+                    calendar_state,
+                )
+                == 1
+            )
+            assert initial_briefing.status == "superseded"
+            assert initial_briefing.attempt_count == 0
+            assert initial_briefing.next_attempt_at is None
+            assert initial_briefing.worker_id is None
+            assert initial_briefing.lease_expires_at is None
+            assert initial_briefing.connection_id is None
+            assert initial_briefing.failed_at is None
+            assert initial_briefing.failure_code is None
+            assert service._aware(customer.start_at) == rescheduled_at
+            assert customer.provider_timezone == "Australia/Sydney"
+
+            cancellation_briefing = ConversationBriefingOutbox(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=PRIMARY_USER_ID,
+                interaction_id=interaction.id,
+                kind="pre_meeting",
+                delivery_intent="scheduled",
+                status="queued",
+                deduplication_key=f"google-provider-cancellation:{interaction.id}",
+                source_fingerprint="b" * 64,
+                subject="Prepare again",
+                body_text="Synthetic replacement preview",
+                href=f"/conversations/{interaction.id}#preparation",
+                prepared_for_at=now + timedelta(days=5),
+                attempt_count=1,
+                next_attempt_at=now + timedelta(minutes=5),
+                failed_at=now,
+                failure_code="provider_busy",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(cancellation_briefing)
+            await session.flush()
+            assert (
+                await service._retain_calendar_event(
+                    connection,
+                    {"id": "customer-event", "status": "cancelled"},
+                    now + timedelta(minutes=11),
+                    calendar_state,
+                )
+                == 1
+            )
+            assert cancellation_briefing.status == "cancelled"
+            assert cancellation_briefing.attempt_count == 0
+            assert cancellation_briefing.next_attempt_at is None
+            assert cancellation_briefing.failed_at is None
+            assert cancellation_briefing.failure_code is None
+            assert customer.state == "deleted"
+            assert customer.title == "Deleted event"
         await engine.dispose()
 
     asyncio.run(run())

@@ -424,6 +424,62 @@ def test_no_snapshot_when_meeting_or_intelligence_is_incomplete(
     _run(scenario)
 
 
+def test_private_automatic_draft_artifact_cannot_complete_shared_revenue_brain_snapshot() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        async with session_factory() as session, session.begin():
+            artifact_type = AIArtifactType.EXECUTIVE_SUMMARY.value
+            seeded = await _seed_ready_meeting(
+                session,
+                omit=artifact_type,
+            )
+            requirement = next(item for item in REQUIRED_ARTIFACTS if item.artifact_type == artifact_type)
+            private_job = AIJob(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                meeting_id=seeded.meeting_id,
+                transcript_id=seeded.transcript_id,
+                transcript_version=1,
+                job_type=artifact_type,
+                status=AIJobStatus.COMPLETED.value,
+                prompt_key=artifact_type,
+                prompt_version=1,
+                schema_version=requirement.schema_version,
+                idempotency_key="private-automatic-executive-summary",
+                requested_by_user_id=PRIMARY_USER_ID,
+                completed_at=NOW,
+                automatic_draft_generation_id=uuid.uuid4(),
+            )
+            session.add(private_job)
+            await session.flush()
+            session.add(
+                AIArtifact(
+                    id=uuid.uuid4(),
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    meeting_id=seeded.meeting_id,
+                    transcript_id=seeded.transcript_id,
+                    transcript_version=1,
+                    job_id=private_job.id,
+                    artifact_type=artifact_type,
+                    artifact_version=1,
+                    schema_version=requirement.schema_version,
+                    prompt_key=artifact_type,
+                    prompt_version=1,
+                    provider_key=MOCK_PROVIDER_NAME,
+                    model_name=MOCK_MODEL_IDENTIFIER,
+                    content_json=_artifact_content(artifact_type),
+                )
+            )
+            await session.flush()
+
+            snapshot = await _create_snapshot(session, seeded)
+            count = await session.scalar(select(func.count()).select_from(RevenueBrainSnapshot))
+
+            assert snapshot is None
+            assert count == 0
+
+    _run(scenario)
+
+
 def test_transcript_version_change_appends_a_distinct_snapshot() -> None:
     async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
         async with session_factory() as session, session.begin():

@@ -684,6 +684,29 @@ contain product-safe source labels but no raw source IDs, transcript, raw artefa
 prompt, schema-registry, provider or worker metadata. See the
 [Pre-Interaction Brief guide](pre-interaction-brief.md).
 
+## Conversation threads and memory
+
+| Method  | Path                                                       | Purpose                                                           |
+| ------- | ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| `GET`   | `/api/v1/conversation-threads`                             | List tenant threads and ranked unassigned-conversation hints      |
+| `POST`  | `/api/v1/conversation-threads`                             | Create a thread; initial assignment requires its expected version |
+| `PATCH` | `/api/v1/conversation-threads/{threadId}`                  | Update thread metadata with an expected version                   |
+| `GET`   | `/api/v1/interactions/{interactionId}/thread-assignment`   | Read the confirmed assignment and non-binding suggestions         |
+| `PUT`   | `/api/v1/interactions/{interactionId}/thread-assignment`   | Confirm, correct or clear grouping with an expected version       |
+| `GET`   | `/api/v1/interactions/{interactionId}/conversation-memory` | Read separate current and cumulative framework coverage           |
+
+The active organisation is always server-derived. Company compatibility is resolved
+from the Interaction, linked Opportunity and linked Person; conflicting relationships
+fail closed. Company and participant overlap can rank suggestions but never
+auto-assigns an Interaction. Assignment versions remain monotonic after clearing, and
+`expectedAssignmentLockVersion` is required when `initialInteractionId` is supplied
+to thread creation. A cumulative projection
+requires a confirmed thread and includes validated snapshots from completed,
+non-deleted Interactions in that thread only. It retains source conversation dates,
+conflicts and staleness and never reads private live/enhanced notes. Cross-tenant
+threads and Interactions remain hidden, and corrections append metadata-only audit
+events.
+
 ## Document and email evidence
 
 All routes require the trusted active organisation; callers never supply an

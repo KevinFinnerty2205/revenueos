@@ -334,6 +334,7 @@ describe("MeetingIntelligenceWorkspace", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it("renders one ordered workspace and prevents duplicate generation submissions", async () => {
@@ -1094,6 +1095,136 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(
       screen.queryByRole("button", { name: /send/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("blocks unowned browser drafts and owner-tags every newly saved draft", async () => {
+    const draftKey = "revenueos:follow-up-draft:meeting-1";
+    window.localStorage.setItem(
+      draftKey,
+      JSON.stringify({ draft: "Another user's private wording." }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          String(input).endsWith("/api/v1/me")
+            ? jsonResponse({
+                user: {
+                  id: "user-1",
+                  externalAuthId: "user_dev_001",
+                  displayName: "Alex Morgan",
+                  email: "alex@example.test",
+                },
+                organisation: {
+                  id: "organisation-1",
+                  name: "Example Revenue Team",
+                  slug: "example-revenue-team",
+                },
+                role: "member",
+                authMode: "mock",
+                requestId: "request-1",
+              })
+            : jsonResponse(completedWorkspace()),
+        ),
+      ),
+    );
+
+    const first = render(
+      <MeetingIntelligenceWorkspace meetingId="meeting-1" />,
+    );
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    expect(draft).not.toHaveValue("Another user's private wording.");
+    expect((draft as HTMLTextAreaElement).value).toContain(
+      "Subject: Pilot next steps",
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Verify and load browser draft",
+      }),
+    );
+    expect(await screen.findByText(/owner cannot be verified/i)).toBeVisible();
+    first.unmount();
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-2" />);
+    const newDraft = await screen.findByLabelText("Editable follow-up draft");
+    fireEvent.change(newDraft, {
+      target: { value: "My reviewed wording." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          String(
+            window.localStorage.getItem("revenueos:follow-up-draft:meeting-2"),
+          ),
+        ),
+      ).toEqual({
+        draft: "My reviewed wording.",
+        approved: false,
+        ownerUserId: "user-1",
+      }),
+    );
+  });
+
+  it("offers regenerated follow-up text without replacing the private draft", async () => {
+    let intelligence = completedWorkspace();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/personal-workspace")) {
+        return Promise.resolve(
+          jsonResponse({
+            exists: true,
+            ownerUserId: "user-1",
+            lockVersion: 2,
+            enhancedNotes: null,
+            followUpDraft: "Keep my reviewed private wording.",
+            followUpReviewed: true,
+            generationFingerprint: null,
+            importedFromBrowserAt: null,
+            updatedAt: "2026-10-31T00:00:00Z",
+          }),
+        );
+      }
+      if (init?.method === "POST" && url.endsWith("/follow-up-email")) {
+        intelligence = {
+          ...completedWorkspace(),
+          followUpEmail: {
+            ...completedWorkspace().followUpEmail,
+            content: {
+              ...emailContent,
+              subject: "Regenerated next steps",
+            },
+          },
+        };
+        return Promise.resolve(jsonResponse({ accepted: true }, 202));
+      }
+      return Promise.resolve(jsonResponse(intelligence));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-1"
+        interactionId="interaction-1"
+      />,
+    );
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    await waitFor(() =>
+      expect(draft).toHaveValue("Keep my reviewed private wording."),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+
+    const applyRegeneration = await screen.findByRole("button", {
+      name: "Use regenerated draft",
+    });
+    expect(draft).toHaveValue("Keep my reviewed private wording.");
+    fireEvent.click(applyRegeneration);
+    expect((draft as HTMLTextAreaElement).value).toContain(
+      "Regenerated next steps",
+    );
   });
 
   it("aborts an in-flight aggregate request when unmounted", () => {

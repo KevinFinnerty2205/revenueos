@@ -443,7 +443,10 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
           role="tabpanel"
           aria-labelledby="meeting-tab-intelligence"
         >
-          <MeetingIntelligenceWorkspace meetingId={meeting.id} />
+          <MeetingIntelligenceWorkspace
+            meetingId={meeting.id}
+            interactionId={meeting.interactionId}
+          />
         </div>
       ) : null}
 

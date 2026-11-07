@@ -25,6 +25,7 @@ const content: SellingProfileContent = {
       intendedOutcomes: [],
       differentiators: [],
       competitorsAlternatives: [],
+      commonObjections: [],
       approvedProof: [],
       approvedClaims: [],
     },
@@ -93,7 +94,7 @@ describe("SellingProfileSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("New draft")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Company & Selling Profile" }),
+      screen.getByRole("heading", { name: "Company understanding" }),
     ).toBeVisible();
   });
 
@@ -109,7 +110,7 @@ describe("SellingProfileSettings", () => {
     render(<SellingProfileSettings />);
 
     expect(
-      await screen.findByRole("heading", { name: "Company & Selling Profile" }),
+      await screen.findByRole("heading", { name: "Company understanding" }),
     ).toBeVisible();
     expect(
       screen.getByText(/not customer Evidence, prospect research, CRM truth/i),

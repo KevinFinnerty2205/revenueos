@@ -135,6 +135,7 @@ class DebriefService:
         max_questions = self._question_limit(interaction, request.capture_type)
         start_context = await self.repository.normalised_start_context(
             self.tenant.organisation_id,
+            self.tenant.user_id,
             interaction,
         )
         debrief = DebriefSession(
@@ -164,6 +165,14 @@ class DebriefService:
 
     async def get(self, interaction_id: UUID, session_id: UUID) -> DebriefSessionResponse:
         return await self._response(await self._require_session(interaction_id, session_id))
+
+    async def latest(self, interaction_id: UUID) -> DebriefSessionResponse | None:
+        record = await self.repository.latest_session(
+            self.tenant.organisation_id,
+            interaction_id,
+            self.tenant.user_id,
+        )
+        return await self._response(record) if record is not None else None
 
     async def answer(
         self,
@@ -272,6 +281,7 @@ class DebriefService:
         interaction = await self._require_completed_interaction(interaction_id)
         context = await self.repository.normalised_start_context(
             self.tenant.organisation_id,
+            self.tenant.user_id,
             interaction,
             include_reconciliation_text=True,
         )
@@ -576,7 +586,11 @@ class DebriefService:
             interaction_id,
         )
         interaction = await self._require_completed_interaction(interaction_id)
-        context = await self.repository.normalised_start_context(self.tenant.organisation_id, interaction)
+        context = await self.repository.normalised_start_context(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            interaction,
+        )
         capture_type = cast(DebriefCaptureType, record.capture_session.capture_type)
         question_count = debrief.question_count
         max_questions = debrief.max_questions

@@ -1,6 +1,10 @@
 "use client";
 
-import type { CallOutcome, Interaction } from "@revenueos/shared";
+import type {
+  CallOutcome,
+  ConversationWorkspaceResponse,
+  Interaction,
+} from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -13,6 +17,9 @@ import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { RecordingFoundation } from "@/components/recording-foundation";
 import { ImportedCallRecording } from "@/components/imported-call-recording";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
+import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
+import { ConversationMemory } from "@/components/conversation-memory";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 export function InteractionDetail({
   interactionId,
@@ -25,6 +32,21 @@ export function InteractionDetail({
   const [completing, setCompleting] = useState(false);
   const [starting, setStarting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
+  const personalWorkspace = useConversationWorkspace({ interactionId });
+  const liveNotesStatus = personalWorkspace.error
+    ? personalWorkspace.error
+    : personalWorkspace.loading
+      ? "Loading your private notes…"
+      : personalWorkspace.saveState === "saving"
+        ? "Saving private notes…"
+        : personalWorkspace.saveState === "saved"
+          ? "Private notes saved."
+          : personalWorkspace.saveState === "conflict"
+            ? "These notes changed in another session. Your local text is still visible; reload before saving again."
+            : personalWorkspace.saveState === "failed"
+              ? "Private notes could not be saved. Your local text is still visible."
+              : "Private to you until you deliberately include something in review.";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -45,7 +67,7 @@ export function InteractionDetail({
           setError(
             requestError instanceof Error
               ? requestError.message
-              : "The interaction could not be loaded.",
+              : "The conversation could not be loaded.",
           );
         })
         .finally(() => {
@@ -72,7 +94,7 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be started.",
+          : "The conversation could not be started.",
       );
     } finally {
       setStarting(false);
@@ -96,20 +118,26 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be completed.",
+          : "The conversation could not be completed.",
       );
     } finally {
       setCompleting(false);
     }
   }
 
+  async function applyGeneratedVersion() {
+    if (await personalWorkspace.applyGeneratedVersion()) {
+      setWorkspaceRefreshKey((current) => current + 1);
+    }
+  }
+
   if (loading) {
-    return <p role="status">Loading interaction…</p>;
+    return <p role="status">Loading conversation…</p>;
   }
   if (!interaction) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
-        <p role="alert">{error ?? "The interaction was not found."}</p>
+        <p role="alert">{error ?? "The conversation was not found."}</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
@@ -118,8 +146,8 @@ export function InteractionDetail({
           >
             Try again
           </button>
-          <Link href="/interactions" className="secondary-button">
-            Return to Interactions
+          <Link href="/conversations" className="secondary-button">
+            Return to conversations
           </Link>
         </div>
       </div>
@@ -138,9 +166,9 @@ export function InteractionDetail({
     <section aria-labelledby="interaction-detail-title">
       <Link
         className="text-sm font-bold text-brand-secondary hover:underline"
-        href="/interactions"
+        href="/conversations"
       >
-        Back to interactions
+        Back to conversations
       </Link>
       <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
@@ -149,7 +177,7 @@ export function InteractionDetail({
           </span>
           <span
             role="status"
-            aria-label="Interaction lifecycle status"
+            aria-label="Conversation lifecycle status"
             className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
           >
             {humanise(interaction.lifecycleStatus)}
@@ -247,7 +275,7 @@ export function InteractionDetail({
             className={
               isActive || isCompleted ? "secondary-button" : "primary-button"
             }
-            href={`/interactions/${interaction.id}/companion`}
+            href={`/conversations/${interaction.id}/workspace`}
           >
             {companionLabel}
           </Link>
@@ -345,13 +373,13 @@ export function InteractionDetail({
               </button>
             </>
           ) : null}
-          {interaction.meetingId ? (
-            <Link
-              className={isCompleted ? "primary-button" : "secondary-button"}
-              href={`/meetings/${interaction.meetingId}`}
+          {isCompleted ? (
+            <a
+              className="primary-button"
+              href={interaction.meetingId ? "#enhanced-notes" : "#debrief"}
             >
-              Review meeting intelligence
-            </Link>
+              Review notes and follow-up
+            </a>
           ) : null}
           {interaction.interactionType === "online_meeting" &&
           interaction.meetingUrl ? (
@@ -365,6 +393,12 @@ export function InteractionDetail({
             </a>
           ) : null}
         </div>
+      </div>
+      <div className="mt-6" id="conversation-memory">
+        <ConversationMemory
+          interactionId={interaction.id}
+          companyId={interaction.companyId}
+        />
       </div>
       {!isCompleted ? (
         <div className="mt-6" id="preparation">
@@ -382,8 +416,29 @@ export function InteractionDetail({
             <PostInteractionCapture
               interactionId={interaction.id}
               interactionType={interaction.interactionType}
+              restoreLatest
+              workspaceRefreshKey={workspaceRefreshKey}
             />
           </BetaFeatureGate>
+        </div>
+      ) : null}
+      {isCompleted && interaction.meetingId ? (
+        <div className="mt-6 scroll-mt-6" id="enhanced-notes">
+          {personalWorkspace.workspace ? (
+            <PostConversationDraftStatus
+              workspace={personalWorkspace.workspace}
+              actionState={personalWorkspace.generationActionState}
+              actionError={personalWorkspace.generationError}
+              onRetry={() => void personalWorkspace.retryGeneration()}
+              onApply={() => void applyGeneratedVersion()}
+              onReload={() => void personalWorkspace.reload()}
+            />
+          ) : null}
+          <MeetingIntelligenceWorkspace
+            meetingId={interaction.meetingId}
+            interactionId={interaction.id}
+            workspaceRefreshKey={workspaceRefreshKey}
+          />
         </div>
       ) : null}
       {!isCompleted ? (
@@ -397,10 +452,11 @@ export function InteractionDetail({
                 Use your meeting platform
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Oryntela remains passive while the meeting runs. It does not
-                join, record system audio, monitor the browser or run a meeting
-                bot. End the meeting here, then add an authorised recording or
-                transcript, or report what happened while it is fresh.
+                Oryntela never joins the meeting or runs a meeting bot. In
+                Companion, you can deliberately share a meeting tab or screen
+                with audio and add your microphone, choose microphone only, or
+                continue without recording. Nothing starts in the background,
+                and display video is never recorded or uploaded.
               </p>
             </section>
           ) : interaction.interactionType === "phone_call" ? (
@@ -455,6 +511,19 @@ export function InteractionDetail({
                   interactionId={interaction.id}
                   interactionType={interaction.interactionType}
                   lifecycleStatus={interaction.lifecycleStatus}
+                  liveNotes={personalWorkspace.values.liveNotes}
+                  onLiveNotesChange={(value) =>
+                    personalWorkspace.setValues((current) => ({
+                      ...current,
+                      liveNotes: value,
+                    }))
+                  }
+                  onSaveLiveNotes={() => void personalWorkspace.save()}
+                  liveNotesSaveDisabled={
+                    personalWorkspace.loading ||
+                    personalWorkspace.saveState === "saving"
+                  }
+                  liveNotesStatus={liveNotesStatus}
                 />
               </BetaFeatureGate>
             )}
@@ -471,6 +540,112 @@ export function InteractionDetail({
             </div>
           ) : null}
         </details>
+      ) : null}
+    </section>
+  );
+}
+
+export function PostConversationDraftStatus({
+  workspace,
+  actionState,
+  actionError,
+  onRetry,
+  onApply,
+  onReload,
+}: {
+  workspace: ConversationWorkspaceResponse;
+  actionState: "idle" | "retrying" | "applying" | "failed";
+  actionError: string | null;
+  onRetry: () => void;
+  onApply: () => void;
+  onReload: () => void;
+}) {
+  if (workspace.generationState === "not_started") return null;
+  const version = workspace.generationTranscriptVersion;
+  const versionLabel =
+    version === null ? "" : ` for transcript version ${version}`;
+  const actionPending =
+    actionState === "retrying" || actionState === "applying";
+
+  return (
+    <section
+      className="mb-4 rounded-2xl border border-brand-primary/20 bg-brand-primary/5 p-4"
+      aria-labelledby="private-draft-status-title"
+    >
+      <h2
+        id="private-draft-status-title"
+        className="text-sm font-bold text-slate-950"
+      >
+        Private post-conversation draft
+      </h2>
+      {workspace.generationState === "pending" ||
+      workspace.generationState === "processing" ? (
+        <>
+          <p className="mt-2 text-sm leading-6 text-slate-700" role="status">
+            {workspace.generationState === "pending" ? "Pending" : "Preparing"}
+            {versionLabel}. Oryntela is building enhanced notes, decisions,
+            suggested actions and a follow-up draft. The result stays private to
+            you and is never sent or shared automatically.
+          </p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            onClick={onReload}
+          >
+            Check status
+          </button>
+        </>
+      ) : null}
+      {workspace.generationState === "failed" ? (
+        <>
+          <p className="mt-2 text-sm leading-6 text-red-800" role="alert">
+            The private draft{versionLabel} could not be prepared. Your notes
+            and edited drafts were preserved.
+          </p>
+          {workspace.generationRetryAvailable ? (
+            <button
+              type="button"
+              className="secondary-button mt-3"
+              disabled={actionPending}
+              onClick={onRetry}
+            >
+              {actionState === "retrying" ? "Retrying…" : "Retry private draft"}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      {workspace.generationState === "ready" ? (
+        <>
+          <p className="mt-2 text-sm leading-6 text-slate-700" role="status">
+            {workspace.generationUpdateAvailable
+              ? `A newer private draft${versionLabel} is ready. Your edited enhanced notes and follow-up were preserved.`
+              : `Your private draft${versionLabel} is ready.`}{" "}
+            The draft is never sent or shared automatically.
+          </p>
+          {workspace.generationUpdateAvailable && workspace.generationId ? (
+            <>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                Choosing this version replaces enhanced notes and the follow-up
+                draft, but keeps your original live notes.
+              </p>
+              <button
+                type="button"
+                className="secondary-button mt-3"
+                disabled={actionPending}
+                onClick={onApply}
+              >
+                {actionState === "applying"
+                  ? "Using version…"
+                  : `Use generated version ${version ?? ""}`}
+              </button>
+            </>
+          ) : null}
+        </>
+      ) : null}
+      {actionError ? (
+        <p className="mt-3 text-sm text-red-800" role="alert">
+          {actionError}
+        </p>
       ) : null}
     </section>
   );

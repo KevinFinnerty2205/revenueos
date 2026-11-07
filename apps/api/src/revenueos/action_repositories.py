@@ -279,6 +279,7 @@ class ActionRepository:
                     AIArtifact.id == reference.source_id,
                     AIArtifact.superseded_at.is_(None),
                     AIJob.status == "completed",
+                    AIJob.automatic_draft_generation_id.is_(None),
                     Transcript.deleted_at.is_(None),
                     Meeting.opportunity_id == opportunity_id,
                     Meeting.status == "completed",

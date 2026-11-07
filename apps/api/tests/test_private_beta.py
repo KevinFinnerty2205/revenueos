@@ -65,6 +65,7 @@ from revenueos.models import (
     CaptureSession,
     CommercialStateEvent,
     Company,
+    ConversationBriefingOutbox,
     CRMImportBatch,
     CRMImportRow,
     CRMRecordMerge,
@@ -238,7 +239,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0065_campaign_trigger_guard"
+    assert EXPECTED_MIGRATION_HEAD == "0077_spin_methodology"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1043,6 +1044,7 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
     target_deal_room_link_id = uuid.uuid4()
     target_deal_room_audit_id = uuid.uuid4()
     target_connection_id = uuid.uuid4()
+    target_briefing_outbox_id = uuid.uuid4()
     target_provider_sync_state_id = uuid.uuid4()
     target_integration_audit_id = uuid.uuid4()
     target_provisioning_event_id = uuid.uuid4()
@@ -1193,6 +1195,30 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                 )
             )
             session.add(
+                ConversationBriefingOutbox(
+                    id=target_briefing_outbox_id,
+                    organisation_id=target_organisation_id,
+                    user_id=PRIMARY_USER_ID,
+                    interaction_id=None,
+                    kind="morning_digest",
+                    status="sent",
+                    deduplication_key="deletion-briefing-outbox",
+                    source_fingerprint="f" * 64,
+                    subject="Synthetic deletion briefing",
+                    body_text="Synthetic private briefing content.",
+                    href="/",
+                    prepared_for_at=now,
+                    delivery_timezone="UTC",
+                    operation_key="f" * 64,
+                    attempt_count=1,
+                    max_attempts=3,
+                    connection_id=target_connection_id,
+                    submission_started_at=now,
+                    provider_message_id="synthetic-provider-message",
+                    sent_at=now,
+                )
+            )
+            session.add(
                 ProviderSyncState(
                     id=target_provider_sync_state_id,
                     organisation_id=target_organisation_id,
@@ -1314,6 +1340,7 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
             assert await session.get(DealRoomAuditEvent, target_deal_room_audit_id) is None
             assert await DealRoomRepository(session).public_projection("d" * 64, datetime.now(UTC)) is None
             assert await session.get(IntegrationConnection, target_connection_id) is None
+            assert await session.get(ConversationBriefingOutbox, target_briefing_outbox_id) is None
             assert await session.get(ProviderSyncState, target_provider_sync_state_id) is None
             assert await session.get(IntegrationAuditEvent, target_integration_audit_id) is None
             assert await session.get(OperatorProvisioningEvent, target_provisioning_event_id) is None
@@ -1641,7 +1668,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 39
+        assert payload["exportVersion"] == 42
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1774,7 +1801,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 39
+        assert download.json()["exportVersion"] == 42
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
         assert download.headers["Content-Disposition"] == (f'attachment; filename="oryntela-export-{request_id}.json"')

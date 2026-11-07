@@ -217,6 +217,18 @@ def test_ai_debrief_is_bounded_idempotent_reviewed_and_source_aware(client: Test
     assert accepted["validationState"] == "verified"
     assert accepted["acceptedEvidenceId"] is not None
 
+    latest = client.get(f"/api/v1/interactions/{interaction_id}/debrief/latest")
+    assert latest.status_code == 200
+    assert latest.json()["id"] == session_id
+    assert latest.json()["turns"][0]["answerText"] == answer_text
+
+    searched = client.get(
+        "/api/v1/interactions",
+        params={"search": "confirmed economic buyer"},
+    )
+    assert searched.status_code == 200, searched.text
+    assert [item["id"] for item in searched.json()["items"]] == [interaction_id]
+
     replacement_contact_id = str(create_contact(client, str(create_company(client, name="Unrelated")["id"]))["id"])
     locked_association = client.patch(
         f"/api/v1/interactions/{interaction_id}",
@@ -678,6 +690,7 @@ def test_debrief_fails_closed_for_lifecycle_feature_and_tenant(
     started = _start(client, interaction_id, key="tenant-start")
     app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
     assert client.get(f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}").status_code == 404
+    assert client.get(f"/api/v1/interactions/{interaction_id}/debrief/latest").json() is None
     assert client.get(f"/api/v1/accounts/{company_id}/brain/reported-interactions").status_code == 404
     app.dependency_overrides.pop(get_current_user)
 

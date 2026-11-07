@@ -13,6 +13,7 @@ from revenueos.models import (
     ActionProposal,
     ActionProposalVersion,
     AIArtifact,
+    AIJob,
     BetaSystemEvent,
     Company,
     Evidence,
@@ -223,10 +224,19 @@ class AskRepository:
             artifact.id: artifact
             for artifact in (
                 await self.session.scalars(
-                    select(AIArtifact).where(
+                    select(AIArtifact)
+                    .join(
+                        AIJob,
+                        and_(
+                            AIJob.organisation_id == AIArtifact.organisation_id,
+                            AIJob.id == AIArtifact.job_id,
+                        ),
+                    )
+                    .where(
                         AIArtifact.organisation_id == organisation_id,
                         AIArtifact.id.in_(artifact_ids),
                         AIArtifact.superseded_at.is_(None),
+                        AIJob.automatic_draft_generation_id.is_(None),
                     )
                 )
             ).all()

@@ -37,13 +37,21 @@ from revenueos.models import (
     Transcript,
     TranscriptVersion,
 )
+from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
 from revenueos.tenant import TenantContext
 
 
 class _MeetingDomainService:
-    def __init__(self, session: AsyncSession, tenant: TenantContext) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        tenant: TenantContext,
+        *,
+        progressive_runtime: ProgressiveTranscriptionRegistry | None = None,
+    ) -> None:
         self.repository = MeetingRepository(session)
         self.tenant = tenant
+        self.progressive_runtime = progressive_runtime
 
     async def _get_meeting(self, meeting_id: UUID) -> Meeting:
         meeting = await self.repository.get_meeting(self.tenant.organisation_id, meeting_id)
@@ -442,7 +450,13 @@ class MeetingService(_MeetingDomainService):
                 changed_fields=[*values, "updated_by"],
             )
         )
+        retire_progressive_sessions = interaction.lifecycle_status == "cancelled" and "status" in values
         await self._commit(meeting)
+        if retire_progressive_sessions and self.progressive_runtime is not None:
+            await self.progressive_runtime.retire_interaction_sessions(
+                self.tenant.organisation_id,
+                interaction.id,
+            )
         return meeting
 
     async def delete_meeting(self, meeting_id: UUID) -> None:
@@ -519,6 +533,11 @@ class MeetingService(_MeetingDomainService):
             )
         )
         await self._commit()
+        if self.progressive_runtime is not None:
+            await self.progressive_runtime.retire_interaction_sessions(
+                self.tenant.organisation_id,
+                interaction.id,
+            )
 
     async def list_history(self, meeting_id: UUID) -> list[MeetingAuditEvent]:
         await self._get_meeting(meeting_id)

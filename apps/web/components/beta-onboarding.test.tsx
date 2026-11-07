@@ -30,7 +30,7 @@ describe("BetaOnboarding", () => {
       }),
     ).toBeVisible();
     expect(screen.getByText(/prepare, capture what happened/i)).toBeVisible();
-    expect(screen.getByText("Step 1 of 5")).toBeVisible();
+    expect(screen.getByText("Step 1 of 6")).toBeVisible();
     expect(
       screen.queryByText(/generate meeting intelligence/i),
     ).not.toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("BetaOnboarding", () => {
     ).toHaveAttribute("href", "/dashboard");
   });
 
-  it("teaches the connected customer journey in the existing five steps", async () => {
+  it("teaches company knowledge before adding a conversation", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => response({ currentStep: 2, completed: false })),
@@ -56,13 +56,13 @@ describe("BetaOnboarding", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Create the customer context",
+        name: "Add your company knowledge",
       }),
     ).toBeVisible();
-    expect(screen.getByText(/Account, add the people involved/i)).toBeVisible();
-    expect(screen.getByText(/create the Opportunity/i)).toBeVisible();
+    expect(screen.getByText(/company website/i)).toBeVisible();
+    expect(screen.getByText(/approved supporting text/i)).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Create an Account" }),
-    ).toHaveAttribute("href", "/companies/new");
+      screen.getByRole("link", { name: "Open Company Knowledge" }),
+    ).toHaveAttribute("href", "/knowledge");
   });
 });

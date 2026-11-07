@@ -226,7 +226,7 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
     },
   );
 
-  await page.goto(`/interactions/${interactionId}/companion`);
+  await page.goto(`/conversations/${interactionId}/workspace`);
   await expect(page.getByText("Live Intelligence is available")).toBeVisible();
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page
@@ -236,6 +236,10 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
 
   const companion = page.getByRole("region", { name: "Live Companion" });
   await expect(companion.getByText("Provisional · needs review")).toBeVisible();
+  await expect(companion.getByText("Suggested next question")).toBeVisible();
+  await expect(
+    companion.getByText(/Who owns security approval/).first(),
+  ).toBeVisible();
   await expect(
     companion.getByText("Agree the rollout plan. — Possibly addressed"),
   ).toBeVisible();

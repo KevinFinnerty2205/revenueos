@@ -405,7 +405,7 @@ test("shows an explainable MEDDPICC deal view on desktop and mobile", async ({
   await page.goto(`/opportunities/${opportunityId}`);
 
   await expect(
-    page.getByRole("heading", { name: "Sales Methodology" }),
+    page.getByRole("heading", { name: "Framework assessment" }),
   ).toBeVisible();
   await expect(
     page.getByText(/without scoring or blocking deal stages/i),
@@ -450,7 +450,7 @@ test("shows an explainable MEDDPICC deal view on desktop and mobile", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Sales Methodology" }),
+    page.getByRole("heading", { name: "Framework assessment" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "View all 5 fields" }),
@@ -689,7 +689,7 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
       .getByText("Unknown", { exact: true }),
   ).toBeVisible();
 
-  await page.goto("/interactions/interaction-methodology");
+  await page.goto("/conversations/interaction-methodology");
   await expect(
     page.getByText("Who ultimately owns commercial approval for this project?"),
   ).toBeVisible();
@@ -702,7 +702,7 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
   await page.getByRole("button", { name: "Start call" }).click();
   await page.getByRole("button", { name: "End connected call" }).click();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(
     page.getByText("Did you establish who owns final commercial approval?"),
   ).toBeVisible();
@@ -903,7 +903,7 @@ test("admin creates and selects bounded custom methodology without JSON or rules
       json: { code: "not_found", message: "Synthetic route not found." },
     });
   });
-  await page.goto("/settings");
+  await page.goto("/frameworks");
 
   await page.getByText("Custom methodology builder", { exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Mutual plan");
@@ -1074,7 +1074,7 @@ test("switching BANT to MEDDPICC keeps the historical evidence-backed view", asy
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/frameworks");
   const meddpiccCard = page
     .locator("div.rounded-2xl")
     .filter({ hasText: "MEDDPICC" });

@@ -1,6 +1,68 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { InteractionDetail } from "@/components/interaction-detail";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  InteractionDetail,
+  PostConversationDraftStatus,
+} from "@/components/interaction-detail";
+
+vi.mock("@/components/conversation-memory", () => ({
+  ConversationMemory: () => <div>Conversation memory</div>,
+}));
+
+const conversationWorkspaceMock = vi.hoisted(() => ({
+  use: vi.fn(),
+}));
+
+vi.mock("@/lib/use-conversation-workspace", () => ({
+  useConversationWorkspace: conversationWorkspaceMock.use,
+}));
+
+vi.mock("@/components/meeting-intelligence-workspace", () => ({
+  MeetingIntelligenceWorkspace: ({
+    workspaceRefreshKey = 0,
+  }: {
+    workspaceRefreshKey?: number;
+  }) => (
+    <textarea
+      aria-label="Visible private follow-up editor"
+      readOnly
+      value={
+        workspaceRefreshKey === 0
+          ? "Edited follow-up"
+          : "Corrected private follow-up"
+      }
+    />
+  ),
+}));
+
+vi.mock("@/components/online-meeting-capture", () => ({
+  OnlineMeetingCapture: () => <div>Online meeting capture</div>,
+}));
+
+function workspaceController(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    workspace: null,
+    values: {
+      liveNotes: "",
+      enhancedNotes: "",
+      followUpDraft: "",
+      followUpReviewed: false,
+    },
+    setValues: vi.fn(),
+    loading: false,
+    saveState: "idle",
+    error: null,
+    generationActionState: "idle",
+    generationError: null,
+    save: vi.fn(() => Promise.resolve(true)),
+    retryGeneration: vi.fn(() => Promise.resolve(true)),
+    applyGeneratedVersion: vi.fn(() => Promise.resolve(false)),
+    reload: vi.fn(() => Promise.resolve()),
+    ...overrides,
+  };
+}
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -29,8 +91,35 @@ const interaction = {
   updatedAt: "2026-07-26T00:00:00Z",
 };
 
+const generatedWorkspace = {
+  exists: true,
+  ownerUserId: "user-1",
+  lockVersion: 3,
+  liveNotes: "Original live notes",
+  enhancedNotes: "Edited enhanced notes",
+  followUpDraft: "Edited follow-up",
+  followUpReviewed: false,
+  generationFingerprint: "a".repeat(64),
+  generationState: "ready" as const,
+  generationId: "generation-2",
+  generationTranscriptVersion: 2,
+  generationFailureCode: null,
+  generationRetryAvailable: false,
+  generationUpdateAvailable: true,
+  generationCompletedAt: "2026-11-01T00:00:00Z",
+  importedFromBrowserAt: null,
+  updatedAt: "2026-11-01T00:00:00Z",
+};
+
 describe("InteractionDetail", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    conversationWorkspaceMock.use.mockReturnValue(workspaceController());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    conversationWorkspaceMock.use.mockReset();
+  });
 
   it("completes a planned interaction and keeps Meeting Intelligence available", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -54,16 +143,18 @@ describe("InteractionDetail", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<InteractionDetail interactionId="interaction-1" />);
-    expect(screen.getByRole("status")).toHaveTextContent("Loading interaction");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading conversation",
+    );
     expect(
       await screen.findByRole("heading", { name: "Acme discovery" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("status", { name: "Interaction lifecycle status" }),
+      screen.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveTextContent("Planned");
     expect(
-      screen.getByRole("link", { name: "Review meeting intelligence" }),
-    ).toHaveAttribute("href", "/meetings/meeting-1");
+      screen.getByRole("link", { name: "Prepare and start" }),
+    ).toHaveAttribute("href", "/conversations/interaction-1/workspace");
     fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
     expect(
       await screen.findByRole("button", { name: "End meeting" }),
@@ -75,7 +166,7 @@ describe("InteractionDetail", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("status", { name: "Interaction lifecycle status" }),
+      screen.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveTextContent("Completed");
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/interactions/interaction-1/complete"),
@@ -155,7 +246,7 @@ describe("InteractionDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "End connected call" }));
     await waitFor(() =>
       expect(
-        screen.getByRole("status", { name: "Interaction lifecycle status" }),
+        screen.getByRole("status", { name: "Conversation lifecycle status" }),
       ).toHaveTextContent("Completed"),
     );
     const completion = fetchMock.mock.calls.find(([input]) =>
@@ -164,5 +255,132 @@ describe("InteractionDetail", () => {
     expect(JSON.parse(String(completion?.[1]?.body))).toEqual({
       callOutcome: "connected",
     });
+  });
+
+  it("refreshes the visible private editor after applying a generated version", async () => {
+    const applyGeneratedVersion = vi.fn(() => Promise.resolve(true));
+    conversationWorkspaceMock.use.mockReturnValue(
+      workspaceController({
+        workspace: generatedWorkspace,
+        values: {
+          liveNotes: generatedWorkspace.liveNotes,
+          enhancedNotes: generatedWorkspace.enhancedNotes,
+          followUpDraft: generatedWorkspace.followUpDraft,
+          followUpReviewed: false,
+        },
+        applyGeneratedVersion,
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({
+            ...interaction,
+            lifecycleStatus: "completed",
+            actualEndAt: "2026-08-01T01:00:00Z",
+          }),
+        ),
+      ),
+    );
+
+    render(<InteractionDetail interactionId="interaction-1" />);
+
+    expect(
+      await screen.findByRole("textbox", {
+        name: "Visible private follow-up editor",
+      }),
+    ).toHaveValue("Edited follow-up");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use generated version 2" }),
+    );
+
+    await waitFor(() => expect(applyGeneratedVersion).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", {
+          name: "Visible private follow-up editor",
+        }),
+      ).toHaveValue("Corrected private follow-up"),
+    );
+    expect(generatedWorkspace.liveNotes).toBe("Original live notes");
+  });
+});
+
+describe("PostConversationDraftStatus", () => {
+  it("shows pending work as private and lets the user check status", () => {
+    const reload = vi.fn();
+    render(
+      <PostConversationDraftStatus
+        workspace={{
+          ...generatedWorkspace,
+          generationState: "processing",
+          generationUpdateAvailable: false,
+        }}
+        actionState="idle"
+        actionError={null}
+        onRetry={vi.fn()}
+        onApply={vi.fn()}
+        onReload={reload}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /stays private to you and is never sent or shared automatically/i,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("offers a retry after a retryable failure", () => {
+    const retry = vi.fn();
+    render(
+      <PostConversationDraftStatus
+        workspace={{
+          ...generatedWorkspace,
+          generationState: "failed",
+          generationRetryAvailable: true,
+          generationUpdateAvailable: false,
+        }}
+        actionState="idle"
+        actionError={null}
+        onRetry={retry}
+        onApply={vi.fn()}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /edited drafts were preserved/i,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry private draft" }),
+    );
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("requires an explicit choice before replacing draft fields with a late version", () => {
+    const apply = vi.fn();
+    render(
+      <PostConversationDraftStatus
+        workspace={generatedWorkspace}
+        actionState="idle"
+        actionError={null}
+        onRetry={vi.fn()}
+        onApply={apply}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /edited enhanced notes.*preserved/i,
+    );
+    expect(
+      screen.getByText(/keeps your original live notes/i),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use generated version 2" }),
+    );
+    expect(apply).toHaveBeenCalledOnce();
   });
 });

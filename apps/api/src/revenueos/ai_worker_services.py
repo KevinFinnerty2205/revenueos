@@ -4,11 +4,13 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -77,9 +79,17 @@ from revenueos.ai_prompt_registry import (
 from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIArtifactService
 from revenueos.ai_worker_repositories import AIWorkerRepository
+from revenueos.automatic_draft_authority import (
+    automatic_draft_job_origin_audit_is_valid,
+    automatic_draft_processing_authority_is_current,
+    cancel_automatic_draft_generation,
+)
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
-from revenueos.database import set_tenant_database_context
+from revenueos.database import (
+    set_private_user_database_context,
+    set_tenant_database_context,
+)
 from revenueos.domain import (
     AIArtifactType,
     AIJobStatus,
@@ -88,7 +98,16 @@ from revenueos.domain import (
     MeetingAuditEntityType,
 )
 from revenueos.errors import PublicAPIError
-from revenueos.models import AIJob, MeetingAuditEvent
+from revenueos.models import (
+    AIJob,
+    ConversationDraftGeneration,
+    Interaction,
+    MeetingAuditEvent,
+    OrganisationMembership,
+    Transcript,
+    TranscriptVersion,
+    User,
+)
 from revenueos.revenue_brain import REQUIRED_ARTIFACT_TYPES, RevenueBrainService
 from revenueos.tenant import TenantContext
 
@@ -96,6 +115,13 @@ logger = logging.getLogger("revenueos.ai_worker")
 Clock = Callable[[], datetime]
 DISCOVERY_LIMIT = 1000
 TRANSACTION_BATCH_LIMIT = 100
+
+
+@dataclass(frozen=True, slots=True)
+class AutomaticDraftJobOrigin:
+    generation_id: UUID
+    user_id: UUID
+    audit_is_valid: bool
 
 
 def calculate_retry_delay_seconds(
@@ -135,6 +161,20 @@ class AIWorkerService:
         self._clock = clock or (lambda: datetime.now(UTC))
 
     async def _reserve_provider_request(self, job: ClaimedAIJob) -> None:
+        try:
+            authority_is_current = await self._automatic_draft_execution_authority_is_current(job)
+        except SQLAlchemyError as exc:
+            raise WorkerExecutionError(
+                "automatic_draft_authority_check_unavailable",
+                "Automatic private draft authority could not be verified before provider execution.",
+                retryable=True,
+            ) from exc
+        if not authority_is_current:
+            raise WorkerExecutionError(
+                "automatic_draft_authority_revoked",
+                "Automatic private draft generation was cancelled because processing authority is no longer current.",
+                retryable=False,
+            )
         if self._settings.ai_provider_name != "openai":
             return
         async with self._session_factory() as session, session.begin():
@@ -149,6 +189,160 @@ class AIWorkerService:
                 self._settings,
             )
             await service.reserve_provider_request()
+
+    async def _automatic_draft_execution_authority_is_current(
+        self,
+        job: ClaimedAIJob,
+    ) -> bool:
+        now = self._clock()
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            origin = await self._automatic_draft_origin(session, job)
+            if origin is None:
+                return True
+
+            # The immutable database origin selects the private owner scope.
+            # The creation audit is an independent trace that must agree before
+            # provider execution can begin.
+            await set_private_user_database_context(session, origin.user_id)
+            generation = await session.scalar(
+                select(ConversationDraftGeneration)
+                .where(
+                    ConversationDraftGeneration.organisation_id == job.organisation_id,
+                    ConversationDraftGeneration.user_id == origin.user_id,
+                    ConversationDraftGeneration.id == origin.generation_id,
+                )
+                .with_for_update()
+            )
+            source = (
+                await session.scalar(
+                    select(TranscriptVersion).where(
+                        TranscriptVersion.organisation_id == job.organisation_id,
+                        TranscriptVersion.id == generation.transcript_version_id,
+                    )
+                )
+                if generation is not None
+                else None
+            )
+            interaction = (
+                await session.scalar(
+                    select(Interaction).where(
+                        Interaction.organisation_id == job.organisation_id,
+                        Interaction.id == generation.interaction_id,
+                        Interaction.lifecycle_status == "completed",
+                        Interaction.deleted_at.is_(None),
+                    )
+                )
+                if generation is not None
+                else None
+            )
+            current_transcript = (
+                await session.scalar(
+                    select(Transcript).where(
+                        Transcript.organisation_id == job.organisation_id,
+                        Transcript.id == source.transcript_id,
+                        Transcript.deleted_at.is_(None),
+                    )
+                )
+                if source is not None and source.transcript_id is not None
+                else None
+            )
+            membership = await session.scalar(
+                select(OrganisationMembership.user_id).where(
+                    OrganisationMembership.organisation_id == job.organisation_id,
+                    OrganisationMembership.user_id == origin.user_id,
+                    OrganisationMembership.status == "active",
+                )
+            )
+            user = await session.scalar(
+                select(User.id).where(
+                    User.id == origin.user_id,
+                    User.status == "active",
+                )
+            )
+            authority_is_current = (
+                origin.audit_is_valid
+                and generation is not None
+                and source is not None
+                and interaction is not None
+                and current_transcript is not None
+                and membership is not None
+                and user is not None
+                and generation.status in {"pending", "processing"}
+                and generation.user_id == job.requested_by_user_id
+                and generation.meeting_id == job.meeting_id
+                and generation.transcript_version == job.transcript_version
+                and source.status == "final"
+                and source.deleted_at is None
+                and source.meeting_id == job.meeting_id
+                and source.interaction_id == generation.interaction_id
+                and source.transcript_id == job.transcript_id
+                and source.version == job.transcript_version
+                and current_transcript.version == job.transcript_version
+                and await automatic_draft_processing_authority_is_current(
+                    session,
+                    self._settings,
+                    generation,
+                    source,
+                )
+            )
+            if authority_is_current:
+                return True
+
+            affected_jobs = list(
+                await session.scalars(
+                    select(AIJob)
+                    .where(
+                        AIJob.organisation_id == job.organisation_id,
+                        AIJob.automatic_draft_generation_id == origin.generation_id,
+                        AIJob.status.in_((AIJobStatus.PENDING.value, AIJobStatus.RUNNING.value)),
+                    )
+                    .with_for_update()
+                )
+            )
+            for affected_job in affected_jobs:
+                self._cancel(session, affected_job, now)
+                affected_job.last_error_code = "automatic_draft_authority_revoked"
+                affected_job.last_error_message_safe = "Automatic private draft generation was cancelled because processing authority is no longer current."
+            if generation is not None and generation.status in {"pending", "processing"}:
+                cancel_automatic_draft_generation(
+                    generation,
+                    "draft_execution_authority_revoked",
+                    now,
+                )
+
+        logger.warning(
+            "automatic_draft_execution_authority_revoked",
+            extra={
+                **self._log_context_from_claim(job),
+                "generation_id": str(origin.generation_id),
+                "origin_audit_valid": origin.audit_is_valid,
+            },
+        )
+        return False
+
+    @staticmethod
+    async def _automatic_draft_origin(
+        session: AsyncSession,
+        job: ClaimedAIJob,
+    ) -> AutomaticDraftJobOrigin | None:
+        generation_id = job.automatic_draft_generation_id
+        if generation_id is None:
+            return None
+        audit_is_valid = await automatic_draft_job_origin_audit_is_valid(
+            session,
+            organisation_id=job.organisation_id,
+            meeting_id=job.meeting_id,
+            job_id=job.job_id,
+            generation_id=generation_id,
+            requested_by_user_id=job.requested_by_user_id,
+            transcript_version=job.transcript_version,
+        )
+        return AutomaticDraftJobOrigin(
+            generation_id=generation_id,
+            user_id=job.requested_by_user_id,
+            audit_is_valid=audit_is_valid,
+        )
 
     async def discover_eligible_organisations(self) -> list[UUID]:
         async with self._session_factory() as session:
@@ -276,6 +470,21 @@ class AIWorkerService:
             )
 
     async def execute_claimed_job(self, job: ClaimedAIJob) -> None:
+        try:
+            authority_is_current = await self._automatic_draft_execution_authority_is_current(job)
+        except SQLAlchemyError:
+            await self._record_failure(
+                job,
+                WorkerExecutionError(
+                    "automatic_draft_authority_check_unavailable",
+                    "Automatic private draft authority could not be verified before provider execution.",
+                    retryable=True,
+                ),
+                processing_duration_ms=0,
+            )
+            return
+        if not authority_is_current:
+            return
         try:
             executor = self._executors.get(job.job_type)
         except WorkerExecutionError as exc:
@@ -1047,6 +1256,7 @@ class AIWorkerService:
                 job.organisation_id,
                 job.meeting_id,
                 job.transcript_version,
+                automatic_draft_generation_id=job.automatic_draft_generation_id,
             )
         if audited_transcript_version is not None and audited_transcript_version != job.transcript_version:
             raise WorkerExecutionError(
@@ -1160,7 +1370,44 @@ class AIWorkerService:
                 job.organisation_id,
                 job.meeting_id,
                 job.transcript_version,
+                automatic_draft_generation_id=job.automatic_draft_generation_id,
             )
+            if job.automatic_draft_generation_id is not None:
+                source_job_ids = {artifact.job_id for artifact in artifacts.values()}
+                source_jobs = list(
+                    await session.scalars(
+                        select(AIJob).where(
+                            AIJob.organisation_id == job.organisation_id,
+                            AIJob.id.in_(source_job_ids),
+                            AIJob.automatic_draft_generation_id == job.automatic_draft_generation_id,
+                        )
+                    )
+                )
+                audits_are_valid = len(source_jobs) == len(source_job_ids)
+                for source_job in source_jobs:
+                    if (
+                        source_job.meeting_id != job.meeting_id
+                        or source_job.transcript_id != job.transcript_id
+                        or source_job.transcript_version != job.transcript_version
+                        or source_job.requested_by_user_id != job.requested_by_user_id
+                        or not await automatic_draft_job_origin_audit_is_valid(
+                            session,
+                            organisation_id=source_job.organisation_id,
+                            meeting_id=source_job.meeting_id,
+                            job_id=source_job.id,
+                            generation_id=job.automatic_draft_generation_id,
+                            requested_by_user_id=source_job.requested_by_user_id,
+                            transcript_version=source_job.transcript_version,
+                        )
+                    ):
+                        audits_are_valid = False
+                        break
+                if not audits_are_valid:
+                    raise WorkerExecutionError(
+                        "automatic_draft_source_audit_invalid",
+                        "The automatic private draft sources could not be authorised.",
+                        retryable=False,
+                    )
         if audited_transcript_version is not None and audited_transcript_version != job.transcript_version:
             raise WorkerExecutionError(
                 "follow_up_email_source_outdated",
@@ -1290,7 +1537,11 @@ class AIWorkerService:
                 user_id=job.requested_by_user_id,
                 role="admin",
             )
-            artifact_service = AIArtifactService(session, tenant)
+            artifact_service = AIArtifactService(
+                session,
+                tenant,
+                automatic_draft_generation_id=job.automatic_draft_generation_id,
+            )
             if job.job_type == AIJobType.INFRASTRUCTURE_TEST.value:
                 await artifact_service.prepare_infrastructure_test_artifact(
                     job_id=job.id,
@@ -1722,6 +1973,7 @@ class AIWorkerService:
             attempt_count=job.attempt_count,
             max_attempts=job.max_attempts,
             worker_id=worker_id,
+            automatic_draft_generation_id=job.automatic_draft_generation_id,
         )
 
     @staticmethod

@@ -190,10 +190,15 @@ describe("FaceToFaceCompanion", () => {
     expect(
       screen.getByRole("heading", { name: "No recording or listening" }),
     ).toBeVisible();
+    const liveNotes = screen.getByLabelText("Private live notes");
+    fireEvent.change(liveNotes, {
+      target: { value: "Finance will confirm the signer on Friday." },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Add marker" }));
     fireEvent.click(screen.getByRole("button", { name: "Objection" }));
     expect(await screen.findByText("Objection marked.")).toBeVisible();
+    expect(liveNotes).toHaveValue("Finance will confirm the signer on Friday.");
     fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
     expect(
       await screen.findByRole("heading", {

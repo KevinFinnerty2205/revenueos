@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
+from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.models import (
     BetaSystemEvent,
     CaptureSession,
@@ -391,6 +392,11 @@ async def _complete_soft_deletion(
         )
     )
     if version is not None and version.deleted_at is None:
+        await delete_live_intelligence(
+            session,
+            organisation_id,
+            transcript_version_ids=(version.id,),
+        )
         version.status = "deleted"
         version.deleted_at = now
         segments = list(

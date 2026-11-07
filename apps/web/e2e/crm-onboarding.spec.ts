@@ -163,7 +163,7 @@ test("admin previews and confirms an explicit-map Account import", async ({
     }),
   );
 
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
   await expect(
     page.getByRole("heading", { name: "Import CRM data" }),
   ).toBeVisible();
@@ -332,7 +332,7 @@ test("admin imports Contacts and open Opportunities with explicit relationship m
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/settings/legacy");
   const importPanel = page.locator(
     'section[aria-labelledby="crm-import-title"]',
   );

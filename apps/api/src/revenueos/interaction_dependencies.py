@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
+from typing import cast
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.companion_services import CompanionService
 from revenueos.config import Settings, get_settings
-from revenueos.database import get_db, set_tenant_database_context
+from revenueos.conversation_thread_services import ConversationThreadService
+from revenueos.database import get_db, set_private_user_database_context, set_tenant_database_context
 from revenueos.debrief_services import DebriefService
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_repositories import InteractionRepository
@@ -13,19 +15,41 @@ from revenueos.interaction_services import InteractionService
 from revenueos.live_intelligence_services import LiveInteractionIntelligenceService
 from revenueos.online_meeting_services import OnlineMeetingService
 from revenueos.pre_interaction_services import PreInteractionBriefService
+from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
 from revenueos.recording_services import RecordingService
 from revenueos.tenant import TenantContext, get_tenant_context
 from revenueos.visual_services import VisualEvidenceService
 
 
 async def get_interaction_service(
+    request: Request,
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ) -> AsyncIterator[InteractionService]:
     await set_tenant_database_context(session, tenant.organisation_id)
+    await set_private_user_database_context(session, tenant.user_id)
     if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
-    yield InteractionService(session, tenant)
+    progressive_runtime = cast(
+        ProgressiveTranscriptionRegistry,
+        request.app.state.progressive_transcription_runtime,
+    )
+    yield InteractionService(
+        session,
+        tenant,
+        progressive_runtime=progressive_runtime,
+    )
+
+
+async def get_conversation_thread_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[ConversationThreadService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
+        raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
+    yield ConversationThreadService(session, tenant, settings)
 
 
 async def get_companion_service(
@@ -73,6 +97,7 @@ async def get_visual_evidence_service(
 
 
 async def get_recording_service(
+    request: Request,
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
     settings: Settings = Depends(get_settings),
@@ -80,7 +105,16 @@ async def get_recording_service(
     await set_tenant_database_context(session, tenant.organisation_id)
     if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
-    yield RecordingService(session, tenant, settings)
+    progressive_runtime = cast(
+        ProgressiveTranscriptionRegistry,
+        request.app.state.progressive_transcription_runtime,
+    )
+    yield RecordingService(
+        session,
+        tenant,
+        settings,
+        progressive_runtime=progressive_runtime,
+    )
 
 
 async def get_online_meeting_service(

@@ -72,7 +72,14 @@ function liveResponse(
         progressStatus: "unresolved",
       },
     ],
-    openQuestions: [],
+    openQuestions: [
+      {
+        itemType: "open_question",
+        itemIndex: 0,
+        label: "Who owns security approval?",
+        progressStatus: "unresolved",
+      },
+    ],
     reconciliation: null,
     generatedAt: "2026-08-15T02:04:00Z",
     updatedAt: "2026-08-15T02:04:00Z",
@@ -106,6 +113,12 @@ describe("LiveInteractionIntelligence", () => {
     expect(
       screen.getByText("Confirm implementation timeline — Possibly addressed"),
     ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Live Companion" }),
+    ).toBeVisible();
+    expect(screen.getByText("Suggested next question")).toBeVisible();
+    expect(screen.getAllByText("Who owns security approval?")[0]).toBeVisible();
+    expect(screen.getByText(/From your preparation/i)).toBeVisible();
     expect(
       screen.getByText("Customer asked about an October rollout."),
     ).toBeVisible();

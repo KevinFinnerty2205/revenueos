@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, update
+from sqlalchemy import event, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -22,6 +22,7 @@ from revenueos.daily_contracts import (
     DailyDealReason,
     DailyInteraction,
     DailyRecommendation,
+    DailyResponse,
 )
 from revenueos.daily_repositories import DailyRecommendationRecord, DailyRepository
 from revenueos.daily_services import RevenueOSDailyService
@@ -34,12 +35,18 @@ from revenueos.models import (
     ActionProposal,
     ActionProposalVersion,
     Company,
+    Contact,
+    ConversationBriefingOutbox,
+    IntegrationConnection,
     Interaction,
+    Meeting,
+    MeetingParticipant,
     MethodologyProjection,
     Opportunity,
     OrganisationMembership,
     OrganisationMethodologySetting,
     PreInteractionBrief,
+    ProviderCalendarEvent,
     RevenueBrainInsight,
     User,
 )
@@ -74,6 +81,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
             end.astimezone(UTC) - remaining_today / 10,
         )
         company_id = uuid.uuid4()
+        contact_id = uuid.uuid4()
         opportunity_id = uuid.uuid4()
         next_interaction_id = uuid.uuid4()
         prepared_interaction_id = uuid.uuid4()
@@ -89,6 +97,18 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     id=company_id,
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     name="Qantas",
+                    status="active",
+                    owner_user_id=PRIMARY_USER_ID,
+                )
+            )
+            session.add(
+                Contact(
+                    id=contact_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    company_id=company_id,
+                    first_name="Priya",
+                    last_name="Rao",
+                    email="priya.rao@example.test",
                     status="active",
                     owner_user_id=PRIMARY_USER_ID,
                 )
@@ -141,7 +161,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     company_id=company_id,
                     opportunity_id=opportunity_id,
-                    interaction_type="workshop",
+                    interaction_type="online_meeting",
                     lifecycle_status="planned",
                     title="Technical review",
                     scheduled_start_at=next_interaction_at,
@@ -155,6 +175,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     company_id=company_id,
                     opportunity_id=opportunity_id,
+                    contact_id=contact_id,
                     interaction_type="phone_call",
                     lifecycle_status="planned",
                     title="Commercial follow-up",
@@ -194,6 +215,33 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
             )
             session.add_all(interactions)
             await session.flush()
+            meeting_id = uuid.uuid4()
+            session.add(
+                Meeting(
+                    id=meeting_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    interaction_id=next_interaction_id,
+                    title="Technical review",
+                    meeting_date=next_interaction_at,
+                    meeting_type="remote",
+                    status="scheduled",
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    owner_user_id=PRIMARY_USER_ID,
+                    created_by=PRIMARY_USER_ID,
+                    updated_by=PRIMARY_USER_ID,
+                )
+            )
+            await session.flush()
+            session.add(
+                MeetingParticipant(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    meeting_id=meeting_id,
+                    contact_id=contact_id,
+                    attendance_status="invited",
+                    role="attendee",
+                )
+            )
             session.add_all(
                 [
                     PreInteractionBrief(
@@ -521,6 +569,204 @@ def test_daily_rejects_invalid_timezone(client: TestClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["code"] == "invalid_timezone"
+
+
+def test_delivery_preferences_and_local_outbox_are_versioned_deduplicated_and_reschedule_safe(
+    client: TestClient,
+) -> None:
+    seeded = _seed_daily_scenario()
+    preferences = client.get("/api/v1/daily/preferences")
+    assert preferences.status_code == 200
+    assert preferences.json()["exists"] is False
+    saved = client.put(
+        "/api/v1/daily/preferences",
+        json={
+            "expectedLockVersion": 0,
+            "timezone": "Australia/Sydney",
+            "morningDigestEnabled": True,
+            "morningDigestTime": "07:15",
+            "preMeetingEnabled": True,
+            "preMeetingMinutes": 45,
+            "importFromBrowser": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["lockVersion"] == 1
+    assert saved.json()["importedFromBrowserAt"] is not None
+    stale = client.put(
+        "/api/v1/daily/preferences",
+        json={
+            "expectedLockVersion": 0,
+            "timezone": "UTC",
+            "morningDigestEnabled": False,
+            "morningDigestTime": "08:00",
+            "preMeetingEnabled": False,
+            "preMeetingMinutes": 30,
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "delivery_preference_conflict"
+    morning = client.post("/api/v1/daily/briefing-preview", json={"kind": "morning_digest"})
+    assert morning.status_code == 200, morning.text
+    assert morning.json()["subject"] == "Prep for today: Qantas"
+    assert "You have 2 conversations today" in morning.json()["bodyText"]
+    assert "Qantas" in morning.json()["bodyText"]
+    assert morning.json()["bodyText"].count("With: Priya Rao") == 2
+    assert "/conversations/" in morning.json()["bodyText"]
+    repeated_morning = client.post("/api/v1/daily/briefing-preview", json={"kind": "morning_digest"})
+    assert repeated_morning.status_code == 200, repeated_morning.text
+    assert repeated_morning.json()["id"] == morning.json()["id"]
+    assert repeated_morning.json()["duplicateSuppressed"] is True
+
+    async def statuses() -> list[str]:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            rows = list(
+                (
+                    await session.scalars(
+                        select(ConversationBriefingOutbox).where(
+                            ConversationBriefingOutbox.interaction_id == uuid.UUID(seeded["interaction_id"])
+                        )
+                    )
+                ).all()
+            )
+        await engine.dispose()
+        return sorted(row.status for row in rows)
+
+    request = {"kind": "pre_meeting", "interactionId": seeded["interaction_id"]}
+    first = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "queued"
+    assert first.json()["duplicateSuppressed"] is False
+    assert "No generated brief is available" in first.json()["bodyText"]
+    repeated = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert repeated.status_code == 200
+    assert repeated.json()["id"] == first.json()["id"]
+    assert repeated.json()["duplicateSuppressed"] is True
+
+    rescheduled = client.patch(
+        f"/api/v1/interactions/{seeded['interaction_id']}",
+        json={
+            "scheduledStartAt": (datetime.now(UTC) + timedelta(days=2)).isoformat(),
+            "scheduledEndAt": (datetime.now(UTC) + timedelta(days=2, hours=1)).isoformat(),
+        },
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    assert asyncio.run(statuses()) == ["superseded"]
+    refreshed = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["id"] != first.json()["id"]
+
+    original_start = datetime.fromisoformat(first.json()["preparedForAt"]) + timedelta(minutes=45)
+    returned_to_original_time = client.patch(
+        f"/api/v1/interactions/{seeded['interaction_id']}",
+        json={
+            "scheduledStartAt": original_start.isoformat(),
+            "scheduledEndAt": (original_start + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert returned_to_original_time.status_code == 200, returned_to_original_time.text
+    reactivated = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["id"] == first.json()["id"]
+    assert reactivated.json()["status"] == "queued"
+    assert reactivated.json()["duplicateSuppressed"] is False
+
+    assert asyncio.run(statuses()) == ["queued", "superseded"]
+
+    cancelled = client.patch(
+        f"/api/v1/interactions/{seeded['interaction_id']}",
+        json={"lifecycleStatus": "cancelled"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert asyncio.run(statuses()) == ["cancelled", "superseded"]
+    cancelled_preview = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert cancelled_preview.status_code == 409
+    assert cancelled_preview.json()["code"] == "interaction_cancelled"
+    assert asyncio.run(statuses()) == ["cancelled", "superseded"]
+
+
+def test_pre_meeting_briefing_tracks_linked_provider_reschedule_and_cancellation(
+    client: TestClient,
+) -> None:
+    seeded = _seed_daily_scenario()
+    interaction_id = uuid.UUID(seeded["interaction_id"])
+    connection_id = uuid.uuid4()
+    event_id = uuid.uuid4()
+    first_start = datetime.now(UTC) + timedelta(days=3)
+
+    async def seed_provider_event() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            now = datetime.now(UTC)
+            session.add_all(
+                [
+                    IntegrationConnection(
+                        id=connection_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connector_key="microsoft_365",
+                        connection_status="active",
+                        created_by_user_id=PRIMARY_USER_ID,
+                        connected_at=now,
+                        last_verified_at=now,
+                        capability_state_json=["read_calendar"],
+                        metadata_version=1,
+                    ),
+                    ProviderCalendarEvent(
+                        id=event_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connection_id=connection_id,
+                        provider_key="microsoft_365",
+                        provider_event_id="synthetic-briefing-event",
+                        title="Synthetic provider meeting",
+                        start_at=first_start,
+                        end_at=first_start + timedelta(hours=1),
+                        provider_timezone="UTC",
+                        attendee_emails_json=[],
+                        sensitivity="normal",
+                        state="active",
+                        match_state="matched",
+                        interaction_id=interaction_id,
+                        last_synced_at=now,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ]
+            )
+            await session.commit()
+        await engine.dispose()
+
+    async def update_provider_event(*, starts_at: datetime | None = None, state: str | None = None) -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            event_record = await session.get(ProviderCalendarEvent, event_id)
+            assert event_record is not None
+            if starts_at is not None:
+                event_record.start_at = starts_at
+                event_record.end_at = starts_at + timedelta(hours=1)
+            if state is not None:
+                event_record.state = state
+            event_record.last_synced_at = datetime.now(UTC)
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed_provider_event())
+    request = {"kind": "pre_meeting", "interactionId": str(interaction_id)}
+    first = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert first.status_code == 200, first.text
+    assert datetime.fromisoformat(first.json()["preparedForAt"]) == first_start - timedelta(minutes=30)
+
+    rescheduled_start = first_start + timedelta(days=1)
+    asyncio.run(update_provider_event(starts_at=rescheduled_start))
+    rescheduled = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert rescheduled.status_code == 200, rescheduled.text
+    assert rescheduled.json()["id"] != first.json()["id"]
+    assert datetime.fromisoformat(rescheduled.json()["preparedForAt"]) == rescheduled_start - timedelta(minutes=30)
+
+    asyncio.run(update_provider_event(state="cancelled"))
+    cancelled = client.post("/api/v1/daily/briefing-preview", json=request)
+    assert cancelled.status_code == 409
+    assert cancelled.json()["code"] == "interaction_cancelled"
 
 
 def test_daily_fails_closed_for_disabled_membership(client: TestClient) -> None:
@@ -936,7 +1182,25 @@ def test_daily_bounds_lists_and_query_count_does_not_scale_per_item(client: Test
     assert len(body["todayInteractions"]) == 5
     assert len(body["actions"]["items"]) == 5
     assert body["actions"]["truncated"] is True
-    assert select_count <= 15
+    daily = DailyResponse.model_validate(body)
+    digest = RevenueOSDailyService._morning_digest_body(daily)
+    assert "Here are the next 5" in digest
+    assert "more conversations" in digest
+    assert RevenueOSDailyService._morning_digest_subject(daily).endswith("+ more")
+    unsafe_subject_daily = daily.model_copy(
+        update={
+            "today_interactions": [
+                daily.today_interactions[0].model_copy(update={"company_name": "Qantas\r\nBcc: attacker@example.test"})
+            ],
+            "total_today_interactions": 1,
+        }
+    )
+    safe_subject = RevenueOSDailyService._morning_digest_subject(unsafe_subject_daily)
+    assert safe_subject == "Prep for today: Qantas Bcc: attacker@example.test"
+    assert "\r" not in safe_subject and "\n" not in safe_subject
+    # The final bounded query batches attendee names for all surfaced
+    # interactions; it does not scale with the number of conversations.
+    assert select_count <= 16
 
 
 def test_daily_degrades_one_source_failure_without_exposing_error(

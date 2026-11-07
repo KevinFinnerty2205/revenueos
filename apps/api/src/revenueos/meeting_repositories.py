@@ -4,12 +4,14 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from revenueos.business_repositories import PageResult
 from revenueos.models import (
+    AIArtifact,
+    AIJob,
     Base,
     Company,
     Contact,
@@ -230,11 +232,44 @@ class MeetingRepository:
         organisation_id: UUID,
         meeting_id: UUID,
     ) -> list[MeetingAuditEvent]:
+        automatic_job_event = (
+            select(AIJob.id)
+            .where(
+                AIJob.organisation_id == MeetingAuditEvent.organisation_id,
+                AIJob.id == MeetingAuditEvent.entity_id,
+                AIJob.automatic_draft_generation_id.is_not(None),
+            )
+            .exists()
+        )
+        automatic_artifact_event = (
+            select(AIArtifact.id)
+            .join(
+                AIJob,
+                and_(
+                    AIJob.organisation_id == AIArtifact.organisation_id,
+                    AIJob.id == AIArtifact.job_id,
+                ),
+            )
+            .where(
+                AIArtifact.organisation_id == MeetingAuditEvent.organisation_id,
+                AIArtifact.id == MeetingAuditEvent.entity_id,
+                AIJob.automatic_draft_generation_id.is_not(None),
+            )
+            .exists()
+        )
         result = await self.session.scalars(
             select(MeetingAuditEvent)
             .where(
                 MeetingAuditEvent.organisation_id == organisation_id,
                 MeetingAuditEvent.meeting_id == meeting_id,
+                ~and_(
+                    MeetingAuditEvent.entity_type == "ai_job",
+                    automatic_job_event,
+                ),
+                ~and_(
+                    MeetingAuditEvent.entity_type == "ai_artifact",
+                    automatic_artifact_event,
+                ),
             )
             .order_by(MeetingAuditEvent.created_at.desc(), MeetingAuditEvent.id.desc())
         )

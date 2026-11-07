@@ -169,6 +169,60 @@ _BANT = MethodologyDefinitionContent(
     ),
 )
 
+_SPIN = MethodologyDefinitionContent(
+    key="spin",
+    name="SPIN",
+    description="Move from the customer’s situation and problem to its implications and the value of change.",
+    version=1,
+    standard=True,
+    fields=(
+        _field(
+            "situation",
+            "Situation",
+            "The customer’s relevant current environment, process and constraints.",
+            1,
+            ("situation",),
+            ("implementation", "technical_requirement", "other"),
+            "How does this work in your organisation today?",
+            freshness_days=180,
+            stage="discovery",
+        ),
+        _field(
+            "problem",
+            "Problem",
+            "The difficulty, friction or unmet need in the current situation.",
+            2,
+            ("pain", "business_pain", "need"),
+            ("risk", "objection", "commercial_intent", "other"),
+            "Where is the current approach causing the most difficulty?",
+            freshness_days=180,
+            stage="discovery",
+        ),
+        _field(
+            "implication",
+            "Implication",
+            "The consequence of leaving the problem unresolved.",
+            3,
+            ("impact", "quantified_business_impact"),
+            ("commercial_intent", "risk", "buying_signal", "other"),
+            "What happens to the team or business if this problem continues?",
+            freshness_days=180,
+            stage="discovery",
+        ),
+        _field(
+            "need_payoff",
+            "Need-payoff",
+            "The customer-described value or outcome of solving the problem.",
+            4,
+            ("need", "impact", "quantified_business_impact"),
+            ("buying_signal", "commercial_intent", "customer_request", "other"),
+            "What would improve if this problem were solved?",
+            freshness_days=180,
+            stage="discovery",
+        ),
+    ),
+)
+
 _SPICED = MethodologyDefinitionContent(
     key="spiced",
     name="SPICED",
@@ -269,16 +323,42 @@ _MEDDPICC = MethodologyDefinitionContent(
     ),
 )
 
+_MEDDICC = MethodologyDefinitionContent(
+    key="meddicc",
+    name="MEDDICC",
+    description="Extend MEDDIC with the competitive position while keeping contracting separate.",
+    version=1,
+    standard=True,
+    fields=(
+        *_MEDDIC.fields,
+        _field(
+            "competition",
+            "Competition",
+            "The named alternatives, internal options and status quo under consideration.",
+            7,
+            ("competition",),
+            ("competitor", "objection", "buying_signal"),
+            "What other options, including the status quo, are being considered?",
+            freshness_days=60,
+            stage="evaluation",
+        ),
+    ),
+)
+
 STANDARD_METHODOLOGIES: dict[StandardMethodologyKey, MethodologyDefinitionContent] = {
     "meddic": _MEDDIC,
+    "meddicc": _MEDDICC,
     "meddpicc": _MEDDPICC,
     "bant": _BANT,
+    "spin": _SPIN,
     "spiced": _SPICED,
 }
 STANDARD_METHODOLOGY_ORDER: tuple[StandardMethodologyKey, ...] = (
     "meddic",
+    "meddicc",
     "meddpicc",
     "bant",
+    "spin",
     "spiced",
 )
 

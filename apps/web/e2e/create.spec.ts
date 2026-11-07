@@ -317,7 +317,7 @@ test("Create shows the studio, deterministic plan and claim approval gate", asyn
     page
       .getByRole("navigation", { name: "Main navigation" })
       .getByRole("link", { name: "Studio" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   if (process.env.CAPTURE_WO_032_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-032-create-studio.png",
