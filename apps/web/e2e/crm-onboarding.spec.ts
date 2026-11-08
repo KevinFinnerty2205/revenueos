@@ -391,16 +391,16 @@ test("admin imports Contacts and open Opportunities with explicit relationship m
   ).toBeVisible();
 });
 
-test("admin explicitly merges an Account and the source becomes a tombstone", async ({
+test("admin explicitly merges a supporting Person record and the source becomes a tombstone", async ({
   page,
 }) => {
   await page.route("**/api/v1/**", unavailable);
   await routeIdentity(page);
   let merged = false;
   const record = () => ({
-    entityType: "account",
+    entityType: "contact",
     entityId: sourceId,
-    title: "Harbour Labs duplicate",
+    title: "Jordan Lee duplicate",
     ownerUserId: "00000000-0000-4000-8000-000000000001",
     ownerName: "Alex Morgan",
     archivedAt: merged ? "2026-09-01T02:00:00Z" : null,
@@ -424,13 +424,13 @@ test("admin explicitly merges an Account and the source becomes a tombstone", as
     mergedIntoEntityId: merged ? survivorId : null,
     mergeId: merged ? "00000000-0000-4000-8000-000000000103" : null,
   });
-  await page.route(`**/api/v1/crm/records/account/${sourceId}`, (route) =>
+  await page.route(`**/api/v1/crm/records/contact/${sourceId}`, (route) =>
     route.fulfill({ json: record() }),
   );
   await page.route("**/api/v1/crm/merges/preview", (route) =>
     route.fulfill({
       json: {
-        entityType: "account",
+        entityType: "contact",
         sourceEntityId: sourceId,
         survivorEntityId: survivorId,
         previewFingerprint: "a".repeat(64),
@@ -448,7 +448,7 @@ test("admin explicitly merges an Account and the source becomes a tombstone", as
   );
   await page.route("**/api/v1/crm/merges/confirm", async (route) => {
     expect(route.request().postDataJSON()).toMatchObject({
-      entityType: "account",
+      entityType: "contact",
       sourceEntityId: sourceId,
       survivorEntityId: survivorId,
       fieldSelection: { industry: "survivor" },
@@ -457,7 +457,7 @@ test("admin explicitly merges an Account and the source becomes a tombstone", as
     await route.fulfill({
       json: {
         mergeId: "00000000-0000-4000-8000-000000000103",
-        entityType: "account",
+        entityType: "contact",
         sourceEntityId: sourceId,
         survivorEntityId: survivorId,
         mergedAt: "2026-09-01T02:00:00Z",
@@ -466,9 +466,9 @@ test("admin explicitly merges an Account and the source becomes a tombstone", as
     });
   });
 
-  await page.goto(`/companies/${sourceId}`);
+  await page.goto(`/contacts/${sourceId}`);
   await page.getByText("Merge a duplicate").click();
-  await page.getByLabel("Survivor Account ID").fill(survivorId);
+  await page.getByLabel("Survivor Contact ID").fill(survivorId);
   await page.getByRole("button", { name: "Preview merge" }).click();
   await expect(
     page.getByRole("heading", { name: "Merge impact" }),
@@ -489,7 +489,7 @@ test("admin explicitly merges an Account and the source becomes a tombstone", as
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "surviving record" }),
-  ).toHaveAttribute("href", `/companies/${survivorId}`);
+  ).toHaveAttribute("href", `/contacts/${survivorId}`);
   await expect(page.getByText("Merge a duplicate")).toHaveCount(0);
   await page.locator('section[aria-labelledby="crm-record-title"]').screenshot({
     path: "../../docs/07-sprints/assets/wo-039c/crm-merged-tombstone-desktop.png",

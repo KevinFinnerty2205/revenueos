@@ -737,11 +737,17 @@ test("interaction timeline supports deliberate creation and completion without i
 
   await page.goto("/companies/company-1");
   await expect(
-    page.getByRole("heading", { name: "Revenue Brain" }),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "No snapshots yet" }),
+    page.getByRole("heading", { name: "Conversations and notes" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Customer planning workshop" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Revenue Brain" }),
+  ).toHaveCount(0);
 
   await expect(page.getByLabel(/transcript/i)).toHaveCount(0);
   for (const prohibited of [
@@ -1451,15 +1457,19 @@ test("a presentation supports browser image upload, explicit review and intellig
 
   await page.goto("/companies/company-visual");
   await expect(
-    page.getByRole("heading", { name: "Reviewed visual evidence" }),
+    page.getByRole("heading", { name: "Southern Cross Operations" }),
   ).toBeVisible();
-  await expect(page.getByText("customer whiteboard")).toBeVisible();
   await expect(
-    page.getByText("Customer requested a reviewed security workshop."),
+    page.getByRole("heading", { name: "Conversations and notes" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Reviewed visual evidence" }),
+  ).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText("customer whiteboard")).toBeVisible();
-  expect(brainVisualReads).toBeGreaterThanOrEqual(2);
+  await expect(
+    page.getByRole("heading", { name: "Southern Cross Operations" }),
+  ).toBeVisible();
+  expect(brainVisualReads).toBe(0);
   await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
 });
 
@@ -1806,13 +1816,17 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
 
   await page.goto("/companies/company-1");
   await expect(
-    page.getByRole("heading", { name: "Reviewed interaction intelligence" }),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
-  await expect(page.getByText("Pricing follow-up call")).toBeVisible();
-  await expect(page.getByText("Reported by you · phone call")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Reviewed interaction intelligence" }),
+  ).toHaveCount(0);
   await page.reload();
   await expect(
-    page.getByText("Jordan confirmed the budget owner."),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
   await expect(page.getByText(/upload a transcript/i)).toHaveCount(0);
 });
@@ -2207,13 +2221,15 @@ test("an authorised imported call recording uses the existing transcription and 
     page.getByText(/Recording comparison: Corroborated/i),
   ).toBeVisible();
   await page.goto("/companies/company-1");
-  await expect(page.getByText("Imported procurement call")).toBeVisible();
   await expect(
-    page.getByText("Jordan owns the procurement decision."),
+    page.getByRole("heading", { name: "Acme Australia" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
   ).toBeVisible();
   await expect(
     page.getByText(/Recording comparison: corroborated/i),
-  ).toBeVisible();
+  ).toHaveCount(0);
 });
 
 test("mobile Companion recording path persists a consented transcript into existing intelligence surfaces", async ({
@@ -2928,7 +2944,13 @@ test("mobile Companion recording path persists a consented transcript into exist
     page.getByText("Identify the economic buyer.", { exact: true }).first(),
   ).toBeVisible();
   await page.goto("/companies/company-1");
-  await expect(page.getByText("Meeting snapshot")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Acme Australia" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
+  ).toBeVisible();
+  await expect(page.getByText("Meeting snapshot")).toHaveCount(0);
   expect(intelligenceGenerated).toBe(true);
 });
 
@@ -4137,17 +4159,14 @@ test("document and email evidence require explicit review before appearing in th
 
   await page.goto("/companies/company-1");
   await expect(
+    page.getByRole("heading", { name: "Acme Australia" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: "Document and email evidence" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("The platform must support SSO integration."),
-  ).toBeVisible();
-  await expect(
-    page.getByText("We will proceed with security review."),
-  ).toBeVisible();
-  await expect(
-    page.getByText(/Seller-provided document/).first(),
-  ).toBeVisible();
+  ).toHaveCount(0);
 });
 
 function meeting() {

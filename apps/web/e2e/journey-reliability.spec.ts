@@ -2387,9 +2387,9 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     await captureFlagship(page, "interaction-review");
   });
   await test.step("19 Confirm Revenue Brain updates", async () => {
-    await page.goto(`/companies/${ids.account}`);
+    await page.goto(`/opportunities/${ids.opportunity}`);
     await expect(
-      page.getByRole("heading", { name: "Reviewed interaction intelligence" }),
+      page.getByRole("heading", { name: "Latest post-interaction report" }),
     ).toBeVisible();
     await expect(
       page.getByText(

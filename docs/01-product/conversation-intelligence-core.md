@@ -83,10 +83,14 @@ reach.
   User-owned debrief evidence remains restricted to its creator in search,
   preparation and debrief context.
 - The conversation directory is account-first: each tenant-scoped account opens
-  its related conversation history and notes, while unassigned conversations
-  remain available separately. The synthetic demo may use bundled local account
-  marks; otherwise the interface renders deterministic initials. It does not
-  fetch third-party favicons, and this does not imply a production logo provider.
+  a relationship-memory page containing restrained account context, linked
+  participants, conversation history and notes. CRM custom fields, Opportunity
+  administration, Business Cases, presentations and Revenue Brain controls are
+  not rendered in this primary journey; their underlying records and legacy
+  routes remain preserved. Unassigned conversations remain available separately.
+  The synthetic demo may use bundled local account marks; otherwise the interface
+  renders deterministic initials. It does not fetch third-party favicons, and
+  this does not imply a production logo provider.
 
 ## Trust boundaries
 

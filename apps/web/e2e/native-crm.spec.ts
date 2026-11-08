@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const accountId = "account-native-crm";
+const contactId = "contact-native-crm";
 const fieldId = "field-segment";
 
 async function routeShell(page: Page, role: "admin" | "member" = "admin") {
@@ -109,7 +109,7 @@ test("admin deliberately selects Oryntela as the CRM system of record", async ({
   ).toBeVisible();
 });
 
-test("member can review a simple mobile account, edit a custom field and inspect history", async ({
+test("member can review a supporting mobile person record, edit a custom field and inspect history", async ({
   page,
 }) => {
   await routeShell(page, "member");
@@ -117,9 +117,9 @@ test("member can review a simple mobile account, edit a custom field and inspect
   let updatedAt = "2026-08-29T10:00:00Z";
 
   const record = () => ({
-    entityType: "account",
-    entityId: accountId,
-    title: "Northstar Facilities Group",
+    entityType: "contact",
+    entityId: contactId,
+    title: "Jordan Lee",
     ownerUserId: "user-1",
     ownerName: "Alex Morgan",
     archivedAt: null,
@@ -147,7 +147,7 @@ test("member can review a simple mobile account, edit a custom field and inspect
       {
         definition: {
           id: fieldId,
-          entityType: "account",
+          entityType: "contact",
           fieldKey: "segment",
           label: "Segment",
           fieldType: "single_select",
@@ -202,11 +202,11 @@ test("member can review a simple mobile account, edit a custom field and inspect
   });
 
   await page.route(
-    `http://localhost:8000/api/v1/crm/records/account/${accountId}`,
+    `http://localhost:8000/api/v1/crm/records/contact/${contactId}`,
     async (route) => route.fulfill({ json: record() }),
   );
   await page.route(
-    `http://localhost:8000/api/v1/crm/records/account/${accountId}/custom-fields/${fieldId}`,
+    `http://localhost:8000/api/v1/crm/records/contact/${contactId}/custom-fields/${fieldId}`,
     async (route) => {
       const body = route.request().postDataJSON() as {
         value: string;
@@ -223,10 +223,8 @@ test("member can review a simple mobile account, edit a custom field and inspect
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/companies/${accountId}`);
-  await expect(
-    page.getByRole("heading", { name: "Northstar Facilities Group" }),
-  ).toBeVisible();
+  await page.goto(`/contacts/${contactId}`);
+  await expect(page.getByRole("heading", { name: "Jordan Lee" })).toBeVisible();
   await expect(page.getByText(/Owned by Alex Morgan/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Archive" })).toHaveCount(0);
   await page
