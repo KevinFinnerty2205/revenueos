@@ -74,6 +74,8 @@ const featureFlagLabels: Record<string, string> = {
   presentationMode: "Presentation mode",
   recordingCapture: "Recording capture",
   transcription: "Transcription",
+  progressiveTranscription: "Progressive transcription",
+  briefingDelivery: "Briefing email delivery",
   autoGenerateIntelligenceAfterTranscription:
     "Automatic intelligence after transcription",
   onlineMeetingCapture: "Online meeting capture",

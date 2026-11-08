@@ -111,6 +111,7 @@ class ClaimedAIJob:
     prompt_key: str | None = None
     prompt_version: int | None = None
     composition_tone: str | None = None
+    automatic_draft_generation_id: UUID | None = None
 
 
 @dataclass(frozen=True)

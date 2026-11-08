@@ -14,12 +14,19 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select, text, update
+from sqlalchemy import and_, delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 
+from revenueos.automatic_draft_authority import AUTOMATIC_DRAFT_GENERATION_METADATA_KEY
 from revenueos.config import Settings, get_settings
-from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
+from revenueos.database import (
+    create_engine,
+    create_session_factory,
+    set_private_user_database_context,
+    set_tenant_database_context,
+)
 from revenueos.export_storage import export_object_reference, export_storage_key, parse_export_object_reference
 from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.live_intelligence_services import expire_live_intelligence
@@ -49,9 +56,18 @@ from revenueos.models import (
     CommercialPlanVersion,
     CommercialStateEvent,
     Company,
+    CompanyKnowledgeIngestionJob,
+    CompanyKnowledgeSource,
     Contact,
     ContactFieldSource,
     ContactSuppression,
+    ConversationBriefingOutbox,
+    ConversationDeliveryPreference,
+    ConversationDraftGeneration,
+    ConversationThread,
+    ConversationThreadAssignment,
+    ConversationThreadAuditEvent,
+    ConversationUserWorkspace,
     CreateApprovedContentItem,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
@@ -205,7 +221,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import S3CompatibleVisualStorage, VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 39
+EXPORT_VERSION = 42
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -929,7 +945,21 @@ async def generate_export(
     try:
         async with session_factory() as session, session.begin():
             await set_tenant_database_context(session, organisation_id)
-            payload = await _export_payload(session, organisation_id, settings)
+            requester_id = await session.scalar(
+                select(BetaDataRequest.requested_by_user_id).where(
+                    BetaDataRequest.organisation_id == organisation_id,
+                    BetaDataRequest.id == request_id,
+                )
+            )
+            if requester_id is None:
+                raise RuntimeError("Export request disappeared before content generation.")
+            await set_private_user_database_context(session, requester_id)
+            payload = await _export_payload(
+                session,
+                organisation_id,
+                settings,
+                private_user_id=requester_id,
+            )
         if isinstance(storage, S3CompatibleVisualStorage):
             with tempfile.TemporaryDirectory(prefix="revenueos-export-") as temporary_root:
                 temporary_path = Path(temporary_root) / f"revenueos-export-{request_id}.json"
@@ -1216,6 +1246,21 @@ async def _delete_organisation_records(
         await session.execute(delete(CRMStageMapping).where(CRMStageMapping.organisation_id == organisation_id))
         await session.execute(delete(CRMFieldMapping).where(CRMFieldMapping.organisation_id == organisation_id))
         await session.execute(delete(CRMEntityMapping).where(CRMEntityMapping.organisation_id == organisation_id))
+        # Delivery rows may retain the connector used for a completed or failed
+        # submission. Remove those private rows before the referenced connection
+        # so organisation erasure remains valid with the restrictive audit FK.
+        for owner_user_id in user_ids:
+            # The outbox is protected by both tenant and private-user RLS.
+            # Delete it in each owner's trusted context before removing the
+            # referenced connector; the FK is intentionally RESTRICT so an
+            # invisible residual row must never be bypassed.
+            await set_private_user_database_context(session, owner_user_id)
+            await session.execute(
+                delete(ConversationBriefingOutbox).where(
+                    ConversationBriefingOutbox.organisation_id == organisation_id,
+                    ConversationBriefingOutbox.user_id == owner_user_id,
+                )
+            )
         await session.execute(
             delete(IntegrationConnection).where(IntegrationConnection.organisation_id == organisation_id)
         )
@@ -1244,6 +1289,9 @@ async def _delete_organisation_records(
             delete(OnlineMeetingTranscriptImport).where(
                 OnlineMeetingTranscriptImport.organisation_id == organisation_id
             )
+        )
+        await session.execute(
+            delete(ConversationDraftGeneration).where(ConversationDraftGeneration.organisation_id == organisation_id)
         )
         await session.execute(delete(TranscriptVersion).where(TranscriptVersion.organisation_id == organisation_id))
         await session.execute(delete(Transcript).where(Transcript.organisation_id == organisation_id))
@@ -1299,8 +1347,23 @@ async def _delete_organisation_records(
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
         await session.execute(
+            delete(ConversationUserWorkspace).where(ConversationUserWorkspace.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ConversationDeliveryPreference).where(
+                ConversationDeliveryPreference.organisation_id == organisation_id
+            )
+        )
+        await session.execute(
             delete(InteractionAuditEvent).where(InteractionAuditEvent.organisation_id == organisation_id)
         )
+        await session.execute(
+            delete(ConversationThreadAuditEvent).where(ConversationThreadAuditEvent.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ConversationThreadAssignment).where(ConversationThreadAssignment.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ConversationThread).where(ConversationThread.organisation_id == organisation_id))
         await session.execute(
             delete(OnlineMeetingMetadata).where(OnlineMeetingMetadata.organisation_id == organisation_id)
         )
@@ -1415,6 +1478,9 @@ async def _delete_organisation_records(
         await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
         await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
         await session.execute(delete(Company).where(Company.organisation_id == organisation_id))
+        await session.execute(
+            delete(CompanyKnowledgeSource).where(CompanyKnowledgeSource.organisation_id == organisation_id)
+        )
         await session.execute(
             delete(DataNoticeAcknowledgement).where(DataNoticeAcknowledgement.organisation_id == organisation_id)
         )
@@ -2090,6 +2156,30 @@ async def _interaction_deletion_counts_from_select(
     organisation_id: UUID,
     interaction_ids: Select[tuple[UUID]],
 ) -> dict[str, int]:
+    draft_generation_count = 0
+    owner_user_ids = list(
+        (
+            await session.scalars(
+                select(OrganisationMembership.user_id).where(OrganisationMembership.organisation_id == organisation_id)
+            )
+        ).all()
+    )
+    for owner_user_id in owner_user_ids:
+        await set_private_user_database_context(session, owner_user_id)
+        draft_generation_count += int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ConversationDraftGeneration)
+                    .where(
+                        ConversationDraftGeneration.organisation_id == organisation_id,
+                        ConversationDraftGeneration.user_id == owner_user_id,
+                        ConversationDraftGeneration.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        )
     return {
         "interactions": int(
             (
@@ -2371,6 +2461,7 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "conversation_draft_generations": draft_generation_count,
         "transcript_segments": int(
             (
                 await session.scalar(
@@ -2750,6 +2841,12 @@ async def _delete_recording_database_rows(
         )
     )
     await session.execute(
+        delete(ConversationDraftGeneration).where(
+            ConversationDraftGeneration.organisation_id == organisation_id,
+            ConversationDraftGeneration.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
         delete(TranscriptVersion).where(
             TranscriptVersion.organisation_id == organisation_id,
             TranscriptVersion.interaction_id.in_(interaction_ids),
@@ -3002,6 +3099,8 @@ async def _export_payload(
     session: AsyncSession,
     organisation_id: UUID,
     settings: Settings,
+    *,
+    private_user_id: UUID | None = None,
 ) -> dict[str, object]:
     organisation = await session.get(Organisation, organisation_id)
     if organisation is None:
@@ -3478,6 +3577,81 @@ async def _export_payload(
         .where(SellingProfileRevision.organisation_id == organisation_id)
         .order_by(SellingProfileRevision.profile_id, SellingProfileRevision.revision_number)
     )
+    company_knowledge_sources = await rows(
+        select(CompanyKnowledgeSource)
+        .where(CompanyKnowledgeSource.organisation_id == organisation_id)
+        .order_by(CompanyKnowledgeSource.created_at, CompanyKnowledgeSource.id)
+    )
+    company_knowledge_jobs = await rows(
+        select(CompanyKnowledgeIngestionJob)
+        .where(CompanyKnowledgeIngestionJob.organisation_id == organisation_id)
+        .order_by(CompanyKnowledgeIngestionJob.created_at, CompanyKnowledgeIngestionJob.id)
+    )
+    conversation_threads = await rows(
+        select(ConversationThread)
+        .where(ConversationThread.organisation_id == organisation_id)
+        .order_by(ConversationThread.created_at, ConversationThread.id)
+    )
+    conversation_thread_assignments = await rows(
+        select(ConversationThreadAssignment)
+        .where(ConversationThreadAssignment.organisation_id == organisation_id)
+        .order_by(ConversationThreadAssignment.created_at, ConversationThreadAssignment.id)
+    )
+    conversation_thread_audit_events = await rows(
+        select(ConversationThreadAuditEvent)
+        .where(ConversationThreadAuditEvent.organisation_id == organisation_id)
+        .order_by(ConversationThreadAuditEvent.created_at, ConversationThreadAuditEvent.id)
+    )
+    conversation_workspaces = (
+        await rows(
+            select(ConversationUserWorkspace)
+            .where(
+                ConversationUserWorkspace.organisation_id == organisation_id,
+                ConversationUserWorkspace.user_id == private_user_id,
+            )
+            .order_by(ConversationUserWorkspace.updated_at, ConversationUserWorkspace.id)
+        )
+        if private_user_id is not None
+        else []
+    )
+    conversation_draft_generations = (
+        await rows(
+            select(ConversationDraftGeneration)
+            .where(
+                ConversationDraftGeneration.organisation_id == organisation_id,
+                ConversationDraftGeneration.user_id == private_user_id,
+            )
+            .order_by(
+                ConversationDraftGeneration.interaction_id,
+                ConversationDraftGeneration.transcript_version,
+                ConversationDraftGeneration.id,
+            )
+        )
+        if private_user_id is not None
+        else []
+    )
+    conversation_delivery_preferences = (
+        await rows(
+            select(ConversationDeliveryPreference).where(
+                ConversationDeliveryPreference.organisation_id == organisation_id,
+                ConversationDeliveryPreference.user_id == private_user_id,
+            )
+        )
+        if private_user_id is not None
+        else []
+    )
+    conversation_briefing_outbox = (
+        await rows(
+            select(ConversationBriefingOutbox)
+            .where(
+                ConversationBriefingOutbox.organisation_id == organisation_id,
+                ConversationBriefingOutbox.user_id == private_user_id,
+            )
+            .order_by(ConversationBriefingOutbox.created_at, ConversationBriefingOutbox.id)
+        )
+        if private_user_id is not None
+        else []
+    )
     action_proposals = await rows(
         select(ActionProposal)
         .where(ActionProposal.organisation_id == organisation_id)
@@ -3758,8 +3932,33 @@ async def _export_payload(
         .where(TranscriptSegment.organisation_id == organisation_id)
         .order_by(TranscriptSegment.transcript_version_id, TranscriptSegment.sequence_number)
     )
+    automatic_artifact_visibility: ColumnElement[bool] = AIJob.automatic_draft_generation_id.is_(None)
+    if private_user_id is not None:
+        automatic_artifact_visibility = or_(
+            automatic_artifact_visibility,
+            ConversationDraftGeneration.user_id == private_user_id,
+        )
     artifacts = await rows(
-        select(AIArtifact).where(AIArtifact.organisation_id == organisation_id).order_by(AIArtifact.id)
+        select(AIArtifact)
+        .join(
+            AIJob,
+            and_(
+                AIJob.organisation_id == AIArtifact.organisation_id,
+                AIJob.id == AIArtifact.job_id,
+            ),
+        )
+        .outerjoin(
+            ConversationDraftGeneration,
+            and_(
+                ConversationDraftGeneration.organisation_id == AIJob.organisation_id,
+                ConversationDraftGeneration.id == AIJob.automatic_draft_generation_id,
+            ),
+        )
+        .where(
+            AIArtifact.organisation_id == organisation_id,
+            automatic_artifact_visibility,
+        )
+        .order_by(AIArtifact.id)
     )
     snapshots = await rows(
         select(RevenueBrainSnapshot)
@@ -3771,11 +3970,68 @@ async def _export_payload(
         .where(RevenueBrainInsight.organisation_id == organisation_id)
         .order_by(RevenueBrainInsight.id)
     )
-    meeting_audits = await rows(
+    all_meeting_audits = await rows(
         select(MeetingAuditEvent)
         .where(MeetingAuditEvent.organisation_id == organisation_id)
         .order_by(MeetingAuditEvent.id)
     )
+    automatic_job_owners = {
+        job_id: owner_user_id
+        for job_id, owner_user_id in (
+            await session.execute(
+                select(AIJob.id, ConversationDraftGeneration.user_id)
+                .outerjoin(
+                    ConversationDraftGeneration,
+                    and_(
+                        ConversationDraftGeneration.organisation_id == AIJob.organisation_id,
+                        ConversationDraftGeneration.id == AIJob.automatic_draft_generation_id,
+                    ),
+                )
+                .where(
+                    AIJob.organisation_id == organisation_id,
+                    AIJob.automatic_draft_generation_id.is_not(None),
+                )
+            )
+        ).all()
+    }
+    automatic_artifact_owners = {
+        artifact_id: owner_user_id
+        for artifact_id, owner_user_id in (
+            await session.execute(
+                select(AIArtifact.id, ConversationDraftGeneration.user_id)
+                .join(
+                    AIJob,
+                    and_(
+                        AIJob.organisation_id == AIArtifact.organisation_id,
+                        AIJob.id == AIArtifact.job_id,
+                    ),
+                )
+                .outerjoin(
+                    ConversationDraftGeneration,
+                    and_(
+                        ConversationDraftGeneration.organisation_id == AIJob.organisation_id,
+                        ConversationDraftGeneration.id == AIJob.automatic_draft_generation_id,
+                    ),
+                )
+                .where(
+                    AIArtifact.organisation_id == organisation_id,
+                    AIJob.automatic_draft_generation_id.is_not(None),
+                )
+            )
+        ).all()
+    }
+    generation_owners = {item.id: item.user_id for item in conversation_draft_generations}
+    meeting_audits = [
+        item
+        for item in all_meeting_audits
+        if _meeting_audit_visible_to_export_owner(
+            item,
+            private_user_id=private_user_id,
+            automatic_job_owners=automatic_job_owners,
+            automatic_artifact_owners=automatic_artifact_owners,
+            generation_owners=generation_owners,
+        )
+    ]
     interaction_audits = await rows(
         select(InteractionAuditEvent)
         .where(InteractionAuditEvent.organisation_id == organisation_id)
@@ -5657,6 +5913,210 @@ async def _export_payload(
             )
             for item in selling_profile_revisions
         ],
+        "companyKnowledgeSources": [
+            {
+                **_columns(
+                    item,
+                    (
+                        "id",
+                        "source_kind",
+                        "label",
+                        "website_url",
+                        "source_text",
+                        "source_filename",
+                        "source_mime_type",
+                        "extracted_text",
+                        "summary_text",
+                        "content_fingerprint",
+                        "processing_status",
+                        "processing_attempts",
+                        "failure_code",
+                        "created_by_user_id",
+                        "processed_at",
+                        "approved_at",
+                        "approved_by_user_id",
+                        "stale_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                ),
+                "source_document_base64": (
+                    base64.b64encode(item.source_document).decode("ascii") if item.source_document is not None else None
+                ),
+            }
+            for item in company_knowledge_sources
+        ],
+        "companyKnowledgeIngestionJobs": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "source_id",
+                    "requested_by_user_id",
+                    "status",
+                    "attempt_count",
+                    "max_attempts",
+                    "next_attempt_at",
+                    "started_at",
+                    "completed_at",
+                    "failure_code",
+                    "cancellation_requested_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in company_knowledge_jobs
+        ],
+        "conversationThreads": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "company_id",
+                    "name",
+                    "status",
+                    "created_by_user_id",
+                    "updated_by_user_id",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_threads
+        ],
+        "conversationThreadAssignments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "thread_id",
+                    "interaction_id",
+                    "confirmed_by_user_id",
+                    "confirmation_kind",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_thread_assignments
+        ],
+        "conversationThreadAuditEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "thread_id",
+                    "interaction_id",
+                    "actor_user_id",
+                    "action",
+                    "metadata_json",
+                    "created_at",
+                ),
+            )
+            for item in conversation_thread_audit_events
+        ],
+        "privateConversationWorkspaces": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "user_id",
+                    "live_notes",
+                    "enhanced_notes",
+                    "follow_up_draft",
+                    "follow_up_reviewed",
+                    "generation_fingerprint",
+                    "user_edited_at",
+                    "imported_from_browser_at",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_workspaces
+        ],
+        "privateConversationDraftGenerations": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "meeting_id",
+                    "transcript_version_id",
+                    "transcript_version",
+                    "user_id",
+                    "status",
+                    "source_fingerprint",
+                    "source_live_notes",
+                    "source_live_notes_fingerprint",
+                    "source_workspace_lock_version",
+                    "input_fingerprint",
+                    "draft_schema_version",
+                    "content_fingerprint",
+                    "enhanced_notes",
+                    "follow_up_draft",
+                    "framework_included",
+                    "attempt_count",
+                    "max_attempts",
+                    "failure_code",
+                    "started_at",
+                    "completed_at",
+                    "workspace_applied_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_draft_generations
+        ],
+        "privateConversationDeliveryPreferences": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "user_id",
+                    "timezone",
+                    "morning_digest_enabled",
+                    "morning_digest_time",
+                    "pre_meeting_enabled",
+                    "pre_meeting_minutes",
+                    "imported_from_browser_at",
+                    "lock_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_delivery_preferences
+        ],
+        "privateConversationBriefingOutbox": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "user_id",
+                    "interaction_id",
+                    "kind",
+                    "delivery_intent",
+                    "status",
+                    "subject",
+                    "body_text",
+                    "href",
+                    "prepared_for_at",
+                    "delivery_timezone",
+                    "attempt_count",
+                    "max_attempts",
+                    "next_attempt_at",
+                    "connection_id",
+                    "provider_message_id",
+                    "sent_at",
+                    "failed_at",
+                    "failure_code",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in conversation_briefing_outbox
+        ],
         "actionProposals": [
             _columns(
                 item,
@@ -6649,6 +7109,9 @@ async def _export_payload(
                     "created_by_user_id",
                     "status",
                     "source_kind",
+                    "provider_name",
+                    "provider_uses_external_processing",
+                    "external_processing_acknowledged_at",
                     "last_processed_sequence",
                     "last_processed_at",
                     "processed_character_count",
@@ -6987,24 +7450,7 @@ async def _export_payload(
                 )
                 for item in interaction_audits
             ],
-            *[
-                _columns(
-                    item,
-                    (
-                        "id",
-                        "meeting_id",
-                        "actor_user_id",
-                        "action",
-                        "entity_type",
-                        "entity_id",
-                        "changed_fields",
-                        "metadata_json",
-                        "version",
-                        "created_at",
-                    ),
-                )
-                for item in meeting_audits
-            ],
+            *[_meeting_audit_export_record(item) for item in meeting_audits],
             *[
                 _columns(
                     item,
@@ -7047,6 +7493,61 @@ async def _export_payload(
 
 def _columns(record: object, names: tuple[str, ...]) -> dict[str, object]:
     return {name: getattr(record, name) for name in names}
+
+
+def _meeting_audit_visible_to_export_owner(
+    event: MeetingAuditEvent,
+    *,
+    private_user_id: UUID | None,
+    automatic_job_owners: dict[UUID, UUID | None],
+    automatic_artifact_owners: dict[UUID, UUID | None],
+    generation_owners: dict[UUID, UUID],
+) -> bool:
+    automatic_owner: UUID | None
+    is_automatic_event = False
+    if event.entity_type == "ai_job" and event.entity_id in automatic_job_owners:
+        automatic_owner = automatic_job_owners[event.entity_id]
+        is_automatic_event = True
+    elif event.entity_type == "ai_artifact" and event.entity_id in automatic_artifact_owners:
+        automatic_owner = automatic_artifact_owners[event.entity_id]
+        is_automatic_event = True
+    else:
+        raw_generation_id = event.metadata_json.get(AUTOMATIC_DRAFT_GENERATION_METADATA_KEY)
+        if raw_generation_id is None:
+            return True
+        is_automatic_event = True
+        try:
+            automatic_owner = generation_owners.get(UUID(str(raw_generation_id)))
+        except (TypeError, ValueError, AttributeError):
+            automatic_owner = None
+    return (
+        is_automatic_event
+        and private_user_id is not None
+        and automatic_owner is not None
+        and automatic_owner == private_user_id
+    )
+
+
+def _meeting_audit_export_record(event: MeetingAuditEvent) -> dict[str, object]:
+    return {
+        **_columns(
+            event,
+            (
+                "id",
+                "meeting_id",
+                "actor_user_id",
+                "action",
+                "entity_type",
+                "entity_id",
+                "version",
+                "created_at",
+            ),
+        ),
+        "changed_fields": [field for field in event.changed_fields if field != AUTOMATIC_DRAFT_GENERATION_METADATA_KEY],
+        "metadata_json": {
+            key: value for key, value in event.metadata_json.items() if key != AUTOMATIC_DRAFT_GENERATION_METADATA_KEY
+        },
+    }
 
 
 def _json_default(value: object) -> object:

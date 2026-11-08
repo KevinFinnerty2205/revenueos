@@ -228,10 +228,10 @@ export function LiveInteractionIntelligence({
   if (live.state === "available") {
     return (
       <section
-        className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50 p-4"
+        className="mt-5 rounded-2xl border border-brand-secondary/20 bg-brand-secondary/10 p-4"
         aria-labelledby="live-available-title"
       >
-        <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">
+        <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
           Optional
         </p>
         <h2
@@ -254,7 +254,7 @@ export function LiveInteractionIntelligence({
             {working ? "Enabling…" : "Enable Live Intelligence"}
           </button>
         ) : (
-          <p className="mt-3 text-sm font-semibold text-indigo-900">
+          <p className="mt-3 text-sm font-semibold text-brand-primary">
             You can enable it after the interaction starts.
           </p>
         )}
@@ -266,15 +266,19 @@ export function LiveInteractionIntelligence({
     (signal) =>
       !["dismissed", "superseded", "expired"].includes(signal.lifecycleStatus),
   );
+  const suggestedQuestion =
+    live.openQuestions.find(
+      (question) => question.progressStatus === "unresolved",
+    ) ?? null;
 
   return (
     <section
-      className="mt-5 rounded-3xl border border-indigo-200 bg-white p-5 shadow-sm"
+      className="mt-5 rounded-3xl border border-brand-secondary/20 bg-white p-5 shadow-sm"
       aria-labelledby="live-companion-title"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-800">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Provisional · needs review
           </p>
           <h2
@@ -286,7 +290,7 @@ export function LiveInteractionIntelligence({
         </div>
         <button
           type="button"
-          className="rounded-lg px-3 py-2 text-sm font-bold text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+          className="rounded-lg px-3 py-2 text-sm font-bold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus"
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
@@ -307,6 +311,21 @@ export function LiveInteractionIntelligence({
 
       {expanded ? (
         <div className="mt-5 space-y-6">
+          {suggestedQuestion ? (
+            <div className="rounded-2xl border border-brand-accent/40 bg-brand-accent/10 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-primary">
+                Suggested next question
+              </p>
+              <p className="mt-2 text-base font-semibold leading-6 text-slate-950">
+                {suggestedQuestion.label}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                From your preparation. Consider it only if it fits the
+                conversation; Oryntela will not interrupt or speak for you.
+              </p>
+            </div>
+          ) : null}
+
           {live.objectives.length ? (
             <div>
               <h3 className="text-sm font-bold text-slate-950">Objectives</h3>
@@ -340,7 +359,7 @@ export function LiveInteractionIntelligence({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">
+                        <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
                           {signalLabel(signal)}
                           {signal.priority === "high" ? " · High priority" : ""}
                         </p>
@@ -362,7 +381,7 @@ export function LiveInteractionIntelligence({
                       {live.state === "active" ? (
                         <button
                           type="button"
-                          className="rounded-lg px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                          className="rounded-lg px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                           aria-label={`Dismiss ${signalLabel(signal).toLowerCase()}`}
                           disabled={working}
                           onClick={() => void dismiss(signal)}
@@ -422,7 +441,7 @@ export function LiveInteractionIntelligence({
           {live.state === "active" ? (
             <button
               type="button"
-              className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 underline focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 underline focus:outline-none focus:ring-2 focus:ring-brand-focus"
               disabled={working}
               onClick={() => void stop()}
             >

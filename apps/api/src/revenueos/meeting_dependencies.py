@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
+from typing import cast
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.ai_services import AIJobService
@@ -11,6 +12,7 @@ from revenueos.errors import PublicAPIError
 from revenueos.intelligence_workspace import MeetingIntelligenceService
 from revenueos.meeting_repositories import MeetingRepository
 from revenueos.meeting_services import MeetingService, ParticipantService, TranscriptService
+from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
@@ -31,11 +33,20 @@ async def _authorise_meeting_context(
 
 
 async def get_meeting_service(
+    request: Request,
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ) -> AsyncIterator[MeetingService]:
     await _authorise_meeting_context(session, tenant)
-    yield MeetingService(session, tenant)
+    progressive_runtime = cast(
+        ProgressiveTranscriptionRegistry,
+        request.app.state.progressive_transcription_runtime,
+    )
+    yield MeetingService(
+        session,
+        tenant,
+        progressive_runtime=progressive_runtime,
+    )
 
 
 async def get_participant_service(

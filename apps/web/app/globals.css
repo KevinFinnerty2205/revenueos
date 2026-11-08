@@ -11,6 +11,7 @@
   --brand-muted: #59687a;
   --brand-border: #7c8999;
   --brand-focus: #c96b45;
+  --brand-deep-canvas: #07101f;
   color-scheme: light;
 }
 
@@ -25,6 +26,7 @@
   --color-brand-muted: var(--brand-muted);
   --color-brand-border: var(--brand-border);
   --color-brand-focus: var(--brand-focus);
+  --color-brand-deep-canvas: var(--brand-deep-canvas);
 }
 
 * {
@@ -40,7 +42,7 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--brand-accent) 35%, white);
+  background: color-mix(in srgb, var(--brand-accent) 28%, white);
   color: var(--brand-primary);
 }
 
@@ -113,18 +115,18 @@ input[type="number"] {
   }
 
   .secondary-button {
-    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-800 transition hover:border-brand-secondary hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-brand-border bg-white px-5 py-2 text-sm font-bold text-brand-primary transition hover:border-brand-secondary hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .form-control {
-    @apply min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20;
+    @apply min-h-11 rounded-xl border border-brand-border bg-white px-4 text-sm text-brand-text outline-none transition focus:border-brand-focus focus:ring-2 focus:ring-brand-focus/25;
   }
 
   .form-card {
-    @apply rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8;
+    @apply rounded-3xl border border-brand-primary/10 bg-white p-6 shadow-sm sm:p-8;
   }
 
   .form-legend {
-    @apply text-xl font-semibold text-slate-950;
+    @apply text-xl font-semibold text-brand-text;
   }
 }

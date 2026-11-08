@@ -80,10 +80,12 @@ describe("CoreSearch", () => {
     ).toHaveAttribute("href", "/opportunities/opportunity-1");
     expect(
       screen.getByRole("link", { name: /Acme workshop/i }),
-    ).toHaveAttribute("href", "/interactions/interaction-1");
+    ).toHaveAttribute("href", "/conversations/interaction-1");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("search=Acme");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/api/v1/contacts");
-    expect(screen.getByText(/does not generate an AI answer/i)).toBeVisible();
+    expect(
+      screen.getByText(/supporting opportunity records remain searchable/i),
+    ).toBeVisible();
   });
 
   it("does not send a one-character search", () => {

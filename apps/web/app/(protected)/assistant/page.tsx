@@ -21,7 +21,7 @@ export default async function AssistantPage({
       <PageHeader
         eyebrow="Workspace"
         title="Search or ask Oryntela"
-        description="Find a record quickly, or ask a grounded question about what Oryntela already knows."
+        description="Find a conversation quickly, or ask a grounded question about commitments, changes and what to ask next."
       />
       <CoreSearch
         initialMode={initialMode}

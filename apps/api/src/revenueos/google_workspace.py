@@ -207,6 +207,7 @@ class GoogleWorkspaceClient:
         subject: str,
         body: str,
         operation_key: str,
+        html_body: str | None = None,
     ) -> GoogleSendResult:
         self._validate_headers(sender_name, sender_email, recipient_name, recipient_email, subject)
         internet_message_id = f"<oryntela-{operation_key}@mail.oryntela.invalid>"
@@ -218,6 +219,8 @@ class GoogleWorkspaceClient:
         message["Message-ID"] = internet_message_id
         message["X-Oryntela-Operation-Id"] = operation_key
         message.set_content(body, subtype="plain", charset="utf-8")
+        if html_body is not None:
+            message.add_alternative(html_body, subtype="html", charset="utf-8")
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         response = await self.google_request(
             context,
@@ -226,7 +229,13 @@ class GoogleWorkspaceClient:
             json_body={"raw": raw},
             write=True,
         )
-        result = self._parse(_GmailSendResponse, response)
+        try:
+            result = self._parse(_GmailSendResponse, response)
+        except GoogleAPIError as exc:
+            # Gmail may have accepted the message before a malformed success
+            # body prevents receipt reconciliation. Never represent that as a
+            # safe retryable rejection.
+            raise GoogleAPIError("provider_outcome_unknown", uncertain=True) from exc
         return GoogleSendResult(
             message_id=result.id,
             thread_id=result.thread_id,

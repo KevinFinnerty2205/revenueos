@@ -15,6 +15,7 @@ import { PostInteractionCapture } from "@/components/post-interaction-capture";
 import { LiveInteractionIntelligence } from "@/components/live-interaction-intelligence";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
 import {
+  ConversationLiveNotes,
   RecordingFoundation,
   type RecordingActivity,
 } from "@/components/recording-foundation";
@@ -22,6 +23,7 @@ import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 type CaptureChoice = "undecided" | "recording" | "passive";
 
@@ -86,6 +88,31 @@ export function FaceToFaceCompanion({
   const [recordingActivity, setRecordingActivity] =
     useState<RecordingActivity | null>(null);
   const elapsedSecondsRef = useRef(0);
+  const liveNotesRevisionRef = useRef(0);
+  const personalWorkspace = useConversationWorkspace({ interactionId });
+  const liveNotes = personalWorkspace.values.liveNotes;
+  const updateLiveNotes = (value: string) => {
+    liveNotesRevisionRef.current += 1;
+    personalWorkspace.setValues((current) => ({
+      ...current,
+      liveNotes: value,
+    }));
+  };
+  const liveNotesStatus = personalWorkspace.error
+    ? personalWorkspace.error
+    : personalWorkspace.loading
+      ? "Loading your private notes…"
+      : personalWorkspace.saveState === "saving"
+        ? "Saving private notes…"
+        : personalWorkspace.saveState === "saved"
+          ? personalWorkspace.dirtyFields.liveNotes
+            ? "An earlier note version was saved. Newer changes remain unsaved."
+            : "Private notes saved."
+          : personalWorkspace.saveState === "conflict"
+            ? "These notes changed in another session. Your local text is still visible; reload before saving again."
+            : personalWorkspace.saveState === "failed"
+              ? "Private notes could not be saved. Your local text is still visible."
+              : "Private to you until you deliberately include something in review.";
 
   const fetchCompanion = useCallback(async () => {
     const [loadedInteraction, loadedBrief, loadedMarkers, loadedCapabilities] =
@@ -168,7 +195,9 @@ export function FaceToFaceCompanion({
     setMessage(
       choice === "passive"
         ? "Passive Companion is active. Oryntela is not recording or listening."
-        : "Recording controls are ready. Consent must be confirmed before microphone access is requested.",
+        : interaction?.interactionType === "online_meeting"
+          ? "Meeting audio controls are ready. Choose shared audio plus microphone or microphone only, then confirm consent before access is requested."
+          : "Recording controls are ready. Consent must be confirmed before microphone access is requested.",
     );
   }
 
@@ -186,7 +215,7 @@ export function FaceToFaceCompanion({
       setInteraction(started);
       setMessage(
         started.interactionType === "online_meeting"
-          ? "Meeting started. Passive Companion is active; Oryntela is not recording or listening."
+          ? "Meeting started. Choose whether to capture meeting audio or continue without recording."
           : "Interaction started. Choose how you want Companion to help.",
       );
     } catch (requestError: unknown) {
@@ -283,6 +312,22 @@ export function FaceToFaceCompanion({
     setWorking(true);
     setError(null);
     try {
+      if (personalWorkspace.dirtyFields.liveNotes) {
+        const revisionAtSaveStart = liveNotesRevisionRef.current;
+        const notesSaved = await personalWorkspace.save();
+        if (!notesSaved) {
+          setError(
+            "Your private notes could not be saved, so the interaction remains open. Resolve the note error and try again.",
+          );
+          return;
+        }
+        if (liveNotesRevisionRef.current !== revisionAtSaveStart) {
+          setError(
+            "Your private notes changed while saving, so the interaction remains open. Save the newer note version and try again.",
+          );
+          return;
+        }
+      }
       const completed = await apiRequest<Interaction>(
         `/api/v1/interactions/${interactionId}/complete`,
         { method: "POST", body: "{}" },
@@ -323,9 +368,7 @@ export function FaceToFaceCompanion({
   const recordingEnabled = capabilities?.featureFlags.recordingCapture === true;
   const visualEnabled = capabilities?.featureFlags.visualEvidence === true;
   const latestRecording = recordings[0] ?? recordingActivity?.recording ?? null;
-  const canUseBrowserRecording = !["phone_call", "online_meeting"].includes(
-    interaction.interactionType,
-  );
+  const canUseBrowserRecording = interaction.interactionType !== "phone_call";
   const effectiveCaptureChoice = canUseBrowserRecording
     ? captureChoice
     : "passive";
@@ -405,6 +448,14 @@ export function FaceToFaceCompanion({
                 showTranscript={false}
                 fallbackHref="#companion-controls"
                 fallbackLabel="Continue with passive Companion"
+                liveNotes={liveNotes}
+                onLiveNotesChange={updateLiveNotes}
+                onSaveLiveNotes={() => void personalWorkspace.save()}
+                liveNotesSaveDisabled={
+                  personalWorkspace.loading ||
+                  personalWorkspace.saveState === "saving"
+                }
+                liveNotesStatus={liveNotesStatus}
                 onElapsedSecondsChange={(seconds) => {
                   elapsedSecondsRef.current = seconds;
                 }}
@@ -420,21 +471,34 @@ export function FaceToFaceCompanion({
           ) : null}
 
           {effectiveCaptureChoice === "passive" ? (
-            <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-                Passive Companion
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
-                No recording or listening
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                {interaction.interactionType === "phone_call"
-                  ? "This browser cannot reliably record the same phone call, so no recording or listening has started."
-                  : interaction.interactionType === "online_meeting"
-                    ? "A browser microphone is not reliable system-audio capture for an online meeting, so no recording or listening has started."
-                    : "Add a photo or marker only when it is safe and appropriate. Markers contain a type and timestamp, never a note."}
-              </p>
-            </section>
+            <>
+              <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+                  Passive Companion
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                  No recording or listening
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  {interaction.interactionType === "phone_call"
+                    ? "This browser cannot reliably record the same phone call, so no recording or listening has started."
+                    : interaction.interactionType === "online_meeting"
+                      ? "You chose not to capture this meeting, so no recording or listening has started."
+                      : "Add a photo or marker only when it is safe and appropriate. Markers contain a type and timestamp, never a note."}
+                </p>
+              </section>
+              <ConversationLiveNotes
+                inputId={`companion-live-notes-${interactionId}`}
+                liveNotes={liveNotes}
+                onLiveNotesChange={updateLiveNotes}
+                onSave={() => void personalWorkspace.save()}
+                saveDisabled={
+                  personalWorkspace.loading ||
+                  personalWorkspace.saveState === "saving"
+                }
+                status={liveNotesStatus}
+              />
+            </>
           ) : null}
 
           {effectiveCaptureChoice !== "undecided" ? (
@@ -449,12 +513,19 @@ export function FaceToFaceCompanion({
               onDeleteMarker={(marker) => void deleteMarker(marker)}
               onEnd={() => void endInteraction()}
               endLabel={
-                interaction.interactionType === "online_meeting"
-                  ? "End meeting"
-                  : "End interaction"
+                personalWorkspace.dirtyFields.liveNotes
+                  ? interaction.interactionType === "online_meeting"
+                    ? "Save notes and end meeting"
+                    : "Save notes and end interaction"
+                  : interaction.interactionType === "online_meeting"
+                    ? "End meeting"
+                    : "End interaction"
               }
               endDisabled={
                 working ||
+                (personalWorkspace.dirtyFields.liveNotes &&
+                  (personalWorkspace.loading ||
+                    personalWorkspace.saveState === "saving")) ||
                 recordingActivity?.blocksInteractionCompletion === true
               }
             />
@@ -504,6 +575,7 @@ export function FaceToFaceCompanion({
           <PostInteractionCapture
             interactionId={interactionId}
             interactionType={interaction.interactionType}
+            workspaceController={personalWorkspace}
           />
         </div>
       ) : null}
@@ -701,9 +773,7 @@ function CaptureChoicePanel({
   recordingEnabled: boolean;
   onChoose(choice: "recording" | "passive"): void;
 }) {
-  const browserRecordingExcluded = ["phone_call", "online_meeting"].includes(
-    interaction.interactionType,
-  );
+  const browserRecordingExcluded = interaction.interactionType === "phone_call";
   return (
     <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
@@ -720,10 +790,16 @@ function CaptureChoicePanel({
       ) : null}
       {browserRecordingExcluded ? (
         <div className="mt-4 rounded-xl bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
-          {interaction.interactionType === "phone_call"
-            ? "This browser cannot reliably record the same phone call. No recording will start."
-            : "A browser microphone is not reliable system-audio capture for an online meeting. No recording will start."}
+          This browser cannot reliably record the same phone call. No recording
+          will start.
         </div>
+      ) : null}
+      {interaction.interactionType === "online_meeting" ? (
+        <p className="mt-4 rounded-xl bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
+          Capture starts only after you choose shared meeting audio plus
+          microphone, or microphone only, and confirm participant notice and
+          authority. Oryntela never joins the meeting or runs a bot.
+        </p>
       ) : null}
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {!browserRecordingExcluded && recordingEnabled ? (
@@ -732,7 +808,9 @@ function CaptureChoicePanel({
             className="primary-button min-h-16 text-base"
             onClick={() => onChoose("recording")}
           >
-            Record interaction
+            {interaction.interactionType === "online_meeting"
+              ? "Capture meeting audio"
+              : "Record interaction"}
           </button>
         ) : null}
         <button

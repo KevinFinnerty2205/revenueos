@@ -5,6 +5,10 @@ const baseURL = `http://localhost:${webPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: [
+    "conversation-persistence-full-stack.spec.ts",
+    "actual-browser-media/**",
+  ],
   use: {
     baseURL,
     trace: "retain-on-failure",
@@ -17,7 +21,7 @@ export default defineConfig({
       // ignored .env.local points browser navigation at localhost.
       NEXT_PUBLIC_SITE_URL: "https://oryntela.com.au",
     },
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

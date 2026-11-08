@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,7 +18,7 @@ from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
-from revenueos.intelligence_workspace import MeetingIntelligenceService
+from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.models import (
     BetaSystemEvent,
     Evidence,
@@ -230,9 +230,7 @@ class RecordingWorkerService:
                 duration_seconds=claim.duration_seconds,
                 timeout_seconds=self._settings.transcription_timeout_seconds,
             )
-            meeting_id = await self._persist_result(claim, result)
-            if meeting_id is not None and self._settings.feature_auto_generate_intelligence_after_transcription:
-                await self._request_intelligence(claim, meeting_id)
+            await self._persist_result(claim, result)
         except (PrivateObjectStorageError, UnsafeAudioError) as exc:
             await self._record_failure(claim, "recording_source_unavailable", retryable=False)
             logger.warning(
@@ -354,9 +352,10 @@ class RecordingWorkerService:
                 claim.organisation_id,
                 claim.recording_id,
             )
-            if existing_version is not None:
+            if existing_version is not None and existing_version.source != "progressive":
                 if recording.lifecycle_status != "completed":
                     recording.lifecycle_status = "completed"
+                self._mark_automatic_draft_requested(session, recording, existing_version.meeting_id)
                 await self._set_online_meeting_ingestion_state(
                     session,
                     recording.organisation_id,
@@ -434,8 +433,8 @@ class RecordingWorkerService:
                 lifecycle_status="available",
                 retention_class="inherited",
             )
-            version_id = uuid.uuid4()
-            version = TranscriptVersion(
+            version_id = existing_version.id if existing_version is not None else uuid.uuid4()
+            version = existing_version or TranscriptVersion(
                 id=version_id,
                 organisation_id=claim.organisation_id,
                 interaction_id=claim.interaction_id,
@@ -452,6 +451,35 @@ class RecordingWorkerService:
                 provider_request_id=result.provider_request_id,
                 created_at=now,
             )
+            if existing_version is not None:
+                # Preserve the progressive version identity used by an active
+                # browser stream while replacing provisional text with the
+                # authoritative whole-recording batch result. Provisional Live
+                # Intelligence windows cannot survive the source transition:
+                # their cursors refer to the progressive segment set.
+                await delete_live_intelligence(
+                    session,
+                    claim.organisation_id,
+                    transcript_version_ids=(version_id,),
+                )
+                version.interaction_id = claim.interaction_id
+                version.meeting_id = meeting.id if meeting is not None else None
+                version.transcript_id = transcript.id if transcript is not None else None
+                version.evidence_id = evidence_id
+                version.version = version_number
+                version.raw_text = result.text
+                version.language = claim.language or "en"
+                version.source = self._transcript_source(claim.recording_type)
+                version.status = "final"
+                version.provider_name = result.provider_name
+                version.provider_request_id = result.provider_request_id
+                version.deleted_at = None
+                await session.execute(
+                    delete(TranscriptSegment).where(
+                        TranscriptSegment.organisation_id == claim.organisation_id,
+                        TranscriptSegment.transcript_version_id == version_id,
+                    )
+                )
             session.add_all((transcript_evidence, version))
             session.add_all(
                 TranscriptSegment(
@@ -474,6 +502,11 @@ class RecordingWorkerService:
             recording.transcription_request_id = result.provider_request_id
             recording.transcription_completed_at = now
             recording.failure_code = None
+            self._mark_automatic_draft_requested(
+                session,
+                recording,
+                meeting.id if meeting is not None else None,
+            )
             await self._set_online_meeting_ingestion_state(
                 session,
                 recording.organisation_id,
@@ -540,52 +573,6 @@ class RecordingWorkerService:
                 {"error_code": code, "retryable": retryable},
             )
 
-    async def _request_intelligence(self, claim: ClaimedRecording, meeting_id: UUID) -> None:
-        try:
-            async with self._session_factory() as session:
-                await set_tenant_database_context(session, claim.organisation_id)
-                tenant = TenantContext(
-                    organisation_id=claim.organisation_id,
-                    user_id=claim.user_id,
-                    role="member",
-                )
-                beta = BetaService(session, tenant, self._settings)
-                await MeetingIntelligenceService(
-                    session,
-                    tenant,
-                    generation_limiter=beta.reserve_generation,
-                    default_max_attempts=self._settings.worker_default_max_attempts,
-                ).generate(meeting_id)
-                recording = await session.scalar(
-                    select(RecordingSession).where(
-                        RecordingSession.organisation_id == claim.organisation_id,
-                        RecordingSession.id == claim.recording_id,
-                    )
-                )
-                if recording is not None:
-                    recording.auto_intelligence_status = "requested"
-                    self._event(session, recording, "auto_intelligence_requested", {"meeting_id": str(meeting_id)})
-                    await session.commit()
-        except (PublicAPIError, SQLAlchemyError):
-            async with self._session_factory() as session, session.begin():
-                await set_tenant_database_context(session, claim.organisation_id)
-                recording = await session.scalar(
-                    select(RecordingSession).where(
-                        RecordingSession.organisation_id == claim.organisation_id,
-                        RecordingSession.id == claim.recording_id,
-                    )
-                )
-                if recording is not None:
-                    recording.auto_intelligence_status = "failed"
-            logger.warning(
-                "auto_intelligence_request_failed",
-                extra={
-                    "organisation_id": str(claim.organisation_id),
-                    "recording_id": str(claim.recording_id),
-                    "meeting_id": str(meeting_id),
-                },
-            )
-
     @staticmethod
     def _transcript_source(recording_type: str) -> str:
         return {
@@ -593,6 +580,25 @@ class RecordingWorkerService:
             "uploaded_audio_recording": "uploaded_audio",
             "imported_audio_recording": "imported_audio",
         }[recording_type]
+
+    def _mark_automatic_draft_requested(
+        self,
+        session: AsyncSession,
+        recording: RecordingSession,
+        meeting_id: UUID | None,
+    ) -> None:
+        if (
+            not self._settings.feature_auto_generate_intelligence_after_transcription
+            or recording.auto_intelligence_status == "requested"
+        ):
+            return
+        recording.auto_intelligence_status = "requested"
+        self._event(
+            session,
+            recording,
+            "auto_intelligence_requested",
+            {"meeting_id": str(meeting_id) if meeting_id is not None else None},
+        )
 
     @staticmethod
     async def _set_online_meeting_ingestion_state(

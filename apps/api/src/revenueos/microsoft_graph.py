@@ -211,6 +211,7 @@ class MicrosoftGraphClient:
         subject: str,
         body: str,
         operation_key: str,
+        html_body: str | None = None,
     ) -> None:
         address = {"address": sender_email}
         if sender_name:
@@ -225,7 +226,10 @@ class MicrosoftGraphClient:
             json_body={
                 "message": {
                     "subject": subject,
-                    "body": {"contentType": "Text", "content": body},
+                    "body": {
+                        "contentType": "HTML" if html_body is not None else "Text",
+                        "content": html_body if html_body is not None else body,
+                    },
                     "from": {"emailAddress": address},
                     "replyTo": [{"emailAddress": address}],
                     "toRecipients": [{"emailAddress": recipient}],

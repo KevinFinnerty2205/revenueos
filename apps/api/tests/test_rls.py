@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -18,17 +18,109 @@ from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.auth import VerifiedIdentity, _resolve_identity
 from revenueos.beta_maintenance import _delete_organisation_records
 from revenueos.beta_services import BetaService
+from revenueos.briefing_delivery import (
+    BriefingDeliveryTarget,
+    BriefingDeliveryWorkerService,
+    ClaimedBriefingDelivery,
+)
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.daily_repositories import DailyRepository
-from revenueos.database import set_tenant_database_context
+from revenueos.database import set_private_user_database_context, set_tenant_database_context
 from revenueos.domain import AIJobStatus
 from revenueos.errors import PublicAPIError
 from revenueos.legal_contracts import AcceptanceSource, TermsAcceptanceStatusResponse
 from revenueos.legal_services import LegalService
-from revenueos.models import OrganisationCommercialState, TermsAcceptance
+from revenueos.models import (
+    ConversationBriefingOutbox,
+    IntegrationConnection,
+    OrganisationCommercialState,
+    TermsAcceptance,
+)
 from revenueos.operations import ProvisioningResult, provision_member, provision_organisation
 from revenueos.tenant import TenantContext
+
+
+def test_postgresql_briefing_claim_is_exclusive_across_concurrent_workers() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for the briefing claim concurrency test.")
+
+    suffix = uuid.uuid4().hex
+    settings = Settings(environment="test", database_url=database_url)
+
+    async def scenario() -> None:
+        engine = create_async_engine(database_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        organisation_id: uuid.UUID | None = None
+        try:
+            provisioned = await provision_organisation(
+                factory,
+                settings,
+                external_organisation_id=f"org_briefing_claim_concurrency_{suffix}",
+                organisation_name="Synthetic briefing claim concurrency team",
+                timezone="UTC",
+                admin_external_user_id=f"user_briefing_claim_concurrency_{suffix}",
+                admin_email=f"briefing-claim-concurrency-{suffix}@example.com",
+                admin_display_name="Synthetic briefing claim administrator",
+                idempotency_key=f"briefing-claim-concurrency-org-{suffix}",
+                operator_reference="briefing-claim-concurrency-test",
+            )
+            organisation_id = uuid.UUID(provisioned.organisation_id)
+            user_id = uuid.UUID(provisioned.user_id)
+            outbox_id = uuid.uuid4()
+            now = datetime.now(UTC)
+            async with factory() as session, session.begin():
+                await set_tenant_database_context(session, organisation_id)
+                await set_private_user_database_context(session, user_id)
+                session.add(
+                    ConversationBriefingOutbox(
+                        id=outbox_id,
+                        organisation_id=organisation_id,
+                        user_id=user_id,
+                        kind="morning_digest",
+                        delivery_intent="scheduled",
+                        status="queued",
+                        deduplication_key=f"delivery:morning:concurrency:{suffix}",
+                        source_fingerprint="a" * 64,
+                        subject="Synthetic concurrent claim",
+                        body_text="Synthetic content only.",
+                        href="/",
+                        prepared_for_at=now - timedelta(minutes=1),
+                        delivery_timezone="UTC",
+                        operation_key="b" * 64,
+                        attempt_count=0,
+                        max_attempts=3,
+                    )
+                )
+
+            target = BriefingDeliveryTarget(organisation_id, user_id)
+            worker = BriefingDeliveryWorkerService(factory, settings, {}, clock=lambda: now)
+            claims = await asyncio.gather(
+                worker.claim_next(target, "postgres-claim-worker-a"),
+                worker.claim_next(target, "postgres-claim-worker-b"),
+            )
+            winners = [claim for claim in claims if isinstance(claim, ClaimedBriefingDelivery)]
+            assert len(winners) == 1
+            assert sum(claim is None for claim in claims) == 1
+            assert winners[0].outbox_id == outbox_id
+
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                await set_private_user_database_context(session, user_id)
+                stored = await session.scalar(
+                    select(ConversationBriefingOutbox).where(ConversationBriefingOutbox.id == outbox_id)
+                )
+                assert stored is not None
+                assert stored.status == "sending"
+                assert stored.attempt_count == 1
+                assert stored.worker_id in {"postgres-claim-worker-a", "postgres-claim-worker-b"}
+        finally:
+            if organisation_id is not None:
+                await _delete_organisation_records(factory, settings, organisation_id)
+            await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_postgresql_commercial_seat_boundary_serialises_concurrent_members() -> None:
@@ -307,6 +399,51 @@ def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
                 assert trial_result.code == "terms_acceptance_required"
             else:
                 assert trial_result.status == "trial_active"
+
+            # Exercise organisation erasure with the new restrictive delivery
+            # receipt FK under the real private-user RLS policy.
+            connection_id = uuid.uuid4()
+            async with factory() as session, session.begin():
+                await set_tenant_database_context(session, organisation_id)
+                await set_private_user_database_context(session, user_id)
+                session.add(
+                    IntegrationConnection(
+                        id=connection_id,
+                        organisation_id=organisation_id,
+                        connector_key="mock_email",
+                        connection_status="active",
+                        created_by_user_id=user_id,
+                        connected_at=datetime.now(UTC),
+                        last_verified_at=datetime.now(UTC),
+                        capability_state_json=["send_email"],
+                        granted_scopes_json=[],
+                        metadata_version=1,
+                    )
+                )
+                await session.flush()
+                session.add(
+                    ConversationBriefingOutbox(
+                        id=uuid.uuid4(),
+                        organisation_id=organisation_id,
+                        user_id=user_id,
+                        kind="morning_digest",
+                        status="sent",
+                        deduplication_key=f"rls-erasure-{suffix}",
+                        source_fingerprint="a" * 64,
+                        subject="Synthetic erasure receipt",
+                        body_text="Synthetic content only.",
+                        href="/",
+                        prepared_for_at=datetime.now(UTC),
+                        delivery_timezone="UTC",
+                        operation_key="b" * 64,
+                        attempt_count=1,
+                        max_attempts=3,
+                        connection_id=connection_id,
+                        submission_started_at=datetime.now(UTC),
+                        provider_message_id="synthetic-erasure-receipt",
+                        sent_at=datetime.now(UTC),
+                    )
+                )
         finally:
             if organisation_id is not None:
                 await _delete_organisation_records(factory, settings, organisation_id)
@@ -521,6 +658,15 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "credit_operations",
         "credit_reservation_allocations",
         "credit_ledger_entries",
+        "company_knowledge_sources",
+        "company_knowledge_ingestion_jobs",
+        "conversation_user_workspaces",
+        "conversation_draft_generations",
+        "conversation_delivery_preferences",
+        "conversation_briefing_outbox",
+        "conversation_threads",
+        "conversation_thread_assignments",
+        "conversation_thread_audit_events",
         "selling_profiles",
         "selling_profile_revisions",
         "prospect_usage_counters",
@@ -753,6 +899,15 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_forecast_revision_id": uuid.uuid4(),
                 "sales_forecast_reviewer_judgment_id": uuid.uuid4(),
                 "sales_forecast_reviewer_revision_id": uuid.uuid4(),
+                "company_knowledge_source_id": uuid.uuid4(),
+                "company_knowledge_job_id": uuid.uuid4(),
+                "conversation_workspace_id": uuid.uuid4(),
+                "conversation_draft_generation_id": uuid.uuid4(),
+                "conversation_delivery_preference_id": uuid.uuid4(),
+                "conversation_briefing_outbox_id": uuid.uuid4(),
+                "conversation_thread_id": uuid.uuid4(),
+                "conversation_thread_assignment_id": uuid.uuid4(),
+                "conversation_thread_audit_event_id": uuid.uuid4(),
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
                 "commercial_event_id": uuid.uuid4(),
@@ -1043,6 +1198,51 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO company_knowledge_sources
+                                (id, organisation_id, source_kind, label,
+                                 website_url, source_text,
+                                 content_fingerprint, processing_status,
+                                 failure_code, created_by_user_id,
+                                 idempotency_key)
+                            VALUES
+                                (:company_knowledge_source_id,
+                                 :organisation_id, 'website',
+                                 :knowledge_source_label,
+                                 :knowledge_source_url, NULL,
+                                 :knowledge_source_fingerprint,
+                                 'queued', NULL, :user_id,
+                                 :knowledge_source_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "knowledge_source_label": f"RLS website {suffix}",
+                            "knowledge_source_url": f"https://rls-{suffix.lower()}.example.test",
+                            "knowledge_source_fingerprint": suffix.lower() * 64,
+                            "knowledge_source_key": f"rls-company-knowledge-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO company_knowledge_ingestion_jobs
+                                (id, organisation_id, source_id,
+                                 requested_by_user_id, status,
+                                 request_fingerprint)
+                            VALUES
+                                (:company_knowledge_job_id, :organisation_id,
+                                 :company_knowledge_source_id, :user_id,
+                                 'pending', :knowledge_job_fingerprint)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "knowledge_job_fingerprint": suffix.lower() * 64,
+                        },
                     )
                     await connection.execute(
                         text(
@@ -2436,6 +2636,108 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
+                            INSERT INTO conversation_threads
+                                (id, organisation_id, company_id, name,
+                                 created_by_user_id, updated_by_user_id)
+                            VALUES
+                                (:conversation_thread_id, :organisation_id,
+                                 :company_id, :thread_name, :user_id, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "thread_name": f"RLS conversation thread {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_thread_assignments
+                                (id, organisation_id, thread_id, interaction_id,
+                                 confirmed_by_user_id)
+                            VALUES
+                                (:conversation_thread_assignment_id,
+                                 :organisation_id, :conversation_thread_id,
+                                 :interaction_id, :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_thread_audit_events
+                                (id, organisation_id, thread_id, interaction_id,
+                                 actor_user_id, action, metadata_json)
+                            VALUES
+                                (:conversation_thread_audit_event_id,
+                                 :organisation_id, :conversation_thread_id,
+                                 :interaction_id, :user_id, 'assigned',
+                                 '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_user_workspaces
+                                (id, organisation_id, interaction_id, user_id,
+                                 enhanced_notes, follow_up_draft)
+                            VALUES
+                                (:conversation_workspace_id, :organisation_id,
+                                 :interaction_id, :user_id,
+                                 :workspace_notes, :workspace_draft)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "workspace_notes": f"Private notes {suffix}",
+                            "workspace_draft": f"Private follow-up {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_delivery_preferences
+                                (id, organisation_id, user_id, timezone)
+                            VALUES
+                                (:conversation_delivery_preference_id,
+                                 :organisation_id, :user_id, 'Australia/Sydney')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_briefing_outbox
+                                (id, organisation_id, user_id, interaction_id,
+                                 kind, status, deduplication_key,
+                                 source_fingerprint, subject, body_text, href,
+                                 prepared_for_at, operation_key)
+                            VALUES
+                                (:conversation_briefing_outbox_id,
+                                 :organisation_id, :user_id, :interaction_id,
+                                 'pre_meeting', 'queued', :outbox_key,
+                                 :outbox_fingerprint, :outbox_subject,
+                                 :outbox_body, :outbox_href, now(),
+                                 :outbox_operation_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "outbox_key": f"rls-outbox-{suffix.lower()}",
+                            "outbox_fingerprint": suffix.lower() * 64,
+                            "outbox_subject": f"Private briefing {suffix}",
+                            "outbox_body": f"Private briefing body {suffix}",
+                            "outbox_href": (f"/conversations/{identity_parameters['interaction_id']}#preparation"),
+                            "outbox_operation_key": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
                             INSERT INTO action_proposals
                                 (id, organisation_id, opportunity_id, interaction_id,
                                  action_type, status, priority, audience, risk_class,
@@ -3420,12 +3722,18 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :organisation_id, :interaction_id,
                                  :meeting_id, :transcript_id, :recording_id,
                                  :evidence_id, 1, :raw_text, 'en',
-                                 'recorded_audio', 'final', 'mock')
+                                 :transcript_source, :transcript_status,
+                                 :transcript_provider)
                             """
                         ),
                         {
                             **identity_parameters,
-                            "raw_text": f"RLS recorded transcript {suffix}",
+                            "raw_text": (
+                                "First provisional turn" if suffix == "A" else f"RLS recorded transcript {suffix}"
+                            ),
+                            "transcript_source": "progressive" if suffix == "A" else "recorded_audio",
+                            "transcript_status": "provisional" if suffix == "A" else "final",
+                            "transcript_provider": "mock-progressive" if suffix == "A" else "mock",
                         },
                     )
                     await connection.execute(
@@ -3442,7 +3750,178 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         ),
                         {
                             **identity_parameters,
-                            "segment_text": f"RLS recorded transcript {suffix}",
+                            "segment_text": (
+                                "First provisional turn" if suffix == "A" else f"RLS recorded transcript {suffix}"
+                            ),
+                        },
+                    )
+                    if suffix == "A":
+                        provisional_version_update = await connection.execute(
+                            text(
+                                """
+                                UPDATE transcript_versions
+                                SET raw_text = 'Updated provisional turn',
+                                    provider_name = 'mock-progressive-v2'
+                                WHERE id = :version_id
+                                """
+                            ),
+                            {"version_id": tenant["recording_transcript_version_id"]},
+                        )
+                        assert provisional_version_update.rowcount == 1
+                        provisional_segment_update = await connection.execute(
+                            text(
+                                """
+                                UPDATE transcript_segments
+                                SET end_ms = 61000, text = 'Updated provisional turn'
+                                WHERE id = :segment_id
+                                """
+                            ),
+                            {"segment_id": tenant["recording_segment_id"]},
+                        )
+                        assert provisional_segment_update.rowcount == 1
+
+                        promotion = await connection.execute(
+                            text(
+                                """
+                                UPDATE transcript_versions
+                                SET raw_text = 'Authoritative batch transcript',
+                                    source = 'recorded_audio',
+                                    status = 'final',
+                                    provider_name = 'mock-batch',
+                                    provider_request_id = 'rls-batch-request'
+                                WHERE id = :version_id
+                                """
+                            ),
+                            {"version_id": tenant["recording_transcript_version_id"]},
+                        )
+                        assert promotion.rowcount == 1
+                        promoted_state = (
+                            await connection.execute(
+                                text(
+                                    """
+                                    SELECT raw_text, source, status, provider_request_id
+                                    FROM transcript_versions
+                                    WHERE id = :version_id
+                                    """
+                                ),
+                                {"version_id": tenant["recording_transcript_version_id"]},
+                            )
+                        ).one()
+                        assert promoted_state == (
+                            "Authoritative batch transcript",
+                            "recorded_audio",
+                            "final",
+                            "rls-batch-request",
+                        )
+
+                        second_promotion_savepoint = await connection.begin_nested()
+                        with pytest.raises(DBAPIError, match="Transcript versions are immutable"):
+                            await connection.execute(
+                                text(
+                                    """
+                                    UPDATE transcript_versions
+                                    SET raw_text = 'Second authoritative transcript',
+                                        provider_request_id = 'rls-second-batch-request'
+                                    WHERE id = :version_id
+                                    """
+                                ),
+                                {"version_id": tenant["recording_transcript_version_id"]},
+                            )
+                        await second_promotion_savepoint.rollback()
+
+                        final_segment_savepoint = await connection.begin_nested()
+                        with pytest.raises(DBAPIError, match="Transcript segments are immutable"):
+                            await connection.execute(
+                                text(
+                                    """
+                                    UPDATE transcript_segments
+                                    SET text = 'Tampered final segment'
+                                    WHERE id = :segment_id
+                                    """
+                                ),
+                                {"segment_id": tenant["recording_segment_id"]},
+                            )
+                        await final_segment_savepoint.rollback()
+
+                        deleted_fixture = await connection.begin_nested()
+                        retired_segment = await connection.execute(
+                            text(
+                                """
+                                UPDATE transcript_segments
+                                SET deleted_at = now()
+                                WHERE id = :segment_id
+                                """
+                            ),
+                            {"segment_id": tenant["recording_segment_id"]},
+                        )
+                        assert retired_segment.rowcount == 1
+                        retired_version = await connection.execute(
+                            text(
+                                """
+                                UPDATE transcript_versions
+                                SET status = 'deleted', deleted_at = now()
+                                WHERE id = :version_id
+                                """
+                            ),
+                            {"version_id": tenant["recording_transcript_version_id"]},
+                        )
+                        assert retired_version.rowcount == 1
+
+                        deleted_version_savepoint = await connection.begin_nested()
+                        with pytest.raises(DBAPIError, match="Deleted transcript versions are immutable"):
+                            await connection.execute(
+                                text(
+                                    """
+                                    UPDATE transcript_versions
+                                    SET status = 'final', deleted_at = NULL
+                                    WHERE id = :version_id
+                                    """
+                                ),
+                                {"version_id": tenant["recording_transcript_version_id"]},
+                            )
+                        await deleted_version_savepoint.rollback()
+
+                        deleted_segment_savepoint = await connection.begin_nested()
+                        with pytest.raises(DBAPIError, match="Deleted transcript segments are immutable"):
+                            await connection.execute(
+                                text(
+                                    """
+                                    UPDATE transcript_segments
+                                    SET deleted_at = NULL
+                                    WHERE id = :segment_id
+                                    """
+                                ),
+                                {"segment_id": tenant["recording_segment_id"]},
+                            )
+                        await deleted_segment_savepoint.rollback()
+                        await deleted_fixture.rollback()
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO conversation_draft_generations
+                                (id, organisation_id, interaction_id, meeting_id,
+                                 transcript_version_id, transcript_version, user_id,
+                                 status, source_fingerprint, source_live_notes,
+                                 source_live_notes_fingerprint,
+                                 source_workspace_lock_version, input_fingerprint,
+                                 next_attempt_at)
+                            VALUES
+                                (:conversation_draft_generation_id,
+                                 :organisation_id, :interaction_id, :meeting_id,
+                                 :recording_transcript_version_id, 1, :user_id,
+                                 'pending', :draft_source_fingerprint,
+                                 :draft_source_live_notes,
+                                 :draft_source_live_notes_fingerprint, 1,
+                                 :draft_input_fingerprint,
+                                 '9999-12-31 23:59:59+00')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "draft_source_fingerprint": "d" * 64,
+                            "draft_source_live_notes": "Private source notes for the owner only.",
+                            "draft_source_live_notes_fingerprint": "e" * 64,
+                            "draft_input_fingerprint": "f" * 64,
                         },
                     )
                     await connection.execute(
@@ -4038,6 +4517,15 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'credit_operations',
                                     'credit_reservation_allocations',
                                     'credit_ledger_entries',
+                                    'company_knowledge_sources',
+                                    'company_knowledge_ingestion_jobs',
+                                    'conversation_user_workspaces',
+                                    'conversation_draft_generations',
+                                    'conversation_delivery_preferences',
+                                    'conversation_briefing_outbox',
+                                    'conversation_threads',
+                                    'conversation_thread_assignments',
+                                    'conversation_thread_audit_events',
                                     'selling_profiles',
                                     'selling_profile_revisions',
                                     'prospect_usage_counters',
@@ -4110,6 +4598,36 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 assert all(row.proconfig == ["search_path=pg_catalog, public"] for row in function_rows)
                 assert all(row.owner_name != role_name for row in function_rows)
                 assert all(row.can_execute for row in function_rows)
+                discovery_function_rows = (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT procedures.proname,
+                                   procedures.prosecdef,
+                                   procedures.proconfig,
+                                   has_function_privilege(
+                                       'public', procedures.oid, 'EXECUTE'
+                                   ) AS public_can_execute,
+                                   has_function_privilege(
+                                       current_user, procedures.oid, 'EXECUTE'
+                                   ) AS runtime_can_execute,
+                                   pg_get_functiondef(procedures.oid) AS definition
+                            FROM pg_proc AS procedures
+                            WHERE procedures.oid IN (
+                                'public.revenueos_post_conversation_draft_worker_scopes(integer)'::regprocedure,
+                                'public.revenueos_briefing_worker_eligible_owners(timestamptz,integer)'::regprocedure
+                            )
+                            ORDER BY procedures.proname
+                            """
+                        )
+                    )
+                ).all()
+                assert len(discovery_function_rows) == 2
+                assert all(row.prosecdef for row in discovery_function_rows)
+                assert all(row.proconfig == ["search_path=pg_catalog, public"] for row in discovery_function_rows)
+                assert all(not row.public_can_execute for row in discovery_function_rows)
+                assert all(not row.runtime_can_execute for row in discovery_function_rows)
+                assert all("COALESCE(result_limit, 1)" in row.definition for row in discovery_function_rows)
                 assert not await connection.scalar(
                     text("SELECT has_schema_privilege(current_user, 'public', 'CREATE')")
                 )
@@ -4195,6 +4713,24 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 await connection.execute(
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
                     {"organisation_id": str(tenant_a["organisation_id"])},
+                )
+                await connection.execute(
+                    text("SELECT set_config('app.user_id', :user_id, true)"),
+                    {"user_id": str(tenant_a["user_id"])},
+                )
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_user_workspaces")) == 1
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_draft_generations")) == 1
+                await connection.execute(
+                    text("SELECT set_config('app.user_id', :user_id, true)"),
+                    {"user_id": str(uuid.uuid4())},
+                )
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_user_workspaces")) == 0
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_draft_generations")) == 0
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_delivery_preferences")) == 0
+                assert await connection.scalar(text("SELECT count(*) FROM conversation_briefing_outbox")) == 0
+                await connection.execute(
+                    text("SELECT set_config('app.user_id', :user_id, true)"),
+                    {"user_id": str(tenant_a["user_id"])},
                 )
                 await connection.execute(
                     text(
@@ -4402,6 +4938,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                knowledge_source_update = await connection.execute(
+                    text("UPDATE company_knowledge_sources SET label = 'Blocked' WHERE id = :id"),
+                    {"id": tenant_b["company_knowledge_source_id"]},
+                )
+                assert knowledge_source_update.rowcount == 0
                 selling_profile_update = await connection.execute(
                     text("UPDATE selling_profiles SET updated_at = now() WHERE id = :id"),
                     {"id": tenant_b["selling_profile_id"]},
@@ -4770,6 +5311,22 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     assert service_job.organisation_id == tenant_a["organisation_id"]
                     assert service_artifact.organisation_id == tenant_a["organisation_id"]
                     assert service_artifact.artifact_version == 1
+                origin_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError, match="origin is immutable"):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE ai_jobs
+                            SET automatic_draft_generation_id = :generation_id
+                            WHERE id = :job_id
+                            """
+                        ),
+                        {
+                            "generation_id": uuid.uuid4(),
+                            "job_id": service_job.id,
+                        },
+                    )
+                await origin_savepoint.rollback()
                 await transaction.commit()
 
                 quota_settings = Settings(
@@ -5167,6 +5724,15 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "commercial_state_events",
                     "organisation_commercial_states",
                     "organisation_module_entitlements",
+                    "conversation_briefing_outbox",
+                    "conversation_delivery_preferences",
+                    "conversation_draft_generations",
+                    "conversation_user_workspaces",
+                    "conversation_thread_audit_events",
+                    "conversation_thread_assignments",
+                    "conversation_threads",
+                    "company_knowledge_ingestion_jobs",
+                    "company_knowledge_sources",
                     "selling_profile_revisions",
                     "selling_profiles",
                     "crm_writeback_previews",

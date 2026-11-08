@@ -447,7 +447,9 @@ so materially improves the interaction or post-interaction review.
 
 No broad live coach, emotion analysis, autonomous action, universal platform or
 guaranteed real-time result. Only explicitly enabled private-beta workspaces test the
-selected provisional use case; production progressive transcription remains unavailable.
+selected provisional use case. The gated progressive adapter and web capture path are
+now implemented and locally fixture-verified; live production activation and provider
+verification remain unavailable.
 
 ## WO-021 — Interaction Platform Beta
 

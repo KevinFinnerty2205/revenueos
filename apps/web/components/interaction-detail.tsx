@@ -13,6 +13,10 @@ import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { RecordingFoundation } from "@/components/recording-foundation";
 import { ImportedCallRecording } from "@/components/imported-call-recording";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
+import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
+import { ConversationMemory } from "@/components/conversation-memory";
+import { ConversationNotesReview } from "@/components/conversation-notes-review";
+import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 export function InteractionDetail({
   interactionId,
@@ -25,6 +29,21 @@ export function InteractionDetail({
   const [completing, setCompleting] = useState(false);
   const [starting, setStarting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
+  const personalWorkspace = useConversationWorkspace({ interactionId });
+  const liveNotesStatus = personalWorkspace.error
+    ? personalWorkspace.error
+    : personalWorkspace.loading
+      ? "Loading your private notes…"
+      : personalWorkspace.saveState === "saving"
+        ? "Saving private notes…"
+        : personalWorkspace.saveState === "saved"
+          ? "Private notes saved."
+          : personalWorkspace.saveState === "conflict"
+            ? "These notes changed in another session. Your local text is still visible; reload before saving again."
+            : personalWorkspace.saveState === "failed"
+              ? "Private notes could not be saved. Your local text is still visible."
+              : "Private to you until you deliberately include something in review.";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -45,7 +64,7 @@ export function InteractionDetail({
           setError(
             requestError instanceof Error
               ? requestError.message
-              : "The interaction could not be loaded.",
+              : "The conversation could not be loaded.",
           );
         })
         .finally(() => {
@@ -72,7 +91,7 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be started.",
+          : "The conversation could not be started.",
       );
     } finally {
       setStarting(false);
@@ -96,20 +115,26 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The interaction could not be completed.",
+          : "The conversation could not be completed.",
       );
     } finally {
       setCompleting(false);
     }
   }
 
+  async function applyGeneratedVersion() {
+    if (await personalWorkspace.applyGeneratedVersion()) {
+      setWorkspaceRefreshKey((current) => current + 1);
+    }
+  }
+
   if (loading) {
-    return <p role="status">Loading interaction…</p>;
+    return <p role="status">Loading conversation…</p>;
   }
   if (!interaction) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
-        <p role="alert">{error ?? "The interaction was not found."}</p>
+        <p role="alert">{error ?? "The conversation was not found."}</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
@@ -118,8 +143,8 @@ export function InteractionDetail({
           >
             Try again
           </button>
-          <Link href="/interactions" className="secondary-button">
-            Return to Interactions
+          <Link href="/conversations" className="secondary-button">
+            Return to conversations
           </Link>
         </div>
       </div>
@@ -138,9 +163,9 @@ export function InteractionDetail({
     <section aria-labelledby="interaction-detail-title">
       <Link
         className="text-sm font-bold text-brand-secondary hover:underline"
-        href="/interactions"
+        href="/conversations"
       >
-        Back to interactions
+        Back to conversations
       </Link>
       <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
@@ -149,7 +174,7 @@ export function InteractionDetail({
           </span>
           <span
             role="status"
-            aria-label="Interaction lifecycle status"
+            aria-label="Conversation lifecycle status"
             className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
           >
             {humanise(interaction.lifecycleStatus)}
@@ -247,7 +272,7 @@ export function InteractionDetail({
             className={
               isActive || isCompleted ? "secondary-button" : "primary-button"
             }
-            href={`/interactions/${interaction.id}/companion`}
+            href={`/conversations/${interaction.id}/workspace`}
           >
             {companionLabel}
           </Link>
@@ -345,13 +370,10 @@ export function InteractionDetail({
               </button>
             </>
           ) : null}
-          {interaction.meetingId ? (
-            <Link
-              className={isCompleted ? "primary-button" : "secondary-button"}
-              href={`/meetings/${interaction.meetingId}`}
-            >
-              Review meeting intelligence
-            </Link>
+          {isCompleted ? (
+            <a className="primary-button" href="#enhanced-notes">
+              Review notes and follow-up
+            </a>
           ) : null}
           {interaction.interactionType === "online_meeting" &&
           interaction.meetingUrl ? (
@@ -366,6 +388,12 @@ export function InteractionDetail({
           ) : null}
         </div>
       </div>
+      <div className="mt-6" id="conversation-memory">
+        <ConversationMemory
+          interactionId={interaction.id}
+          companyId={interaction.companyId}
+        />
+      </div>
       {!isCompleted ? (
         <div className="mt-6" id="preparation">
           <BetaFeatureGate feature="aiCompanion">
@@ -376,14 +404,35 @@ export function InteractionDetail({
           </BetaFeatureGate>
         </div>
       ) : null}
+      {isCompleted ? (
+        <div className="mt-6 scroll-mt-6" id="enhanced-notes">
+          <ConversationNotesReview
+            controller={personalWorkspace}
+            onApplyGeneratedVersion={applyGeneratedVersion}
+          />
+        </div>
+      ) : null}
       {interaction.lifecycleStatus === "completed" ? (
         <div className="mt-6" id="debrief">
           <BetaFeatureGate feature="aiDebrief">
             <PostInteractionCapture
               interactionId={interaction.id}
               interactionType={interaction.interactionType}
+              restoreLatest
+              workspaceController={personalWorkspace}
+              workspaceRefreshKey={workspaceRefreshKey}
             />
           </BetaFeatureGate>
+        </div>
+      ) : null}
+      {isCompleted && interaction.meetingId ? (
+        <div className="mt-6" id="interaction-intelligence">
+          <MeetingIntelligenceWorkspace
+            meetingId={interaction.meetingId}
+            interactionId={interaction.id}
+            privateFollowUpManagedExternally
+            workspaceRefreshKey={workspaceRefreshKey}
+          />
         </div>
       ) : null}
       {!isCompleted ? (
@@ -397,10 +446,11 @@ export function InteractionDetail({
                 Use your meeting platform
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Oryntela remains passive while the meeting runs. It does not
-                join, record system audio, monitor the browser or run a meeting
-                bot. End the meeting here, then add an authorised recording or
-                transcript, or report what happened while it is fresh.
+                Oryntela never joins the meeting or runs a meeting bot. In
+                Companion, you can deliberately share a meeting tab or screen
+                with audio and add your microphone, choose microphone only, or
+                continue without recording. Nothing starts in the background,
+                and display video is never recorded or uploaded.
               </p>
             </section>
           ) : interaction.interactionType === "phone_call" ? (
@@ -455,6 +505,19 @@ export function InteractionDetail({
                   interactionId={interaction.id}
                   interactionType={interaction.interactionType}
                   lifecycleStatus={interaction.lifecycleStatus}
+                  liveNotes={personalWorkspace.values.liveNotes}
+                  onLiveNotesChange={(value) =>
+                    personalWorkspace.setValues((current) => ({
+                      ...current,
+                      liveNotes: value,
+                    }))
+                  }
+                  onSaveLiveNotes={() => void personalWorkspace.save()}
+                  liveNotesSaveDisabled={
+                    personalWorkspace.loading ||
+                    personalWorkspace.saveState === "saving"
+                  }
+                  liveNotesStatus={liveNotesStatus}
                 />
               </BetaFeatureGate>
             )}

@@ -16,13 +16,23 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from revenueos.auth import get_current_user
 from revenueos.config import Settings
 from revenueos.main import create_app
-from revenueos.models import AIUsageCounter, PreInteractionBrief
+from revenueos.models import (
+    AIArtifact,
+    AIUsageCounter,
+    CaptureSession,
+    Evidence,
+    Interaction,
+    InteractionIntelligenceSnapshot,
+    Meeting,
+    PreInteractionBrief,
+)
 from revenueos.pre_interaction_contracts import PreInteractionBriefContent
 from revenueos.pre_interaction_repositories import PreInteractionBriefRepository
 from revenueos.revenue_brain_reasoning_repositories import RevenueBrainReasoningRepository
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
+    PRIMARY_USER_ID,
     SECONDARY_ORGANISATION_ID,
     TEST_DB_URL,
 )
@@ -150,13 +160,24 @@ def test_opportunity_context_does_not_fall_back_to_account_reasoning(
     result = asyncio.run(
         repository._latest_revenue_brain_insight(  # noqa: SLF001
             PRIMARY_ORGANISATION_ID,
+            confirmed_thread_id=None,
             opportunity_id=uuid.uuid4(),
-            company_id=uuid.uuid4(),
         )
     )
 
     assert result is None
     assert calls == ["opportunity"]
+
+    calls.clear()
+    result = asyncio.run(
+        repository._latest_revenue_brain_insight(  # noqa: SLF001
+            PRIMARY_ORGANISATION_ID,
+            confirmed_thread_id=uuid.uuid4(),
+            opportunity_id=uuid.uuid4(),
+        )
+    )
+    assert result is None
+    assert calls == []
 
 
 @pytest.mark.parametrize(
@@ -241,6 +262,10 @@ def test_phone_brief_prioritises_the_explicit_linked_contact_and_role(client: Te
         "role": "Revenue Director",
         "focus": "Confirm Jordan Lee's priorities and role in this interaction.",
     }
+    brief = generated.json()["brief"]
+    assert brief["headline"] == "Establish whether a focused follow-up is worthwhile."
+    assert all("previous discussion" not in item["question"].lower() for item in brief["questionsToAsk"])
+    assert any("business outcome" in item["question"].lower() for item in brief["questionsToAsk"])
     assert "+61 400 000 000" not in generated.text
 
 
@@ -397,6 +422,271 @@ def test_context_selection_never_queries_the_transcript_table(
     assert all("transcripts" not in statement.lower() for statement in statements)
     assert "Synthetic prior customer context" not in response.text
     assert str(SECONDARY_ORGANISATION_ID) not in response.text
+
+
+def test_confirmed_thread_prevents_same_company_thread_b_from_entering_thread_a_brief(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    company_id = str(create_company(client, name="Two initiative account")["id"])
+    source_a = create_meeting(client, title="Thread A discovery", company_id=company_id)
+    source_b = create_meeting(client, title="Thread B discovery", company_id=company_id)
+    assert (
+        client.patch(
+            f"/api/v1/meetings/{source_a['id']}",
+            json={"status": "completed", "meetingDate": "2026-08-01T10:00:00+10:00"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/v1/meetings/{source_b['id']}",
+            json={"status": "completed", "meetingDate": "2026-08-02T10:00:00+10:00"},
+        ).status_code
+        == 200
+    )
+    thread_a = client.post(
+        "/api/v1/conversation-threads",
+        json={
+            "name": "Initiative A",
+            "companyId": company_id,
+            "initialInteractionId": source_a["interactionId"],
+            "expectedAssignmentLockVersion": 0,
+        },
+    )
+    assert thread_a.status_code == 201, thread_a.text
+    thread_b = client.post(
+        "/api/v1/conversation-threads",
+        json={
+            "name": "Initiative B",
+            "companyId": company_id,
+            "initialInteractionId": source_b["interactionId"],
+            "expectedAssignmentLockVersion": 0,
+        },
+    )
+    assert thread_b.status_code == 201, thread_b.text
+    target = create_interaction(
+        client,
+        title="Prepare Initiative A",
+        interaction_type="online_meeting",
+        company_id=company_id,
+    )
+    assigned = client.put(
+        f"/api/v1/interactions/{target['id']}/thread-assignment",
+        json={"threadId": thread_a.json()["id"], "expectedLockVersion": 0},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    selected_meetings: list[UUID | None] = []
+
+    async def capture_selected_meeting(
+        _repository: PreInteractionBriefRepository,
+        _organisation_id: UUID,
+        meeting: Meeting | None,
+    ) -> dict[str, AIArtifact]:
+        selected_meetings.append(None if meeting is None else meeting.id)
+        return {}
+
+    monkeypatch.setattr(
+        PreInteractionBriefRepository,
+        "_completed_current_artifacts",
+        capture_selected_meeting,
+    )
+    generated = client.post(_brief_url(str(target["id"])))
+
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["state"] == "completed"
+    assert selected_meetings == [UUID(str(source_a["id"]))]
+    assert UUID(str(source_b["id"])) not in selected_meetings
+    assert "confirmed conversation thread" in generated.json()["brief"]["accountContext"]
+    assert generated.json()["brief"]["headline"] == (
+        "Resolve the most important change or open point from the previous conversation."
+    )
+    assert any(
+        item["question"] == "What has changed since our last conversation?"
+        for item in generated.json()["brief"]["questionsToAsk"]
+    )
+
+
+def test_confirmed_thread_prior_phone_call_snapshot_informs_next_brief(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    company_id = str(create_company(client, name="Phone continuity account")["id"])
+    prior_call = create_interaction(
+        client,
+        title="Pricing follow-up call",
+        interaction_type="phone_call",
+        company_id=company_id,
+        call_direction="outbound",
+    )
+    completed = client.post(
+        f"/api/v1/interactions/{prior_call['id']}/complete",
+        json={"callOutcome": "connected"},
+    )
+    assert completed.status_code == 200, completed.text
+    thread = client.post(
+        "/api/v1/conversation-threads",
+        json={
+            "name": "Pricing continuity",
+            "companyId": company_id,
+            "initialInteractionId": prior_call["id"],
+            "expectedAssignmentLockVersion": 0,
+        },
+    )
+    assert thread.status_code == 201, thread.text
+    target = create_interaction(
+        client,
+        title="Pricing decision meeting",
+        interaction_type="online_meeting",
+        company_id=company_id,
+    )
+    assigned = client.put(
+        f"/api/v1/interactions/{target['id']}/thread-assignment",
+        json={"threadId": thread.json()["id"], "expectedLockVersion": 0},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    snapshot_id = uuid.uuid4()
+    evidence_id = uuid.uuid4()
+    capture_id = uuid.uuid4()
+    occurred_at = datetime(2026, 8, 10, 1, 0, tzinfo=UTC)
+    statement = "The buyer asked for a revised pricing option before the decision meeting."
+
+    async def seed_prior_phone_intelligence() -> None:
+        async with app.state.session_factory() as session:
+            interaction = await session.scalar(
+                select(Interaction).where(
+                    Interaction.organisation_id == PRIMARY_ORGANISATION_ID,
+                    Interaction.id == UUID(str(prior_call["id"])),
+                )
+            )
+            assert interaction is not None
+            interaction.actual_start_at = occurred_at
+            interaction.actual_end_at = occurred_at
+            session.add_all(
+                (
+                    CaptureSession(
+                        id=capture_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction.id,
+                        capture_type="ai_debrief",
+                        status="completed",
+                        started_by_user_id=PRIMARY_USER_ID,
+                        started_at=occurred_at,
+                        completed_at=occurred_at,
+                    ),
+                    Evidence(
+                        id=evidence_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction.id,
+                        capture_session_id=capture_id,
+                        evidence_type="user_observation",
+                        origin_class="salesperson_reported",
+                        support_class="reported",
+                        validation_state="verified",
+                        captured_by_user_id=PRIMARY_USER_ID,
+                        captured_at=occurred_at,
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                    InteractionIntelligenceSnapshot(
+                        id=snapshot_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction.id,
+                        opportunity_id=None,
+                        session_id=capture_id,
+                        schema_version=1,
+                        version=1,
+                        validation_state="validated",
+                        content_json={
+                            "schemaVersion": 1,
+                            "origin": "salesperson_reported",
+                            "sourceLabel": "Reported by you",
+                            "items": [
+                                {
+                                    "evidenceId": str(evidence_id),
+                                    "category": "customer_request",
+                                    "statement": statement,
+                                    "origin": "salesperson_reported",
+                                    "validationState": "verified",
+                                    "conflictState": "not_assessed",
+                                }
+                            ],
+                        },
+                        source_evidence_ids=[str(evidence_id)],
+                        created_at=occurred_at,
+                    ),
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed_prior_phone_intelligence())
+    generated = client.post(_brief_url(str(target["id"])))
+
+    assert generated.status_code == 200, generated.text
+    body = generated.json()
+    assert body["state"] == "completed"
+    assert statement in body["brief"]["accountContext"]
+    assert "reviewed reports, not customer-direct evidence" in body["brief"]["accountContext"]
+    assert body["brief"]["headline"] == (
+        "Resolve the most important change or open point from the previous conversation."
+    )
+    assert any(
+        item["question"] == "What has changed since our last conversation?" for item in body["brief"]["questionsToAsk"]
+    )
+    assert "Prior validated Interaction Intelligence" in body["sourceLabels"]
+
+    async def read_source_references() -> list[dict[str, object]]:
+        async with app.state.session_factory() as session:
+            brief = await session.scalar(
+                select(PreInteractionBrief)
+                .where(
+                    PreInteractionBrief.organisation_id == PRIMARY_ORGANISATION_ID,
+                    PreInteractionBrief.interaction_id == UUID(str(target["id"])),
+                )
+                .order_by(PreInteractionBrief.brief_version.desc())
+                .limit(1)
+            )
+            assert brief is not None
+            return brief.source_references_json
+
+    references = asyncio.run(read_source_references())
+    snapshot_references = [item for item in references if item.get("capability") == "interaction_intelligence"]
+    assert {item["source_id"] for item in snapshot_references} == {str(snapshot_id)}
+    assert {item["source_classification"] for item in snapshot_references} == {"salesperson_reported"}
+    assert {item["validation_status"] for item in snapshot_references} == {"validated"}
+
+
+def test_no_confirmed_thread_does_not_fall_back_to_company_history(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    company_id = str(create_company(client, name="Ungrouped account")["id"])
+    prior = create_meeting(client, title="Unrelated company conversation", company_id=company_id)
+    assert client.patch(f"/api/v1/meetings/{prior['id']}", json={"status": "completed"}).status_code == 200
+    target = create_interaction(client, title="Ungrouped preparation", company_id=company_id)
+    selected_meetings: list[UUID | None] = []
+
+    async def capture_selected_meeting(
+        _repository: PreInteractionBriefRepository,
+        _organisation_id: UUID,
+        meeting: Meeting | None,
+    ) -> dict[str, AIArtifact]:
+        selected_meetings.append(None if meeting is None else meeting.id)
+        return {}
+
+    monkeypatch.setattr(
+        PreInteractionBriefRepository,
+        "_completed_current_artifacts",
+        capture_selected_meeting,
+    )
+    generated = client.post(_brief_url(str(target["id"])))
+
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["state"] == "completed"
+    assert selected_meetings == [None]
+    assert "Prior validated Meeting Intelligence" not in generated.json()["sourceLabels"]
 
 
 def test_full_validated_intelligence_is_grounded_and_stale_versions_are_excluded(

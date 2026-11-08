@@ -22,9 +22,13 @@ from revenueos.auth import (
 )
 from revenueos.beta_dependencies import get_session_revoker
 from revenueos.clerk_sessions import SessionRevocationResult
+from revenueos.errors import PublicAPIError
 from revenueos.models import BetaSystemEvent, Organisation, OrganisationMembership, User
+from revenueos.progressive_transcription_contracts import ProgressiveSessionResponse
+from revenueos.progressive_transcription_runtime import ProgressiveTranscriptionRuntime
 
 from .conftest import PRIMARY_ORGANISATION_ID, SECONDARY_ORGANISATION_ID
+from .test_progressive_transcription_runtime import LocalFixtureProvider
 
 TARGET_USER_ID = UUID("00000000-0000-4000-8000-000000000099")
 TARGET_EXTERNAL_ID = "user_deauthorisation_A1"
@@ -117,6 +121,25 @@ def test_disable_revokes_exact_user_and_old_auth_never_revives(
     )
     app.dependency_overrides[get_session_revoker] = lambda: revoker
     issued_before_disable = datetime.now(UTC) - timedelta(minutes=1)
+    provider = LocalFixtureProvider()
+    progressive_runtime = ProgressiveTranscriptionRuntime(
+        app.state.settings.model_copy(update={"feature_progressive_transcription_enabled": True}),
+        provider_factory=lambda _settings: provider,
+    )
+    app.state.progressive_transcription_runtime = progressive_runtime
+    portal = client.portal
+    assert portal is not None
+
+    async def start_progressive_session() -> ProgressiveSessionResponse:
+        return await progressive_runtime.start(
+            organisation_id=PRIMARY_ORGANISATION_ID,
+            user_id=TARGET_USER_ID,
+            interaction_id=UUID("00000000-0000-4000-8000-000000000091"),
+            recording_session_id=UUID("00000000-0000-4000-8000-000000000092"),
+            idempotency_key="member-disable-runtime-revocation",
+        )
+
+    progressive_session = portal.call(start_progressive_session)
 
     disabled = client.patch(
         f"/api/v1/beta/admin/members/{TARGET_USER_ID}",
@@ -129,6 +152,27 @@ def test_disable_revokes_exact_user_and_old_auth_never_revives(
         "revokedSessionCount": 2,
     }
     assert revoker.external_id_pairs == [(TARGET_EXTERNAL_ID, "org_dev_001")]
+    assert provider.connection.closed is True
+    assert provider.connection.close_calls == 1
+
+    async def verify_progressive_session_retired_once() -> None:
+        with pytest.raises(PublicAPIError) as retired:
+            await progressive_runtime.owned_session(
+                PRIMARY_ORGANISATION_ID,
+                TARGET_USER_ID,
+                progressive_session.session_id,
+            )
+        assert retired.value.code == "progressive_transcription_not_found"
+        assert (
+            await progressive_runtime.retire_user_sessions(
+                PRIMARY_ORGANISATION_ID,
+                TARGET_USER_ID,
+            )
+            == 0
+        )
+
+    portal.call(verify_progressive_session_retired_once)
+    assert provider.connection.close_calls == 1
 
     factory = app.state.session_factory
     assert isinstance(factory, async_sessionmaker)

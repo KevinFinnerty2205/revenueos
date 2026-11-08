@@ -16,23 +16,32 @@ the final Opportunity Workspace intelligence projection or Revenue Brain.
 1. Prepare and review the Pre-Interaction Brief.
 2. Start the Interaction and its separately authorised source capture.
 3. Explicitly choose **Enable Live Intelligence**.
-4. Review bounded objective/question progress and material emerging signals.
+4. Review the next unresolved preparation question, bounded
+   objective/question progress and material emerging signals.
 5. Collapse the panel, dismiss an individual signal or disable it for the Interaction.
 6. End the Interaction. Oryntela freezes live processing.
 7. Finalise the normal evidence path and run final Interaction Intelligence.
 8. Compare the frozen live state with final intelligence.
 9. Use AI Debrief for material ambiguity that final evidence did not resolve.
 
-The panel uses no audio, toast, modal, vibration or autonomous prompt. Silence is a
-valid result. There is no score, forecast, confidence percentage or coaching script.
+The panel uses no audio, toast, modal, vibration or autonomous prompt. When a reviewed
+preparation question remains unresolved, the panel may quietly surface that exact
+question as **Suggested next question**. It does not generate a new coaching script,
+interrupt, auto-speak or claim that the question is appropriate for the current
+moment. Silence is a valid result. There is no score, forecast or confidence
+percentage.
 
 ## Supported and fallback behaviour
 
 - Face-to-face meetings, presentations, workshops, site visits and online meetings
   can use live processing only when an authorised progressive source exists.
-- The current deterministic source is suitable for synthetic/private-beta evaluation.
-  WO-015 recording and WO-018 online import remain batch/post-interaction paths; the
-  product does not claim that they provide production live transcription.
+- The browser can deliberately tap an authorised recording stream as 24 kHz mono
+  PCM16 and send it through authenticated server routes to the disabled-by-default
+  OpenAI Realtime transcription adapter. Final provider turns are persisted as a
+  provisional `progressive` transcript for this feature; partial and final text are
+  also reconciled in the recording UI. Ordering, bounded buffering, cancellation,
+  reconnect/retry and final drain are fixture- and synthetic-browser-tested only.
+  WO-015 batch processing remains the authoritative final transcript path.
 - Ordinary cellular calls have no same-device capture. Phone Live Intelligence is
   unavailable unless a separately authorised progressive source exists.
 - Executive lunches and other sensitive unsupported modes fall back to passive
@@ -44,7 +53,9 @@ valid result. There is no score, forecast, confidence percentage or coaching scr
 - possible objection, decision, action, risk or customer request;
 - possible timeline, procurement, security/legal or stakeholder change;
 - an objective as **Possibly addressed**; and
-- an open question as **Possibly answered**.
+- an open question as **Possibly answered**; and
+- the first still-unresolved preparation question as a quiet
+  **Suggested next question**.
 
 Buying, commercial-intent and customer-request signals require customer attribution.
 Unknown speakers can support only conservative, visibly uncertain operational
@@ -60,7 +71,17 @@ customer intent.
   processing also waits for enough new material.
 - Online live capability depends on an authorised progressive source.
 - There is no ordinary cellular-call interception, native app or meeting bot.
-- External live AI is disabled and unavailable in this work order.
+- A server-only OpenAI Responses live-signal adapter is implemented with strict
+  schema/source validation, no tools, `store=false`, bounded timeouts and safe
+  retry/error mapping. Each live session durably records its provider mode and,
+  when external processing is selected, the user's acknowledgement time; processing
+  fails closed if runtime configuration no longer matches that binding. Live
+  activation and verification remain disabled; the local deterministic detector
+  remains the default.
+- Progressive audio-to-text transport is implemented behind closed gates, but live
+  provider behaviour, regional processing, retention, cost, reliability and
+  production rollout/drain remain unverified activation boundaries. Fixture-tested
+  protocol compatibility is not live-provider verification.
 - Private-beta flags, quotas, consent, retention and production-data restrictions
   remain in force.
 

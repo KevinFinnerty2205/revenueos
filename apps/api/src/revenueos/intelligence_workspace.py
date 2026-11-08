@@ -264,6 +264,12 @@ EXTRACTION_NAMES: tuple[CapabilityName, ...] = (
     "risks_blockers",
     "open_questions",
 )
+POST_CONVERSATION_DRAFT_EXTRACTION_NAMES: tuple[CapabilityName, ...] = (
+    "executive_summary",
+    "decisions",
+    "action_items",
+    "open_questions",
+)
 FOLLOW_UP_EMAIL_PREREQUISITES: tuple[CapabilityName, ...] = (
     "executive_summary",
     "decisions",
@@ -291,9 +297,11 @@ class MeetingIntelligenceService:
         tenant: TenantContext,
         generation_limiter: Callable[[], Awaitable[None]] | None = None,
         default_max_attempts: int | None = None,
+        automatic_draft_generation_id: UUID | None = None,
     ) -> None:
         self.session = session
         self.tenant = tenant
+        self._automatic_draft_generation_id = automatic_draft_generation_id
         self.jobs = AIJobRepository(session)
         self.artifacts = AIArtifactRepository(session)
         self.capabilities = AIJobService(
@@ -302,6 +310,7 @@ class MeetingIntelligenceService:
             job_repository=self.jobs,
             generation_limiter=generation_limiter,
             default_max_attempts=default_max_attempts,
+            automatic_draft_generation_id=automatic_draft_generation_id,
         )
 
     async def get_workspace(
@@ -357,6 +366,7 @@ class MeetingIntelligenceService:
             meeting_id,
             transcript_version,
             [configuration.job_type for configuration in CAPABILITIES],
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         artifacts = await self.artifacts.list_intelligence_artifacts_for_jobs(
             self.tenant.organisation_id,
@@ -492,6 +502,83 @@ class MeetingIntelligenceService:
         )
         return GenerationResult(response=response, created_count=len(created))
 
+    async def generate_post_conversation_draft(self, meeting_id: UUID) -> GenerationResult:
+        """Generate only the neutral artefacts needed for one private draft."""
+
+        logger.info(
+            "post_conversation_draft_intelligence_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+            },
+        )
+        created: list[CapabilityName] = []
+        reused: list[CapabilityName] = []
+        requesters = {
+            "executive_summary": self.capabilities.request_executive_summary,
+            "decisions": self.capabilities.request_decisions,
+            "action_items": self.capabilities.request_action_items,
+            "open_questions": self.capabilities.request_open_questions,
+        }
+        for name in POST_CONVERSATION_DRAFT_EXTRACTION_NAMES:
+            await self._reset_tenant_context()
+            result = await requesters[name](meeting_id)
+            self._record_orchestration_result(meeting_id, name, result, created, reused)
+
+        await self._reset_tenant_context()
+        intermediate, snapshots = await self._read_workspace(meeting_id)
+        prerequisites_ready = all(snapshots[name].state == "completed" for name in FOLLOW_UP_EMAIL_PREREQUISITES)
+        email_state = snapshots["follow_up_email"].state
+        if prerequisites_ready and email_state in {
+            "not_generated",
+            "failed",
+            "cancelled",
+        }:
+            logger.info(
+                "post_conversation_draft_composer_prerequisites_satisfied",
+                extra=self._log_context(meeting_id, intermediate),
+            )
+            await self._reset_tenant_context()
+            email_result = await self.capabilities.request_follow_up_email(
+                meeting_id,
+                FollowUpEmailTone.PROFESSIONAL,
+            )
+            self._record_orchestration_result(
+                meeting_id,
+                "follow_up_email",
+                email_result,
+                created,
+                reused,
+            )
+        elif email_state in {"queued", "processing", "completed"}:
+            reused.append("follow_up_email")
+            logger.info(
+                "post_conversation_draft_orchestration_reused_job",
+                extra={
+                    "organisation_id": str(self.tenant.organisation_id),
+                    "meeting_id": str(meeting_id),
+                    "job_type": AIJobType.FOLLOW_UP_EMAIL.value,
+                    "reused_count": 1,
+                },
+            )
+
+        await self._reset_tenant_context()
+        final, _ = await self._read_workspace(meeting_id)
+        response = MeetingIntelligenceGenerationResponse(
+            **final.model_dump(),
+            created_capabilities=created,
+            reused_capabilities=reused,
+        )
+        logger.info(
+            "post_conversation_draft_intelligence_completed",
+            extra={
+                **self._log_context(meeting_id, final),
+                "created_count": len(created),
+                "reused_count": len(reused),
+            },
+        )
+        return GenerationResult(response=response, created_count=len(created))
+
     async def _read_workspace(
         self,
         meeting_id: UUID,
@@ -519,6 +606,7 @@ class MeetingIntelligenceService:
             meeting_id,
             transcript.version,
             [configuration.job_type for configuration in CAPABILITIES],
+            automatic_draft_generation_id=self._automatic_draft_generation_id,
         )
         selected_jobs = {
             configuration.name: self._latest_equivalent_job(jobs, configuration) for configuration in CAPABILITIES

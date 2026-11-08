@@ -234,7 +234,7 @@ durable human intent while keeping future execution integrations out of current 
 
 ## Sales Methodology now implemented
 
-WO-024 adds MEDDIC, MEDDPICC, BANT, SPICED and bounded custom organisation
+WO-024 adds MEDDIC, MEDDICC, MEDDPICC, BANT, SPIN, SPICED and bounded custom organisation
 methodologies to Oryntela Core. They organise current validated Evidence into
 reviewable categorical field states under Opportunity → Deal. There is no percentage,
 qualification score, close probability, stage gate or new top-level navigation item.

@@ -76,7 +76,7 @@ describe("SettingsExperience", () => {
     expect(screen.queryByText("Methodology controls")).not.toBeInTheDocument();
   });
 
-  it("shows methodology and beta controls to administrators", async () => {
+  it("keeps conversation settings focused and links administrators to knowledge and frameworks", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
@@ -89,16 +89,15 @@ describe("SettingsExperience", () => {
       ),
     );
     render(<SettingsExperience />);
-    expect(await screen.findByText("Methodology controls")).toBeVisible();
+    expect(
+      await screen.findByRole("heading", {
+        name: "Digest and pre-meeting preferences",
+      }),
+    ).toBeVisible();
     const settingsNavigation = screen.getByRole("navigation", {
       name: "Settings sections",
     });
-    for (const label of [
-      "Company profile",
-      "Plan & billing",
-      "Sales setup",
-      "Team & safety",
-    ]) {
+    for (const label of ["Company knowledge", "Frameworks", "Team & safety"]) {
       expect(
         within(settingsNavigation).getByRole("link", {
           name: new RegExp(label, "i"),
@@ -106,13 +105,12 @@ describe("SettingsExperience", () => {
       ).toBeVisible();
     }
     expect(
-      screen.getByText("Company and selling profile controls"),
-    ).toBeVisible();
-    expect(screen.getByText("Commercial plan controls")).toBeVisible();
-    expect(screen.getByText("Credit controls")).toBeVisible();
-    expect(screen.getByText("Prospect controls")).toBeVisible();
-    expect(screen.getByText("CRM controls")).toBeVisible();
-    expect(screen.getByText("Pipeline controls")).toBeVisible();
+      screen.queryByText("Commercial plan controls"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Credit controls")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prospect controls")).not.toBeInTheDocument();
+    expect(screen.queryByText("CRM controls")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pipeline controls")).not.toBeInTheDocument();
     expect(screen.getByText("Administrator controls for user-1")).toBeVisible();
   });
 });

@@ -16,6 +16,7 @@ const EMPTY_OFFERING: SellingOffering = {
   intendedOutcomes: [],
   differentiators: [],
   competitorsAlternatives: [],
+  commonObjections: [],
   approvedProof: [],
   approvedClaims: [],
 };
@@ -32,6 +33,7 @@ const OPTIONAL_FIELDS: Array<{
   { key: "intendedOutcomes", label: "Intended outcomes" },
   { key: "differentiators", label: "Differentiators" },
   { key: "competitorsAlternatives", label: "Competitors and alternatives" },
+  { key: "commonObjections", label: "Common objections and approved answers" },
   { key: "approvedProof", label: "Approved proof" },
   { key: "approvedClaims", label: "Approved claims" },
 ];
@@ -46,6 +48,7 @@ function copyContent(value: SellingProfileContent): SellingProfileContent {
       intendedOutcomes: [...offering.intendedOutcomes],
       differentiators: [...offering.differentiators],
       competitorsAlternatives: [...offering.competitorsAlternatives],
+      commonObjections: [...offering.commonObjections],
       approvedProof: [...offering.approvedProof],
       approvedClaims: [...offering.approvedClaims],
     })),
@@ -252,16 +255,17 @@ export function SellingProfileSettings() {
       aria-labelledby="selling-profile-title"
     >
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-        Admin control
+        Step 2 · Review
       </p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="selling-profile-title" className="form-legend">
-            Company &amp; Selling Profile
+            Company understanding
           </h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">
-            Maintain approved context about your company and offers. Members may
-            use only the approved current revision.
+            Review what Oryntela should use for preparation: what you sell, who
+            it is for, the problems and outcomes, differentiators, evidence and
+            approved objection handling. Members use only the approved revision.
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-700">

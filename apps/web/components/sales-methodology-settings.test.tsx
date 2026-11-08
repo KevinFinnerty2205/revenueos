@@ -14,7 +14,7 @@ function response(body: object, status = 200) {
 }
 
 function standard(
-  key: "meddic" | "meddpicc" | "bant" | "spiced",
+  key: "meddic" | "meddicc" | "meddpicc" | "bant" | "spin" | "spiced",
 ): MethodologyDefinitionSummary {
   return {
     id: null,
@@ -50,8 +50,10 @@ function catalogue(
   return {
     standards: [
       standard("meddic"),
+      standard("meddicc"),
       standard("meddpicc"),
       standard("bant"),
+      standard("spin"),
       standard("spiced"),
     ],
     custom: [],
@@ -81,13 +83,14 @@ describe("SalesMethodologySettings", () => {
     render(<SalesMethodologySettings />);
 
     expect(
-      await screen.findByRole("heading", { name: "Sales Methodology" }),
+      await screen.findByRole("heading", { name: "Conversation Frameworks" }),
     ).toBeVisible();
     expect(
       screen.getByText(
-        /do not score opportunities, block stages or make automatic changes/i,
+        /do not predict a win, block stages or make automatic changes/i,
       ),
     ).toBeVisible();
+    expect(screen.getByText("SPIN")).toBeVisible();
     const card = screen.getByText("MEDDPICC").closest("div.rounded-2xl");
     fireEvent.click(card!.querySelector("button")!);
 

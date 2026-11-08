@@ -541,12 +541,44 @@ test("interaction timeline supports deliberate creation and completion without i
     async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
+      if (path.endsWith("/personal-workspace")) {
+        await route.fulfill({
+          json: {
+            exists: true,
+            ownerUserId: "user-1",
+            lockVersion: 2,
+            liveNotes:
+              "Finance needs the implementation sequence before approval.",
+            enhancedNotes:
+              "Finance needs the implementation sequence. The transcript confirms a Friday review.",
+            followUpDraft:
+              "Subject: Friday review\n\nHere are the transcript-backed next steps.",
+            followUpReviewed: false,
+            generationFingerprint: "a".repeat(64),
+            generationState: "ready",
+            generationId: "generation-1",
+            generationTranscriptVersion: 1,
+            generationPersonalNotesState: "current",
+            generationFailureCode: null,
+            generationRetryAvailable: false,
+            generationUpdateAvailable: false,
+            generationCompletedAt: "2026-11-08T00:00:00Z",
+            importedFromBrowserAt: null,
+            updatedAt: "2026-11-08T00:00:00Z",
+          },
+        });
+        return;
+      }
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({ json: emptyBriefResponse() });
         return;
       }
       if (path.endsWith("/companion/markers")) {
         await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
         return;
       }
       if (request.method() === "POST" && path.endsWith("/start")) {
@@ -688,21 +720,21 @@ test("interaction timeline supports deliberate creation and completion without i
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/interactions");
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Interactions" }),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
-  await expect(page.getByText("Acme Australia")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Open Meeting Intelligence" }),
-  ).toHaveAttribute("href", "/meetings/meeting-1");
+    page.getByRole("link", { name: "View conversations and notes" }),
+  ).toHaveAttribute("href", "/companies/company-1#conversations");
 
-  await page.getByRole("link", { name: "Create interaction" }).first().click();
+  await page.getByRole("link", { name: "Add conversation" }).first().click();
   await page.getByLabel("Title").fill("Customer planning workshop");
-  await page.getByLabel("Interaction type").selectOption("workshop");
+  await page.getByLabel("Conversation type").selectOption("workshop");
   await page.getByLabel("Company").selectOption("company-1");
   await page.getByLabel("Opportunity").selectOption("opportunity-1");
-  await page.getByRole("button", { name: "Create interaction" }).click();
-  await expect(page).toHaveURL(/\/interactions\/interaction-2$/);
+  await page.getByRole("button", { name: "Add conversation" }).click();
+  await expect(page).toHaveURL(/\/conversations\/interaction-2$/);
   expect(created).toBe(true);
   expect(createPayload).toMatchObject({
     title: "Customer planning workshop",
@@ -713,9 +745,17 @@ test("interaction timeline supports deliberate creation and completion without i
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page.getByRole("button", { name: "Finish interaction" }).click();
   await expect(
-    page.getByRole("status", { name: "Interaction lifecycle status" }),
+    page.getByRole("status", { name: "Conversation lifecycle status" }),
   ).toHaveText("Completed");
+  await expect(page.getByLabel("Enhanced conversation notes")).toHaveValue(
+    "Finance needs the implementation sequence. The transcript confirms a Friday review.",
+  );
   expect(completed).toBe(true);
+  if (process.env.CAPTURE_PRIVATE_NOTES_SCREENSHOT === "1") {
+    await page.getByRole("region", { name: "Conversation notes" }).screenshot({
+      path: "../../docs/07-sprints/assets/conversation-private-notes-review-mobile.png",
+    });
+  }
   if (process.env.CAPTURE_WO_011_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-011-interaction-detail.png",
@@ -723,18 +763,27 @@ test("interaction timeline supports deliberate creation and completion without i
     });
   }
 
-  await page.getByRole("link", { name: "Back to interactions" }).click();
+  await page.getByRole("link", { name: "Back to conversations" }).click();
+  await page
+    .getByRole("link", { name: "View conversations and notes" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Customer planning workshop" }),
   ).toBeVisible();
 
   await page.goto("/companies/company-1");
   await expect(
-    page.getByRole("heading", { name: "Revenue Brain" }),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "No snapshots yet" }),
+    page.getByRole("heading", { name: "Conversations and notes" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Customer planning workshop" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Revenue Brain" }),
+  ).toHaveCount(0);
 
   await expect(page.getByLabel(/transcript/i)).toHaveCount(0);
   for (const prohibited of [
@@ -829,8 +878,8 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/interactions");
-  await expect(page.getByText("Brief ready").first()).toBeVisible();
-  await page.getByRole("link", { name: "Open brief" }).first().click();
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await page.getByRole("link", { name: "On-site pilot planning" }).click();
   await expect(
     page.getByRole("heading", { name: "Prepare for this interaction" }),
   ).toBeVisible();
@@ -1274,7 +1323,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
   await page.getByRole("link", { name: "Prepare and start" }).click();
   await expect(page).toHaveURL(
-    /\/interactions\/interaction-visual\/companion$/,
+    /\/conversations\/interaction-visual\/workspace$/,
   );
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page
@@ -1294,7 +1343,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
     await page.getByRole("link", { name: "Back", exact: true }).click();
     await expect(
-      page.getByRole("status", { name: "Interaction lifecycle status" }),
+      page.getByRole("status", { name: "Conversation lifecycle status" }),
     ).toHaveText("Completed");
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({
@@ -1380,7 +1429,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   ).toBeVisible();
 
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await page
     .getByLabel("Your answer")
     .fill(
@@ -1444,15 +1493,19 @@ test("a presentation supports browser image upload, explicit review and intellig
 
   await page.goto("/companies/company-visual");
   await expect(
-    page.getByRole("heading", { name: "Reviewed visual evidence" }),
+    page.getByRole("heading", { name: "Southern Cross Operations" }),
   ).toBeVisible();
-  await expect(page.getByText("customer whiteboard")).toBeVisible();
   await expect(
-    page.getByText("Customer requested a reviewed security workshop."),
+    page.getByRole("heading", { name: "Conversations and notes" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Reviewed visual evidence" }),
+  ).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText("customer whiteboard")).toBeVisible();
-  expect(brainVisualReads).toBeGreaterThanOrEqual(2);
+  await expect(
+    page.getByRole("heading", { name: "Southern Cross Operations" }),
+  ).toBeVisible();
+  expect(brainVisualReads).toBe(0);
   await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
 });
 
@@ -1526,6 +1579,10 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
       }
       if (path.endsWith("/recordings") && request.method() === "GET") {
         await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
         return;
       }
       if (path.endsWith("/start") && request.method() === "POST") {
@@ -1732,7 +1789,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await page.getByRole("button", { name: "Start call" }).click();
   await expect(
-    page.getByRole("status", { name: "Interaction lifecycle status" }),
+    page.getByRole("status", { name: "Conversation lifecycle status" }),
   ).toHaveText("In Progress");
   await expect(
     page.getByText(/does not intercept cellular calls/i),
@@ -1740,11 +1797,11 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
   await page.getByRole("button", { name: "End connected call" }).click();
   await expect(
     page.getByRole("heading", {
-      name: "Capture this call while it’s fresh",
+      name: "Write what you noticed on this call",
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Capture what happened" }),
+    page.getByRole("button", { name: "Start personal notes" }),
   ).toBeVisible();
   await page.getByText("Other debrief options").click();
   await expect(
@@ -1768,7 +1825,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
     });
   }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await page
     .getByLabel("Your answer")
     .fill("Jordan confirmed the budget and I will send the proposal.");
@@ -1795,13 +1852,17 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
 
   await page.goto("/companies/company-1");
   await expect(
-    page.getByRole("heading", { name: "Reviewed interaction intelligence" }),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
-  await expect(page.getByText("Pricing follow-up call")).toBeVisible();
-  await expect(page.getByText("Reported by you · phone call")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Reviewed interaction intelligence" }),
+  ).toHaveCount(0);
   await page.reload();
   await expect(
-    page.getByText("Jordan confirmed the budget owner."),
+    page.getByRole("heading", { name: "Acme Australia" }),
   ).toBeVisible();
   await expect(page.getByText(/upload a transcript/i)).toHaveCount(0);
 });
@@ -1902,6 +1963,10 @@ test("an authorised imported call recording uses the existing transcription and 
       if (path.endsWith("/recordings") && request.method() === "GET") {
         if (imported) transcriptionReady = true;
         await route.fulfill({ json: imported ? [importedRecording()] : [] });
+        return;
+      }
+      if (path.endsWith("/debrief/latest")) {
+        await route.fulfill({ json: null });
         return;
       }
       if (path.endsWith("/recordings") && request.method() === "POST") {
@@ -2192,13 +2257,15 @@ test("an authorised imported call recording uses the existing transcription and 
     page.getByText(/Recording comparison: Corroborated/i),
   ).toBeVisible();
   await page.goto("/companies/company-1");
-  await expect(page.getByText("Imported procurement call")).toBeVisible();
   await expect(
-    page.getByText("Jordan owns the procurement decision."),
+    page.getByRole("heading", { name: "Acme Australia" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
   ).toBeVisible();
   await expect(
     page.getByText(/Recording comparison: corroborated/i),
-  ).toBeVisible();
+  ).toHaveCount(0);
 });
 
 test("mobile Companion recording path persists a consented transcript into existing intelligence surfaces", async ({
@@ -2304,13 +2371,32 @@ test("mobile Companion recording path persists a consented transcript into exist
       }
     }
 
+    class DeterministicAudioTrack extends EventTarget {
+      readonly id = "synthetic-microphone-track";
+      readonly kind = "audio";
+      muted = false;
+      readyState: MediaStreamTrackState = "live";
+
+      getSettings(): MediaTrackSettings {
+        return { deviceId: "synthetic-microphone" };
+      }
+
+      stop(): void {
+        this.readyState = "ended";
+      }
+    }
+
+    const microphoneTrack = new DeterministicAudioTrack();
+    const mediaDevices = Object.assign(new EventTarget(), {
+      getUserMedia: async () => ({
+        getTracks: () => [microphoneTrack],
+        getAudioTracks: () => [microphoneTrack],
+        getVideoTracks: () => [],
+      }),
+    });
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
-      value: {
-        getUserMedia: async () => ({
-          getTracks: () => [{ stop: () => undefined }],
-        }),
-      },
+      value: mediaDevices,
     });
     Object.defineProperty(globalThis, "MediaRecorder", {
       configurable: true,
@@ -2863,7 +2949,7 @@ test("mobile Companion recording path persists a consented transcript into exist
     }),
   ).toBeVisible();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(
     page.getByText("What important outcome might the recording have missed?"),
   ).toBeVisible();
@@ -2894,7 +2980,13 @@ test("mobile Companion recording path persists a consented transcript into exist
     page.getByText("Identify the economic buyer.", { exact: true }).first(),
   ).toBeVisible();
   await page.goto("/companies/company-1");
-  await expect(page.getByText("Meeting snapshot")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Acme Australia" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
+  ).toBeVisible();
+  await expect(page.getByText("Meeting snapshot")).toHaveCount(0);
   expect(intelligenceGenerated).toBe(true);
 });
 
@@ -3136,7 +3228,7 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
     });
   }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Capture what happened" }).click();
+  await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(page.getByText("How did it go?")).toBeVisible();
   await page
     .getByLabel("Your answer")
@@ -3312,9 +3404,8 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(
     page
       .getByRole("article", { name: "Follow-up Email" })
-      .locator("p")
-      .filter({ hasText: "Subject: Pilot next steps" }),
-  ).toBeVisible();
+      .getByLabel("Editable follow-up draft"),
+  ).toHaveValue(/Subject: Pilot next steps/);
 
   await page.getByRole("button", { name: "Copy" }).click();
   await expect(page.getByText("Email copied to clipboard.")).toBeVisible();
@@ -4104,17 +4195,14 @@ test("document and email evidence require explicit review before appearing in th
 
   await page.goto("/companies/company-1");
   await expect(
+    page.getByRole("heading", { name: "Acme Australia" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversations and notes" }),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: "Document and email evidence" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("The platform must support SSO integration."),
-  ).toBeVisible();
-  await expect(
-    page.getByText("We will proceed with security review."),
-  ).toBeVisible();
-  await expect(
-    page.getByText(/Seller-provided document/).first(),
-  ).toBeVisible();
+  ).toHaveCount(0);
 });
 
 function meeting() {

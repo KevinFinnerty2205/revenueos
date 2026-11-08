@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DebriefSession } from "@revenueos/shared";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
+import type {
+  ConversationWorkspaceController,
+  WorkspaceValues,
+} from "@/lib/use-conversation-workspace";
 
 function response(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -55,11 +59,11 @@ describe("PostInteractionCapture", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Capture this call while it’s fresh",
+        name: "Write what you noticed on this call",
       }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Capture what happened" }),
+      screen.getByRole("button", { name: "Start personal notes" }),
     ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Start AI Debrief" }),
@@ -224,14 +228,14 @@ describe("PostInteractionCapture", () => {
         interactionType="presentation"
       />,
     );
-    await screen.findByRole("button", { name: "Capture what happened" });
+    await screen.findByRole("button", { name: "Start personal notes" });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /safely stopped/i,
       }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Capture what happened" }),
+      screen.getByRole("button", { name: "Start personal notes" }),
     );
     await screen.findByText("How did it go?");
     fireEvent.change(screen.getByLabelText("Your answer"), {
@@ -294,6 +298,107 @@ describe("PostInteractionCapture", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/interactions/interaction-1/debrief/session-1"),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("does not seed debrief defaults over dirty private draft fields", async () => {
+    const completed = session({
+      lifecycleStatus: "completed",
+      currentQuestion: null,
+      completedAt: "2026-08-14T01:05:00Z",
+      candidates: [
+        {
+          id: "candidate-1",
+          evidenceCategory: "decision",
+          statement: "The customer selected the staged rollout.",
+          originalStatement: "The customer selected the staged rollout.",
+          origin: "salesperson_reported",
+          sourceLabel: "Reported by you",
+          supportClassification: "reported",
+          validationState: "verified",
+          conflictState: "not_assessed",
+          userReviewState: "accepted",
+          sourceCaptureSessionId: "session-1",
+          evidenceFragmentId: "fragment-1",
+          acceptedEvidenceId: "evidence-1",
+          entityReference: null,
+          explicitlyReportedAt: "2026-08-14T01:05:00Z",
+          edited: false,
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(completed)));
+    let localValues: WorkspaceValues = {
+      liveNotes: "Original rough note",
+      enhancedNotes: "Keep my unsaved enhanced wording.",
+      followUpDraft: "Keep my unsaved follow-up wording.",
+      followUpReviewed: false,
+    };
+    const setValues = vi.fn(
+      (
+        update:
+          WorkspaceValues | ((current: WorkspaceValues) => WorkspaceValues),
+      ) => {
+        localValues =
+          typeof update === "function" ? update(localValues) : update;
+      },
+    );
+    const workspaceController = {
+      workspace: {
+        exists: true,
+        ownerUserId: "user-1",
+        lockVersion: 2,
+        liveNotes: "Original rough note",
+        enhancedNotes: null,
+        followUpDraft: null,
+        followUpReviewed: false,
+        generationFingerprint: null,
+        generationState: "not_started" as const,
+        generationId: null,
+        generationTranscriptVersion: null,
+        generationPersonalNotesState: "not_included" as const,
+        generationFailureCode: null,
+        generationRetryAvailable: false,
+        generationUpdateAvailable: false,
+        generationCompletedAt: null,
+        importedFromBrowserAt: null,
+        updatedAt: "2026-08-14T01:00:00Z",
+      },
+      values: localValues,
+      setValues,
+      loading: false,
+      saveState: "idle" as const,
+      error: null,
+      generationActionState: "idle" as const,
+      generationError: null,
+      dirtyFields: {
+        liveNotes: false,
+        enhancedNotes: true,
+        followUpDraft: true,
+        followUpReviewed: false,
+      },
+      isDirty: true,
+      save: vi.fn(async () => true),
+      retryGeneration: vi.fn(async () => false),
+      applyGeneratedVersion: vi.fn(async () => false),
+      refresh: vi.fn(async () => undefined),
+      reload: vi.fn(async () => undefined),
+    } satisfies ConversationWorkspaceController;
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="online_meeting"
+        restoreLatest
+        workspaceController={workspaceController}
+      />,
+    );
+
+    expect(await screen.findByText("Debrief complete")).toBeVisible();
+    await waitFor(() => expect(setValues).toHaveBeenCalled());
+    expect(localValues.enhancedNotes).toBe("Keep my unsaved enhanced wording.");
+    expect(localValues.followUpDraft).toBe(
+      "Keep my unsaved follow-up wording.",
     );
   });
 });

@@ -65,7 +65,7 @@ const contactPage = {
 describe("InteractionList", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("renders loading, provenance-neutral records and compatibility navigation", async () => {
+  it("renders an account-first directory with deterministic account navigation", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
@@ -81,20 +81,23 @@ describe("InteractionList", () => {
 
     render(<InteractionList />);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading interactions",
+      "Loading conversations",
     );
     expect(
-      await screen.findByRole("heading", { name: "Acme discovery" }),
+      await screen.findByRole("heading", { name: "Account conversations" }),
     ).toBeVisible();
-    expect(screen.getByText("Acme Australia")).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Open Meeting Intelligence" }),
-    ).toHaveAttribute("href", "/meetings/meeting-1");
-    expect(screen.getByText("Brief ready")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open brief" })).toHaveAttribute(
-      "href",
-      "/interactions/interaction-1#preparation",
-    );
+      screen.getByRole("heading", { name: "Acme Australia" }),
+    ).toBeVisible();
+    expect(
+      screen.getAllByRole("link", { name: "Acme Australia" })[0],
+    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    expect(
+      screen.getByRole("link", { name: "Acme discovery" }),
+    ).toHaveAttribute("href", "/conversations/interaction-1");
+    expect(
+      screen.getByRole("link", { name: "View conversations and notes" }),
+    ).toHaveAttribute("href", "/companies/company-1#conversations");
     expect(
       screen.queryByText(/prompt|provider|worker/i),
     ).not.toBeInTheDocument();
@@ -114,9 +117,9 @@ describe("InteractionList", () => {
 
     render(<InteractionList />);
     expect(
-      await screen.findByRole("heading", { name: "No interactions found" }),
+      await screen.findByRole("heading", { name: "No conversations found" }),
     ).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Search interactions"), {
+    fireEvent.change(screen.getByLabelText("Search conversations"), {
       target: { value: "Acme discovery" },
     });
     fireEvent.change(screen.getByLabelText("Filter by type"), {
@@ -139,6 +142,105 @@ describe("InteractionList", () => {
         }),
       ).toBe(true),
     );
+  });
+
+  it("hydrates accounts outside the first company page and appends filtered result pages", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const firstFilteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "phone-101",
+          companyId: "company-101",
+          meetingId: null,
+          interactionType: "phone_call",
+          title: "First paged call",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const secondFilteredPage = {
+      ...firstFilteredPage,
+      items: [
+        {
+          ...firstFilteredPage.items[0],
+          id: "phone-102",
+          companyId: "company-102",
+          title: "Second paged call",
+        },
+      ],
+      page: 2,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/interactions")) {
+        if (!path.includes("interactionType=phone_call")) {
+          return Promise.resolve(jsonResponse(emptyPage));
+        }
+        return Promise.resolve(
+          jsonResponse(
+            path.includes("page=2") ? secondFilteredPage : firstFilteredPage,
+          ),
+        );
+      }
+      if (path.includes("/companies/company-101")) {
+        return Promise.resolve(
+          jsonResponse({ id: "company-101", name: "Outside Page One" }),
+        );
+      }
+      if (path.includes("/companies/company-102")) {
+        return Promise.resolve(
+          jsonResponse({ id: "company-102", name: "Outside Page Two" }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "No conversations found" }),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Outside Page One" }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/v1/companies/company-101"),
+      ),
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Outside Page Two" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Outside Page One" }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.some(([input]) => {
+        const path = String(input);
+        return (
+          path.includes("/api/v1/interactions?") &&
+          path.includes("page=2") &&
+          path.includes("interactionType=phone_call")
+        );
+      }),
+    ).toBe(true);
   });
 
   it("shows a safe error and supports retry", async () => {
@@ -169,7 +271,7 @@ describe("InteractionList", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(
-      await screen.findByRole("heading", { name: "No interactions found" }),
+      await screen.findByRole("heading", { name: "No conversations found" }),
     ).toBeVisible();
   });
 
@@ -179,8 +281,15 @@ describe("InteractionList", () => {
       items: [
         {
           ...interactionPage.items[0],
+          id: "overdue",
+          title: "Overdue discovery",
+          scheduledStartAt: "2025-08-01T00:00:00Z",
+        },
+        {
+          ...interactionPage.items[0],
           id: "phone-1",
           title: "Commercial call",
+          companyId: null,
           meetingId: null,
           contactId: "contact-1",
           interactionType: "phone_call",
@@ -221,5 +330,110 @@ describe("InteractionList", () => {
         "Capture: Debrief · Recording · Intelligence ready · Recording available",
       ),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Open notes and follow-up" }),
+    ).toHaveAttribute("href", "/conversations/phone-1#debrief");
+    expect(
+      screen.getByRole("heading", {
+        name: "General and unassigned conversations",
+      }),
+    ).toBeVisible();
+  });
+
+  it("groups several conversations beneath one account instead of repeating it", async () => {
+    const groupedPage = {
+      ...interactionPage,
+      items: [
+        interactionPage.items[0],
+        {
+          ...interactionPage.items[0],
+          id: "interaction-2",
+          title: "Acme follow-up",
+          briefState: "not_generated",
+        },
+      ],
+      total: 2,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(jsonResponse(groupedPage));
+        }
+        if (path.includes("/contacts")) {
+          return Promise.resolve(jsonResponse(contactPage));
+        }
+        return Promise.resolve(jsonResponse(companyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByText("2 conversations · 1 prepared"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: "Acme Australia 2 conversations",
+      }),
+    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    expect(
+      screen.getByRole("link", { name: "Acme Australia" }),
+    ).toHaveAttribute("href", "/companies/company-1#conversations");
+    expect(
+      screen.queryByRole("heading", { name: "Acme follow-up" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("highlights the nearest future conversation rather than the farthest", async () => {
+    const groupedPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "overdue-meeting",
+          title: "Overdue discovery",
+          scheduledStartAt: "2025-08-01T00:00:00Z",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "far-future",
+          title: "Annual review",
+          scheduledStartAt: "2031-08-01T00:00:00Z",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "next-meeting",
+          title: "Next discovery",
+          scheduledStartAt: "2030-08-01T00:00:00Z",
+        },
+      ],
+      total: 3,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(jsonResponse(groupedPage));
+        }
+        if (path.includes("/contacts")) {
+          return Promise.resolve(jsonResponse(contactPage));
+        }
+        return Promise.resolve(jsonResponse(companyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(await screen.findByText("Next conversation")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Next discovery" }),
+    ).toHaveAttribute("href", "/conversations/next-meeting");
+    expect(
+      screen.queryByRole("link", { name: "Annual review" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Overdue discovery" }),
+    ).not.toBeInTheDocument();
   });
 });

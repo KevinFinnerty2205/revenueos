@@ -524,6 +524,7 @@ class OpportunityWorkspaceRepository:
             .where(
                 AIArtifact.organisation_id == organisation_id,
                 AIJob.status == "completed",
+                AIJob.automatic_draft_generation_id.is_(None),
                 or_(*version_conditions),
                 or_(*trace_conditions),
             )

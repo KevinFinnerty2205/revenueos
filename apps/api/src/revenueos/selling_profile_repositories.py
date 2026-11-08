@@ -6,7 +6,13 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from revenueos.models import OrganisationMembership, SellingProfile, SellingProfileRevision
+from revenueos.models import (
+    CompanyKnowledgeIngestionJob,
+    CompanyKnowledgeSource,
+    OrganisationMembership,
+    SellingProfile,
+    SellingProfileRevision,
+)
 
 
 class SellingProfileRepository:
@@ -102,3 +108,77 @@ class SellingProfileRepository:
 
     def add(self, row: SellingProfile | SellingProfileRevision) -> None:
         self.session.add(row)
+
+    async def knowledge_sources(self, organisation_id: UUID) -> list[CompanyKnowledgeSource]:
+        values = await self.session.scalars(
+            select(CompanyKnowledgeSource)
+            .where(CompanyKnowledgeSource.organisation_id == organisation_id)
+            .order_by(CompanyKnowledgeSource.created_at.desc(), CompanyKnowledgeSource.id.desc())
+            .limit(100)
+        )
+        return list(values.all())
+
+    async def knowledge_source_by_idempotency(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        idempotency_key: str,
+    ) -> CompanyKnowledgeSource | None:
+        return cast(
+            CompanyKnowledgeSource | None,
+            await self.session.scalar(
+                select(CompanyKnowledgeSource).where(
+                    CompanyKnowledgeSource.organisation_id == organisation_id,
+                    CompanyKnowledgeSource.created_by_user_id == user_id,
+                    CompanyKnowledgeSource.idempotency_key == idempotency_key,
+                )
+            ),
+        )
+
+    async def knowledge_source(
+        self,
+        organisation_id: UUID,
+        source_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> CompanyKnowledgeSource | None:
+        statement = select(CompanyKnowledgeSource).where(
+            CompanyKnowledgeSource.organisation_id == organisation_id,
+            CompanyKnowledgeSource.id == source_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(
+            CompanyKnowledgeSource | None,
+            await self.session.scalar(statement),
+        )
+
+    def add_knowledge_source(self, row: CompanyKnowledgeSource) -> None:
+        self.session.add(row)
+
+    def add_knowledge_job(self, row: CompanyKnowledgeIngestionJob) -> None:
+        self.session.add(row)
+
+    async def active_knowledge_job(
+        self,
+        organisation_id: UUID,
+        source_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> CompanyKnowledgeIngestionJob | None:
+        statement = (
+            select(CompanyKnowledgeIngestionJob)
+            .where(
+                CompanyKnowledgeIngestionJob.organisation_id == organisation_id,
+                CompanyKnowledgeIngestionJob.source_id == source_id,
+                CompanyKnowledgeIngestionJob.status.in_(("pending", "running")),
+            )
+            .order_by(CompanyKnowledgeIngestionJob.created_at.desc())
+            .limit(1)
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(CompanyKnowledgeIngestionJob | None, await self.session.scalar(statement))
+
+    async def delete_knowledge_source(self, row: CompanyKnowledgeSource) -> None:
+        await self.session.delete(row)

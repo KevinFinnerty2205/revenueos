@@ -20,7 +20,8 @@ const securityHeaders = [
   { key: "Content-Security-Policy", value: contentSecurityPolicy },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(self), geolocation=(), payment=()",
+    value:
+      "camera=(), microphone=(self), display-capture=(self), geolocation=(), payment=()",
   },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Content-Type-Options", value: "nosniff" },

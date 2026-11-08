@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-MIGRATION_HEAD = "0065_campaign_trigger_guard"
+MIGRATION_HEAD = "0078_private_note_draft_sources"
 MIGRATION_HEAD_ROW = (MIGRATION_HEAD,)
 POSTGRES_IDENTIFIER_MAX_BYTES = 63
 MIGRATION_NAMED_OBJECT_ARGUMENTS = {
@@ -44,6 +45,594 @@ POSTGRES_RAW_CONSTRAINT_IDENTIFIER_PATTERN = re.compile(
     r"\bADD\s+CONSTRAINT\s+[\"']?([A-Za-z_][A-Za-z0-9_$]*)",
     flags=re.IGNORECASE,
 )
+
+
+def test_spin_methodology_migration_constraint_and_cycle(tmp_path: Path, monkeypatch: object) -> None:
+    database_path = tmp_path / "spin-methodology.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+
+    command.upgrade(configuration, "0076_briefing_source_observation")
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'SPIN migration', ?)",
+            (organisation_id, f"spin-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Owner')",
+            (user_id, f"user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "INSERT INTO organisation_methodology_settings "
+                "(organisation_id, selection, updated_by_user_id) VALUES (?, 'spin', ?)",
+                (organisation_id, user_id),
+            )
+
+    command.upgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisation_methodology_settings "
+            "(organisation_id, selection, updated_by_user_id) VALUES (?, 'spin', ?)",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("spin",)
+
+    command.downgrade(configuration, "0076_briefing_source_observation")
+    with connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("none",)
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+
+
+def test_post_conversation_draft_migration_schema_and_cycle(tmp_path: Path, monkeypatch: object) -> None:
+    database_path = tmp_path / "post-conversation-drafts.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+
+    command.upgrade(configuration, "0071_assignment_tombstones")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "conversation_draft_generations" not in tables
+        workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_user_workspaces)")}
+        assert "user_edited_at" not in workspace_columns
+
+    command.upgrade(configuration, "0072_post_conversation_drafts")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0072_post_conversation_drafts",
+        )
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert {
+            "interaction_id",
+            "meeting_id",
+            "transcript_version_id",
+            "transcript_version",
+            "source_recording_session_id",
+            "source_evidence_id",
+            "user_id",
+            "status",
+            "source_fingerprint",
+            "content_fingerprint",
+            "enhanced_notes",
+            "follow_up_draft",
+            "framework_included",
+            "attempt_count",
+            "orchestration_attempt_count",
+            "max_attempts",
+            "worker_id",
+            "lease_mode",
+            "lease_expires_at",
+            "next_attempt_at",
+            "workspace_applied_at",
+        }.issubset(columns)
+        indexes = {row[1] for row in connection.execute("PRAGMA index_list(conversation_draft_generations)")}
+        assert "ix_conversation_draft_generations_owner_status" in indexes
+        workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_user_workspaces)")}
+        assert "user_edited_at" in workspace_columns
+
+    command.downgrade(configuration, "0071_assignment_tombstones")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "conversation_draft_generations" not in tables
+        workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_user_workspaces)")}
+        assert "user_edited_at" not in workspace_columns
+
+    command.upgrade(configuration, "head")
+
+
+def test_private_note_draft_source_migration_backfills_input_trace_and_cycles(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "private-note-draft-sources.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+
+    command.upgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert "source_live_notes" not in columns
+        assert "input_fingerprint" not in columns
+
+    command.upgrade(configuration, MIGRATION_HEAD)
+    with connect(database_path) as connection:
+        column_rows = {row[1]: row for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert {
+            "source_live_notes",
+            "source_live_notes_fingerprint",
+            "source_workspace_lock_version",
+            "input_fingerprint",
+            "draft_schema_version",
+        }.issubset(column_rows)
+        # A pre-0078 worker can still insert during a rolling deploy. The new
+        # worker fails closed before processing a row whose trace is null.
+        assert column_rows["input_fingerprint"][3] == 0
+        table_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'conversation_draft_generations'"
+        ).fetchone()[0]
+        assert "ck_conversation_draft_gen_source_worker_fence" in table_sql
+        assert "next_attempt_at IS NOT NULL" in table_sql
+
+    command.downgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert "source_live_notes" not in columns
+        assert "input_fingerprint" not in columns
+
+    command.upgrade(configuration, "head")
+
+
+def test_briefing_delivery_worker_migration_schema_and_cycle(tmp_path: Path, monkeypatch: object) -> None:
+    database_path = tmp_path / "briefing-delivery-worker.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    outbox_id = str(uuid.uuid4())
+    lifecycle_columns = {
+        "delivery_intent",
+        "delivery_timezone",
+        "operation_key",
+        "attempt_count",
+        "max_attempts",
+        "next_attempt_at",
+        "worker_id",
+        "lease_expires_at",
+        "connection_id",
+        "submission_started_at",
+        "provider_message_id",
+        "sent_at",
+        "failed_at",
+        "failure_code",
+        "source_observed_at",
+    }
+
+    command.upgrade(configuration, "0072_post_conversation_drafts")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_briefing_outbox)")}
+        assert lifecycle_columns.isdisjoint(columns)
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Briefing migration', ?)",
+            (organisation_id, f"briefing-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Briefing owner')",
+            (user_id, f"briefing-user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO conversation_briefing_outbox
+                (id, organisation_id, user_id, kind, status, deduplication_key,
+                 source_fingerprint, subject, body_text, href, prepared_for_at)
+            VALUES (?, ?, ?, 'morning_digest', 'prepared', 'legacy-preview', ?,
+                    'Legacy preview', 'Never deliver this historical preview.', '/',
+                    '2026-01-01 07:30:00')
+            """,
+            (outbox_id, organisation_id, user_id, "a" * 64),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_briefing_outbox)")}
+        assert lifecycle_columns.issubset(columns)
+        indexes = {row[1] for row in connection.execute("PRAGMA index_list(conversation_briefing_outbox)")}
+        assert {
+            "ix_conversation_briefing_outbox_due",
+            "ix_conversation_briefing_outbox_lease",
+        }.issubset(indexes)
+        table_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'conversation_briefing_outbox'"
+        ).fetchone()
+        assert table_sql is not None
+        assert "'queued', 'sending', 'sent', 'failed', 'superseded', 'cancelled'" in table_sql[0]
+        assert connection.execute(
+            "SELECT delivery_intent, status FROM conversation_briefing_outbox WHERE id = ?",
+            (outbox_id,),
+        ).fetchone() == ("preview", "cancelled")
+        source_times = connection.execute(
+            "SELECT created_at, source_observed_at FROM conversation_briefing_outbox WHERE id = ?",
+            (outbox_id,),
+        ).fetchone()
+        assert source_times is not None
+        assert source_times[1] == source_times[0]
+
+    command.downgrade(configuration, "0072_post_conversation_drafts")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_briefing_outbox)")}
+        assert lifecycle_columns.isdisjoint(columns)
+
+    command.upgrade(configuration, "head")
+
+
+def test_progressive_transcript_guard_lifecycle_and_downgrade_safety(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "progressive-transcript-guards.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    organisation_id = str(uuid.uuid4())
+    interaction_id = str(uuid.uuid4())
+    recording_id = str(uuid.uuid4())
+    version_id = str(uuid.uuid4())
+    retired_version_id = str(uuid.uuid4())
+    segment_id = str(uuid.uuid4())
+
+    command.upgrade(configuration, "0073_briefing_delivery_worker")
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO transcript_versions
+                (id, organisation_id, interaction_id, recording_session_id, version,
+                 raw_text, language, source, status, provider_name)
+            VALUES (?, ?, ?, ?, 1, 'First provisional turn', 'en-AU',
+                    'progressive', 'provisional', 'openai')
+            """,
+            (version_id, organisation_id, interaction_id, recording_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO transcript_segments
+                (id, organisation_id, transcript_version_id, sequence_number,
+                 start_ms, end_ms, speaker_label, speaker_role, text)
+            VALUES (?, ?, ?, 0, 0, 1000, NULL, 'unknown', 'First provisional turn')
+            """,
+            (segment_id, organisation_id, version_id),
+        )
+        connection.commit()
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE transcript_versions SET raw_text = 'Updated provisional turn' WHERE id = ?",
+                (version_id,),
+            )
+        connection.rollback()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        connection.execute(
+            "UPDATE transcript_versions SET raw_text = 'Updated provisional turn' WHERE id = ?",
+            (version_id,),
+        )
+        connection.execute(
+            "UPDATE transcript_segments SET end_ms = 1200, text = 'Updated provisional turn' WHERE id = ?",
+            (segment_id,),
+        )
+        connection.commit()
+
+    with pytest.raises(RuntimeError, match="provisional progressive data"):
+        command.downgrade(configuration, "0073_briefing_delivery_worker")
+
+    with connect(database_path) as connection:
+        # SQLite DDL is non-transactional. Later reversible migrations are
+        # removed before the guarded 0074 downgrade refuses, leaving 0074 as
+        # the truthful current revision.
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0074_progressive_transcript",
+        )
+        connection.execute(
+            """
+            UPDATE transcript_versions
+            SET raw_text = 'Authoritative batch transcript', source = 'recorded_audio',
+                status = 'final', provider_name = 'openai', provider_request_id = 'batch-request'
+            WHERE id = ?
+            """,
+            (version_id,),
+        )
+        connection.commit()
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE transcript_versions SET raw_text = 'Tampered final transcript' WHERE id = ?",
+                (version_id,),
+            )
+        connection.rollback()
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE transcript_segments SET text = 'Tampered final segment' WHERE id = ?",
+                (segment_id,),
+            )
+        connection.rollback()
+        connection.execute(
+            "UPDATE transcript_versions SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (version_id,),
+        )
+        connection.commit()
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE transcript_versions SET status = 'final', deleted_at = NULL WHERE id = ?",
+                (version_id,),
+            )
+        connection.rollback()
+        connection.execute(
+            """
+            INSERT INTO transcript_versions
+                (id, organisation_id, interaction_id, recording_session_id, version,
+                 raw_text, language, source, status, provider_name, deleted_at)
+            VALUES (?, ?, ?, ?, 1, 'Retired provisional history', 'en-AU',
+                    'progressive', 'deleted', 'openai', CURRENT_TIMESTAMP)
+            """,
+            (retired_version_id, organisation_id, str(uuid.uuid4()), str(uuid.uuid4())),
+        )
+        connection.commit()
+
+    command.downgrade(configuration, "0073_briefing_delivery_worker")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0073_briefing_delivery_worker",
+        )
+    command.upgrade(configuration, "head")
+
+
+def test_automatic_draft_job_origin_backfill_and_immutability(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "automatic-draft-job-origin.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    organisation_id = uuid.uuid4().hex
+    user_id = uuid.uuid4().hex
+    interaction_id = uuid.uuid4().hex
+    meeting_id = uuid.uuid4().hex
+    transcript_id = uuid.uuid4().hex
+    transcript_version_id = uuid.uuid4().hex
+    generation_id = uuid.uuid4().hex
+    job_id = uuid.uuid4().hex
+    audit_id = uuid.uuid4().hex
+
+    command.upgrade(configuration, "0074_progressive_transcript")
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Draft origin tenant', ?)",
+            (organisation_id, f"draft-origin-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Draft owner')",
+            (user_id, f"draft-origin-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO interactions
+                (id, organisation_id, interaction_type, lifecycle_status, title,
+                 creation_origin, created_by_user_id)
+            VALUES (?, ?, 'online_meeting', 'completed', 'Draft origin meeting',
+                    'meeting_compatibility', ?)
+            """,
+            (interaction_id, organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO meetings
+                (id, organisation_id, interaction_id, title, meeting_date,
+                 meeting_type, status, owner_user_id, created_by, updated_by)
+            VALUES (?, ?, ?, 'Draft origin meeting', '2026-10-01 01:00:00',
+                    'remote', 'completed', ?, ?, ?)
+            """,
+            (meeting_id, organisation_id, interaction_id, user_id, user_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO transcripts
+                (id, organisation_id, meeting_id, raw_text, language, version, source)
+            VALUES (?, ?, ?, 'Final relationship conversation.', 'en-AU', 1, 'manual')
+            """,
+            (transcript_id, organisation_id, meeting_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO transcript_versions
+                (id, organisation_id, interaction_id, meeting_id, transcript_id,
+                 version, raw_text, language, source, status)
+            VALUES (?, ?, ?, ?, ?, 1, 'Final relationship conversation.',
+                    'en-AU', 'manual', 'final')
+            """,
+            (transcript_version_id, organisation_id, interaction_id, meeting_id, transcript_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO conversation_draft_generations
+                (id, organisation_id, interaction_id, meeting_id, transcript_version_id,
+                 transcript_version, user_id, status, source_fingerprint, max_attempts)
+            VALUES (?, ?, ?, ?, ?, 1, ?, 'processing', ?, 3)
+            """,
+            (
+                generation_id,
+                organisation_id,
+                interaction_id,
+                meeting_id,
+                transcript_version_id,
+                user_id,
+                "a" * 64,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO ai_jobs
+                (id, organisation_id, meeting_id, transcript_id, transcript_version,
+                 job_type, status, prompt_key, prompt_version, schema_version,
+                 idempotency_key, requested_by_user_id)
+            VALUES (?, ?, ?, ?, 1, 'executive_summary', 'pending',
+                    'executive-summary-v1', 1, 1, 'automatic-draft-existing', ?)
+            """,
+            (job_id, organisation_id, meeting_id, transcript_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO meeting_audit_events
+                (id, organisation_id, meeting_id, actor_user_id, action,
+                 entity_type, entity_id, changed_fields, metadata_json, version)
+            VALUES (?, ?, ?, ?, 'ai_job_created', 'ai_job', ?, '[]', ?, 1)
+            """,
+            (
+                audit_id,
+                organisation_id,
+                meeting_id,
+                user_id,
+                job_id,
+                json.dumps(
+                    {
+                        "job_id": str(uuid.UUID(job_id)),
+                        "automatic_draft_generation_id": str(uuid.UUID(generation_id)),
+                    }
+                ),
+            ),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)")}
+        assert "automatic_draft_generation_id" in columns
+        assert connection.execute(
+            "SELECT automatic_draft_generation_id FROM ai_jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone() == (generation_id,)
+        expected_input_fingerprint = hashlib.sha256(f"{'a' * 64}\0none\0{1}".encode("ascii")).hexdigest()
+        assert connection.execute(
+            "SELECT source_live_notes, source_live_notes_fingerprint, "
+            "source_workspace_lock_version, input_fingerprint, draft_schema_version "
+            "FROM conversation_draft_generations WHERE id = ?",
+            (generation_id,),
+        ).fetchone() == (None, None, None, expected_input_fingerprint, 1)
+        connection.execute(
+            "UPDATE conversation_draft_generations "
+            "SET source_live_notes = ?, source_live_notes_fingerprint = ?, "
+            "source_workspace_lock_version = 1, next_attempt_at = ? "
+            "WHERE id = ?",
+            ("Pinned owner-private note.", "b" * 64, "9999-12-31 23:59:59.000000", generation_id),
+        )
+        connection.commit()
+
+    with pytest.raises(
+        RuntimeError,
+        match="Cannot downgrade private note draft sources while pinned personal-note snapshots exist",
+    ):
+        command.downgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        connection.execute(
+            "UPDATE conversation_draft_generations "
+            "SET source_live_notes = NULL, source_live_notes_fingerprint = NULL, "
+            "source_workspace_lock_version = NULL, next_attempt_at = NULL "
+            "WHERE id = ?",
+            (generation_id,),
+        )
+        connection.commit()
+
+    with connect(database_path) as connection:
+        indexes = {row[1] for row in connection.execute("PRAGMA index_list(ai_jobs)")}
+        assert "ix_ai_jobs_organisation_automatic_draft_generation" in indexes
+        triggers = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'ai_jobs'"
+            )
+        }
+        assert {
+            "ai_jobs_validate_transcript_trace",
+            "ai_jobs_prevent_trace_change",
+            "ai_jobs_automatic_draft_origin_immutable",
+        }.issubset(triggers)
+        with pytest.raises(IntegrityError, match="origin is immutable"):
+            connection.execute(
+                "UPDATE ai_jobs SET automatic_draft_generation_id = NULL WHERE id = ?",
+                (job_id,),
+            )
+        connection.rollback()
+        with pytest.raises(IntegrityError, match="origin is immutable"):
+            connection.execute(
+                "UPDATE ai_jobs SET automatic_draft_generation_id = ? WHERE id = ?",
+                (uuid.uuid4().hex, job_id),
+            )
+        connection.rollback()
+        connection.execute("UPDATE ai_jobs SET status = 'running' WHERE id = ?", (job_id,))
+        connection.commit()
+
+    with pytest.raises(
+        RuntimeError,
+        match="Cannot downgrade automatic draft origin guards while tagged AI jobs exist",
+    ):
+        command.downgrade(configuration, "0074_progressive_transcript")
+    with connect(database_path) as connection:
+        # The reversible 0076 step has already been removed before the guarded
+        # 0075 downgrade refuses on SQLite's non-transactional DDL path.
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0075_automatic_draft_job_origin",
+        )
+        connection.execute(
+            "DELETE FROM meeting_audit_events WHERE id = ?",
+            (audit_id,),
+        )
+        connection.execute("DELETE FROM ai_jobs WHERE id = ?", (job_id,))
+        connection.execute(
+            "DELETE FROM conversation_draft_generations WHERE id = ?",
+            (generation_id,),
+        )
+        connection.commit()
+
+    command.downgrade(configuration, "0074_progressive_transcript")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)")}
+        assert "automatic_draft_generation_id" not in columns
+        triggers = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'ai_jobs'"
+            )
+        }
+        assert {
+            "ai_jobs_validate_transcript_trace",
+            "ai_jobs_prevent_trace_change",
+        }.issubset(triggers)
+    command.upgrade(configuration, "head")
 
 
 def _call_name(node: ast.Call) -> str | None:
@@ -1931,6 +2520,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(live_interaction_sessions)").fetchall()
         }
         assert live_session_columns["organisation_id"] == 1
+        assert live_session_columns["provider_name"] == 1
+        assert live_session_columns["provider_uses_external_processing"] == 1
+        assert live_session_columns["external_processing_acknowledged_at"] == 0
         assert live_session_columns["last_processed_sequence"] == 1
         assert live_session_columns["retention_expires_at"] == 1
         live_signal_columns = {
@@ -1956,6 +2548,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert job_columns["worker_id"] == 0
         assert job_columns["heartbeat_at"] == 0
         assert job_columns["composition_tone"] == 0
+        assert job_columns["automatic_draft_generation_id"] == 0
         artifact_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(ai_artifacts)").fetchall()}
         assert artifact_columns["organisation_id"] == 1
         assert artifact_columns["job_id"] == 1
@@ -2024,6 +2617,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "ix_ai_jobs_status_lease_expires",
             "ix_ai_jobs_transcript_version",
             "ix_ai_jobs_organisation_created",
+            "ix_ai_jobs_organisation_automatic_draft_generation",
         }.issubset(job_indexes)
         artifact_indexes = {row[1] for row in connection.execute("PRAGMA index_list(ai_artifacts)").fetchall()}
         assert {
@@ -2061,6 +2655,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert job_triggers == {
             "ai_jobs_validate_transcript_trace",
             "ai_jobs_prevent_trace_change",
+            "ai_jobs_automatic_draft_origin_immutable",
         }
         snapshot_indexes = {
             row[1] for row in connection.execute("PRAGMA index_list(revenue_brain_snapshots)").fetchall()
@@ -3202,8 +3797,21 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:33] == [
+    assert [revision.revision for revision in script.walk_revisions()][:46] == [
         MIGRATION_HEAD,
+        "0077_spin_methodology",
+        "0076_briefing_source_observation",
+        "0075_automatic_draft_job_origin",
+        "0074_progressive_transcript",
+        "0073_briefing_delivery_worker",
+        "0072_post_conversation_drafts",
+        "0071_assignment_tombstones",
+        "0070_live_provider_binding",
+        "0069_private_live_notes",
+        "0068_conversation_threads",
+        "0067_conversation_foundations",
+        "0066_conversation_core",
+        "0065_campaign_trigger_guard",
         "0064_deauthorisation",
         "0063_terms_acceptance",
         "0062_live_stripe_billing",
@@ -4443,6 +5051,104 @@ def test_commercial_migration_seeds_versions_backfills_add_ons_and_is_reversible
             ("create", 1, "manual_private_beta"),
             ("crm", 1, "manual_private_beta"),
         ]
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+
+
+def test_conversation_core_migration_preserves_meddicc_setting_on_rollback(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "conversation-core-migration.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0066_conversation_core")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    company_id = str(uuid.uuid4())
+    website_source_id = str(uuid.uuid4())
+    text_source_id = str(uuid.uuid4())
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Conversation core', ?)",
+            (organisation_id, f"conversation-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Owner')",
+            (user_id, f"user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO companies (id, organisation_id, name, status, owner_user_id) "
+            "VALUES (?, ?, 'Legacy knowledge company', 'active', ?)",
+            (company_id, organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO company_knowledge_sources "
+            "(id, organisation_id, source_kind, label, website_url, source_text, content_fingerprint, "
+            "processing_status, created_by_user_id, idempotency_key) "
+            "VALUES (?, ?, 'website', 'Legacy site', 'https://legacy.example.test', NULL, ?, "
+            "'saved_unprocessed', ?, 'legacy-site')",
+            (website_source_id, organisation_id, "a" * 64, user_id),
+        )
+        connection.execute(
+            "INSERT INTO company_knowledge_sources "
+            "(id, organisation_id, source_kind, label, website_url, source_text, content_fingerprint, "
+            "processing_status, created_by_user_id, idempotency_key) "
+            "VALUES (?, ?, 'supporting_text', 'Legacy text', NULL, 'Legacy approved context', ?, "
+            "'ready_for_review', ?, 'legacy-text')",
+            (text_source_id, organisation_id, "b" * 64, user_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_user_workspaces)")}
+        assert "live_notes" in workspace_columns
+        assignment_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(conversation_thread_assignments)")
+        }
+        assert assignment_columns["thread_id"][3] == 0
+        assert connection.execute(
+            "SELECT processing_status FROM company_knowledge_sources WHERE id = ?",
+            (website_source_id,),
+        ).fetchone() == ("queued",)
+        assert connection.execute(
+            "SELECT count(*) FROM company_knowledge_ingestion_jobs WHERE source_id = ? AND status = 'pending'",
+            (website_source_id,),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT summary_text FROM company_knowledge_sources WHERE id = ?",
+            (text_source_id,),
+        ).fetchone() == ("Legacy approved context",)
+        connection.execute(
+            "INSERT INTO organisation_methodology_settings "
+            "(organisation_id, selection, updated_by_user_id) VALUES (?, 'meddicc', ?)",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+
+    command.downgrade(configuration, "0065_campaign_trigger_guard")
+    with connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT selection FROM organisation_methodology_settings WHERE organisation_id = ?",
+            (organisation_id,),
+        ).fetchone() == ("meddic",)
+        remaining_tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "company_knowledge_sources" not in remaining_tables
+        assert "company_knowledge_ingestion_jobs" not in remaining_tables
+        assert "conversation_user_workspaces" not in remaining_tables
+        assert "conversation_delivery_preferences" not in remaining_tables
+        assert "conversation_briefing_outbox" not in remaining_tables
+        assert "conversation_threads" not in remaining_tables
+        assert "conversation_thread_assignments" not in remaining_tables
+        assert "conversation_thread_audit_events" not in remaining_tables
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:

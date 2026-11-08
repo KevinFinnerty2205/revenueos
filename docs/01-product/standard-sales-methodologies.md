@@ -7,15 +7,17 @@ qualification/deal score; the Opportunity remains the explanation and review sur
 
 **Status:** Current Oryntela Core behaviour from WO-024.
 
-Oryntela supplies concise, original v1 definitions for four commonly named sales
+Oryntela supplies concise, original v1 definitions for six commonly named sales
 methodologies. These definitions organise existing Evidence; they do not reproduce
 proprietary training material or claim to replace an organisation's enablement.
 
 | Methodology | Ordered fields |
 | --- | --- |
 | MEDDIC | Metrics; Economic Buyer; Decision Criteria; Decision Process; Identify Pain; Champion |
+| MEDDICC | Metrics; Economic Buyer; Decision Criteria; Decision Process; Identify Pain; Champion; Competition |
 | MEDDPICC | Metrics; Economic Buyer; Decision Criteria; Decision Process; Paper Process; Identify Pain; Champion; Competition |
 | BANT | Budget; Authority; Need; Timing |
+| SPIN | Situation; Problem; Implication; Need-payoff |
 | SPICED | Situation; Pain; Impact; Critical Event; Decision |
 
 Each immutable definition records a stable field key, short explanation, required or

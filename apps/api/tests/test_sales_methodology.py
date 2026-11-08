@@ -63,12 +63,21 @@ def _custom_payload(name: str = "Value discovery") -> dict[str, object]:
 
 def test_standard_registry_is_versioned_bounded_and_non_predictive() -> None:
     standards = standard_methodologies()
-    assert [item.key for item in standards] == ["meddic", "meddpicc", "bant", "spiced"]
-    assert [item.name for item in standards] == ["MEDDIC", "MEDDPICC", "BANT", "SPICED"]
-    assert [len(item.fields) for item in standards] == [6, 8, 4, 5]
+    assert [item.key for item in standards] == ["meddic", "meddicc", "meddpicc", "bant", "spin", "spiced"]
+    assert [item.name for item in standards] == ["MEDDIC", "MEDDICC", "MEDDPICC", "BANT", "SPIN", "SPICED"]
+    assert [len(item.fields) for item in standards] == [6, 7, 8, 4, 4, 5]
     assert all(item.version == 1 and item.standard for item in standards)
     assert [[field.key for field in item.fields] for item in standards] == [
         ["metrics", "economic_buyer", "decision_criteria", "decision_process", "identify_pain", "champion"],
+        [
+            "metrics",
+            "economic_buyer",
+            "decision_criteria",
+            "decision_process",
+            "identify_pain",
+            "champion",
+            "competition",
+        ],
         [
             "metrics",
             "economic_buyer",
@@ -80,6 +89,7 @@ def test_standard_registry_is_versioned_bounded_and_non_predictive() -> None:
             "competition",
         ],
         ["budget", "authority", "need", "timing"],
+        ["situation", "problem", "implication", "need_payoff"],
         ["situation", "pain", "impact", "critical_event", "decision"],
     ]
     assert all([field.order for field in item.fields] == list(range(1, len(item.fields) + 1)) for item in standards)
@@ -190,6 +200,15 @@ def test_admin_can_select_version_and_archive_bounded_custom_methodology(client:
 
     selected = _select(client, "meddpicc")
     assert selected["effectiveDefinition"]["fieldCount"] == 8
+
+    spin = _select(client, "spin")
+    assert spin["effectiveDefinition"]["name"] == "SPIN"
+    assert [field["key"] for field in spin["effectiveDefinition"]["fields"]] == [
+        "situation",
+        "problem",
+        "implication",
+        "need_payoff",
+    ]
 
     created = client.post("/api/v1/methodologies/custom", json=_custom_payload())
     assert created.status_code == 201, created.text

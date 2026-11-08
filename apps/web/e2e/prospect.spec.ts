@@ -474,7 +474,7 @@ async function routeShell(page: Page, enabled = true) {
   );
 }
 
-test("flagship account research path is sourced, refreshable and explicitly promoted", async ({
+test("legacy account research remains directly reachable, sourced and refreshable", async ({
   page,
   context,
 }) => {
@@ -593,7 +593,11 @@ test("flagship account research path is sourced, refreshable and explicitly prom
   await expect(
     page.getByRole("heading", { name: "Which company are you looking for?" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Find" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Find" }),
+  ).toHaveCount(0);
   if (process.env.CAPTURE_WO_026_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-026-find-empty-desktop.png",

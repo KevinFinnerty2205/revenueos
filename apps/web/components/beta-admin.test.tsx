@@ -209,6 +209,7 @@ describe("BetaAdmin", () => {
       featureFlags: {
         ...overview.featureFlags,
         salesforceCrm: false,
+        briefingDelivery: false,
         futureSafeCapability: true,
       },
       dataRequests: [
@@ -246,6 +247,7 @@ describe("BetaAdmin", () => {
     fireEvent.click(diagnosticsSummary.closest("summary")!);
     expect(diagnostics).toHaveAttribute("open");
     expect(await screen.findByText("Salesforce CRM sync")).toBeVisible();
+    expect(screen.getByText("Briefing email delivery")).toBeVisible();
     expect(screen.getByText("Future Safe Capability")).toBeVisible();
     expect(
       screen.queryByText("Unrecognised capability"),

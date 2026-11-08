@@ -30,6 +30,7 @@ from revenueos.models import (
     RecordingUsageCounter,
     Transcript,
 )
+from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
 from revenueos.recording_contracts import (
     RecordingCancelRequest,
     RecordingChunkCompleteRequest,
@@ -71,6 +72,7 @@ class RecordingService:
         settings: Settings,
         *,
         storage: PrivateObjectStorage | None = None,
+        progressive_runtime: ProgressiveTranscriptionRegistry | None = None,
     ) -> None:
         self.session = session
         self.tenant = tenant
@@ -78,6 +80,7 @@ class RecordingService:
         self.repository = RecordingRepository(session)
         self.beta = BetaService(session, tenant, settings)
         self.storage = storage or create_recording_storage(settings)
+        self.progressive_runtime = progressive_runtime
         self.grants = PrivateObjectGrantSigner(settings.visual_storage_signing_secret.get_secret_value())
 
     async def create(
@@ -647,28 +650,52 @@ class RecordingService:
     ) -> RecordingSessionResponse:
         del request
         recording = await self._require_recording(interaction_id, recording_id, for_update=True, mutate=True)
-        if recording.lifecycle_status == "cancelled":
-            return self._response(recording)
-        recording.lifecycle_status = transition_recording(recording.lifecycle_status, "cancelled")
-        recording.stopped_at = recording.stopped_at or datetime.now(UTC)
-        source = await self.session.scalar(
-            select(Evidence).where(
-                Evidence.organisation_id == self.tenant.organisation_id,
-                Evidence.id == recording.source_evidence_id,
+        if recording.lifecycle_status != "cancelled":
+            recording.lifecycle_status = transition_recording(recording.lifecycle_status, "cancelled")
+            now = datetime.now(UTC)
+            recording.stopped_at = recording.stopped_at or now
+            progressive_version = await self.repository.get_recording_transcript_version(
+                self.tenant.organisation_id,
+                recording.id,
             )
-        )
-        if source is not None:
-            source.lifecycle_status = "excluded"
-        capture = await self.repository.get_capture_session(
-            self.tenant.organisation_id,
-            recording.capture_session_id,
-            for_update=True,
-        )
-        if capture is not None:
-            capture.status = "abandoned"
-            capture.completed_at = datetime.now(UTC)
-        self._event("recording_cancelled", recording.id, {})
+            if progressive_version is not None and progressive_version.source == "progressive":
+                await delete_live_intelligence(
+                    self.session,
+                    self.tenant.organisation_id,
+                    transcript_version_ids=(progressive_version.id,),
+                )
+                progressive_version.status = "deleted"
+                progressive_version.deleted_at = now
+                for segment in await self.repository.list_transcript_segments(
+                    self.tenant.organisation_id,
+                    progressive_version.id,
+                ):
+                    segment.deleted_at = now
+            source = await self.session.scalar(
+                select(Evidence).where(
+                    Evidence.organisation_id == self.tenant.organisation_id,
+                    Evidence.id == recording.source_evidence_id,
+                )
+            )
+            if source is not None:
+                source.lifecycle_status = "excluded"
+            capture = await self.repository.get_capture_session(
+                self.tenant.organisation_id,
+                recording.capture_session_id,
+                for_update=True,
+            )
+            if capture is not None:
+                capture.status = "abandoned"
+                capture.completed_at = datetime.now(UTC)
+            self._event("recording_cancelled", recording.id, {})
         await self._commit("The recording could not be cancelled.", refresh=recording)
+        # Retire only after the database cancellation is durable. Progressive
+        # persistence takes its process-local fence before locking this row.
+        if self.progressive_runtime is not None:
+            await self.progressive_runtime.retire_recording_session(
+                self.tenant.organisation_id,
+                recording.id,
+            )
         return self._response(recording)
 
     async def transcription(
@@ -681,6 +708,11 @@ class RecordingService:
             self.tenant.organisation_id,
             recording_id,
         )
+        # The recording transcription endpoint represents the authoritative
+        # batch result. Progressive turns are provisional Live Intelligence/UI
+        # input and must not be mislabeled as a completed recording transcript.
+        if version is not None and version.source == "progressive":
+            version = None
         segments = (
             await self.repository.list_transcript_segments(self.tenant.organisation_id, version.id)
             if version is not None
@@ -729,10 +761,23 @@ class RecordingService:
             mutate=True,
         )
         if recording.lifecycle_status == "deleted":
+            await self._commit("The recording deletion state could not be confirmed.", refresh=recording)
+            if self.progressive_runtime is not None:
+                await self.progressive_runtime.retire_recording_session(
+                    self.tenant.organisation_id,
+                    recording.id,
+                )
             return RecordingDeleteResponse(id=recording.id, deleted=True, retry_required=False)
         if recording.lifecycle_status != "deleting":
             recording.lifecycle_status = transition_recording(recording.lifecycle_status, "deleting")
-            await self._commit("Recording deletion could not be started.")
+        # Make the revocation durable and release the recording row lock before
+        # waiting for the process-local progressive persistence fence.
+        await self._commit("Recording deletion could not be started.", refresh=recording)
+        if self.progressive_runtime is not None:
+            await self.progressive_runtime.retire_recording_session(
+                self.tenant.organisation_id,
+                recording.id,
+            )
 
         chunks = await self.repository.list_chunks(self.tenant.organisation_id, recording_id, for_update=True)
         retry_required = False

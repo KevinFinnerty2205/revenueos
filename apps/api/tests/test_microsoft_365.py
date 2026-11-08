@@ -48,6 +48,7 @@ from revenueos.models import (
     ActionExecution,
     ActionProposal,
     ContactSuppression,
+    ConversationBriefingOutbox,
     EncryptedConnectorCredential,
     IntegrationConnection,
     Interaction,
@@ -910,6 +911,56 @@ def test_graph_send_is_plain_text_sender_bound_and_marks_acceptance_only() -> No
     assert message["internetMessageHeaders"] == [{"name": "X-Oryntela-Operation-Id", "value": "a" * 64}]
 
 
+def test_graph_send_uses_html_content_when_an_alternative_is_supplied() -> None:
+    observed: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed["body"] = json.loads(request.content)
+        return httpx.Response(202)
+
+    async def run() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url="sqlite+aiosqlite://",
+            microsoft_client_id="microsoft-test-client-id",
+            microsoft_client_secret=SecretStr("microsoft-test-secret"),
+            microsoft_oauth_redirect_uri="http://localhost/callback",
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            graph = MicrosoftGraphClient(
+                settings,
+                cast(CredentialStore, _StaticCredentialStore(_credential())),
+                http_client=http_client,
+            )
+            await graph.send_mail(
+                ExecutorConnectionContext(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    connection_id=uuid.uuid4(),
+                    credential_reference="encrypted:test",
+                    execution_mode="live",
+                    external_account_email="alex@example.test",
+                ),
+                sender_name="Alex Morgan",
+                sender_email="alex@example.test",
+                recipient_name="Jordan Lee",
+                recipient_email="jordan@example.com",
+                subject="Prep for today",
+                body="Plain fallback",
+                html_body="<p>Branded preparation</p>",
+                operation_key="c" * 64,
+            )
+
+    asyncio.run(run())
+    body = cast(dict[str, object], observed["body"])
+    message = cast(dict[str, object], body["message"])
+    assert message["body"] == {
+        "contentType": "HTML",
+        "content": "<p>Branded preparation</p>",
+    }
+
+
 def test_graph_rejected_access_token_forces_one_refresh() -> None:
     authorisations: list[str | None] = []
 
@@ -1413,6 +1464,32 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
                 == 4
             )
             customer.interaction_id = interaction.id
+            briefing = ConversationBriefingOutbox(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=PRIMARY_USER_ID,
+                interaction_id=interaction.id,
+                kind="pre_meeting",
+                delivery_intent="scheduled",
+                status="sending",
+                deduplication_key=f"provider-test:{interaction.id}",
+                source_fingerprint="a" * 64,
+                subject="Prepare",
+                body_text="Synthetic local preview",
+                href=f"/conversations/{interaction.id}#preparation",
+                prepared_for_at=now + timedelta(days=3),
+                attempt_count=2,
+                next_attempt_at=now + timedelta(minutes=5),
+                worker_id="abandoned-microsoft-briefing-worker",
+                lease_expires_at=now + timedelta(minutes=1),
+                connection_id=connection.id,
+                failed_at=now,
+                failure_code="provider_busy",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(briefing)
+            await session.flush()
             changed = await service._retain_calendar_event(
                 connection,
                 {
@@ -1434,6 +1511,14 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
                 now + timedelta(minutes=1),
             )
             assert changed == 1
+            assert briefing.status == "cancelled"
+            assert briefing.attempt_count == 0
+            assert briefing.next_attempt_at is None
+            assert briefing.worker_id is None
+            assert briefing.lease_expires_at is None
+            assert briefing.connection_id is None
+            assert briefing.failed_at is None
+            assert briefing.failure_code is None
             assert customer.title == "Private event"
             assert customer.interaction_id is None
             assert customer.organiser_email is None
