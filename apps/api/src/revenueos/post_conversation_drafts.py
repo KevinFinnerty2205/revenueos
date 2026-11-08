@@ -33,9 +33,11 @@ from revenueos.intelligence_contracts import (
     OpenQuestionsContentResponse,
 )
 from revenueos.intelligence_workspace import MeetingIntelligenceService
+from revenueos.interaction_contracts import CONVERSATION_DRAFT_MAX_CHARACTERS
 from revenueos.methodology_contracts import MethodologyProjectionContent
 from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import (
+    CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT,
     AIJob,
     ConversationDraftGeneration,
     ConversationUserWorkspace,
@@ -52,6 +54,10 @@ from revenueos.tenant import TenantContext
 logger = logging.getLogger("revenueos.post_conversation_drafts")
 DISCOVERY_LIMIT = 1000
 EVENT_INTERACTION_TYPES = frozenset({"conference_interaction", "trade_show_interaction"})
+PRIVATE_DRAFT_SCHEMA_VERSION = 1
+SUPPORTED_PRIVATE_DRAFT_SCHEMA_VERSIONS = frozenset({1})
+PRIVATE_PERSONAL_NOTES_SECTION_LABEL = "Personal notes (private, verbatim)"
+PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS = 20_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +89,32 @@ def private_draft_fingerprint(enhanced_notes: str, follow_up_draft: str) -> str:
     digest.update(enhanced_notes.encode("utf-8"))
     digest.update(b"\0")
     digest.update(follow_up_draft.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def personal_notes_fingerprint(live_notes: str | None) -> str | None:
+    if live_notes is None or not live_notes.strip():
+        return None
+    return hashlib.sha256(live_notes.encode("utf-8")).hexdigest()
+
+
+def eligible_personal_notes_snapshot(live_notes: str | None) -> str | None:
+    if live_notes is None or not live_notes.strip() or len(live_notes) > PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS:
+        return None
+    return live_notes
+
+
+def draft_input_fingerprint(
+    source_fingerprint: str,
+    source_live_notes_fingerprint: str | None,
+    draft_schema_version: int,
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(source_fingerprint.encode("ascii"))
+    digest.update(b"\0")
+    digest.update((source_live_notes_fingerprint or "none").encode("ascii"))
+    digest.update(b"\0")
+    digest.update(str(draft_schema_version).encode("ascii"))
     return digest.hexdigest()
 
 
@@ -199,6 +231,27 @@ class PostConversationDraftWorkerService:
             for version, source_recording_session_id, source_evidence_id in versions:
                 assert version.meeting_id is not None
                 source_fingerprint = self._source_fingerprint(version)
+                workspace = await session.scalar(
+                    select(ConversationUserWorkspace)
+                    .where(
+                        ConversationUserWorkspace.organisation_id == scope.organisation_id,
+                        ConversationUserWorkspace.interaction_id == version.interaction_id,
+                        ConversationUserWorkspace.user_id == scope.user_id,
+                    )
+                    .with_for_update()
+                )
+                source_live_notes = eligible_personal_notes_snapshot(
+                    workspace.live_notes if workspace is not None else None
+                )
+                source_live_notes_fingerprint = personal_notes_fingerprint(source_live_notes)
+                source_workspace_lock_version = (
+                    workspace.lock_version if workspace is not None and source_live_notes is not None else None
+                )
+                input_fingerprint = draft_input_fingerprint(
+                    source_fingerprint,
+                    source_live_notes_fingerprint,
+                    PRIVATE_DRAFT_SCHEMA_VERSION,
+                )
                 try:
                     async with session.begin_nested():
                         session.add(
@@ -214,7 +267,17 @@ class PostConversationDraftWorkerService:
                                 user_id=scope.user_id,
                                 status="pending",
                                 source_fingerprint=source_fingerprint,
+                                source_live_notes=source_live_notes,
+                                source_live_notes_fingerprint=source_live_notes_fingerprint,
+                                source_workspace_lock_version=source_workspace_lock_version,
+                                input_fingerprint=input_fingerprint,
+                                draft_schema_version=PRIVATE_DRAFT_SCHEMA_VERSION,
                                 max_attempts=self._settings.worker_default_max_attempts,
+                                next_attempt_at=(
+                                    CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT
+                                    if source_live_notes is not None
+                                    else None
+                                ),
                             )
                         )
                         await session.flush()
@@ -240,6 +303,7 @@ class PostConversationDraftWorkerService:
                         and_(
                             ConversationDraftGeneration.status == "pending",
                             or_(
+                                ConversationDraftGeneration.source_live_notes.is_not(None),
                                 ConversationDraftGeneration.next_attempt_at.is_(None),
                                 ConversationDraftGeneration.next_attempt_at <= now,
                             ),
@@ -247,6 +311,7 @@ class PostConversationDraftWorkerService:
                         and_(
                             ConversationDraftGeneration.status == "processing",
                             or_(
+                                ConversationDraftGeneration.source_live_notes.is_not(None),
                                 ConversationDraftGeneration.next_attempt_at.is_(None),
                                 ConversationDraftGeneration.next_attempt_at <= now,
                             ),
@@ -316,6 +381,9 @@ class PostConversationDraftWorkerService:
             ):
                 self._cancel(generation, "draft_transcript_superseded")
                 return None
+            if not self._generation_input_trace_is_valid(generation):
+                self._cancel(generation, "draft_input_trace_invalid")
+                return None
             if not await self._processing_authority_is_current(session, generation, source):
                 self._cancel(generation, "draft_processing_consent_withdrawn")
                 return None
@@ -335,7 +403,7 @@ class PostConversationDraftWorkerService:
             generation.worker_id = clean_worker_id
             generation.lease_mode = "orchestrate" if orchestrate else "poll"
             generation.lease_expires_at = now + timedelta(seconds=self._settings.worker_lease_duration_seconds)
-            generation.next_attempt_at = None
+            generation.next_attempt_at = self._worker_fence(generation)
             return DraftGenerationClaim(
                 organisation_id=scope.organisation_id,
                 user_id=scope.user_id,
@@ -539,6 +607,9 @@ class PostConversationDraftWorkerService:
             ):
                 self._cancel(generation, "draft_transcript_superseded")
                 return
+            if not self._generation_input_trace_is_valid(generation):
+                self._cancel(generation, "draft_input_trace_invalid")
+                return
             if not await self._processing_authority_is_current(session, generation, source):
                 self._cancel(generation, "draft_processing_consent_withdrawn")
                 return
@@ -569,7 +640,23 @@ class PostConversationDraftWorkerService:
                     # general private draft or substitute unsupported conclusions.
                     methodology = None
 
-            enhanced_notes = self._render_enhanced_notes(summary, decisions, actions, questions, methodology)
+            enhanced_notes = self._render_enhanced_notes(
+                summary,
+                decisions,
+                actions,
+                questions,
+                methodology,
+                generation.source_live_notes,
+                generation.draft_schema_version,
+            )
+            if len(enhanced_notes) > CONVERSATION_DRAFT_MAX_CHARACTERS:
+                # Do not silently cut the verbatim personal-note section or
+                # partial evidence out of transcript-derived sections. Keep
+                # the pinned inputs and fail with safe metadata instead.
+                # The completed immutable inputs cannot become smaller on a
+                # retry, so this is terminal rather than retryable failure.
+                self._cancel(generation, "draft_enhanced_notes_too_large")
+                return
             follow_up_draft = self._render_follow_up(follow_up)
             content_fingerprint = private_draft_fingerprint(enhanced_notes, follow_up_draft)
             now = datetime.now(UTC)
@@ -594,7 +681,7 @@ class PostConversationDraftWorkerService:
                 )
                 .with_for_update()
             )
-            if workspace is None:
+            if workspace is None and generation.source_live_notes_fingerprint is None:
                 workspace = ConversationUserWorkspace(
                     id=uuid.uuid4(),
                     organisation_id=claim.organisation_id,
@@ -608,7 +695,7 @@ class PostConversationDraftWorkerService:
                 )
                 session.add(workspace)
                 generation.workspace_applied_at = now
-            elif self._workspace_accepts_initial_generation(workspace):
+            elif workspace is not None and self._workspace_accepts_initial_generation(workspace, generation):
                 workspace.enhanced_notes = enhanced_notes
                 workspace.follow_up_draft = follow_up_draft
                 workspace.follow_up_reviewed = False
@@ -675,10 +762,16 @@ class PostConversationDraftWorkerService:
                 return
             generation.worker_id = None
             generation.lease_mode = None
-            generation.lease_expires_at = None
-            generation.next_attempt_at = datetime.now(UTC) + timedelta(
-                seconds=self._settings.worker_poll_interval_seconds
-            )
+            if generation.source_live_notes_fingerprint is not None:
+                generation.lease_expires_at = datetime.now(UTC) + timedelta(
+                    seconds=self._settings.worker_poll_interval_seconds
+                )
+                generation.next_attempt_at = CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT
+            else:
+                generation.lease_expires_at = None
+                generation.next_attempt_at = datetime.now(UTC) + timedelta(
+                    seconds=self._settings.worker_poll_interval_seconds
+                )
 
     async def _stage_orchestration_attempt(self, claim: DraftGenerationClaim) -> None:
         """Move a completed prerequisite phase to one new bounded attempt."""
@@ -707,7 +800,7 @@ class PostConversationDraftWorkerService:
             generation.worker_id = None
             generation.lease_mode = None
             generation.lease_expires_at = None
-            generation.next_attempt_at = None
+            generation.next_attempt_at = self._worker_fence(generation)
 
     async def _mark_orchestration_returned(self, claim: DraftGenerationClaim) -> bool:
         """Fence a returned orchestrator call from abandoned-poll recovery."""
@@ -814,12 +907,46 @@ class PostConversationDraftWorkerService:
         return opportunity_id is not None and event_id is None and interaction_type not in EVENT_INTERACTION_TYPES
 
     @staticmethod
-    def _workspace_accepts_initial_generation(workspace: ConversationUserWorkspace) -> bool:
+    def _workspace_accepts_initial_generation(
+        workspace: ConversationUserWorkspace,
+        generation: ConversationDraftGeneration,
+    ) -> bool:
         return (
             workspace.user_edited_at is None
             and workspace.generation_fingerprint is None
             and not (workspace.enhanced_notes or "").strip()
             and not (workspace.follow_up_draft or "").strip()
+            and personal_notes_fingerprint(workspace.live_notes) == generation.source_live_notes_fingerprint
+        )
+
+    @staticmethod
+    def _generation_input_trace_is_valid(generation: ConversationDraftGeneration) -> bool:
+        if generation.draft_schema_version not in SUPPORTED_PRIVATE_DRAFT_SCHEMA_VERSIONS:
+            return False
+        if generation.input_fingerprint is None:
+            return False
+        if (
+            generation.source_live_notes is not None
+            and len(generation.source_live_notes) > PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS
+        ):
+            return False
+        notes_fingerprint = personal_notes_fingerprint(generation.source_live_notes)
+        if notes_fingerprint != generation.source_live_notes_fingerprint:
+            return False
+        if (generation.source_workspace_lock_version is None) != (notes_fingerprint is None):
+            return False
+        return generation.input_fingerprint == draft_input_fingerprint(
+            generation.source_fingerprint,
+            notes_fingerprint,
+            generation.draft_schema_version,
+        )
+
+    @staticmethod
+    def _worker_fence(generation: ConversationDraftGeneration) -> datetime | None:
+        return (
+            CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT
+            if generation.source_live_notes_fingerprint is not None
+            else None
         )
 
     @staticmethod
@@ -829,8 +956,33 @@ class PostConversationDraftWorkerService:
         actions: ActionItemsContentResponse,
         questions: OpenQuestionsContentResponse,
         methodology: MethodologyProjectionContent | None,
+        source_live_notes: str | None,
+        draft_schema_version: int,
     ) -> str:
-        sections = ["Enhanced notes", "Summary", summary.executive_summary]
+        if draft_schema_version == 1:
+            return PostConversationDraftWorkerService._render_enhanced_notes_v1(
+                summary,
+                decisions,
+                actions,
+                questions,
+                methodology,
+                source_live_notes,
+            )
+        raise ValueError("Unsupported private draft schema version.")
+
+    @staticmethod
+    def _render_enhanced_notes_v1(
+        summary: ExecutiveSummaryContentResponse,
+        decisions: DecisionsContentResponse,
+        actions: ActionItemsContentResponse,
+        questions: OpenQuestionsContentResponse,
+        methodology: MethodologyProjectionContent | None,
+        source_live_notes: str | None,
+    ) -> str:
+        sections = ["Enhanced notes"]
+        if source_live_notes is not None:
+            sections.extend((PRIVATE_PERSONAL_NOTES_SECTION_LABEL, source_live_notes))
+        sections.extend(("Summary", summary.executive_summary))
         sections.extend(
             (
                 "Decisions",

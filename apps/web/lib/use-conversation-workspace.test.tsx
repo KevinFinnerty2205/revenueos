@@ -21,6 +21,7 @@ const savedWorkspace = {
   generationState: "ready",
   generationId: "generation-1",
   generationTranscriptVersion: 1,
+  generationPersonalNotesState: "current",
   generationFailureCode: null,
   generationRetryAvailable: false,
   generationUpdateAvailable: false,
@@ -109,6 +110,104 @@ describe("useConversationWorkspace", () => {
     );
   });
 
+  it("keeps edits made while a save request is in flight", async () => {
+    let resolveSave!: (value: Response) => void;
+    const pendingSave = new Promise<Response>((resolve) => {
+      resolveSave = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockReturnValueOnce(pendingSave);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        enhancedNotes: "Text submitted to the save request",
+      }));
+    });
+    let savePromise!: Promise<boolean>;
+    act(() => {
+      savePromise = result.current.save();
+    });
+    await waitFor(() => expect(result.current.saveState).toBe("saving"));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        enhancedNotes: "Newer text typed while the request was pending",
+      }));
+    });
+
+    await act(async () => {
+      resolveSave(
+        response({
+          ...savedWorkspace,
+          lockVersion: 5,
+          enhancedNotes: "Text submitted to the save request",
+        }),
+      );
+      expect(await savePromise).toBe(true);
+    });
+
+    expect(result.current.workspace?.lockVersion).toBe(5);
+    expect(result.current.values.enhancedNotes).toBe(
+      "Newer text typed while the request was pending",
+    );
+    expect(result.current.dirtyFields.enhancedNotes).toBe(true);
+  });
+
+  it("does not mark newer follow-up text reviewed when it changes during save", async () => {
+    let resolveSave!: (value: Response) => void;
+    const pendingSave = new Promise<Response>((resolve) => {
+      resolveSave = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockReturnValueOnce(pendingSave);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let savePromise!: Promise<boolean>;
+    act(() => {
+      savePromise = result.current.save({ followUpReviewed: true });
+    });
+    await waitFor(() => expect(result.current.saveState).toBe("saving"));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        followUpDraft: "New follow-up wording typed while review was saving",
+        followUpReviewed: false,
+      }));
+    });
+
+    await act(async () => {
+      resolveSave(
+        response({
+          ...savedWorkspace,
+          lockVersion: 5,
+          followUpReviewed: true,
+        }),
+      );
+      expect(await savePromise).toBe(true);
+    });
+
+    expect(result.current.values.followUpDraft).toBe(
+      "New follow-up wording typed while review was saving",
+    );
+    expect(result.current.values.followUpReviewed).toBe(false);
+    expect(result.current.dirtyFields.followUpDraft).toBe(true);
+    expect(result.current.dirtyFields.followUpReviewed).toBe(true);
+  });
+
   it("keeps unsaved edits through regenerated defaults and persists an intentional clear", async () => {
     const clearedWorkspace = {
       ...savedWorkspace,
@@ -153,6 +252,91 @@ describe("useConversationWorkspace", () => {
     expect(result.current.values.enhancedNotes).toBe("");
   });
 
+  it("uses field defaults when a saved live-note row has null draft fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        response({
+          ...savedWorkspace,
+          liveNotes: "A saved rough note",
+          enhancedNotes: null,
+          followUpDraft: null,
+          generationFingerprint: null,
+          generationState: "not_started",
+          generationId: null,
+          generationTranscriptVersion: null,
+          generationPersonalNotesState: "not_included",
+          generationCompletedAt: null,
+        }),
+      ),
+    );
+    const { result } = renderHook(() =>
+      useConversationWorkspace({
+        interactionId: "interaction-1",
+        initialEnhancedNotes: "Reviewed debrief notes",
+        initialFollowUpDraft: "Reviewed debrief follow-up",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values).toMatchObject({
+      liveNotes: "A saved rough note",
+      enhancedNotes: "Reviewed debrief notes",
+      followUpDraft: "Reviewed debrief follow-up",
+    });
+  });
+
+  it("refreshes generation metadata without replacing dirty local text", async () => {
+    const pendingWorkspace = {
+      ...savedWorkspace,
+      generationState: "processing",
+      generationId: "generation-2",
+      generationTranscriptVersion: 2,
+      generationPersonalNotesState: "current",
+      generationUpdateAvailable: false,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(pendingWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...pendingWorkspace,
+          lockVersion: 5,
+          enhancedNotes: "New server-generated notes",
+          followUpDraft: "New server-generated follow-up",
+          generationState: "ready",
+          generationUpdateAvailable: true,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        enhancedNotes: "Keep my unsaved local edit",
+      }));
+    });
+    expect(result.current.isDirty).toBe(true);
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.workspace?.generationState).toBe("ready");
+    expect(result.current.workspace?.generationUpdateAvailable).toBe(true);
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.values.enhancedNotes).toBe(
+      "Keep my unsaved local edit",
+    );
+    expect(result.current.values.followUpDraft).toBe(
+      savedWorkspace.followUpDraft,
+    );
+  });
+
   it("retries a failed private generation without changing the current draft", async () => {
     const failedWorkspace = {
       ...savedWorkspace,
@@ -167,6 +351,8 @@ describe("useConversationWorkspace", () => {
       .mockResolvedValueOnce(
         response({
           ...failedWorkspace,
+          lockVersion: 5,
+          enhancedNotes: "Changed in another session",
           generationState: "pending",
           generationFailureCode: null,
           generationRetryAvailable: false,
@@ -188,12 +374,13 @@ describe("useConversationWorkspace", () => {
     );
     expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST" });
     expect(result.current.workspace?.generationState).toBe("pending");
+    expect(result.current.workspace?.lockVersion).toBe(4);
     expect(result.current.values.enhancedNotes).toBe(
       savedWorkspace.enhancedNotes,
     );
   });
 
-  it("explicitly applies a later generated version while preserving live notes", async () => {
+  it("explicitly applies a later generated version while preserving unsaved live notes", async () => {
     const updateWorkspace = {
       ...savedWorkspace,
       generationId: "generation-2",
@@ -219,6 +406,12 @@ describe("useConversationWorkspace", () => {
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Unsaved rough-note wording stays in this browser",
+      }));
+    });
     await act(async () => {
       expect(await result.current.applyGeneratedVersion()).toBe(true);
     });
@@ -231,10 +424,11 @@ describe("useConversationWorkspace", () => {
       expectedLockVersion: 4,
     });
     expect(result.current.values).toMatchObject({
-      liveNotes: savedWorkspace.liveNotes,
+      liveNotes: "Unsaved rough-note wording stays in this browser",
       enhancedNotes: "Corrected generated notes",
       followUpDraft: "Corrected private follow-up",
     });
+    expect(result.current.dirtyFields.liveNotes).toBe(true);
   });
 
   it("reloads another mounted editor when its refresh key changes", async () => {

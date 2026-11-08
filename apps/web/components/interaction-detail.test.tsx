@@ -1,9 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  InteractionDetail,
-  PostConversationDraftStatus,
-} from "@/components/interaction-detail";
+import { InteractionDetail } from "@/components/interaction-detail";
+import { PostConversationDraftStatus } from "@/components/conversation-notes-review";
 
 vi.mock("@/components/conversation-memory", () => ({
   ConversationMemory: () => <div>Conversation memory</div>,
@@ -56,9 +54,17 @@ function workspaceController(
     error: null,
     generationActionState: "idle",
     generationError: null,
+    dirtyFields: {
+      liveNotes: false,
+      enhancedNotes: false,
+      followUpDraft: false,
+      followUpReviewed: false,
+    },
+    isDirty: false,
     save: vi.fn(() => Promise.resolve(true)),
     retryGeneration: vi.fn(() => Promise.resolve(true)),
     applyGeneratedVersion: vi.fn(() => Promise.resolve(false)),
+    refresh: vi.fn(() => Promise.resolve()),
     reload: vi.fn(() => Promise.resolve()),
     ...overrides,
   };
@@ -103,6 +109,7 @@ const generatedWorkspace = {
   generationState: "ready" as const,
   generationId: "generation-2",
   generationTranscriptVersion: 2,
+  generationPersonalNotesState: "current" as const,
   generationFailureCode: null,
   generationRetryAvailable: false,
   generationUpdateAvailable: true,
@@ -321,7 +328,7 @@ describe("PostConversationDraftStatus", () => {
         actionError={null}
         onRetry={vi.fn()}
         onApply={vi.fn()}
-        onReload={reload}
+        onRefresh={reload}
       />,
     );
 
@@ -346,7 +353,7 @@ describe("PostConversationDraftStatus", () => {
         actionError={null}
         onRetry={retry}
         onApply={vi.fn()}
-        onReload={vi.fn()}
+        onRefresh={vi.fn()}
       />,
     );
 
@@ -368,7 +375,7 @@ describe("PostConversationDraftStatus", () => {
         actionError={null}
         onRetry={vi.fn()}
         onApply={apply}
-        onReload={vi.fn()}
+        onRefresh={vi.fn()}
       />,
     );
 
@@ -376,7 +383,7 @@ describe("PostConversationDraftStatus", () => {
       /edited enhanced notes.*preserved/i,
     );
     expect(
-      screen.getByText(/keeps your original live notes/i),
+      screen.getByText(/keeps your original rough notes/i),
     ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Use generated version 2" }),

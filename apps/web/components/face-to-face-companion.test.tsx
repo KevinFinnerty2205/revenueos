@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type {
   Interaction,
   PreInteractionBriefResponse,
@@ -96,9 +102,38 @@ const completedBrief: PreInteractionBriefResponse = {
   },
 };
 
-function installApi(initialInteraction: Interaction) {
+function installApi(
+  initialInteraction: Interaction,
+  {
+    personalWorkspaceSaveFails = false,
+    personalWorkspaceSaveResponse,
+  }: {
+    personalWorkspaceSaveFails?: boolean;
+    personalWorkspaceSaveResponse?: Promise<Response>;
+  } = {},
+) {
   let currentInteraction = initialInteraction;
   const markers: object[] = [];
+  let privateWorkspace = {
+    exists: false,
+    ownerUserId: "user-1",
+    lockVersion: 0,
+    liveNotes: null as string | null,
+    enhancedNotes: null as string | null,
+    followUpDraft: null as string | null,
+    followUpReviewed: false,
+    generationFingerprint: null,
+    generationState: "not_started",
+    generationId: null,
+    generationTranscriptVersion: null,
+    generationPersonalNotesState: "not_included",
+    generationFailureCode: null,
+    generationRetryAvailable: false,
+    generationUpdateAvailable: false,
+    generationCompletedAt: null,
+    importedFromBrowserAt: null,
+    updatedAt: null as string | null,
+  };
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -138,6 +173,42 @@ function installApi(initialInteraction: Interaction) {
     }
     if (url.endsWith("/recordings") || url.endsWith("/visual-evidence")) {
       return Promise.resolve(jsonResponse([]));
+    }
+    if (url.endsWith("/personal-workspace") && method === "GET") {
+      return Promise.resolve(jsonResponse(privateWorkspace));
+    }
+    if (url.endsWith("/personal-workspace") && method === "PUT") {
+      if (personalWorkspaceSaveResponse) {
+        return personalWorkspaceSaveResponse;
+      }
+      if (personalWorkspaceSaveFails) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "conversation_workspace_conflict",
+              message: "This private workspace changed in another session.",
+            },
+            409,
+          ),
+        );
+      }
+      const body = JSON.parse(String(init?.body)) as {
+        liveNotes: string;
+        enhancedNotes: string;
+        followUpDraft: string;
+        followUpReviewed: boolean;
+      };
+      privateWorkspace = {
+        ...privateWorkspace,
+        exists: true,
+        lockVersion: privateWorkspace.lockVersion + 1,
+        liveNotes: body.liveNotes,
+        enhancedNotes: body.enhancedNotes,
+        followUpDraft: body.followUpDraft,
+        followUpReviewed: body.followUpReviewed,
+        updatedAt: "2026-08-15T03:00:00Z",
+      };
+      return Promise.resolve(jsonResponse(privateWorkspace));
     }
     if (url.endsWith("/start") && method === "POST") {
       currentInteraction = interaction({
@@ -199,7 +270,11 @@ describe("FaceToFaceCompanion", () => {
     fireEvent.click(screen.getByRole("button", { name: "Objection" }));
     expect(await screen.findByText("Objection marked.")).toBeVisible();
     expect(liveNotes).toHaveValue("Finance will confirm the signer on Friday.");
-    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Save notes and end interaction",
+      }),
+    );
     expect(
       await screen.findByRole("heading", {
         name: "Fill the gaps while they are fresh",
@@ -220,6 +295,20 @@ describe("FaceToFaceCompanion", () => {
       expect.stringContaining("/complete"),
       expect.objectContaining({ method: "POST" }),
     );
+    const privateSaveIndex = fetchMock.mock.calls.findIndex(
+      ([input, init]) =>
+        String(input).endsWith("/personal-workspace") && init?.method === "PUT",
+    );
+    const completionIndex = fetchMock.mock.calls.findIndex(([input]) =>
+      String(input).endsWith("/complete"),
+    );
+    expect(privateSaveIndex).toBeGreaterThan(-1);
+    expect(completionIndex).toBeGreaterThan(privateSaveIndex);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[privateSaveIndex]?.[1]?.body)),
+    ).toMatchObject({
+      liveNotes: "Finance will confirm the signer on Friday.",
+    });
   });
 
   it("forces a phone call into honest passive mode", async () => {
@@ -242,5 +331,125 @@ describe("FaceToFaceCompanion", () => {
       screen.queryByRole("button", { name: "Record interaction" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Recording status")).not.toBeInTheDocument();
+  });
+
+  it("keeps the interaction open when dirty private notes cannot be saved", async () => {
+    const fetchMock = installApi(
+      interaction({
+        lifecycleStatus: "in_progress",
+        actualStartAt: "2026-08-15T02:00:00Z",
+      }),
+      { personalWorkspaceSaveFails: true },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+
+    await screen.findByRole("heading", { name: "How should Companion help?" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue without recording" }),
+    );
+    const liveNotes = screen.getByLabelText("Private live notes");
+    fireEvent.change(liveNotes, {
+      target: { value: "Do not lose this unresolved signer note." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Save notes and end interaction",
+      }),
+    );
+
+    expect(await screen.findByText(/interaction remains open/i)).toBeVisible();
+    expect(liveNotes).toHaveValue("Do not lose this unresolved signer note.");
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/complete") && init?.method === "POST",
+      ),
+    ).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Save notes and end interaction" }),
+    ).toBeVisible();
+  });
+
+  it("keeps a newer note edit open when it changes during save-before-end", async () => {
+    let resolveSave!: (value: Response) => void;
+    const pendingSave = new Promise<Response>((resolve) => {
+      resolveSave = resolve;
+    });
+    const fetchMock = installApi(
+      interaction({
+        lifecycleStatus: "in_progress",
+        actualStartAt: "2026-08-15T02:00:00Z",
+      }),
+      { personalWorkspaceSaveResponse: pendingSave },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+
+    await screen.findByRole("heading", { name: "How should Companion help?" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue without recording" }),
+    );
+    const liveNotes = screen.getByLabelText("Private live notes");
+    fireEvent.change(liveNotes, {
+      target: { value: "The note submitted when End was selected." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Save notes and end interaction",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/personal-workspace") &&
+            init?.method === "PUT",
+        ),
+      ).toBe(true),
+    );
+
+    fireEvent.change(liveNotes, {
+      target: { value: "A newer note typed before the save finished." },
+    });
+    await act(async () => {
+      resolveSave(
+        jsonResponse({
+          exists: true,
+          ownerUserId: "user-1",
+          lockVersion: 1,
+          liveNotes: "The note submitted when End was selected.",
+          enhancedNotes: "",
+          followUpDraft: "",
+          followUpReviewed: false,
+          generationFingerprint: null,
+          generationState: "not_started",
+          generationId: null,
+          generationTranscriptVersion: null,
+          generationPersonalNotesState: "not_included",
+          generationFailureCode: null,
+          generationRetryAvailable: false,
+          generationUpdateAvailable: false,
+          generationCompletedAt: null,
+          importedFromBrowserAt: null,
+          updatedAt: "2026-08-15T03:00:00Z",
+        }),
+      );
+      await pendingSave;
+    });
+
+    expect(
+      await screen.findByText(/notes changed while saving/i),
+    ).toBeVisible();
+    expect(liveNotes).toHaveValue(
+      "A newer note typed before the save finished.",
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/complete") && init?.method === "POST",
+      ),
+    ).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Save notes and end interaction" }),
+    ).toBeVisible();
   });
 });

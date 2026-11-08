@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -11,10 +12,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import and_, delete, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import revenueos.post_conversation_drafts as post_conversation_drafts_module
 from revenueos.ai_executors import (
     AIExecutorRegistry,
     AIJobExecutor,
@@ -32,9 +34,11 @@ from revenueos.config import Settings
 from revenueos.database import set_private_user_database_context, set_tenant_database_context
 from revenueos.intelligence_contracts import MeetingIntelligenceResponse
 from revenueos.intelligence_workspace import MeetingIntelligenceService
+from revenueos.interaction_contracts import CONVERSATION_DRAFT_MAX_CHARACTERS
 from revenueos.main import create_app
 from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import (
+    CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT,
     AIArtifact,
     AIJob,
     ConversationDraftGeneration,
@@ -50,9 +54,14 @@ from revenueos.models import (
     User,
 )
 from revenueos.post_conversation_drafts import (
+    PRIVATE_DRAFT_SCHEMA_VERSION,
+    PRIVATE_PERSONAL_NOTES_SECTION_LABEL,
+    PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS,
     DraftGenerationClaim,
     DraftOwnerScope,
     PostConversationDraftWorkerService,
+    draft_input_fingerprint,
+    personal_notes_fingerprint,
 )
 from revenueos.recording_worker import RecordingWorkerService
 from revenueos.tenant import TenantContext
@@ -186,7 +195,10 @@ def _complete_meeting(client: TestClient, meeting: dict[str, object]) -> None:
     assert response.status_code == 200, response.text
 
 
-async def _run_generation_until_ready(settings: Settings) -> tuple[int, ConversationDraftGeneration]:
+async def _run_generation_until_status(
+    settings: Settings,
+    expected_status: str,
+) -> tuple[int, ConversationDraftGeneration]:
     engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     draft_worker = PostConversationDraftWorkerService(session_factory, settings)
@@ -212,12 +224,16 @@ async def _run_generation_until_ready(settings: Settings) -> tuple[int, Conversa
                     )
                     .limit(1)
                 )
-                if generation is not None and generation.status == "ready":
+                if generation is not None and generation.status == expected_status:
                     return ai_jobs_executed, generation
             await asyncio.sleep(0.002)
-        raise AssertionError("The deterministic private draft did not become ready.")
+        raise AssertionError(f"The deterministic private draft did not become {expected_status}.")
     finally:
         await engine.dispose()
+
+
+async def _run_generation_until_ready(settings: Settings) -> tuple[int, ConversationDraftGeneration]:
+    return await _run_generation_until_status(settings, "ready")
 
 
 def _same_tenant_other_user() -> AuthenticatedUser:
@@ -362,6 +378,15 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
     assert first_generation.attempt_count == 3
     assert first_generation.orchestration_attempt_count == 3
     assert first_generation.transcript_version == 1
+    assert first_generation.source_live_notes is None
+    assert first_generation.source_live_notes_fingerprint is None
+    assert first_generation.source_workspace_lock_version is None
+    assert first_generation.draft_schema_version == PRIVATE_DRAFT_SCHEMA_VERSION
+    assert first_generation.input_fingerprint == draft_input_fingerprint(
+        first_generation.source_fingerprint,
+        None,
+        PRIVATE_DRAFT_SCHEMA_VERSION,
+    )
     assert first_generation.framework_included is False
     assert first_generation.enhanced_notes is not None
     assert "Enhanced notes" in first_generation.enhanced_notes
@@ -406,6 +431,7 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
     assert first_workspace["generationState"] == "ready"
     assert first_workspace["generationTranscriptVersion"] == 1
     assert first_workspace["generationUpdateAvailable"] is True
+    assert first_workspace["generationPersonalNotesState"] == "not_included"
     assert first_workspace["liveNotes"] == "Concurrent private live notes"
     assert first_workspace["enhancedNotes"] == "Concurrent user-edited enhanced notes"
     assert first_workspace["followUpDraft"] == "Concurrent user-edited follow-up"
@@ -453,6 +479,21 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
     _, second_generation = asyncio.run(_run_generation_until_ready(settings))
     assert second_generation.transcript_version == 2
     assert second_generation.id != first_generation.id
+    assert second_generation.source_live_notes == "My original private live notes"
+    assert second_generation.source_live_notes_fingerprint == personal_notes_fingerprint(
+        "My original private live notes"
+    )
+    assert second_generation.source_workspace_lock_version == edited.json()["lockVersion"]
+    assert second_generation.input_fingerprint == draft_input_fingerprint(
+        second_generation.source_fingerprint,
+        second_generation.source_live_notes_fingerprint,
+        second_generation.draft_schema_version,
+    )
+    assert "Personal notes (private, verbatim)\n\nMy original private live notes" in (
+        second_generation.enhanced_notes or ""
+    )
+    assert "My original private live notes" not in (second_generation.follow_up_draft or "")
+    assert PRIVATE_PERSONAL_NOTES_SECTION_LABEL not in (second_generation.follow_up_draft or "")
 
     preserved = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace").json()
     assert preserved["liveNotes"] == "My original private live notes"
@@ -460,6 +501,7 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
     assert preserved["followUpDraft"] == "My edited follow-up"
     assert preserved["generationTranscriptVersion"] == 2
     assert preserved["generationUpdateAvailable"] is True
+    assert preserved["generationPersonalNotesState"] == "current"
 
     applied = client.post(
         f"/api/v1/interactions/{interaction_id}/personal-workspace/generation/apply",
@@ -472,6 +514,7 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
     assert applied.json()["liveNotes"] == "My original private live notes"
     assert applied.json()["enhancedNotes"] != "My edited enhanced notes"
     assert applied.json()["generationUpdateAvailable"] is False
+    assert applied.json()["generationPersonalNotesState"] == "current"
 
     async def assert_duplicate_workers_are_idempotent() -> None:
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
@@ -689,9 +732,13 @@ def test_failed_capability_waits_for_explicit_retry_before_replacement_job(
     asyncio.run(assert_one_replacement_attempt())
 
 
-def test_recording_finalization_flows_through_transcription_to_one_ready_private_draft() -> None:
+def test_recording_finalization_flows_through_transcription_to_one_ready_private_draft(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     settings = _settings()
     app = create_app(settings)
+    private_notes = "Private live notes written before transcription completed."
+    caplog.set_level(logging.INFO)
     with TestClient(app) as client:
         meeting = create_meeting(client, title="Recorded relationship review")
         interaction_id = str(meeting["interactionId"])
@@ -718,7 +765,7 @@ def test_recording_finalization_flows_through_transcription_to_one_ready_private
             f"/api/v1/interactions/{interaction_id}/personal-workspace",
             json={
                 "expectedLockVersion": 0,
-                "liveNotes": "Private live notes written before transcription completed.",
+                "liveNotes": private_notes,
                 "enhancedNotes": None,
                 "followUpDraft": None,
                 "followUpReviewed": False,
@@ -762,14 +809,460 @@ def test_recording_finalization_flows_through_transcription_to_one_ready_private
     assert ai_jobs_executed > 0
     assert generation.interaction_id == UUID(interaction_id)
     assert generation.status == "ready"
+    assert generation.source_live_notes == private_notes
+    assert generation.source_live_notes_fingerprint == personal_notes_fingerprint(private_notes)
+    assert generation.source_workspace_lock_version == 1
+    assert generation.input_fingerprint == draft_input_fingerprint(
+        generation.source_fingerprint,
+        generation.source_live_notes_fingerprint,
+        generation.draft_schema_version,
+    )
     assert generation.enhanced_notes is not None
+    assert f"Personal notes (private, verbatim)\n\n{private_notes}" in generation.enhanced_notes
     assert generation.follow_up_draft is not None
+    assert private_notes not in generation.follow_up_draft
+    assert PRIVATE_PERSONAL_NOTES_SECTION_LABEL not in generation.follow_up_draft
+
+    async def assert_notes_stay_out_of_shared_artifacts_and_export_source_trace() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with session_factory() as session:
+                artifacts = list(
+                    await session.scalars(
+                        select(AIArtifact)
+                        .join(
+                            AIJob,
+                            (AIJob.organisation_id == AIArtifact.organisation_id) & (AIJob.id == AIArtifact.job_id),
+                        )
+                        .where(AIJob.automatic_draft_generation_id == generation.id)
+                    )
+                )
+                artifact_content = repr([artifact.content_json for artifact in artifacts])
+                assert private_notes not in artifact_content
+                assert PRIVATE_PERSONAL_NOTES_SECTION_LABEL not in artifact_content
+                exported = await _export_payload(
+                    session,
+                    PRIMARY_ORGANISATION_ID,
+                    settings,
+                    private_user_id=PRIMARY_USER_ID,
+                )
+                generations = exported["privateConversationDraftGenerations"]
+                assert isinstance(generations, list)
+                exported_generation = next(item for item in generations if item["id"] == generation.id)
+                assert exported_generation["source_live_notes"] == private_notes
+                assert exported_generation["source_live_notes_fingerprint"] == generation.source_live_notes_fingerprint
+                assert exported_generation["input_fingerprint"] == generation.input_fingerprint
+                assert exported_generation["draft_schema_version"] == PRIVATE_DRAFT_SCHEMA_VERSION
+        finally:
+            await engine.dispose()
+
+    asyncio.run(assert_notes_stay_out_of_shared_artifacts_and_export_source_trace())
+    assert private_notes not in caplog.text
+    assert PRIVATE_PERSONAL_NOTES_SECTION_LABEL not in caplog.text
     with TestClient(app) as client:
         workspace = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
         assert workspace.status_code == 200, workspace.text
-        assert workspace.json()["liveNotes"] == ("Private live notes written before transcription completed.")
+        assert workspace.json()["liveNotes"] == private_notes
         assert workspace.json()["enhancedNotes"] == generation.enhanced_notes
         assert workspace.json()["followUpDraft"] == generation.follow_up_draft
+        assert workspace.json()["generationPersonalNotesState"] == "current"
+
+
+def test_legacy_note_above_snapshot_limit_generates_transcript_only(
+    client: TestClient,
+) -> None:
+    settings = _settings()
+    meeting = create_meeting(
+        client,
+        title="Legacy long private note",
+        transcript={
+            "rawText": "Jordan confirmed the transcript-only generation decision.",
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    _complete_meeting(client, meeting)
+    interaction_id = str(meeting["interactionId"])
+    legacy_notes = "L" * (PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS + 1)
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "liveNotes": legacy_notes,
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["liveNotes"] == legacy_notes
+
+    ai_jobs_executed, generation = asyncio.run(_run_generation_until_ready(settings))
+    assert ai_jobs_executed > 0
+    assert generation.source_live_notes is None
+    assert generation.source_live_notes_fingerprint is None
+    assert generation.source_workspace_lock_version is None
+    assert generation.input_fingerprint == draft_input_fingerprint(
+        generation.source_fingerprint,
+        None,
+        generation.draft_schema_version,
+    )
+    assert PRIVATE_PERSONAL_NOTES_SECTION_LABEL not in (generation.enhanced_notes or "")
+    assert legacy_notes not in (generation.enhanced_notes or "")
+    assert legacy_notes not in (generation.follow_up_draft or "")
+
+    workspace = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["liveNotes"] == legacy_notes
+    assert workspace.json()["enhancedNotes"] is None
+    assert workspace.json()["generationState"] == "ready"
+    assert workspace.json()["generationUpdateAvailable"] is True
+    assert workspace.json()["generationPersonalNotesState"] == "not_included"
+
+
+def test_note_bearing_generation_states_fence_legacy_workers(
+    client: TestClient,
+) -> None:
+    settings = _settings()
+    meeting = create_meeting(
+        client,
+        title="Private-note rollout fence",
+        transcript={
+            "rawText": "Jordan confirmed the rolling worker provenance decision.",
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    _complete_meeting(client, meeting)
+    interaction_id = str(meeting["interactionId"])
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "liveNotes": "This private note must be handled only by the note-aware worker.",
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    async def pin_generation() -> UUID:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        worker = PostConversationDraftWorkerService(session_factory, settings)
+        scope = DraftOwnerScope(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID)
+        try:
+            assert await worker.ensure_final_generations(scope) == 1
+            async with session_factory() as session:
+                generation = await session.scalar(
+                    select(ConversationDraftGeneration).where(
+                        ConversationDraftGeneration.interaction_id == UUID(interaction_id)
+                    )
+                )
+                assert generation is not None
+                assert generation.status == "pending"
+                assert generation.next_attempt_at is not None
+                assert generation.next_attempt_at.year == CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT.year
+                now = datetime.now(UTC)
+                old_worker_candidate = await session.scalar(
+                    select(ConversationDraftGeneration.id).where(
+                        ConversationDraftGeneration.id == generation.id,
+                        or_(
+                            and_(
+                                ConversationDraftGeneration.status == "pending",
+                                or_(
+                                    ConversationDraftGeneration.next_attempt_at.is_(None),
+                                    ConversationDraftGeneration.next_attempt_at <= now,
+                                ),
+                            ),
+                            and_(
+                                ConversationDraftGeneration.status == "processing",
+                                or_(
+                                    ConversationDraftGeneration.next_attempt_at.is_(None),
+                                    ConversationDraftGeneration.next_attempt_at <= now,
+                                ),
+                                or_(
+                                    ConversationDraftGeneration.lease_expires_at.is_(None),
+                                    ConversationDraftGeneration.lease_expires_at <= now,
+                                ),
+                            ),
+                        ),
+                    )
+                )
+                assert old_worker_candidate is None
+                generation_id = generation.id
+
+            async with session_factory() as session:
+                generation = await session.get(ConversationDraftGeneration, generation_id)
+                assert generation is not None
+                generation.next_attempt_at = None
+                with pytest.raises(IntegrityError):
+                    await session.commit()
+                await session.rollback()
+            return generation_id
+        finally:
+            await engine.dispose()
+
+    generation_id = asyncio.run(pin_generation())
+    pending = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert pending.status_code == 200, pending.text
+    assert pending.json()["generationState"] == "pending"
+
+    async def claim_generation() -> tuple[str, int | None]:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        worker = PostConversationDraftWorkerService(session_factory, settings)
+        try:
+            claim = await worker.claim_next(
+                DraftOwnerScope(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID),
+                "note-aware-rollout-worker",
+            )
+            assert claim is not None
+            assert claim.generation_id == generation_id
+            async with session_factory() as session:
+                generation = await session.get(ConversationDraftGeneration, generation_id)
+                assert generation is not None
+                return (
+                    generation.status,
+                    generation.next_attempt_at.year if generation.next_attempt_at is not None else None,
+                )
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(claim_generation()) == (
+        "processing",
+        CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT.year,
+    )
+    processing = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert processing.status_code == 200, processing.text
+    assert processing.json()["generationState"] == "processing"
+
+
+@pytest.mark.parametrize(
+    ("rendered_characters", "expected_status"),
+    (
+        (CONVERSATION_DRAFT_MAX_CHARACTERS, "ready"),
+        (CONVERSATION_DRAFT_MAX_CHARACTERS + 1, "cancelled"),
+    ),
+    ids=("at-workspace-limit", "above-workspace-limit"),
+)
+def test_private_note_enhanced_notes_respect_workspace_limit_without_truncating_source(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    rendered_characters: int,
+    expected_status: str,
+) -> None:
+    settings = _settings()
+    meeting = create_meeting(
+        client,
+        title="Bounded private enhanced notes",
+        transcript={
+            "rawText": "Jordan confirmed the bounded enhanced-note decision.",
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    _complete_meeting(client, meeting)
+    interaction_id = str(meeting["interactionId"])
+    private_notes = "N" * PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "liveNotes": private_notes,
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    original_render = PostConversationDraftWorkerService._render_enhanced_notes
+
+    def render_at_boundary(*args: object) -> str:
+        rendered = original_render(*args)  # type: ignore[arg-type]
+        assert f"{PRIVATE_PERSONAL_NOTES_SECTION_LABEL}\n\n{private_notes}" in rendered
+        assert len(rendered) <= rendered_characters
+        return rendered + ("G" * (rendered_characters - len(rendered)))
+
+    monkeypatch.setattr(
+        PostConversationDraftWorkerService,
+        "_render_enhanced_notes",
+        staticmethod(render_at_boundary),
+    )
+    ai_jobs_executed, generation = asyncio.run(_run_generation_until_status(settings, expected_status))
+    assert ai_jobs_executed > 0
+    assert generation.source_live_notes == private_notes
+    assert len(generation.source_live_notes) == PRIVATE_PERSONAL_NOTES_SNAPSHOT_MAX_CHARACTERS
+    if expected_status == "ready":
+        assert generation.failure_code is None
+        assert generation.enhanced_notes is not None
+        assert len(generation.enhanced_notes) == CONVERSATION_DRAFT_MAX_CHARACTERS
+        assert f"{PRIVATE_PERSONAL_NOTES_SECTION_LABEL}\n\n{private_notes}" in generation.enhanced_notes
+        workspace = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace").json()
+        resaved = client.put(
+            f"/api/v1/interactions/{interaction_id}/personal-workspace",
+            json={
+                "expectedLockVersion": workspace["lockVersion"],
+                "liveNotes": workspace["liveNotes"],
+                "enhancedNotes": workspace["enhancedNotes"],
+                "followUpDraft": workspace["followUpDraft"],
+                "followUpReviewed": workspace["followUpReviewed"],
+                "generationFingerprint": workspace["generationFingerprint"],
+            },
+        )
+        assert resaved.status_code == 200, resaved.text
+    else:
+        assert generation.failure_code == "draft_enhanced_notes_too_large"
+        assert generation.enhanced_notes is None
+        workspace = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+        assert workspace.status_code == 200, workspace.text
+        assert workspace.json()["generationState"] == "failed"
+        assert workspace.json()["generationRetryAvailable"] is False
+
+
+def test_live_note_edit_after_source_snapshot_never_auto_applies_stale_enhancement(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings()
+    meeting = create_meeting(
+        client,
+        title="Private note snapshot race",
+        transcript={
+            "rawText": "Jordan confirmed the implementation sequence and review date.",
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    _complete_meeting(client, meeting)
+    interaction_id = str(meeting["interactionId"])
+    snapshotted_notes = "Keep the rollout concern visible in my private notes."
+    changed_notes = "Updated personal note after generation was queued."
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "liveNotes": snapshotted_notes,
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    async def pin_generation() -> UUID:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        worker = PostConversationDraftWorkerService(session_factory, settings)
+        try:
+            assert await worker.ensure_final_generations(DraftOwnerScope(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID)) == 1
+            async with session_factory() as session:
+                generation = await session.scalar(
+                    select(ConversationDraftGeneration).where(
+                        ConversationDraftGeneration.interaction_id == UUID(interaction_id)
+                    )
+                )
+                assert generation is not None
+                assert generation.source_live_notes == snapshotted_notes
+                return generation.id
+        finally:
+            await engine.dispose()
+
+    generation_id = asyncio.run(pin_generation())
+    changed = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": saved.json()["lockVersion"],
+            "liveNotes": changed_notes,
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert changed.status_code == 200, changed.text
+
+    # A future writer version must not invalidate an already pinned, still
+    # supported schema-v1 generation. Rendering dispatches from the stored row.
+    monkeypatch.setattr(post_conversation_drafts_module, "PRIVATE_DRAFT_SCHEMA_VERSION", 2)
+    _, generation = asyncio.run(_run_generation_until_ready(settings))
+    assert generation.id == generation_id
+    assert generation.draft_schema_version == 1
+    assert generation.source_live_notes == snapshotted_notes
+    assert snapshotted_notes in (generation.enhanced_notes or "")
+    assert changed_notes not in (generation.enhanced_notes or "")
+    assert snapshotted_notes not in (generation.follow_up_draft or "")
+    workspace = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["liveNotes"] == changed_notes
+    assert workspace.json()["enhancedNotes"] is None
+    assert workspace.json()["followUpDraft"] is None
+    assert workspace.json()["generationUpdateAvailable"] is True
+    assert workspace.json()["generationPersonalNotesState"] == "changed"
+
+
+def test_claim_cancels_when_private_note_input_trace_is_tampered(client: TestClient) -> None:
+    settings = _settings()
+    meeting = create_meeting(
+        client,
+        title="Private note trace guard",
+        transcript={
+            "rawText": "Jordan confirmed the private note trace test decision.",
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    _complete_meeting(client, meeting)
+    interaction_id = str(meeting["interactionId"])
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            "liveNotes": "Original private note snapshot.",
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    async def exercise() -> tuple[str, str | None]:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        worker = PostConversationDraftWorkerService(session_factory, settings)
+        scope = DraftOwnerScope(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID)
+        try:
+            assert await worker.ensure_final_generations(scope) == 1
+            async with session_factory() as session, session.begin():
+                await worker._set_private_context(session, scope)
+                generation = await session.scalar(
+                    select(ConversationDraftGeneration).where(
+                        ConversationDraftGeneration.interaction_id == UUID(interaction_id)
+                    )
+                )
+                assert generation is not None
+                generation.source_live_notes = "Tampered private note source."
+                generation_id = generation.id
+            assert await worker.claim_next(scope, "private-note-trace-worker") is None
+            async with session_factory() as session:
+                await worker._set_private_context(session, scope)
+                generation = await session.get(ConversationDraftGeneration, generation_id)
+                assert generation is not None
+                return generation.status, generation.failure_code
+        finally:
+            await engine.dispose()
+
+    status, failure_code = asyncio.run(exercise())
+    assert status == "cancelled"
+    assert failure_code == "draft_input_trace_invalid"
 
 
 def test_recording_consent_withdrawal_and_membership_revocation_cancel_private_generation() -> None:
@@ -1713,7 +2206,7 @@ def test_materialisation_rechecks_current_source_and_processing_notice(
     _complete_meeting(client, meeting)
     _, ready_generation = asyncio.run(_run_generation_until_ready(settings))
 
-    async def exercise() -> tuple[str | None, str | None]:
+    async def exercise() -> tuple[str | None, str | None, str | None]:
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         worker = PostConversationDraftWorkerService(session_factory, settings)
@@ -1782,6 +2275,22 @@ def test_materialisation_rechecks_current_source_and_processing_notice(
 
             await reset_claim()
             async with session_factory() as session, session.begin():
+                generation = await session.get(ConversationDraftGeneration, ready_generation.id)
+                assert generation is not None
+                generation.input_fingerprint = "0" * 64
+            await worker._materialise(claim, response)
+            async with session_factory() as session, session.begin():
+                generation = await session.get(ConversationDraftGeneration, ready_generation.id)
+                assert generation is not None
+                input_code = generation.failure_code
+                generation.input_fingerprint = draft_input_fingerprint(
+                    generation.source_fingerprint,
+                    generation.source_live_notes_fingerprint,
+                    generation.draft_schema_version,
+                )
+
+            await reset_claim()
+            async with session_factory() as session, session.begin():
                 await session.execute(
                     delete(DataNoticeAcknowledgement).where(
                         DataNoticeAcknowledgement.organisation_id == PRIMARY_ORGANISATION_ID,
@@ -1808,12 +2317,13 @@ def test_materialisation_rechecks_current_source_and_processing_notice(
                             notice_version=settings.private_beta_data_notice_version,
                         )
                     )
-            return source_code, consent_code
+            return source_code, input_code, consent_code
         finally:
             await engine.dispose()
 
-    source_code, consent_code = asyncio.run(exercise())
+    source_code, input_code, consent_code = asyncio.run(exercise())
     assert source_code == "draft_transcript_superseded"
+    assert input_code == "draft_input_trace_invalid"
     assert consent_code == "draft_processing_consent_withdrawn"
 
 

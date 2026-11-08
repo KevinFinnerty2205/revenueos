@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -1512,6 +1512,9 @@ class ConversationUserWorkspace(TimestampMixin, Base):
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
 
+CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
+
+
 class ConversationDraftGeneration(TimestampMixin, Base):
     __tablename__ = "conversation_draft_generations"
     __table_args__ = (
@@ -1531,6 +1534,25 @@ class ConversationDraftGeneration(TimestampMixin, Base):
         CheckConstraint(
             "lease_mode IS NULL OR lease_mode IN ('orchestrate', 'poll')",
             name="ck_conversation_draft_gen_lease_mode",
+        ),
+        CheckConstraint(
+            "(source_live_notes IS NULL AND source_live_notes_fingerprint IS NULL "
+            "AND source_workspace_lock_version IS NULL) OR "
+            "(source_live_notes IS NOT NULL AND source_live_notes_fingerprint IS NOT NULL "
+            "AND source_workspace_lock_version IS NOT NULL)",
+            name="ck_conversation_draft_gen_source_notes",
+        ),
+        CheckConstraint(
+            "source_workspace_lock_version IS NULL OR source_workspace_lock_version > 0",
+            name="ck_conversation_draft_gen_source_lock",
+        ),
+        CheckConstraint(
+            "source_live_notes IS NULL OR status NOT IN ('pending', 'processing') OR next_attempt_at IS NOT NULL",
+            name="ck_conversation_draft_gen_source_worker_fence",
+        ),
+        CheckConstraint(
+            "draft_schema_version > 0",
+            name="ck_conversation_draft_gen_schema_version",
         ),
         CheckConstraint(
             "(status = 'ready' AND enhanced_notes IS NOT NULL AND follow_up_draft IS NOT NULL "
@@ -1602,6 +1624,13 @@ class ConversationDraftGeneration(TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_live_notes: Mapped[str | None] = mapped_column(Text)
+    source_live_notes_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    source_workspace_lock_version: Mapped[int | None] = mapped_column(Integer)
+    # Nullable only for rolling-deploy compatibility with a pre-0078 worker.
+    # The current worker always writes and validates this trace before work.
+    input_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    draft_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     content_fingerprint: Mapped[str | None] = mapped_column(String(64))
     enhanced_notes: Mapped[str | None] = mapped_column(Text)
     follow_up_draft: Mapped[str | None] = mapped_column(Text)

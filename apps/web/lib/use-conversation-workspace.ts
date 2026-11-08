@@ -1,7 +1,14 @@
 "use client";
 
 import type { ConversationWorkspaceResponse } from "@revenueos/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
 
 export type WorkspaceSaveState =
@@ -9,11 +16,62 @@ export type WorkspaceSaveState =
 export type WorkspaceGenerationActionState =
   "idle" | "retrying" | "applying" | "failed";
 
-interface WorkspaceValues {
+export interface WorkspaceValues {
   liveNotes: string;
   enhancedNotes: string;
   followUpDraft: string;
   followUpReviewed: boolean;
+}
+
+export type WorkspaceDirtyFields = Record<keyof WorkspaceValues, boolean>;
+
+const generationMetadataKeys = [
+  "generationState",
+  "generationId",
+  "generationTranscriptVersion",
+  "generationPersonalNotesState",
+  "generationFailureCode",
+  "generationRetryAvailable",
+  "generationUpdateAvailable",
+  "generationCompletedAt",
+] as const satisfies ReadonlyArray<keyof ConversationWorkspaceResponse>;
+
+function responseValues(
+  response: ConversationWorkspaceResponse,
+  defaults: Pick<
+    WorkspaceValues,
+    "liveNotes" | "enhancedNotes" | "followUpDraft"
+  >,
+): WorkspaceValues {
+  return {
+    liveNotes: response.liveNotes ?? defaults.liveNotes,
+    enhancedNotes: response.enhancedNotes ?? defaults.enhancedNotes,
+    followUpDraft: response.followUpDraft ?? defaults.followUpDraft,
+    followUpReviewed: response.followUpReviewed,
+  };
+}
+
+function dirtyFields(
+  values: WorkspaceValues,
+  baseline: WorkspaceValues,
+): WorkspaceDirtyFields {
+  return {
+    liveNotes: values.liveNotes !== baseline.liveNotes,
+    enhancedNotes: values.enhancedNotes !== baseline.enhancedNotes,
+    followUpDraft: values.followUpDraft !== baseline.followUpDraft,
+    followUpReviewed: values.followUpReviewed !== baseline.followUpReviewed,
+  };
+}
+
+function mergeGenerationMetadata(
+  current: ConversationWorkspaceResponse,
+  response: ConversationWorkspaceResponse,
+): ConversationWorkspaceResponse {
+  const merged = { ...current };
+  for (const key of generationMetadataKeys) {
+    Object.assign(merged, { [key]: response[key] });
+  }
+  return merged;
 }
 
 export function useConversationWorkspace({
@@ -36,7 +94,7 @@ export function useConversationWorkspace({
     enhancedNotes: initialEnhancedNotes,
     followUpDraft: initialFollowUpDraft,
   });
-  const [values, setValues] = useState<WorkspaceValues>({
+  const [values, setValuesState] = useState<WorkspaceValues>({
     liveNotes: initialLiveNotes,
     enhancedNotes: initialEnhancedNotes,
     followUpDraft: initialFollowUpDraft,
@@ -48,6 +106,33 @@ export function useConversationWorkspace({
   const [generationActionState, setGenerationActionState] =
     useState<WorkspaceGenerationActionState>("idle");
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState<WorkspaceValues>({
+    liveNotes: initialLiveNotes,
+    enhancedNotes: initialEnhancedNotes,
+    followUpDraft: initialFollowUpDraft,
+    followUpReviewed: false,
+  });
+  const valuesRevision = useRef(0);
+  const setValues = useCallback((update: SetStateAction<WorkspaceValues>) => {
+    valuesRevision.current += 1;
+    setValuesState(update);
+  }, []);
+
+  const fieldsDirty = useMemo(
+    () => dirtyFields(values, baseline),
+    [baseline, values],
+  );
+  const isDirty = Object.values(fieldsDirty).some(Boolean);
+
+  const hydrate = useCallback((response: ConversationWorkspaceResponse) => {
+    const next = responseValues(response, defaults.current);
+    setBaseline(next);
+    setWorkspace(response);
+    setValuesState(next);
+    setSaveState("idle");
+    setGenerationActionState("idle");
+    setGenerationError(null);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,22 +141,7 @@ export function useConversationWorkspace({
       const response = await apiRequest<ConversationWorkspaceResponse>(
         `/api/v1/interactions/${interactionId}/personal-workspace`,
       );
-      setWorkspace(response);
-      setValues({
-        liveNotes: response.exists
-          ? (response.liveNotes ?? "")
-          : defaults.current.liveNotes,
-        enhancedNotes: response.exists
-          ? (response.enhancedNotes ?? "")
-          : defaults.current.enhancedNotes,
-        followUpDraft: response.exists
-          ? (response.followUpDraft ?? "")
-          : defaults.current.followUpDraft,
-        followUpReviewed: response.followUpReviewed,
-      });
-      setSaveState("idle");
-      setGenerationActionState("idle");
-      setGenerationError(null);
+      hydrate(response);
     } catch (reason: unknown) {
       setError(
         reason instanceof Error
@@ -81,7 +151,36 @@ export function useConversationWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [interactionId]);
+  }, [hydrate, interactionId]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiRequest<ConversationWorkspaceResponse>(
+        `/api/v1/interactions/${interactionId}/personal-workspace`,
+      );
+      if (!isDirty || workspace === null) {
+        hydrate(response);
+      } else {
+        setWorkspace((current) =>
+          current === null
+            ? response
+            : mergeGenerationMetadata(current, response),
+        );
+        setGenerationActionState("idle");
+        setGenerationError(null);
+      }
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Your private conversation workspace could not be refreshed.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrate, interactionId, isDirty, workspace]);
 
   useEffect(() => {
     let active = true;
@@ -99,7 +198,9 @@ export function useConversationWorkspace({
       options: { importFromBrowser?: boolean } = {},
     ) => {
       if (workspace === null) return false;
-      const merged = { ...values, ...next };
+      const requestStartValues = values;
+      const requestStartRevision = valuesRevision.current;
+      const merged = { ...requestStartValues, ...next };
       setSaveState("saving");
       setError(null);
       try {
@@ -118,8 +219,19 @@ export function useConversationWorkspace({
             }),
           },
         );
+        const savedValues: WorkspaceValues = {
+          liveNotes: response.liveNotes ?? merged.liveNotes,
+          enhancedNotes: response.enhancedNotes ?? merged.enhancedNotes,
+          followUpDraft: response.followUpDraft ?? merged.followUpDraft,
+          followUpReviewed: response.followUpReviewed,
+        };
         setWorkspace(response);
-        setValues(merged);
+        setBaseline(savedValues);
+        setValuesState((current) =>
+          valuesRevision.current === requestStartRevision
+            ? savedValues
+            : current,
+        );
         setSaveState("saved");
         return true;
       } catch (reason: unknown) {
@@ -147,7 +259,11 @@ export function useConversationWorkspace({
         `/api/v1/interactions/${interactionId}/personal-workspace/generation/retry`,
         { method: "POST" },
       );
-      setWorkspace(response);
+      setWorkspace((current) =>
+        current === null
+          ? response
+          : mergeGenerationMetadata(current, response),
+      );
       setGenerationActionState("idle");
       return true;
     } catch (reason: unknown) {
@@ -171,6 +287,7 @@ export function useConversationWorkspace({
     }
     setGenerationActionState("applying");
     setGenerationError(null);
+    const requestStartValues = values;
     try {
       const response = await apiRequest<ConversationWorkspaceResponse>(
         `/api/v1/interactions/${interactionId}/personal-workspace/generation/apply`,
@@ -183,12 +300,32 @@ export function useConversationWorkspace({
         },
       );
       setWorkspace(response);
-      setValues({
-        liveNotes: response.liveNotes ?? "",
-        enhancedNotes: response.enhancedNotes ?? "",
-        followUpDraft: response.followUpDraft ?? "",
+      const appliedValues: WorkspaceValues = {
+        liveNotes: response.liveNotes ?? requestStartValues.liveNotes,
+        enhancedNotes:
+          response.enhancedNotes ?? requestStartValues.enhancedNotes,
+        followUpDraft:
+          response.followUpDraft ?? requestStartValues.followUpDraft,
         followUpReviewed: response.followUpReviewed,
-      });
+      };
+      setBaseline(appliedValues);
+      setValuesState((current) => ({
+        // Applying a generated version only owns enhanced notes and follow-up.
+        // Rough notes stay local even if they changed before or during the request.
+        liveNotes: current.liveNotes,
+        enhancedNotes:
+          current.enhancedNotes === requestStartValues.enhancedNotes
+            ? appliedValues.enhancedNotes
+            : current.enhancedNotes,
+        followUpDraft:
+          current.followUpDraft === requestStartValues.followUpDraft
+            ? appliedValues.followUpDraft
+            : current.followUpDraft,
+        followUpReviewed:
+          current.followUpReviewed === requestStartValues.followUpReviewed
+            ? appliedValues.followUpReviewed
+            : current.followUpReviewed,
+      }));
       setGenerationActionState("idle");
       return true;
     } catch (reason: unknown) {
@@ -205,7 +342,7 @@ export function useConversationWorkspace({
       );
       return false;
     }
-  }, [interactionId, workspace]);
+  }, [interactionId, values, workspace]);
 
   return {
     workspace,
@@ -216,9 +353,16 @@ export function useConversationWorkspace({
     error,
     generationActionState,
     generationError,
+    dirtyFields: fieldsDirty,
+    isDirty,
     save,
     retryGeneration,
     applyGeneratedVersion,
+    refresh,
     reload: load,
   };
 }
+
+export type ConversationWorkspaceController = ReturnType<
+  typeof useConversationWorkspace
+>;

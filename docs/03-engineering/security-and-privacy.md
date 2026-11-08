@@ -184,6 +184,25 @@ current transcript. Orchestration logs only overall/capability counts and
 created/reused metadata; it never logs generated content. Cross-tenant aggregate
 read and generation return not found.
 
+Automatic private-draft note composition adds a narrower owner boundary. The
+server derives the owner from the durable generation origin, establishes both
+transaction-local organisation and user contexts, and pins one bounded personal-
+note snapshot with the transcript-versioned private generation when the saved
+note fits the separate snapshot bound. Longer saved notes remain unchanged and
+the generation proceeds transcript-only. Personal notes are untrusted data, not
+instructions or customer-direct evidence. Only the owner-private enhanced-note
+composer and the explicit owner-only export can read the snapshot; transcript
+extraction jobs, tenant-wide AI artefacts, follow-up composition, conversation
+memory and shared intelligence remain transcript-only. The snapshot, rendered
+input and note-derived private content are excluded from job metadata, logs and
+audits.
+Original notes and user-edited drafts retain optimistic conflict protection, and
+a later note change neither mutates the pinned source nor implies note-only
+regeneration. The verified composer is deterministic and local only; personal
+notes are not sent to OpenAI and no live provider is activated. Export and
+erasure treat the snapshot as owner-private content and apply the same owner,
+Interaction, membership and organisation lifecycle as its generation.
+
 WO-006A Buying Signals requests retain the same tenant, transcript-version,
 worker and persistence checks. Signal summary and evidence text are excluded
 from logs and audits; only signal count, empty-result flag and counts by
@@ -285,7 +304,7 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Meeting deletion is soft-only and cascades the soft-delete timestamp to active participants and transcripts.
 - Transcript writes are bounded to one million characters and stale versions fail safely.
 - Meeting audit events contain changed field names and identifiers only, not transcript or participant content.
-- AI jobs contain bounded safe failure metadata, prompt/schema trace, usage counts and integer minor-unit cost estimates; they contain no raw transcript, rendered prompt, secret or full provider response.
+- AI jobs contain bounded safe failure metadata, prompt/schema trace, usage counts and integer minor-unit cost estimates; they contain no raw transcript, personal-note snapshot, rendered prompt, secret or full provider response.
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
 - Revenue Brain insights are strict, versioned, append-only deterministic
   derivatives; they contain controlled changes and evidence references but no
@@ -312,6 +331,9 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
   the eight validated extraction artefacts; Follow-up Email sends only its
   validated source projection and tone. Neither composer reads or sends
   transcript text.
+- The owner-private enhanced-note composer may additionally read its pinned
+  personal-note snapshot only in the deterministic local path. The snapshot is
+  never added to the transcript extraction or follow-up provider requests.
 - OpenAI requests use strict structured output, `store=false`, no tools, no
   streaming and zero SDK retries. The application Pydantic validator remains
   authoritative.

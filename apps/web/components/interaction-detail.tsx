@@ -1,10 +1,6 @@
 "use client";
 
-import type {
-  CallOutcome,
-  ConversationWorkspaceResponse,
-  Interaction,
-} from "@revenueos/shared";
+import type { CallOutcome, Interaction } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -19,6 +15,7 @@ import { ImportedCallRecording } from "@/components/imported-call-recording";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
 import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
 import { ConversationMemory } from "@/components/conversation-memory";
+import { ConversationNotesReview } from "@/components/conversation-notes-review";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 export function InteractionDetail({
@@ -374,10 +371,7 @@ export function InteractionDetail({
             </>
           ) : null}
           {isCompleted ? (
-            <a
-              className="primary-button"
-              href={interaction.meetingId ? "#enhanced-notes" : "#debrief"}
-            >
+            <a className="primary-button" href="#enhanced-notes">
               Review notes and follow-up
             </a>
           ) : null}
@@ -410,6 +404,14 @@ export function InteractionDetail({
           </BetaFeatureGate>
         </div>
       ) : null}
+      {isCompleted ? (
+        <div className="mt-6 scroll-mt-6" id="enhanced-notes">
+          <ConversationNotesReview
+            controller={personalWorkspace}
+            onApplyGeneratedVersion={applyGeneratedVersion}
+          />
+        </div>
+      ) : null}
       {interaction.lifecycleStatus === "completed" ? (
         <div className="mt-6" id="debrief">
           <BetaFeatureGate feature="aiDebrief">
@@ -417,26 +419,18 @@ export function InteractionDetail({
               interactionId={interaction.id}
               interactionType={interaction.interactionType}
               restoreLatest
+              workspaceController={personalWorkspace}
               workspaceRefreshKey={workspaceRefreshKey}
             />
           </BetaFeatureGate>
         </div>
       ) : null}
       {isCompleted && interaction.meetingId ? (
-        <div className="mt-6 scroll-mt-6" id="enhanced-notes">
-          {personalWorkspace.workspace ? (
-            <PostConversationDraftStatus
-              workspace={personalWorkspace.workspace}
-              actionState={personalWorkspace.generationActionState}
-              actionError={personalWorkspace.generationError}
-              onRetry={() => void personalWorkspace.retryGeneration()}
-              onApply={() => void applyGeneratedVersion()}
-              onReload={() => void personalWorkspace.reload()}
-            />
-          ) : null}
+        <div className="mt-6" id="interaction-intelligence">
           <MeetingIntelligenceWorkspace
             meetingId={interaction.meetingId}
             interactionId={interaction.id}
+            privateFollowUpManagedExternally
             workspaceRefreshKey={workspaceRefreshKey}
           />
         </div>
@@ -540,112 +534,6 @@ export function InteractionDetail({
             </div>
           ) : null}
         </details>
-      ) : null}
-    </section>
-  );
-}
-
-export function PostConversationDraftStatus({
-  workspace,
-  actionState,
-  actionError,
-  onRetry,
-  onApply,
-  onReload,
-}: {
-  workspace: ConversationWorkspaceResponse;
-  actionState: "idle" | "retrying" | "applying" | "failed";
-  actionError: string | null;
-  onRetry: () => void;
-  onApply: () => void;
-  onReload: () => void;
-}) {
-  if (workspace.generationState === "not_started") return null;
-  const version = workspace.generationTranscriptVersion;
-  const versionLabel =
-    version === null ? "" : ` for transcript version ${version}`;
-  const actionPending =
-    actionState === "retrying" || actionState === "applying";
-
-  return (
-    <section
-      className="mb-4 rounded-2xl border border-brand-primary/20 bg-brand-primary/5 p-4"
-      aria-labelledby="private-draft-status-title"
-    >
-      <h2
-        id="private-draft-status-title"
-        className="text-sm font-bold text-slate-950"
-      >
-        Private post-conversation draft
-      </h2>
-      {workspace.generationState === "pending" ||
-      workspace.generationState === "processing" ? (
-        <>
-          <p className="mt-2 text-sm leading-6 text-slate-700" role="status">
-            {workspace.generationState === "pending" ? "Pending" : "Preparing"}
-            {versionLabel}. Oryntela is building enhanced notes, decisions,
-            suggested actions and a follow-up draft. The result stays private to
-            you and is never sent or shared automatically.
-          </p>
-          <button
-            type="button"
-            className="secondary-button mt-3"
-            onClick={onReload}
-          >
-            Check status
-          </button>
-        </>
-      ) : null}
-      {workspace.generationState === "failed" ? (
-        <>
-          <p className="mt-2 text-sm leading-6 text-red-800" role="alert">
-            The private draft{versionLabel} could not be prepared. Your notes
-            and edited drafts were preserved.
-          </p>
-          {workspace.generationRetryAvailable ? (
-            <button
-              type="button"
-              className="secondary-button mt-3"
-              disabled={actionPending}
-              onClick={onRetry}
-            >
-              {actionState === "retrying" ? "Retrying…" : "Retry private draft"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-      {workspace.generationState === "ready" ? (
-        <>
-          <p className="mt-2 text-sm leading-6 text-slate-700" role="status">
-            {workspace.generationUpdateAvailable
-              ? `A newer private draft${versionLabel} is ready. Your edited enhanced notes and follow-up were preserved.`
-              : `Your private draft${versionLabel} is ready.`}{" "}
-            The draft is never sent or shared automatically.
-          </p>
-          {workspace.generationUpdateAvailable && workspace.generationId ? (
-            <>
-              <p className="mt-2 text-xs leading-5 text-slate-600">
-                Choosing this version replaces enhanced notes and the follow-up
-                draft, but keeps your original live notes.
-              </p>
-              <button
-                type="button"
-                className="secondary-button mt-3"
-                disabled={actionPending}
-                onClick={onApply}
-              >
-                {actionState === "applying"
-                  ? "Using version…"
-                  : `Use generated version ${version ?? ""}`}
-              </button>
-            </>
-          ) : null}
-        </>
-      ) : null}
-      {actionError ? (
-        <p className="mt-3 text-sm text-red-800" role="alert">
-          {actionError}
-        </p>
       ) : null}
     </section>
   );

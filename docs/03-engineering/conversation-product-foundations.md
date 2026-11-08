@@ -3,7 +3,7 @@
 ## Current implementation
 
 Migrations `0067_conversation_foundations` through
-`0076_briefing_source_observation` add the durable foundations behind the
+`0078_private_note_draft_sources` add the durable foundations behind the
 conversation-first interface. They do not activate live providers, outbound
 delivery or native capture.
 
@@ -61,6 +61,20 @@ web interface. They remain separate from generated enhanced notes. Regeneration
 presents an explicit replacement choice and leaves the current private draft
 untouched until the user accepts the new generated version.
 
+For automatic post-conversation generation, one nonblank snapshot of up to
+20,000 characters from the current owner's live notes is pinned under the
+trusted organisation-and-user context for that generation. The existing
+100,000-character workspace save boundary remains unchanged; a longer saved note
+is preserved and the automatic generation is transcript-only. The snapshot is
+untrusted personal content and remains inside the owner-private generation
+boundary. It is composed with the pinned transcript
+result only to produce private enhanced notes; it is not copied into tenant-wide
+AI jobs or artefacts, follow-up source material, conversation memory or shared
+intelligence. The original live notes remain unchanged. Optimistic locking and
+explicit generated-version application continue to preserve user edits. A later
+live-note save neither mutates the pinned snapshot nor claims to create a new
+note-only generation.
+
 Automatic post-conversation generation writes its private draft generation ID
 atomically into a nullable internal AI-job column only when it creates a job.
 Database triggers make that origin immutable, and the non-public creation audit
@@ -71,24 +85,33 @@ orchestrator reads only jobs and artefacts tagged with its exact generation;
 manual and organisation-shared reads accept only untagged work. Its deliberately
 neutral capability set is executive summary, decisions, action items, open
 questions and follow-up draft—never the sales-only extraction set or Next Best
-Action. Creation audits are revalidated before a completed prerequisite is
-consumed or materialised. Before an automatic job enters an executor, and again
-immediately before each provider request, the worker re-establishes the linked
-owner's private RLS context and rechecks the feature gate, completed/non-deleted
-Interaction, active membership, current data notice and immutable source
-recording/evidence authority. Transcript corrections inherit that source owner
-and consent lineage rather than falling back to the Interaction creator. A
-missing, mismatched or revoked source cancels only jobs carrying that durable
-automatic origin and its private generation, without cancelling unrelated
-manual AI work. Migration downgrade refuses to discard the origin column while
-any tagged AI job remains.
+Action. Those structured jobs and the follow-up composer remain transcript-only.
+After the transcript-derived prerequisites complete, the owner-private local
+composer may use the pinned personal-note snapshot for enhanced notes only. The
+composer fails with safe metadata instead of truncating either the verbatim note
+or transcript-derived evidence if the rendered enhanced notes would exceed the
+workspace save boundary. Raw personal notes, rendered prompts and note-derived
+private content stay out of AI
+job metadata, shared artefacts, logs and audits. Creation audits are revalidated
+before a completed prerequisite is consumed or materialised. Before an automatic
+job enters an executor, and again immediately before each provider request, the
+worker re-establishes the linked owner's private RLS context and rechecks the
+feature gate, completed/non-deleted Interaction, active membership, current data
+notice and immutable source recording/evidence authority. Transcript corrections
+inherit that source owner and consent lineage rather than falling back to the
+Interaction creator. A missing, mismatched or revoked source cancels only jobs
+carrying that durable automatic origin and its private generation, without
+cancelling unrelated manual AI work. Only the deterministic local note-composition
+path is verified; no live provider is activated. Migration downgrade refuses to
+discard the origin column while any tagged AI job remains.
 
-Private workspace and preference records are deleted by their membership,
-interaction or organisation foreign-key lifecycle. A data export includes
-private workspace, preference and local-outbox content only for the user who
-requested that export; organisation-shared knowledge remains organisation
-data. Knowledge exports include the retained original document as base64 as
-well as its filename, media type, extracted text and review metadata.
+Private workspace, draft-generation and preference records are deleted by their
+membership, interaction or organisation foreign-key lifecycle. A data export
+includes the pinned personal-note snapshot, private workspace, generated draft,
+preference and local-outbox content only for the user who requested that export;
+organisation-shared knowledge remains organisation data. Knowledge exports
+include the retained original document as base64 as well as its filename, media
+type, extracted text and review metadata.
 
 ### Knowledge ingestion
 

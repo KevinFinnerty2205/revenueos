@@ -57,10 +57,12 @@ const overallLabels: Record<MeetingIntelligenceOverallState, string> = {
 export function MeetingIntelligenceWorkspace({
   meetingId,
   interactionId,
+  privateFollowUpManagedExternally = false,
   workspaceRefreshKey = 0,
 }: {
   meetingId: string;
   interactionId?: string;
+  privateFollowUpManagedExternally?: boolean;
   workspaceRefreshKey?: number;
 }) {
   const [workspace, setWorkspace] =
@@ -468,6 +470,7 @@ export function MeetingIntelligenceWorkspace({
         <FollowUpEmailView
           meetingId={meetingId}
           interactionId={interactionId}
+          privateFollowUpManagedExternally={privateFollowUpManagedExternally}
           workspaceRefreshKey={workspaceRefreshKey}
           content={workspace.followUpEmail.content}
           tone={tone}
@@ -1176,6 +1179,7 @@ export function OpenQuestionsView({
 function FollowUpEmailView({
   meetingId,
   interactionId,
+  privateFollowUpManagedExternally,
   workspaceRefreshKey,
   content,
   tone,
@@ -1187,6 +1191,7 @@ function FollowUpEmailView({
 }: {
   meetingId: string;
   interactionId?: string;
+  privateFollowUpManagedExternally: boolean;
   workspaceRefreshKey: number;
   content: FollowUpEmailContent | null;
   tone: FollowUpEmailTone;
@@ -1196,6 +1201,69 @@ function FollowUpEmailView({
   onCopy: (content: string) => Promise<void>;
   onRegenerate: () => void;
 }) {
+  if (privateFollowUpManagedExternally) {
+    if (!content) return <MissingContent />;
+    const renderedSource = renderFollowUpEmail(content);
+    return (
+      <div className="mt-5">
+        <p className="text-sm leading-6 text-slate-700">
+          The editable private follow-up draft is kept with Conversation notes
+          above. This completed transcript result remains visible here as a
+          read-only source version.
+        </p>
+        <pre
+          aria-label="Generated transcript follow-up source"
+          className="mt-4 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 font-sans text-sm leading-6 text-slate-800"
+        >
+          {renderedSource}
+        </pre>
+        <p className="mt-3 text-xs leading-5 text-slate-600">
+          Regenerating prepares a new read-only transcript source. It does not
+          replace the private draft or any edits in Conversation notes.
+        </p>
+        {copyStatus ? (
+          <p role="status" className="mt-3 text-sm text-slate-700">
+            {copyStatus}
+          </p>
+        ) : null}
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <label className="text-sm font-bold text-slate-800">
+            Tone
+            <select
+              className="form-control mt-2 block min-w-44"
+              value={tone}
+              onChange={(event) =>
+                onToneChange(event.target.value as FollowUpEmailTone)
+              }
+            >
+              {tones.map((value) => (
+                <option key={value} value={value}>
+                  {humanise(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void onCopy(renderedSource)}
+            >
+              Copy source
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={busy}
+              onClick={onRegenerate}
+            >
+              {busy ? "Requesting…" : "Regenerate source"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (interactionId) {
     return (
       <PersistedFollowUpEmailView

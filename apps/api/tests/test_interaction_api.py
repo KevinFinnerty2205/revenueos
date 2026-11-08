@@ -96,15 +96,32 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         "generationFailureCode": None,
         "generationRetryAvailable": False,
         "generationUpdateAvailable": False,
+        "generationPersonalNotesState": "not_included",
         "generationCompletedAt": None,
         "importedFromBrowserAt": None,
         "updatedAt": None,
     }
 
-    saved = client.put(
+    legacy_notes = "x" * 20_001
+    legacy_saved = client.put(
         f"/api/v1/interactions/{interaction_id}/personal-workspace",
         json={
             "expectedLockVersion": 0,
+            "liveNotes": legacy_notes,
+            "enhancedNotes": None,
+            "followUpDraft": None,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert legacy_saved.status_code == 200, legacy_saved.text
+    assert legacy_saved.json()["liveNotes"] == legacy_notes
+    assert client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace").json()["liveNotes"] == legacy_notes
+
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": legacy_saved.json()["lockVersion"],
             "liveNotes": "Private notes typed while capture was active.",
             "enhancedNotes": "Private edited notes from browser one.",
             "followUpDraft": "Draft only — do not send.",
@@ -114,7 +131,7 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         },
     )
     assert saved.status_code == 200, saved.text
-    assert saved.json()["lockVersion"] == 1
+    assert saved.json()["lockVersion"] == 2
     assert saved.json()["importedFromBrowserAt"] is not None
 
     second_session = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")

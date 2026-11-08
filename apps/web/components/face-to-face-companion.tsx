@@ -88,13 +88,16 @@ export function FaceToFaceCompanion({
   const [recordingActivity, setRecordingActivity] =
     useState<RecordingActivity | null>(null);
   const elapsedSecondsRef = useRef(0);
+  const liveNotesRevisionRef = useRef(0);
   const personalWorkspace = useConversationWorkspace({ interactionId });
   const liveNotes = personalWorkspace.values.liveNotes;
-  const updateLiveNotes = (value: string) =>
+  const updateLiveNotes = (value: string) => {
+    liveNotesRevisionRef.current += 1;
     personalWorkspace.setValues((current) => ({
       ...current,
       liveNotes: value,
     }));
+  };
   const liveNotesStatus = personalWorkspace.error
     ? personalWorkspace.error
     : personalWorkspace.loading
@@ -102,7 +105,9 @@ export function FaceToFaceCompanion({
       : personalWorkspace.saveState === "saving"
         ? "Saving private notes…"
         : personalWorkspace.saveState === "saved"
-          ? "Private notes saved."
+          ? personalWorkspace.dirtyFields.liveNotes
+            ? "An earlier note version was saved. Newer changes remain unsaved."
+            : "Private notes saved."
           : personalWorkspace.saveState === "conflict"
             ? "These notes changed in another session. Your local text is still visible; reload before saving again."
             : personalWorkspace.saveState === "failed"
@@ -307,6 +312,22 @@ export function FaceToFaceCompanion({
     setWorking(true);
     setError(null);
     try {
+      if (personalWorkspace.dirtyFields.liveNotes) {
+        const revisionAtSaveStart = liveNotesRevisionRef.current;
+        const notesSaved = await personalWorkspace.save();
+        if (!notesSaved) {
+          setError(
+            "Your private notes could not be saved, so the interaction remains open. Resolve the note error and try again.",
+          );
+          return;
+        }
+        if (liveNotesRevisionRef.current !== revisionAtSaveStart) {
+          setError(
+            "Your private notes changed while saving, so the interaction remains open. Save the newer note version and try again.",
+          );
+          return;
+        }
+      }
       const completed = await apiRequest<Interaction>(
         `/api/v1/interactions/${interactionId}/complete`,
         { method: "POST", body: "{}" },
@@ -492,12 +513,19 @@ export function FaceToFaceCompanion({
               onDeleteMarker={(marker) => void deleteMarker(marker)}
               onEnd={() => void endInteraction()}
               endLabel={
-                interaction.interactionType === "online_meeting"
-                  ? "End meeting"
-                  : "End interaction"
+                personalWorkspace.dirtyFields.liveNotes
+                  ? interaction.interactionType === "online_meeting"
+                    ? "Save notes and end meeting"
+                    : "Save notes and end interaction"
+                  : interaction.interactionType === "online_meeting"
+                    ? "End meeting"
+                    : "End interaction"
               }
               endDisabled={
                 working ||
+                (personalWorkspace.dirtyFields.liveNotes &&
+                  (personalWorkspace.loading ||
+                    personalWorkspace.saveState === "saving")) ||
                 recordingActivity?.blocksInteractionCompletion === true
               }
             />
@@ -547,6 +575,7 @@ export function FaceToFaceCompanion({
           <PostInteractionCapture
             interactionId={interactionId}
             interactionType={interaction.interactionType}
+            workspaceController={personalWorkspace}
           />
         </div>
       ) : null}

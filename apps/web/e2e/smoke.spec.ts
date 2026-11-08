@@ -541,6 +541,34 @@ test("interaction timeline supports deliberate creation and completion without i
     async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
+      if (path.endsWith("/personal-workspace")) {
+        await route.fulfill({
+          json: {
+            exists: true,
+            ownerUserId: "user-1",
+            lockVersion: 2,
+            liveNotes:
+              "Finance needs the implementation sequence before approval.",
+            enhancedNotes:
+              "Finance needs the implementation sequence. The transcript confirms a Friday review.",
+            followUpDraft:
+              "Subject: Friday review\n\nHere are the transcript-backed next steps.",
+            followUpReviewed: false,
+            generationFingerprint: "a".repeat(64),
+            generationState: "ready",
+            generationId: "generation-1",
+            generationTranscriptVersion: 1,
+            generationPersonalNotesState: "current",
+            generationFailureCode: null,
+            generationRetryAvailable: false,
+            generationUpdateAvailable: false,
+            generationCompletedAt: "2026-11-08T00:00:00Z",
+            importedFromBrowserAt: null,
+            updatedAt: "2026-11-08T00:00:00Z",
+          },
+        });
+        return;
+      }
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({ json: emptyBriefResponse() });
         return;
@@ -719,7 +747,15 @@ test("interaction timeline supports deliberate creation and completion without i
   await expect(
     page.getByRole("status", { name: "Conversation lifecycle status" }),
   ).toHaveText("Completed");
+  await expect(page.getByLabel("Enhanced conversation notes")).toHaveValue(
+    "Finance needs the implementation sequence. The transcript confirms a Friday review.",
+  );
   expect(completed).toBe(true);
+  if (process.env.CAPTURE_PRIVATE_NOTES_SCREENSHOT === "1") {
+    await page.getByRole("region", { name: "Conversation notes" }).screenshot({
+      path: "../../docs/07-sprints/assets/conversation-private-notes-review-mobile.png",
+    });
+  }
   if (process.env.CAPTURE_WO_011_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-011-interaction-detail.png",

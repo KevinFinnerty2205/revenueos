@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-MIGRATION_HEAD = "0077_spin_methodology"
+MIGRATION_HEAD = "0078_private_note_draft_sources"
 MIGRATION_HEAD_ROW = (MIGRATION_HEAD,)
 POSTGRES_IDENTIFIER_MAX_BYTES = 63
 MIGRATION_NAMED_OBJECT_ARGUMENTS = {
@@ -151,6 +152,48 @@ def test_post_conversation_draft_migration_schema_and_cycle(tmp_path: Path, monk
         assert "conversation_draft_generations" not in tables
         workspace_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_user_workspaces)")}
         assert "user_edited_at" not in workspace_columns
+
+    command.upgrade(configuration, "head")
+
+
+def test_private_note_draft_source_migration_backfills_input_trace_and_cycles(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "private-note-draft-sources.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+
+    command.upgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert "source_live_notes" not in columns
+        assert "input_fingerprint" not in columns
+
+    command.upgrade(configuration, MIGRATION_HEAD)
+    with connect(database_path) as connection:
+        column_rows = {row[1]: row for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert {
+            "source_live_notes",
+            "source_live_notes_fingerprint",
+            "source_workspace_lock_version",
+            "input_fingerprint",
+            "draft_schema_version",
+        }.issubset(column_rows)
+        # A pre-0078 worker can still insert during a rolling deploy. The new
+        # worker fails closed before processing a row whose trace is null.
+        assert column_rows["input_fingerprint"][3] == 0
+        table_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'conversation_draft_generations'"
+        ).fetchone()[0]
+        assert "ck_conversation_draft_gen_source_worker_fence" in table_sql
+        assert "next_attempt_at IS NOT NULL" in table_sql
+
+    command.downgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(conversation_draft_generations)")}
+        assert "source_live_notes" not in columns
+        assert "input_fingerprint" not in columns
 
     command.upgrade(configuration, "head")
 
@@ -492,6 +535,39 @@ def test_automatic_draft_job_origin_backfill_and_immutability(
             "SELECT automatic_draft_generation_id FROM ai_jobs WHERE id = ?",
             (job_id,),
         ).fetchone() == (generation_id,)
+        expected_input_fingerprint = hashlib.sha256(f"{'a' * 64}\0none\0{1}".encode("ascii")).hexdigest()
+        assert connection.execute(
+            "SELECT source_live_notes, source_live_notes_fingerprint, "
+            "source_workspace_lock_version, input_fingerprint, draft_schema_version "
+            "FROM conversation_draft_generations WHERE id = ?",
+            (generation_id,),
+        ).fetchone() == (None, None, None, expected_input_fingerprint, 1)
+        connection.execute(
+            "UPDATE conversation_draft_generations "
+            "SET source_live_notes = ?, source_live_notes_fingerprint = ?, "
+            "source_workspace_lock_version = 1, next_attempt_at = ? "
+            "WHERE id = ?",
+            ("Pinned owner-private note.", "b" * 64, "9999-12-31 23:59:59.000000", generation_id),
+        )
+        connection.commit()
+
+    with pytest.raises(
+        RuntimeError,
+        match="Cannot downgrade private note draft sources while pinned personal-note snapshots exist",
+    ):
+        command.downgrade(configuration, "0077_spin_methodology")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == MIGRATION_HEAD_ROW
+        connection.execute(
+            "UPDATE conversation_draft_generations "
+            "SET source_live_notes = NULL, source_live_notes_fingerprint = NULL, "
+            "source_workspace_lock_version = NULL, next_attempt_at = NULL "
+            "WHERE id = ?",
+            (generation_id,),
+        )
+        connection.commit()
+
+    with connect(database_path) as connection:
         indexes = {row[1] for row in connection.execute("PRAGMA index_list(ai_jobs)")}
         assert "ix_ai_jobs_organisation_automatic_draft_generation" in indexes
         triggers = {
@@ -3721,8 +3797,9 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:45] == [
+    assert [revision.revision for revision in script.walk_revisions()][:46] == [
         MIGRATION_HEAD,
+        "0077_spin_methodology",
         "0076_briefing_source_observation",
         "0075_automatic_draft_job_origin",
         "0074_progressive_transcript",

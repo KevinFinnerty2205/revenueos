@@ -21,7 +21,8 @@ from revenueos.domain import (
 from revenueos.online_meeting_contracts import BoundedExternalMeetingId, BoundedMeetingReference
 
 TimezoneName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
-ConversationDraft = Annotated[str, StringConstraints(max_length=100_000)]
+CONVERSATION_DRAFT_MAX_CHARACTERS = 100_000
+ConversationDraft = Annotated[str, StringConstraints(max_length=CONVERSATION_DRAFT_MAX_CHARACTERS)]
 ContentFingerprint = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
@@ -176,6 +177,7 @@ class ConversationWorkspaceResponse(APIModel):
     generation_failure_code: str | None = None
     generation_retry_available: bool = False
     generation_update_available: bool = False
+    generation_personal_notes_state: Literal["not_included", "current", "changed"] = "not_included"
     generation_completed_at: datetime | None = None
     imported_from_browser_at: datetime | None = None
     updated_at: datetime | None = None

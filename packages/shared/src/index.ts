@@ -1363,6 +1363,7 @@ export interface ConversationWorkspaceResponse {
     "not_started" | "pending" | "processing" | "failed" | "ready";
   generationId: string | null;
   generationTranscriptVersion: number | null;
+  generationPersonalNotesState: "not_included" | "current" | "changed";
   generationFailureCode: string | null;
   generationRetryAvailable: boolean;
   generationUpdateAvailable: boolean;

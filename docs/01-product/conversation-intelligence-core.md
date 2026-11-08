@@ -33,6 +33,15 @@ reach.
   accepted evidence remain separate. Saving, failure and conflict states are
   visible. Owner-tagged browser drafts require an explicit import; older
   unscoped keys are blocked because authenticated ownership cannot be proved.
+  Automatic post-conversation generation pins the current owner's nonblank
+  personal notes only when they fit the separate 20,000-character generation
+  snapshot bound, then composes that verbatim snapshot into the owner's enhanced
+  notes only. The existing 100,000-character private-workspace save contract is
+  unchanged; longer saved notes remain intact and that generation proceeds from
+  the transcript alone. Follow-up and reusable organisation-level AI artefacts
+  remain transcript-only. The snapshot does not replace the original notes, and
+  a later note edit does not silently rewrite an existing generated version or
+  imply automatic note-only regeneration.
 - Conversations can be explicitly grouped into lightweight initiatives without an
   Opportunity. Company and participant overlap creates suggestions only; it never
   auto-assigns. Users can confirm, correct or remove a grouping. The conversation
@@ -103,7 +112,11 @@ reach.
   recording upload and typed notes remain alternatives.
 - Live notes are user-private server data, separate from enhanced notes. They stay
   mounted through media errors and use explicit save plus optimistic conflict
-  protection.
+  protection. The automatic private-draft path may pin one owner-private snapshot
+  alongside its transcript version, but only the enhanced-note composer can use
+  it. Follow-up composition, shared intelligence and thread memory cannot read
+  that snapshot. The locally verified path is deterministic and makes no live AI
+  provider call.
 - Website extraction is implemented behind a disabled live-fetch feature flag.
   Local tests exercise the same fetch/extract boundary with deterministic HTTP
   fixtures. Extracted website and document text is always untrusted data: it
@@ -148,9 +161,10 @@ trial terms.
   Google/Microsoft adapter wiring are implemented, while the default/test path
   remains deterministic and no-network and the production flag remains off;
 - live-provider activation and verification for automatic private
-  post-conversation drafts; the current final-transcript path is implemented
-  and deterministic-worker verified, keeps generated drafts distinct from
-  user-reported debrief evidence, and never sends or shares them automatically;
+  post-conversation drafts; the current final-transcript path and owner-private
+  note snapshot for enhanced-note composition are implemented and
+  deterministic-worker verified, while follow-up and shared artefacts remain
+  transcript-only and nothing is sent or shared automatically;
 - native macOS and Windows capture, call detection, overlays and installers.
 
 Native clients should reuse the current conversation, capture and intelligence

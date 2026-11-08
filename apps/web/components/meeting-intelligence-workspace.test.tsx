@@ -1097,6 +1097,37 @@ describe("MeetingIntelligenceWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps a completed manual follow-up visible read-only when the private editor is managed above", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(completedWorkspace())),
+    );
+
+    render(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-1"
+        interactionId="interaction-1"
+        privateFollowUpManagedExternally
+      />,
+    );
+
+    const source = await screen.findByLabelText(
+      "Generated transcript follow-up source",
+    );
+    expect(source).toHaveTextContent("Subject: Pilot next steps");
+    expect(
+      screen.getByText(/completed transcript result remains visible/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByLabelText("Editable follow-up draft"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy source" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Regenerate source" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Tone")).toHaveValue("professional");
+  });
+
   it("blocks unowned browser drafts and owner-tags every newly saved draft", async () => {
     const draftKey = "revenueos:follow-up-draft:meeting-1";
     window.localStorage.setItem(

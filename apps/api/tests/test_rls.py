@@ -3901,17 +3901,27 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             INSERT INTO conversation_draft_generations
                                 (id, organisation_id, interaction_id, meeting_id,
                                  transcript_version_id, transcript_version, user_id,
-                                 status, source_fingerprint)
+                                 status, source_fingerprint, source_live_notes,
+                                 source_live_notes_fingerprint,
+                                 source_workspace_lock_version, input_fingerprint,
+                                 next_attempt_at)
                             VALUES
                                 (:conversation_draft_generation_id,
                                  :organisation_id, :interaction_id, :meeting_id,
                                  :recording_transcript_version_id, 1, :user_id,
-                                 'pending', :draft_source_fingerprint)
+                                 'pending', :draft_source_fingerprint,
+                                 :draft_source_live_notes,
+                                 :draft_source_live_notes_fingerprint, 1,
+                                 :draft_input_fingerprint,
+                                 '9999-12-31 23:59:59+00')
                             """
                         ),
                         {
                             **identity_parameters,
                             "draft_source_fingerprint": "d" * 64,
+                            "draft_source_live_notes": "Private source notes for the owner only.",
+                            "draft_source_live_notes_fingerprint": "e" * 64,
+                            "draft_input_fingerprint": "f" * 64,
                         },
                     )
                     await connection.execute(

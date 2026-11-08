@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -35,6 +36,7 @@ from revenueos.interaction_contracts import (
 )
 from revenueos.interaction_repositories import InteractionRecord, InteractionRepository
 from revenueos.models import (
+    CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT,
     Contact,
     ConversationBriefingOutbox,
     ConversationDraftGeneration,
@@ -218,7 +220,11 @@ class InteractionService:
         generation.worker_id = None
         generation.lease_mode = None
         generation.lease_expires_at = None
-        generation.next_attempt_at = None
+        generation.next_attempt_at = (
+            CONVERSATION_DRAFT_PRIVATE_NOTES_WORKER_FENCE_AT
+            if generation.source_live_notes_fingerprint is not None
+            else None
+        )
         try:
             workspace = await self.repository.get_user_workspace(
                 self.tenant.organisation_id,
@@ -1020,6 +1026,17 @@ class InteractionService:
         generation_update_available = (
             generation is not None and generation.status == "ready" and generation.workspace_applied_at is None
         )
+        generation_personal_notes_state: Literal["not_included", "current", "changed"] = "not_included"
+        if generation is not None and generation.source_live_notes_fingerprint is not None:
+            current_notes = workspace.live_notes if workspace is not None else None
+            current_fingerprint = (
+                hashlib.sha256(current_notes.encode("utf-8")).hexdigest()
+                if current_notes is not None and current_notes.strip()
+                else None
+            )
+            generation_personal_notes_state = (
+                "current" if current_fingerprint == generation.source_live_notes_fingerprint else "changed"
+            )
         generation_completed_at = generation.completed_at if generation is not None else None
         if workspace is None:
             return ConversationWorkspaceResponse(
@@ -1032,6 +1049,7 @@ class InteractionService:
                 generation_failure_code=generation_failure_code,
                 generation_retry_available=generation_retry_available,
                 generation_update_available=generation_update_available,
+                generation_personal_notes_state=generation_personal_notes_state,
                 generation_completed_at=generation_completed_at,
             )
         return ConversationWorkspaceResponse(
@@ -1051,6 +1069,7 @@ class InteractionService:
             generation_failure_code=generation_failure_code,
             generation_retry_available=generation_retry_available,
             generation_update_available=generation_update_available,
+            generation_personal_notes_state=generation_personal_notes_state,
             generation_completed_at=generation_completed_at,
         )
 

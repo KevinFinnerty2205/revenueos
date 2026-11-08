@@ -350,6 +350,38 @@ MIME, duration and size. Responses expose product-safe lifecycle, questions, tur
 candidates and resulting snapshot IDs; they never expose audio or provider payloads.
 See [AI Debrief](ai-debrief.md).
 
+### Private conversation workspace and automatic draft
+
+| Method | Path                                                                                 | Purpose                                                     |
+| ------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `GET`  | `/api/v1/interactions/{interactionId}/personal-workspace`                            | Read the authenticated user's private workspace and status  |
+| `PUT`  | `/api/v1/interactions/{interactionId}/personal-workspace`                            | Save private notes and editable drafts with expected version |
+| `POST` | `/api/v1/interactions/{interactionId}/personal-workspace/generation/retry`           | Explicitly retry an eligible failed transcript generation   |
+| `POST` | `/api/v1/interactions/{interactionId}/personal-workspace/generation/apply`           | Explicitly apply a ready generated version                   |
+
+The active organisation and user are server-derived. Reads and writes repeat
+both predicates under forced owner RLS, and a stale `expectedLockVersion` returns
+a conflict instead of overwriting another session. Automatic generation pins the
+current final transcript version and, when nonblank and no longer than 20,000
+characters, one owner-private personal-note snapshot. The workspace API retains
+its existing 100,000-character field limit: a longer saved note is preserved and
+the generation proceeds transcript-only rather than truncating or cancelling it.
+The snapshot is internal and is composed into private enhanced notes only.
+Follow-up composition and reusable or organisation-shared AI artefacts
+remain transcript-only. Original live notes are not replaced, edited enhanced
+notes and follow-up drafts retain the existing explicit-version replacement
+boundary, and changing only the notes does not promise an automatic regeneration.
+Responses expose only whether the generation omitted notes, still matches the
+current notes or was pinned before the notes changed; they never return the
+internal snapshot as generation metadata. The note-composition path is
+deterministic and local; these routes do not activate a live AI provider or send
+anything automatically.
+
+Migration `0078_private_note_draft_sources` is additive for application rollback.
+If pinned personal-note provenance exists, rollback keeps the forward database
+schema until any required owner export is complete and those owner-private rows
+are explicitly erased; the migration will not discard the snapshot columns.
+
 ### Visual evidence
 
 | Method   | Path                                                                       | Purpose                                      |

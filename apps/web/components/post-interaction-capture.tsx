@@ -16,7 +16,10 @@ import {
 } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
-import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
+import {
+  type ConversationWorkspaceController,
+  useConversationWorkspace,
+} from "@/lib/use-conversation-workspace";
 
 type InputPreference = "guided" | "voice" | "typed";
 type RecordingState = "idle" | "recording" | "paused" | "uploading";
@@ -75,11 +78,13 @@ export function PostInteractionCapture({
   interactionId,
   interactionType,
   restoreLatest = false,
+  workspaceController,
   workspaceRefreshKey = 0,
 }: {
   interactionId: string;
   interactionType: InteractionType;
   restoreLatest?: boolean;
+  workspaceController?: ConversationWorkspaceController;
   workspaceRefreshKey?: number;
 }) {
   const [session, setSession] = useState<DebriefSession | null>(null);
@@ -662,6 +667,7 @@ export function PostInteractionCapture({
         <CompletedConversationReview
           interactionId={interactionId}
           session={session}
+          workspaceController={workspaceController}
           workspaceRefreshKey={workspaceRefreshKey}
         />
       ) : null}
@@ -672,10 +678,12 @@ export function PostInteractionCapture({
 function CompletedConversationReview({
   interactionId,
   session,
+  workspaceController,
   workspaceRefreshKey,
 }: {
   interactionId: string;
   session: DebriefSession;
+  workspaceController?: ConversationWorkspaceController;
   workspaceRefreshKey: number;
 }) {
   const accepted = session.candidates.filter(
@@ -714,15 +722,112 @@ function CompletedConversationReview({
     "",
     "Please correct anything I have misunderstood.",
   ].join("\n");
-  const enhancedLegacyKey = `revenueos:enhanced-notes:${interactionId}`;
-  const followUpLegacyKey = `revenueos:conversation-follow-up:${interactionId}`;
+  if (workspaceController) {
+    return (
+      <CompletedConversationReviewContent
+        interactionId={interactionId}
+        session={session}
+        accepted={accepted}
+        initialEnhanced={initialEnhanced}
+        initialFollowUp={initialFollowUp}
+        workspace={workspaceController}
+      />
+    );
+  }
+  return (
+    <StandaloneCompletedConversationReview
+      interactionId={interactionId}
+      session={session}
+      accepted={accepted}
+      initialEnhanced={initialEnhanced}
+      initialFollowUp={initialFollowUp}
+      workspaceRefreshKey={workspaceRefreshKey}
+    />
+  );
+}
+
+function StandaloneCompletedConversationReview({
+  interactionId,
+  session,
+  accepted,
+  initialEnhanced,
+  initialFollowUp,
+  workspaceRefreshKey,
+}: {
+  interactionId: string;
+  session: DebriefSession;
+  accepted: CandidateEvidence[];
+  initialEnhanced: string;
+  initialFollowUp: string;
+  workspaceRefreshKey: number;
+}) {
   const workspace = useConversationWorkspace({
     interactionId,
     initialEnhancedNotes: initialEnhanced,
     initialFollowUpDraft: initialFollowUp,
     refreshKey: workspaceRefreshKey,
   });
+  return (
+    <CompletedConversationReviewContent
+      interactionId={interactionId}
+      session={session}
+      accepted={accepted}
+      initialEnhanced={initialEnhanced}
+      initialFollowUp={initialFollowUp}
+      workspace={workspace}
+    />
+  );
+}
+
+function CompletedConversationReviewContent({
+  interactionId,
+  session,
+  accepted,
+  initialEnhanced,
+  initialFollowUp,
+  workspace,
+}: {
+  interactionId: string;
+  session: DebriefSession;
+  accepted: CandidateEvidence[];
+  initialEnhanced: string;
+  initialFollowUp: string;
+  workspace: ConversationWorkspaceController;
+}) {
+  const enhancedLegacyKey = `revenueos:enhanced-notes:${interactionId}`;
+  const followUpLegacyKey = `revenueos:conversation-follow-up:${interactionId}`;
   const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
+  const defaultsSeeded = useRef(false);
+
+  useEffect(() => {
+    if (
+      defaultsSeeded.current ||
+      workspace.loading ||
+      workspace.workspace === null
+    ) {
+      return;
+    }
+    defaultsSeeded.current = true;
+    if (
+      workspace.workspace.enhancedNotes !== null &&
+      workspace.workspace.followUpDraft !== null
+    ) {
+      return;
+    }
+    workspace.setValues((current) => ({
+      ...current,
+      enhancedNotes:
+        workspace.workspace?.enhancedNotes === null &&
+        !workspace.dirtyFields.enhancedNotes
+          ? initialEnhanced
+          : current.enhancedNotes,
+      followUpDraft:
+        workspace.workspace?.followUpDraft === null &&
+        !workspace.dirtyFields.followUpDraft
+          ? initialFollowUp
+          : current.followUpDraft,
+    }));
+  }, [initialEnhanced, initialFollowUp, workspace]);
 
   useEffect(() => {
     let active = true;
@@ -751,11 +856,11 @@ function CompletedConversationReview({
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="font-semibold text-slate-950">
-          Original personal notes
+          Original debrief answers
         </h3>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Preserved separately from enhanced notes. Only the user who captured
-          this debrief can retrieve it.
+          Preserved separately from rough and enhanced notes. Only the user who
+          captured this debrief can retrieve it.
         </p>
         {session.turns.length ? (
           <ol className="mt-4 space-y-4">
@@ -772,81 +877,12 @@ function CompletedConversationReview({
           </ol>
         ) : (
           <p className="mt-4 text-sm text-slate-600">
-            No personal notes were saved.
+            No debrief answers were saved.
           </p>
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h3 className="font-semibold text-slate-950">
-          Enhanced conversation notes
-        </h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Edit the accepted, deterministic debrief output without changing your
-          original notes or evidence record.
-        </p>
-        <textarea
-          aria-label="Enhanced conversation notes"
-          className="form-control mt-4 min-h-52 py-3"
-          disabled={workspace.loading}
-          value={workspace.values.enhancedNotes}
-          onChange={(event) =>
-            workspace.setValues((current) => ({
-              ...current,
-              enhancedNotes: event.target.value,
-            }))
-          }
-        />
-        <button
-          type="button"
-          className="secondary-button mt-3"
-          disabled={workspace.loading || workspace.saveState === "saving"}
-          onClick={() => void workspace.save()}
-        >
-          {workspace.saveState === "saving" ? "Saving…" : "Save enhanced notes"}
-        </button>
-      </section>
-
       <StructuredDebrief accepted={accepted} />
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h3 className="font-semibold text-slate-950">Follow-up draft</h3>
-        <p className="mt-2 text-sm leading-6 text-amber-900">
-          Advisory draft only. Review before copying or exporting. Oryntela will
-          not send it.
-        </p>
-        <textarea
-          aria-label="Follow-up draft"
-          className="form-control mt-4 min-h-64 py-3"
-          disabled={workspace.loading}
-          value={workspace.values.followUpDraft}
-          onChange={(event) =>
-            workspace.setValues((current) => ({
-              ...current,
-              followUpDraft: event.target.value,
-            }))
-          }
-        />
-        <div className="mt-3 flex flex-wrap gap-3">
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={workspace.loading || workspace.saveState === "saving"}
-            onClick={() => void workspace.save()}
-          >
-            Save follow-up draft
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() =>
-              void navigator.clipboard.writeText(workspace.values.followUpDraft)
-            }
-          >
-            Copy draft
-          </button>
-        </div>
-      </section>
       {legacyOwnershipBlocked ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p>
@@ -854,26 +890,6 @@ function CompletedConversationReview({
             owner metadata. Oryntela will not import or display private content
             that cannot be matched to your user.
           </p>
-        </div>
-      ) : null}
-      {workspace.saveState === "saved" ? (
-        <p role="status" className="text-sm font-semibold text-brand-primary">
-          Saved privately to your Oryntela workspace. No external action was
-          taken.
-        </p>
-      ) : null}
-      {workspace.error ? (
-        <div role="alert" className="text-sm font-semibold text-rose-800">
-          <p>{workspace.error}</p>
-          {workspace.saveState === "conflict" ? (
-            <button
-              type="button"
-              className="secondary-button mt-3"
-              onClick={() => void workspace.reload()}
-            >
-              Reload latest saved draft
-            </button>
-          ) : null}
         </div>
       ) : null}
     </div>
