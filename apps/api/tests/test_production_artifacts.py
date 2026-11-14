@@ -229,7 +229,9 @@ def test_migration_and_backup_jobs_have_separate_minimum_authority() -> None:
     migration = jobs["migrate"]
     backup = jobs["daily-independent-backup"]
     assert migration["kind"] == "PRE_DEPLOY"
-    assert migration["run_command"] == "alembic upgrade head"
+    assert migration["run_command"] == (
+        "alembic upgrade head && revenueos-operations deployment-database-preflight --runtime-role revenueos_runtime"
+    )
     assert migration["instance_count"] == 1
     assert migration["instance_size_slug"] == "apps-s-1vcpu-0.5gb"
     assert set(_component_environment(migration)) == {
