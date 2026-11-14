@@ -4,10 +4,10 @@
 - Latest Stripe control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest owner build-only boundary: 24 October 2026 (Australia/Sydney)
-- Latest production deployment evidence: 14 November 2026 (Australia/Sydney)
+- Latest production deployment evidence: 15 November 2026 (Australia/Sydney)
 - Pre-gate main baseline: `4facc04`
 - Current repository migration head: `0078_private_note_draft_sources`
-- Deployed release: `cf9c1dd885f85c444714ebee4182aebb1b9d1fef`
+- Deployed release: `d46cf5badaf466e0fd294701a8f7d253701594ea`
 - Deployed migration head: `0078_private_note_draft_sources`
 - State: downsized synthetic-only production healthy; Stripe live configuration bound and verified;
   exact legal release owner-approved and published; OpenAI project funded and its
@@ -38,11 +38,48 @@ starting billable usage. The detailed execution and rollback procedure remains t
   migration was a no-op at `0078`, the new worker remained stable past the six-minute
   observation window, and API liveness/readiness, web readiness and the homepage
   stayed HTTP 200 throughout cutover monitoring.
-- The checked-in follow-up release gate will run a diagnostic, migration-side audit
+- The checked-in release gate now runs a diagnostic, migration-side audit
   immediately after Alembic and before cutover on every later approved release. It
   verifies the expected runtime login and all four worker-discovery functions without
   receiving the runtime password and never grants or repairs authority.
 - No provider, billing, Credits, WO-045, real-customer-data, topology or automatic
+  deployment boundary changed. Autodeploy remains off and production remains
+  synthetic-only.
+
+## Automatic worker-authority gate activation — 14–15 November 2026 (Australia/Sydney)
+
+- Release `38f276e2d7eb8985fdf15dd9aba5ccce1e13b25b` added the diagnostic
+  migration-side audit without changing the schema. Deployment
+  `9d1d6548-d697-477a-b215-2bb728e1fcff` failed before the audit or cutover
+  because App Platform passed bare `&&` tokens to Alembic; the existing
+  production release remained live.
+- Deployment `bd43f46a-505b-4bc7-a366-385b0a11741c` used an explicit shell
+  wrapper, reached the audit and correctly blocked cutover because
+  `revenueos_runtime` lacked `EXECUTE` on
+  `public.revenueos_post_conversation_draft_worker_scopes(integer)` and
+  `public.revenueos_briefing_worker_eligible_owners(timestamptz, integer)`.
+- Guarded repair attempt `48dad323-0e8f-4f43-984e-f50fd9926160` stopped on an
+  incorrect `defaultdb` precondition before either grant; production authority
+  remained unchanged.
+- Corrected guarded repair deployment
+  `2aab20f6-5e84-4e4d-8213-c25e1e335b78`, still at release
+  `38f276e2d7eb8985fdf15dd9aba5ccce1e13b25b`,
+  verified the exact database and roles, sole `0078` head, all four function
+  signatures and owners, `SECURITY DEFINER` settings, fixed search paths,
+  `PUBLIC` denial and exact pre-repair grant set. It granted only the two
+  missing functions, after which all three deployment preflight checks passed
+  with `status=ready`.
+- After the audit-only command was restored, configuration deployment
+  `791a1454-9947-4752-8a6f-f56c1c36c8b4` passed with no repair SQL and no
+  schema change.
+- Full-rebuild deployment `41c9f61c-a874-4bf4-aa24-13711cb49987` of merged
+  release `d46cf5badaf466e0fd294701a8f7d253701594ea` used the same audit-only
+  wrapper, passed the migration-head, runtime-role and all-function authority
+  checks, and went live at `2026-11-14T12:58:25Z`. The worker emitted
+  `worker_started` at `2026-11-14T12:57:39.734898Z`; the app remained Healthy,
+  and API liveness/readiness, web readiness and the homepage stayed HTTP 200
+  through `2026-11-14T13:05:17Z`, more than six minutes after cutover.
+- No provider, billing, Credits, WO-045, customer-data, topology or automatic
   deployment boundary changed. Autodeploy remains off and production remains
   synthetic-only.
 
