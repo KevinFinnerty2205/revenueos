@@ -8,10 +8,12 @@ synthetic-only DigitalOcean Sydney deployment: one 512 MiB web service, one
 cluster and one private Spaces subscription. Its fixed DigitalOcean run rate is
 USD 35.15/month before tax and short-lived job usage. It contains no customer
 data and is not the approved first-customer resilience profile. The current
-production release is `cf9c1dd885f85c444714ebee4182aebb1b9d1fef` at Alembic
-head `0078_private_note_draft_sources`. Its 14 November 2026 controlled deployment,
-worker restart and public health window passed without a cutover or availability
-anomaly.
+production release is `d46cf5badaf466e0fd294701a8f7d253701594ea` at Alembic
+head `0078_private_note_draft_sources`. Its 14 November 2026 full-rebuild
+deployment passed the automatic migration-head, runtime-role and all-four-function
+authority gate before cutover. A new worker started, the app remained Healthy, and
+API liveness/readiness, web readiness and the homepage stayed HTTP 200 throughout
+cutover and the greater-than-six-minute post-cutover observation window.
 
 This repository does not deploy automatically. Every future production release
 requires separate owner approval and must preserve the synthetic-only boundary until
