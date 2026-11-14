@@ -15,7 +15,7 @@ Provider outage: keep local state, stop new external mutations and use backoff/r
 
 ## Rotation rules
 
-All rotations use separate non-secret change references, dual control for high-impact production secrets where practical, a synthetic verification, revocation of old material, log review and inventory update. Never reveal old/new values in tickets, Git, screenshots or shell command arguments. A database or signing/encryption-key rotation is not complete until dependent processes restart and evidence is verified.
+All rotations use separate non-secret change references, dual control for high-impact production secrets where practical, a synthetic verification, revocation of old material, log review and inventory update. Never reveal old/new values in tickets, Git, screenshots or shell command arguments. A database or signing/encryption-key rotation is not complete until every dependent long-running process restarts—or, for an invocation-only job, that job executes with the replacement—and evidence is verified.
 
 | Secret | Rotation sequence | Special caution |
 | --- | --- | --- |
