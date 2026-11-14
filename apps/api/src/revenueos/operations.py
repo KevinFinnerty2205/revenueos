@@ -397,6 +397,10 @@ async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
                                         'public.revenueos_ai_worker_eligible_organisations(timestamptz,integer)'
                                     ),
                                     (
+                                        'knowledge_ingestion_worker',
+                                        'public.revenueos_knowledge_worker_eligible_organisations(integer)'
+                                    ),
+                                    (
                                         'post_conversation_draft_worker',
                                         'public.revenueos_post_conversation_draft_worker_scopes(integer)'
                                     ),
@@ -432,7 +436,7 @@ async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
                 .mappings()
                 .all()
             )
-            worker_discovery_ready = len(worker_discovery_authorities) == 3 and all(
+            worker_discovery_ready = len(worker_discovery_authorities) == 4 and all(
                 authority.is_security_definer
                 and (authority.owner_is_superuser or authority.owner_bypasses_rls)
                 and authority.runtime_can_execute

@@ -30,8 +30,10 @@ def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
         pytest.skip("A PostgreSQL DATABASE_URL is required for worker preflight tests.")
 
     runtime_role = f"worker_preflight_runtime_{uuid.uuid4().hex}"
+    knowledge_function_signature = "public.revenueos_knowledge_worker_eligible_organisations(integer)"
     function_signatures = (
         "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer)",
+        knowledge_function_signature,
         "public.revenueos_post_conversation_draft_worker_scopes(integer)",
         "public.revenueos_briefing_worker_eligible_owners(timestamptz, integer)",
     )
@@ -68,7 +70,7 @@ def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
 
             async with admin_engine.begin() as connection:
                 await connection.exec_driver_sql(
-                    f'REVOKE EXECUTE ON FUNCTION {function_signatures[1]} FROM "{runtime_role}"'
+                    f'REVOKE EXECUTE ON FUNCTION {knowledge_function_signature} FROM "{runtime_role}"'
                 )
             blocked_checks = await inspect_runtime_database(runtime_engine)
             assert (
