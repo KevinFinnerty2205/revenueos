@@ -4,13 +4,15 @@
 - Latest Stripe control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest OpenAI control-plane evidence: 15 September 2026 (Australia/Sydney)
 - Latest owner build-only boundary: 24 October 2026 (Australia/Sydney)
+- Latest production deployment evidence: 14 November 2026 (Australia/Sydney)
 - Pre-gate main baseline: `4facc04`
 - Current repository migration head: `0078_private_note_draft_sources`
-- Deployed pre-build migration head: `0064_deauthorisation`
+- Deployed release: `cf9c1dd885f85c444714ebee4182aebb1b9d1fef`
+- Deployed migration head: `0078_private_note_draft_sources`
 - State: downsized synthetic-only production healthy; Stripe live configuration bound and verified;
   exact legal release owner-approved and published; OpenAI project funded and its
   least-privilege secret bound while execution remains disabled; customer checkout
-  and Credits disabled; paid-customer resilience gate pending review and deployment
+  and Credits disabled; paid-customer resilience gate pending review
 - Stripe fixed spend in this activation pass: AUD 0 / USD 0; no transaction fee
 - Customer data: none
 
@@ -18,6 +20,31 @@ This is the resumption ledger for the owner-boundary pass. It records only facts
 verified without creating an account, accepting a contract, entering credentials or
 starting billable usage. The detailed execution and rollback procedure remains the
 [production launch runbook](production-launch-runbook.md).
+
+## Worker-authority repair and `0078` deployment — 14 November 2026
+
+- Release `399b59d7c7f7eb1cdec6fd5769eb0ab0fd6b5f2a` migrated production from
+  `0064_deauthorisation` through `0078_private_note_draft_sources`. The migration
+  completed, but the worker then failed during discovery because the least-privilege
+  runtime role lacked `EXECUTE` on
+  `public.revenueos_knowledge_worker_eligible_organisations(integer)`.
+- A guarded migration-role transaction verified the exact database, role properties,
+  single `0078` head, function owner, `SECURITY DEFINER` setting and fixed search
+  path, then granted only that function to the runtime role. `PUBLIC` execution
+  remained denied; no table grant, ownership, `BYPASSRLS` or broader role authority
+  changed.
+- The worker restarted cleanly and the app returned to Healthy. Release
+  `cf9c1dd885f85c444714ebee4182aebb1b9d1fef` then deployed successfully; its
+  migration was a no-op at `0078`, the new worker remained stable past the six-minute
+  observation window, and API liveness/readiness, web readiness and the homepage
+  stayed HTTP 200 throughout cutover monitoring.
+- The checked-in follow-up release gate will run a diagnostic, migration-side audit
+  immediately after Alembic and before cutover on every later approved release. It
+  verifies the expected runtime login and all four worker-discovery functions without
+  receiving the runtime password and never grants or repairs authority.
+- No provider, billing, Credits, WO-045, real-customer-data, topology or automatic
+  deployment boundary changed. Autodeploy remains off and production remains
+  synthetic-only.
 
 ## Selected topology and current cost boundary
 
@@ -77,8 +104,7 @@ not independently re-verify or change any provider control plane.
 On 15 September 2026 the owner approved the exact PR #88 Terms and Privacy Policy,
 selected effective date `2026-09-15`, and authorised publication. The legal-release
 commit binds those canonical bytes, versions and fingerprints. The owner-approved
-pages are published; the current repository candidate adds their public index and
-sitemap integration, but this build-only work does not deploy that candidate.
+pages, public index and sitemap integration are deployed.
 
 ### Stripe live control-plane evidence — 15 September 2026
 
@@ -197,10 +223,10 @@ records exactly as they are; this branch does not re-verify or modify the contro
 plane. Leave `oryntela.com` unchanged and do not enable HSTS preload as part of this
 work.
 
-Additional production expansion is paused. Alembic migrations through the current
-repository head `0078_private_note_draft_sources` may reach production only through a
-separately approved deployment. Do not resize
-services, add a standby, create paid
+Additional production expansion is paused. Production is at
+`0078_private_note_draft_sources`; every later immutable release remains separately
+approved and must retain the automatic worker-authority gate. Do not resize services,
+add a standby, create paid
 test/restore resources, activate a provider, enable checkout/Credits, release real
 customer data or begin WO-045 under this build instruction.
 
@@ -208,9 +234,8 @@ customer data or begin WO-045 under this build instruction.
 
 1. Approve a fresh capacity, high-availability, bounded-load and recovery assessment
    plus the resulting fixed cost before the first paid customer or real customer data.
-2. Separately approve a reviewed production deployment of the eventual merged Git
-   revision containing Alembic head `0078_private_note_draft_sources`; the owner-demo
-   branch itself must not deploy.
+2. Separately approve every future reviewed production deployment and require its
+   PRE_DEPLOY migration plus automatic worker-authority audit to pass before cutover.
 3. Separately approve the real-data release and named-customer/Clerk session evidence.
 4. Separately approve any OpenAI, Prospect, Microsoft, Google, HubSpot or Salesforce
    production activation and its bounded synthetic smoke. No paid provider call is

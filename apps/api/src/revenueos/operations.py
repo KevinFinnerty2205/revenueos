@@ -17,8 +17,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import func, select, text
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker
 
 from revenueos.auth import identity_organisation_id, identity_user_id
 from revenueos.billing_provider import build_billing_provider
@@ -62,6 +63,29 @@ from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
 CheckStatus = Literal["pass", "fail"]
 AddOnModule = Literal["prospect", "engage", "create", "crm"]
+
+WORKER_DISCOVERY_FUNCTIONS = (
+    (
+        "ai_job_worker",
+        "public.revenueos_ai_worker_eligible_organisations(timestamptz,integer)",
+    ),
+    (
+        "knowledge_ingestion_worker",
+        "public.revenueos_knowledge_worker_eligible_organisations(integer)",
+    ),
+    (
+        "post_conversation_draft_worker",
+        "public.revenueos_post_conversation_draft_worker_scopes(integer)",
+    ),
+    (
+        "briefing_delivery_worker",
+        "public.revenueos_briefing_worker_eligible_owners(timestamptz,integer)",
+    ),
+)
+_WORKER_DISCOVERY_VALUES_SQL = ",\n".join(
+    f"('{function_name}', '{signature}')" for function_name, signature in WORKER_DISCOVERY_FUNCTIONS
+)
+_DATABASE_ROLE_NAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 
 @dataclass(frozen=True)
@@ -118,6 +142,14 @@ def _validate_manual_paid_operator_reference(value: str) -> str:
     if "<" in resolved or ">" in resolved:
         raise ValueError("Operator reference must be plain printable text.")
     return resolved
+
+
+def _parse_database_role_name(value: str) -> str:
+    if _DATABASE_ROLE_NAME_PATTERN.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError(
+            "Database role names must be lowercase PostgreSQL identifiers containing at most 63 characters."
+        )
+    return value
 
 
 class _StoreOnce(argparse.Action):
@@ -359,6 +391,166 @@ def _add_manual_paid_purchase_arguments(parser: argparse.ArgumentParser, *, exec
         parser.add_argument("--confirm", required=True, action=_StoreOnce)
 
 
+async def _worker_discovery_authorities(
+    connection: AsyncConnection,
+    runtime_role: str,
+) -> list[RowMapping]:
+    result = await connection.execute(
+        text(
+            f"""
+            WITH required(function_name, signature) AS (
+                VALUES {_WORKER_DISCOVERY_VALUES_SQL}
+            ), resolved AS (
+                SELECT function_name, to_regprocedure(signature) AS function_oid
+                FROM required
+            )
+            SELECT
+                resolved.function_name,
+                runtime.oid IS NOT NULL AS runtime_role_exists,
+                runtime.rolcanlogin AS runtime_can_login,
+                runtime.rolsuper AS runtime_is_superuser,
+                runtime.rolbypassrls AS runtime_bypasses_rls,
+                EXISTS (
+                    SELECT 1
+                    FROM pg_roles AS privileged
+                    WHERE (privileged.rolsuper OR privileged.rolbypassrls)
+                    AND pg_has_role(runtime.oid, privileged.oid, 'MEMBER')
+                ) AS runtime_has_privileged_membership,
+                functions.oid IS NOT NULL AS function_exists,
+                functions.prosecdef AS is_security_definer,
+                functions.proconfig IS NOT DISTINCT FROM
+                    ARRAY['search_path=pg_catalog, public']::text[] AS has_safe_search_path,
+                owners.oid = connected_role.oid AS owner_is_connected_role,
+                owners.rolsuper AS owner_is_superuser,
+                owners.rolbypassrls AS owner_bypasses_rls,
+                has_function_privilege(
+                    runtime.oid, resolved.function_oid, 'EXECUTE'
+                ) AS runtime_can_execute,
+                has_function_privilege(
+                    'public', resolved.function_oid, 'EXECUTE'
+                ) AS public_can_execute
+            FROM resolved
+            LEFT JOIN pg_proc AS functions
+                ON functions.oid = resolved.function_oid
+            LEFT JOIN pg_roles AS owners
+                ON owners.oid = functions.proowner
+            LEFT JOIN pg_roles AS runtime
+                ON runtime.rolname = :runtime_role
+            LEFT JOIN pg_roles AS connected_role
+                ON connected_role.rolname = current_user
+            ORDER BY resolved.function_name
+            """
+        ),
+        {"runtime_role": runtime_role},
+    )
+    return list(result.mappings().all())
+
+
+def _worker_discovery_authority_ready(
+    authorities: list[RowMapping],
+    *,
+    require_connected_owner: bool,
+) -> bool:
+    return len(authorities) == len(WORKER_DISCOVERY_FUNCTIONS) and all(
+        authority["function_exists"] is True
+        and authority["is_security_definer"] is True
+        and authority["has_safe_search_path"] is True
+        and (not require_connected_owner or authority["owner_is_connected_role"] is True)
+        and (authority["owner_is_superuser"] is True or authority["owner_bypasses_rls"] is True)
+        and authority["runtime_can_execute"] is True
+        and authority["public_can_execute"] is False
+        for authority in authorities
+    )
+
+
+async def deployment_database_preflight(
+    engine: AsyncEngine,
+    runtime_role: str,
+) -> dict[str, object]:
+    checks: list[PreflightCheck] = []
+    try:
+        async with engine.connect() as connection:
+            if connection.dialect.name != "postgresql":
+                return {
+                    "status": "blocked",
+                    "checks": [
+                        asdict(
+                            PreflightCheck(
+                                "database_connectivity",
+                                "fail",
+                                "Deployment database authority inspection requires PostgreSQL.",
+                            )
+                        )
+                    ],
+                }
+            migration = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT count(*) AS head_count, min(version_num) AS migration_head "
+                            "FROM public.alembic_version"
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            migration_ready = migration.head_count == 1 and migration.migration_head == EXPECTED_MIGRATION_HEAD
+            checks.append(
+                PreflightCheck(
+                    "database_migration_head",
+                    "pass" if migration_ready else "fail",
+                    "Migration head is current."
+                    if migration_ready
+                    else "Migration head is missing, ambiguous or stale.",
+                )
+            )
+            authorities = await _worker_discovery_authorities(connection, runtime_role)
+            runtime_role_ready = len(authorities) == len(WORKER_DISCOVERY_FUNCTIONS) and all(
+                authority["runtime_role_exists"] is True
+                and authority["runtime_can_login"] is True
+                and authority["runtime_is_superuser"] is False
+                and authority["runtime_bypasses_rls"] is False
+                and authority["runtime_has_privileged_membership"] is False
+                for authority in authorities
+            )
+            checks.append(
+                PreflightCheck(
+                    "database_runtime_role",
+                    "pass" if runtime_role_ready else "fail",
+                    "Configured runtime role is a least-privilege login role."
+                    if runtime_role_ready
+                    else "Configured runtime role is absent, cannot log in or has elevated authority.",
+                )
+            )
+            worker_discovery_ready = runtime_role_ready and _worker_discovery_authority_ready(
+                authorities,
+                require_connected_owner=True,
+            )
+            checks.append(
+                PreflightCheck(
+                    "database_worker_discovery_authority",
+                    "pass" if worker_discovery_ready else "fail",
+                    "Every worker-discovery function has the required isolated owner, safe definition, "
+                    "runtime execution and PUBLIC denial."
+                    if worker_discovery_ready
+                    else "One or more worker-discovery functions has unsafe ownership, definition or execution authority.",
+                )
+            )
+    except (OSError, SQLAlchemyError):
+        checks = [
+            PreflightCheck(
+                "database_connectivity",
+                "fail",
+                "Deployment database authority inspection failed.",
+            )
+        ]
+    return {
+        "status": "ready" if checks and all(check.status == "pass" for check in checks) else "blocked",
+        "checks": [asdict(check) for check in checks],
+    }
+
+
 async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
     checks: list[PreflightCheck] = []
     try:
@@ -368,7 +560,13 @@ async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
                     await connection.execute(
                         text(
                             """SELECT current_user AS role_name, roles.rolsuper AS is_superuser,
-                    roles.rolbypassrls AS bypasses_rls
+                    roles.rolbypassrls AS bypasses_rls,
+                    EXISTS (
+                        SELECT 1
+                        FROM pg_roles AS privileged
+                        WHERE (privileged.rolsuper OR privileged.rolbypassrls)
+                        AND pg_has_role(roles.oid, privileged.oid, 'MEMBER')
+                    ) AS has_privileged_membership
                     FROM pg_roles AS roles WHERE roles.rolname = current_user"""
                         )
                     )
@@ -379,76 +577,28 @@ async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
             checks.append(
                 PreflightCheck(
                     "database_runtime_role",
-                    "pass" if not role.is_superuser and not role.bypasses_rls else "fail",
-                    "Runtime role is non-superuser and does not bypass RLS."
-                    if not role.is_superuser and not role.bypasses_rls
-                    else "Runtime role has superuser or BYPASSRLS privilege.",
+                    "pass"
+                    if not role.is_superuser and not role.bypasses_rls and not role.has_privileged_membership
+                    else "fail",
+                    "Runtime role is non-superuser, does not bypass RLS and has no privileged membership."
+                    if not role.is_superuser and not role.bypasses_rls and not role.has_privileged_membership
+                    else "Runtime role has superuser, BYPASSRLS or privileged role membership.",
                 )
             )
-            worker_discovery_authorities = (
-                (
-                    await connection.execute(
-                        text(
-                            """
-                            WITH required(function_name, signature) AS (
-                                VALUES
-                                    (
-                                        'ai_job_worker',
-                                        'public.revenueos_ai_worker_eligible_organisations(timestamptz,integer)'
-                                    ),
-                                    (
-                                        'knowledge_ingestion_worker',
-                                        'public.revenueos_knowledge_worker_eligible_organisations(integer)'
-                                    ),
-                                    (
-                                        'post_conversation_draft_worker',
-                                        'public.revenueos_post_conversation_draft_worker_scopes(integer)'
-                                    ),
-                                    (
-                                        'briefing_delivery_worker',
-                                        'public.revenueos_briefing_worker_eligible_owners(timestamptz,integer)'
-                                    )
-                            ), resolved AS (
-                                SELECT function_name, to_regprocedure(signature) AS function_oid
-                                FROM required
-                            )
-                            SELECT
-                                resolved.function_name,
-                                functions.prosecdef AS is_security_definer,
-                                owners.rolsuper AS owner_is_superuser,
-                                owners.rolbypassrls AS owner_bypasses_rls,
-                                has_function_privilege(
-                                    current_user, resolved.function_oid, 'EXECUTE'
-                                ) AS runtime_can_execute,
-                                has_function_privilege(
-                                    'public', resolved.function_oid, 'EXECUTE'
-                                ) AS public_can_execute
-                            FROM resolved
-                            LEFT JOIN pg_proc AS functions
-                                ON functions.oid = resolved.function_oid
-                            LEFT JOIN pg_roles AS owners
-                                ON owners.oid = functions.proowner
-                            ORDER BY resolved.function_name
-                            """
-                        )
-                    )
-                )
-                .mappings()
-                .all()
+            worker_discovery_authorities = await _worker_discovery_authorities(
+                connection,
+                str(role.role_name),
             )
-            worker_discovery_ready = len(worker_discovery_authorities) == 4 and all(
-                authority.is_security_definer
-                and (authority.owner_is_superuser or authority.owner_bypasses_rls)
-                and authority.runtime_can_execute
-                and not authority.public_can_execute
-                for authority in worker_discovery_authorities
+            worker_discovery_ready = _worker_discovery_authority_ready(
+                worker_discovery_authorities,
+                require_connected_owner=False,
             )
             checks.append(
                 PreflightCheck(
                     "database_worker_discovery_authority",
                     "pass" if worker_discovery_ready else "fail",
-                    "Every worker-discovery function is SECURITY DEFINER, runtime-only and its isolated owner "
-                    "can read across forced RLS."
+                    "Every worker-discovery function is SECURITY DEFINER, executable by runtime, denied to PUBLIC "
+                    "and owned by an isolated role that can read across forced RLS."
                     if worker_discovery_ready
                     else "One or more worker-discovery functions are unavailable, over-broad, not executable by "
                     "runtime or owned without authority to read across forced RLS.",
@@ -1113,6 +1263,13 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="RevenueOS real-data operations")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("production-preflight")
+    deployment_database = subparsers.add_parser("deployment-database-preflight")
+    deployment_database.add_argument(
+        "--runtime-role",
+        required=True,
+        type=_parse_database_role_name,
+        action=_StoreOnce,
+    )
 
     provision = subparsers.add_parser("provision-organisation")
     provision.add_argument("--external-organisation-id", required=True)
@@ -1197,6 +1354,9 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
     if engine is None or session_factory is None:
         return 1, {"status": "blocked", "code": "database_unavailable"}
     try:
+        if arguments.command == "deployment-database-preflight":
+            result = await deployment_database_preflight(engine, arguments.runtime_role)
+            return (0 if result["status"] == "ready" else 1), result
         if arguments.command == "provision-organisation":
             expected_confirmation = f"PROVISION {arguments.external_organisation_id}"
             if arguments.confirm != expected_confirmation:

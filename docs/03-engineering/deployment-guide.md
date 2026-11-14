@@ -8,12 +8,14 @@ synthetic-only DigitalOcean Sydney deployment: one 512 MiB web service, one
 cluster and one private Spaces subscription. Its fixed DigitalOcean run rate is
 USD 35.15/month before tax and short-lived job usage. It contains no customer
 data and is not the approved first-customer resilience profile. The current
-repository's Alembic migration head is `0078_private_note_draft_sources`; the
-deployed pre-build release remains on its previously reviewed Git and migration
-heads until a separate deployment approval.
+production release is `cf9c1dd885f85c444714ebee4182aebb1b9d1fef` at Alembic
+head `0078_private_note_draft_sources`. Its 14 November 2026 controlled deployment,
+worker restart and public health window passed without a cutover or availability
+anomaly.
 
-This repository does not deploy automatically, and the current owner-demo build
-work must not change that production environment. The canonical
+This repository does not deploy automatically. Every future production release
+requires separate owner approval and must preserve the synthetic-only boundary until
+the relevant launch gates pass. The canonical
 [production launch runbook](production-launch-runbook.md) and
 [activation boundary ledger](wo-054-production-activation-ledger.md) own current
 setup, operation, cost and recovery evidence; neither is production-data
@@ -42,7 +44,9 @@ smoke or customer transaction is authorised.
 - Deploy `revenueos-ai-worker` as an independently supervised long-running
   process from the same immutable release as the API.
 - Use PostgreSQL with a non-RLS-bypass runtime role. Keep migration credentials
-  separate and apply Alembic before starting the API or worker.
+  separate. PRE_DEPLOY uses the migration credential to apply Alembic and audit the
+  named runtime role's worker-discovery authority without receiving the runtime
+  password, before starting the API or worker.
 
 ## Configuration and secrets
 
@@ -94,7 +98,9 @@ are verified. No Event provider credential is required or supported.
 1. Build and scan one immutable release.
 2. Back up and verify recovery expectations for PostgreSQL.
 3. Apply Alembic with the guarded migration role.
-4. Confirm migration drift checks are clean.
+4. In the same PRE_DEPLOY job, require the migration-side runtime-authority audit to
+   pass for all four worker-discovery functions; then confirm migration drift checks
+   are clean.
 5. Start/update the API and verify `/health/live` and `/health/ready`.
 6. Start/update the worker and verify content-free worker/provider telemetry.
 7. Start/update the web application and exercise a synthetic smoke journey.
