@@ -83,6 +83,30 @@ starting billable usage. The detailed execution and rollback procedure remains t
   deployment boundary changed. Autodeploy remains off and production remains
   synthetic-only.
 
+## Migration credential rotation — 15 November 2026 (Australia/Sydney)
+
+- The provider-managed password for the separate `revenueos_migration` login was
+  reset, invalidating the former value. The replacement connection was bound only
+  to the `migrate` PRE_DEPLOY job's encrypted, component-scoped `DATABASE_URL`.
+  The API and worker `revenueos_runtime` credential, custom CA, TLS mode, database
+  roles, grants and ownership were unchanged; no secret value or connection string
+  is recorded here.
+- Configuration deployment `f3d4a93c-628c-422e-8e48-050d3a0bf851` retained release
+  `d46cf5badaf466e0fd294701a8f7d253701594ea` and the sole migration head
+  `0078_private_note_draft_sources`. The dependent migration job applied no schema
+  change. The configuration deployment went live at `2026-11-14T22:43:17Z`. Its
+  preflight returned `status=ready` with `database_migration_head=pass`,
+  `database_runtime_role=pass` and `database_worker_discovery_authority=pass`.
+- The app stayed Healthy. API liveness/readiness, web readiness and the homepage
+  stayed HTTP 200 through `2026-11-14T22:49:53Z`, more than six minutes after
+  cutover; readiness confirmed the database, migration and worker configuration
+  were ready. The runtime services do not consume the migration credential and
+  remained live without an authentication or restart loop.
+- No rollback was required. No schema, application source, external AI or connector
+  provider activation, billing, Credits, WO-045, customer-data, topology or
+  automatic deployment boundary changed. Autodeploy remains off and production
+  remains synthetic-only.
+
 ## Selected topology and current cost boundary
 
 The owner-approved pre-launch Sydney topology is one 512 MiB web service, one
