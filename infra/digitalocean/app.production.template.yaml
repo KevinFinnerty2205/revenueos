@@ -416,8 +416,8 @@ jobs:
     dockerfile_path: infra/docker/api.Dockerfile
     source_dir: /
     run_command: >-
-      alembic upgrade head &&
-      revenueos-operations deployment-database-preflight --runtime-role revenueos_runtime
+      /bin/sh -c 'alembic upgrade head &&
+      revenueos-operations deployment-database-preflight --runtime-role revenueos_runtime'
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
     envs:
