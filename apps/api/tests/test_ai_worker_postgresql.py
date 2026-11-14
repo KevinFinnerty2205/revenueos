@@ -23,6 +23,14 @@ from revenueos.models import (
 )
 from revenueos.operations import inspect_runtime_database
 
+KNOWLEDGE_DISCOVERY_FUNCTION_SIGNATURE = "public.revenueos_knowledge_worker_eligible_organisations(integer)"
+WORKER_DISCOVERY_FUNCTION_SIGNATURES = (
+    "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer)",
+    KNOWLEDGE_DISCOVERY_FUNCTION_SIGNATURE,
+    "public.revenueos_post_conversation_draft_worker_scopes(integer)",
+    "public.revenueos_briefing_worker_eligible_owners(timestamptz, integer)",
+)
+
 
 def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
     database_url = os.getenv("DATABASE_URL", "")
@@ -30,11 +38,6 @@ def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
         pytest.skip("A PostgreSQL DATABASE_URL is required for worker preflight tests.")
 
     runtime_role = f"worker_preflight_runtime_{uuid.uuid4().hex}"
-    function_signatures = (
-        "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer)",
-        "public.revenueos_post_conversation_draft_worker_scopes(integer)",
-        "public.revenueos_briefing_worker_eligible_owners(timestamptz, integer)",
-    )
 
     async def scenario() -> None:
         admin_engine = create_async_engine(database_url)
@@ -45,7 +48,7 @@ def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
                 await connection.exec_driver_sql(f'CREATE ROLE "{runtime_role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
                 await connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{runtime_role}"')
                 await connection.exec_driver_sql(f'GRANT SELECT ON public.alembic_version TO "{runtime_role}"')
-                for signature in function_signatures:
+                for signature in WORKER_DISCOVERY_FUNCTION_SIGNATURES:
                     original_public_execute[signature] = bool(
                         await connection.scalar(
                             text("SELECT has_function_privilege('public', to_regprocedure(:signature), 'EXECUTE')"),
@@ -68,7 +71,7 @@ def test_postgresql_preflight_checks_every_worker_discovery_function() -> None:
 
             async with admin_engine.begin() as connection:
                 await connection.exec_driver_sql(
-                    f'REVOKE EXECUTE ON FUNCTION {function_signatures[1]} FROM "{runtime_role}"'
+                    f'REVOKE EXECUTE ON FUNCTION {KNOWLEDGE_DISCOVERY_FUNCTION_SIGNATURE} FROM "{runtime_role}"'
                 )
             blocked_checks = await inspect_runtime_database(runtime_engine)
             assert (
@@ -230,21 +233,14 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                     )
                 )
                 assert isinstance(original_function_owner, str)
-                original_public_execute = bool(
-                    await connection.scalar(
-                        text(
-                            """
-                            SELECT has_function_privilege('public', functions.oid, 'EXECUTE')
-                            FROM pg_proc AS functions
-                            JOIN pg_namespace AS namespaces
-                                ON namespaces.oid = functions.pronamespace
-                            WHERE namespaces.nspname = 'public'
-                                AND functions.proname =
-                                    'revenueos_ai_worker_eligible_organisations'
-                            """
+                original_public_execute = {}
+                for signature in WORKER_DISCOVERY_FUNCTION_SIGNATURES:
+                    original_public_execute[signature] = bool(
+                        await connection.scalar(
+                            text("SELECT has_function_privilege('public', to_regprocedure(:signature), 'EXECUTE')"),
+                            {"signature": signature},
                         )
                     )
-                )
                 await connection.exec_driver_sql(
                     f'CREATE ROLE "{discovery_owner_role}" NOLOGIN NOSUPERUSER NOBYPASSRLS'
                 )
@@ -264,10 +260,8 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                 assert blocked_discovery_check.status == "fail"
                 async with engine.begin() as connection:
                     await connection.exec_driver_sql(f'ALTER ROLE "{discovery_owner_role}" BYPASSRLS')
-                    await connection.exec_driver_sql(
-                        "REVOKE EXECUTE ON FUNCTION "
-                        "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer) FROM PUBLIC"
-                    )
+                    for signature in WORKER_DISCOVERY_FUNCTION_SIGNATURES:
+                        await connection.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION {signature} FROM PUBLIC")
                 assert organisation_id in await first.discover_eligible_organisations()
                 ready_checks = await inspect_runtime_database(engine)
                 ready_discovery_check = next(
@@ -282,11 +276,9 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                     )
                     await connection.exec_driver_sql(f'DROP OWNED BY "{discovery_owner_role}"')
                     await connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{discovery_owner_role}"')
-                    if original_public_execute:
-                        await connection.exec_driver_sql(
-                            "GRANT EXECUTE ON FUNCTION "
-                            "public.revenueos_ai_worker_eligible_organisations(timestamptz, integer) TO PUBLIC"
-                        )
+                    for signature, public_could_execute in original_public_execute.items():
+                        if public_could_execute:
+                            await connection.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION {signature} TO PUBLIC")
 
             claims = await asyncio.gather(
                 first.claim_next_job(organisation_id, "worker-one"),
