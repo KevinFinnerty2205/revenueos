@@ -41,7 +41,7 @@ export function InteractionCard({
             ? "Brief ready"
             : interaction.briefState === "not_generated"
               ? "Not prepared"
-              : "Link context"}
+              : "Preparation unavailable"}
         </span>
         {interaction.interactionType === "phone_call" ? (
           <span className="rounded-full bg-indigo-50 px-3 py-1 text-indigo-800">
@@ -104,17 +104,9 @@ export function InteractionCard({
         {liveWorkspaceAvailable ? (
           <Link
             className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-            href={`/conversations/${interaction.id}/workspace`}
+            href={`/conversations/${interaction.id}?view=capture`}
           >
             Open live workspace
-          </Link>
-        ) : null}
-        {interaction.meetingId ? (
-          <Link
-            className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-            href={`/meetings/${interaction.meetingId}`}
-          >
-            Open Meeting Intelligence
           </Link>
         ) : null}
         {interaction.briefState !== "unavailable" ? (

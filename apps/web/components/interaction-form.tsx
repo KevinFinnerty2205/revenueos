@@ -12,7 +12,7 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { interactionTypes } from "@/lib/interactions";
@@ -34,11 +34,13 @@ function appendUnique<T extends { id: string }>(
 }
 
 export function InteractionForm({
+  conversationOnly = false,
   initialCompanyId = "",
   initialOpportunityId = "",
   initialContactId = "",
   initialInteractionType = "manual_interaction",
 }: {
+  conversationOnly?: boolean;
   initialCompanyId?: string;
   initialOpportunityId?: string;
   initialContactId?: string;
@@ -76,10 +78,18 @@ export function InteractionForm({
       apiRequest<EntityPage<Company>>("/api/v1/companies?pageSize=100", {
         signal: controller.signal,
       }),
-      apiRequest<EntityPage<Opportunity>>(
-        "/api/v1/opportunities?pageSize=100",
-        { signal: controller.signal },
-      ),
+      conversationOnly
+        ? Promise.resolve({
+            items: [],
+            page: 1,
+            pageSize: 100,
+            total: 0,
+            pages: 0,
+          } as EntityPage<Opportunity>)
+        : apiRequest<EntityPage<Opportunity>>(
+            "/api/v1/opportunities?pageSize=100",
+            { signal: controller.signal },
+          ),
       apiRequest<EntityPage<Contact>>("/api/v1/contacts?pageSize=100", {
         signal: controller.signal,
       }),
@@ -96,6 +106,7 @@ export function InteractionForm({
                   { signal: controller.signal },
                 )
               : Promise.resolve(null),
+            !conversationOnly &&
             initialOpportunityId &&
             !opportunityPage.items.some(
               (opportunity) => opportunity.id === initialOpportunityId,
@@ -185,6 +196,7 @@ export function InteractionForm({
       });
     return () => controller.abort();
   }, [
+    conversationOnly,
     initialCompanyId,
     initialContactId,
     initialInteractionType,
@@ -264,10 +276,8 @@ export function InteractionForm({
           Add conversation
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Plan a meeting, outbound call or in-person conversation, or add a
-          simple note. Company and opportunity context are optional. Online
-          meeting links are stored only as safe, query-free navigation links;
-          Oryntela does not join or fetch them.
+          Add a meeting, call or in-person note. Give it a title to get started;
+          you can add company context and a time when useful.
         </p>
       </div>
 
@@ -324,9 +334,31 @@ export function InteractionForm({
                 setInteractionType(event.target.value as InteractionType);
               }}
             >
-              {interactionTypes.map((value) => (
+              {(conversationOnly
+                ? [
+                    ...new Set<InteractionType>([
+                      "online_meeting",
+                      "face_to_face_meeting",
+                      "phone_call",
+                      "conference_interaction",
+                      "manual_interaction",
+                      initialInteractionType,
+                    ]),
+                  ]
+                : interactionTypes
+              ).map((value) => (
                 <option key={value} value={value}>
-                  {humanise(value)}
+                  {conversationOnly
+                    ? ((
+                        {
+                          online_meeting: "Online meeting",
+                          face_to_face_meeting: "In-person meeting",
+                          phone_call: "Phone call",
+                          conference_interaction: "Event notes",
+                          manual_interaction: "Note",
+                        } as Partial<Record<InteractionType, string>>
+                      )[value] ?? humanise(value))
+                    : humanise(value)}
                 </option>
               ))}
             </select>
@@ -341,6 +373,9 @@ export function InteractionForm({
                   markContextDirty();
                   const nextCompanyId = event.target.value;
                   setCompanyId(nextCompanyId);
+                  if (conversationOnly && opportunityId) {
+                    setOpportunityId("");
+                  }
                   if (
                     contactId &&
                     contacts.find((contact) => contact.id === contactId)
@@ -358,24 +393,26 @@ export function InteractionForm({
                 ))}
               </select>
             </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Opportunity
-              <select
-                className="form-control"
-                value={opportunityId}
-                onChange={(event) => {
-                  markContextDirty();
-                  setOpportunityId(event.target.value);
-                }}
-              >
-                <option value="">No opportunity</option>
-                {opportunities.map((opportunity) => (
-                  <option key={opportunity.id} value={opportunity.id}>
-                    {opportunity.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!conversationOnly ? (
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Opportunity
+                <select
+                  className="form-control"
+                  value={opportunityId}
+                  onChange={(event) => {
+                    markContextDirty();
+                    setOpportunityId(event.target.value);
+                  }}
+                >
+                  <option value="">No opportunity</option>
+                  {opportunities.map((opportunity) => (
+                    <option key={opportunity.id} value={opportunity.id}>
+                      {opportunity.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
           {interactionType === "phone_call" ? (
             <fieldset className="grid gap-5 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:grid-cols-2">
@@ -475,26 +512,28 @@ export function InteractionForm({
               </p>
             </fieldset>
           ) : null}
-          <div className="grid gap-5 sm:grid-cols-2">
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Scheduled start
-              <input
-                className="form-control"
-                type="datetime-local"
-                value={scheduledStartAt}
-                onChange={(event) => setScheduledStartAt(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Scheduled end
-              <input
-                className="form-control"
-                type="datetime-local"
-                value={scheduledEndAt}
-                onChange={(event) => setScheduledEndAt(event.target.value)}
-              />
-            </label>
-          </div>
+          <OptionalSchedule collapsed={conversationOnly}>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Scheduled start
+                <input
+                  className="form-control"
+                  type="datetime-local"
+                  value={scheduledStartAt}
+                  onChange={(event) => setScheduledStartAt(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Scheduled end
+                <input
+                  className="form-control"
+                  type="datetime-local"
+                  value={scheduledEndAt}
+                  onChange={(event) => setScheduledEndAt(event.target.value)}
+                />
+              </label>
+            </div>
+          </OptionalSchedule>
           {submitError ? (
             <p
               role="alert"
@@ -518,5 +557,24 @@ export function InteractionForm({
         </form>
       ) : null}
     </section>
+  );
+}
+
+function OptionalSchedule({
+  collapsed,
+  children,
+}: {
+  collapsed: boolean;
+  children: ReactNode;
+}) {
+  return collapsed ? (
+    <details className="rounded-xl border border-brand-primary/10 p-4">
+      <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-focus">
+        Add a scheduled time (optional)
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
+  ) : (
+    children
   );
 }

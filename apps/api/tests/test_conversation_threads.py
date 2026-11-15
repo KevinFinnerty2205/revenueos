@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from revenueos.auth import get_current_user
+from revenueos.conversation_thread_services import ConversationThreadService
 from revenueos.models import (
     CaptureSession,
     ConversationThreadAuditEvent,
@@ -16,6 +17,7 @@ from revenueos.models import (
     Interaction,
     InteractionIntelligenceSnapshot,
 )
+from revenueos.tenant import TenantContext
 
 from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID
 from .test_business_api import create_company, create_contact, create_opportunity
@@ -234,6 +236,34 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
     }
     assert source_dates["January expansion discovery"].startswith("2026-01-15")
     assert source_dates["April expansion follow-up"].startswith("2026-04-21")
+
+    async def preparation_sources() -> set[UUID]:
+        async with app.state.session_factory() as session:
+            gaps = await ConversationThreadService(
+                session,
+                TenantContext(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    "admin",
+                ),
+                app.state.settings,
+            ).preparation_gaps(UUID(str(april["id"])))
+            assert gaps
+            assert all(gap.projection_id is None for gap in gaps)
+            source_ids = {source.source_id for gap in gaps for source in gap.sources}
+            return set(
+                await session.scalars(
+                    select(InteractionIntelligenceSnapshot.interaction_id).where(
+                        InteractionIntelligenceSnapshot.organisation_id == PRIMARY_ORGANISATION_ID,
+                        InteractionIntelligenceSnapshot.id.in_(source_ids),
+                    )
+                )
+            )
+
+    sources = asyncio.run(preparation_sources())
+    assert UUID(str(february["id"])) not in sources
+    assert UUID(str(april["id"])) not in sources
+    assert UUID(str(july["id"])) not in sources
 
     corrected = client.put(
         f"/api/v1/interactions/{april['id']}/thread-assignment",

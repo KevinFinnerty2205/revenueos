@@ -136,6 +136,7 @@ export function ConversationLiveNotes({
         rows={5}
         className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-3 text-base text-slate-950 shadow-inner focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/30"
         maxLength={20_000}
+        disabled={saveDisabled}
         value={liveNotes}
         onChange={(event) => onLiveNotesChange(event.target.value)}
         aria-describedby={

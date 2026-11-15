@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  CallOutcome,
   Interaction,
   InteractionMarker,
   InteractionMarkerType,
@@ -68,8 +69,18 @@ function durationLabel(seconds: number | null): string {
 
 export function FaceToFaceCompanion({
   interactionId,
+  embedded = false,
+  onInteractionChange,
+  onOpenPreparation,
+  onOpenReview,
+  briefRefreshKey = 0,
 }: {
   interactionId: string;
+  embedded?: boolean;
+  onInteractionChange?: (interaction: Interaction) => void;
+  onOpenPreparation?: () => void;
+  onOpenReview?: () => void;
+  briefRefreshKey?: number;
 }) {
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [brief, setBrief] = useState<PreInteractionBriefResponse | null>(null);
@@ -151,6 +162,7 @@ export function FaceToFaceCompanion({
   const applyLoaded = useCallback(
     (loaded: Awaited<ReturnType<typeof fetchCompanion>>) => {
       setInteraction(loaded.interaction);
+      onInteractionChange?.(loaded.interaction);
       setBrief(loaded.brief);
       setMarkers(loaded.markers);
       setRecordings(loaded.recordings);
@@ -163,7 +175,7 @@ export function FaceToFaceCompanion({
         setCaptureChoice(stored);
       }
     },
-    [interactionId],
+    [interactionId, onInteractionChange],
   );
 
   useEffect(() => {
@@ -189,6 +201,34 @@ export function FaceToFaceCompanion({
     };
   }, [applyLoaded, fetchCompanion]);
 
+  useEffect(() => {
+    if (briefRefreshKey === 0) return;
+    const controller = new AbortController();
+    void apiRequest<PreInteractionBriefResponse>(
+      `/api/v1/interactions/${interactionId}/companion/brief`,
+      { signal: controller.signal },
+    )
+      .then((updated) => {
+        if (!controller.signal.aborted) setBrief(updated);
+      })
+      .catch((requestError: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          !(
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          )
+        ) {
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "The refreshed preparation brief could not be loaded.",
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [briefRefreshKey, interactionId]);
+
   function chooseCapture(choice: Exclude<CaptureChoice, "undecided">) {
     setCaptureChoice(choice);
     window.sessionStorage.setItem(captureStorageKey(interactionId), choice);
@@ -213,6 +253,7 @@ export function FaceToFaceCompanion({
         },
       );
       setInteraction(started);
+      onInteractionChange?.(started);
       setMessage(
         started.interactionType === "online_meeting"
           ? "Meeting started. Choose whether to capture meeting audio or continue without recording."
@@ -302,7 +343,7 @@ export function FaceToFaceCompanion({
     }
   }
 
-  async function endInteraction() {
+  async function endInteraction(callOutcome?: CallOutcome) {
     if (recordingActivity?.blocksInteractionCompletion) {
       setError(
         "Stop and finish the recording upload before ending the interaction.",
@@ -330,9 +371,13 @@ export function FaceToFaceCompanion({
       }
       const completed = await apiRequest<Interaction>(
         `/api/v1/interactions/${interactionId}/complete`,
-        { method: "POST", body: "{}" },
+        {
+          method: "POST",
+          body: JSON.stringify(callOutcome ? { callOutcome } : {}),
+        },
       );
       setInteraction(completed);
+      onInteractionChange?.(completed);
       setMessage(
         completed.interactionType === "online_meeting"
           ? "Meeting ended. Choose an authorised capture path while the context is fresh."
@@ -350,7 +395,7 @@ export function FaceToFaceCompanion({
     }
   }
 
-  if (loading) return <p role="status">Loading mobile Companion…</p>;
+  if (loading) return <p role="status">Loading notes & capture…</p>;
   if (!interaction) {
     return (
       <div role="alert" className="rounded-2xl bg-red-50 p-5 text-red-900">
@@ -374,26 +419,28 @@ export function FaceToFaceCompanion({
     : "passive";
 
   return (
-    <main className="mx-auto max-w-3xl pb-24" aria-labelledby="companion-title">
-      <div className="-mx-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:mx-0 sm:rounded-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <Link
-            className="text-sm font-bold text-brand-secondary"
-            href={`/interactions/${interactionId}`}
+    <div className="mx-auto max-w-3xl pb-12">
+      {!embedded ? (
+        <div className="-mx-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:mx-0 sm:rounded-2xl">
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              className="text-sm font-bold text-brand-secondary"
+              href={`/conversations/${interactionId}`}
+            >
+              Back
+            </Link>
+            <span className="rounded-full bg-brand-primary px-3 py-1 text-xs font-bold tracking-[0.16em] text-white">
+              {phase}
+            </span>
+          </div>
+          <h1
+            id="companion-title"
+            className="mt-2 truncate text-xl font-semibold text-slate-950"
           >
-            Back
-          </Link>
-          <span className="rounded-full bg-brand-primary px-3 py-1 text-xs font-bold tracking-[0.16em] text-white">
-            {phase}
-          </span>
+            {interaction.title}
+          </h1>
         </div>
-        <h1
-          id="companion-title"
-          className="mt-2 truncate text-xl font-semibold text-slate-950"
-        >
-          {interaction.title}
-        </h1>
-      </div>
+      ) : null}
 
       {message ? (
         <p
@@ -412,6 +459,21 @@ export function FaceToFaceCompanion({
         </p>
       ) : null}
 
+      {embedded && phase === "BEFORE" ? (
+        <ConversationLiveNotes
+          inputId={`companion-prepared-notes-${interactionId}`}
+          liveNotes={liveNotes}
+          onLiveNotesChange={updateLiveNotes}
+          onSave={() => void personalWorkspace.save()}
+          saveDisabled={
+            personalWorkspace.loading ||
+            !personalWorkspace.workspace ||
+            personalWorkspace.saveState === "saving"
+          }
+          status={liveNotesStatus}
+        />
+      ) : null}
+
       {interaction.lifecycleStatus === "cancelled" ? (
         <section className="form-card mt-5">
           <h2 className="text-xl font-semibold">Interaction cancelled</h2>
@@ -426,6 +488,7 @@ export function FaceToFaceCompanion({
           working={working}
           onPrepare={() => void prepareBrief()}
           onStart={() => void startInteraction()}
+          onOpenPreparation={onOpenPreparation}
         />
       ) : phase === "DURING" ? (
         <>
@@ -453,6 +516,7 @@ export function FaceToFaceCompanion({
                 onSaveLiveNotes={() => void personalWorkspace.save()}
                 liveNotesSaveDisabled={
                   personalWorkspace.loading ||
+                  !personalWorkspace.workspace ||
                   personalWorkspace.saveState === "saving"
                 }
                 liveNotesStatus={liveNotesStatus}
@@ -494,6 +558,7 @@ export function FaceToFaceCompanion({
                 onSave={() => void personalWorkspace.save()}
                 saveDisabled={
                   personalWorkspace.loading ||
+                  !personalWorkspace.workspace ||
                   personalWorkspace.saveState === "saving"
                 }
                 status={liveNotesStatus}
@@ -511,15 +576,25 @@ export function FaceToFaceCompanion({
               onToggleVisuals={() => setShowVisuals((value) => !value)}
               onAddMarker={(type) => void addMarker(type)}
               onDeleteMarker={(marker) => void deleteMarker(marker)}
-              onEnd={() => void endInteraction()}
+              onEnd={() =>
+                void endInteraction(
+                  interaction.interactionType === "phone_call"
+                    ? "connected"
+                    : undefined,
+                )
+              }
               endLabel={
                 personalWorkspace.dirtyFields.liveNotes
                   ? interaction.interactionType === "online_meeting"
                     ? "Save notes and end meeting"
-                    : "Save notes and end interaction"
+                    : interaction.interactionType === "phone_call"
+                      ? "Save notes and end connected call"
+                      : "Save notes and end interaction"
                   : interaction.interactionType === "online_meeting"
                     ? "End meeting"
-                    : "End interaction"
+                    : interaction.interactionType === "phone_call"
+                      ? "End connected call"
+                      : "End interaction"
               }
               endDisabled={
                 working ||
@@ -529,6 +604,35 @@ export function FaceToFaceCompanion({
                 recordingActivity?.blocksInteractionCompletion === true
               }
             />
+          ) : null}
+
+          {interaction.interactionType === "phone_call" ? (
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={working}
+                onClick={() => void endInteraction("no_answer")}
+              >
+                No answer
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={working}
+                onClick={() => void endInteraction("voicemail")}
+              >
+                Left voicemail
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={working}
+                onClick={() => void endInteraction("cancelled")}
+              >
+                Cancel call
+              </button>
+            </div>
           ) : null}
 
           {showVisuals && visualEnabled ? (
@@ -541,6 +645,22 @@ export function FaceToFaceCompanion({
             </div>
           ) : null}
         </>
+      ) : embedded ? (
+        <section className="form-card mt-5">
+          <h2 className="text-lg font-semibold">Conversation ended</h2>
+          <p className="mt-2 text-sm text-brand-muted">
+            Open Review & follow-up for your notes, summary and next steps.
+          </p>
+          {onOpenReview ? (
+            <button
+              type="button"
+              className="primary-button mt-4"
+              onClick={onOpenReview}
+            >
+              Open Review & follow-up
+            </button>
+          ) : null}
+        </section>
       ) : (
         <AfterPhase
           interaction={interaction}
@@ -554,7 +674,7 @@ export function FaceToFaceCompanion({
         />
       )}
 
-      {phase === "AFTER" && showVisuals && visualEnabled ? (
+      {!embedded && phase === "AFTER" && showVisuals && visualEnabled ? (
         <div className="mt-5">
           <VisualEvidenceCapture
             interactionId={interactionId}
@@ -563,14 +683,17 @@ export function FaceToFaceCompanion({
           />
         </div>
       ) : null}
-      {phase === "AFTER" &&
+      {!embedded &&
+      phase === "AFTER" &&
       interaction.interactionType === "online_meeting" &&
       capabilities?.featureFlags.onlineMeetingCapture === true ? (
         <div className="mt-5" id="online-meeting-capture">
           <OnlineMeetingCapture interaction={interaction} />
         </div>
       ) : null}
-      {phase === "AFTER" && capabilities?.featureFlags.aiDebrief === true ? (
+      {!embedded &&
+      phase === "AFTER" &&
+      capabilities?.featureFlags.aiDebrief === true ? (
         <div className="mt-5" id="companion-debrief">
           <PostInteractionCapture
             interactionId={interactionId}
@@ -586,7 +709,7 @@ export function FaceToFaceCompanion({
           interactionCompleted={phase === "AFTER"}
         />
       ) : null}
-    </main>
+    </div>
   );
 }
 
@@ -596,12 +719,14 @@ function BeforePhase({
   working,
   onPrepare,
   onStart,
+  onOpenPreparation,
 }: {
   interaction: Interaction;
   brief: PreInteractionBriefResponse | null;
   working: boolean;
   onPrepare(): void;
   onStart(): void;
+  onOpenPreparation?: () => void;
 }) {
   const content = brief?.state === "completed" ? brief.brief : null;
   return (
@@ -703,7 +828,9 @@ function BeforePhase({
             ? "Starting…"
             : interaction.interactionType === "online_meeting"
               ? "Start meeting"
-              : "Start interaction"}
+              : interaction.interactionType === "phone_call"
+                ? "Start call"
+                : "Start interaction"}
         </button>
         {interaction.interactionType === "online_meeting" &&
         interaction.meetingUrl ? (
@@ -716,12 +843,22 @@ function BeforePhase({
             Open meeting
           </a>
         ) : null}
-        <Link
-          className="secondary-button min-h-14 text-center text-base"
-          href={`/interactions/${interaction.id}#preparation`}
-        >
-          Open full brief
-        </Link>
+        {onOpenPreparation ? (
+          <button
+            type="button"
+            className="secondary-button min-h-14 text-base"
+            onClick={onOpenPreparation}
+          >
+            Open full brief
+          </button>
+        ) : (
+          <Link
+            className="secondary-button min-h-14 text-center text-base"
+            href={`/conversations/${interaction.id}#preparation`}
+          >
+            Open full brief
+          </Link>
+        )}
       </div>
     </section>
   );
@@ -997,12 +1134,12 @@ function AfterPhase({
         ) : null}
         <Link
           className="secondary-button min-h-14 text-center text-base"
-          href={`/interactions/${interaction.id}`}
+          href={`/conversations/${interaction.id}`}
         >
           Finish
         </Link>
       </div>
-      {visualEnabled || interaction.opportunityId || interaction.companyId ? (
+      {visualEnabled || interaction.companyId ? (
         <details className="mt-4 rounded-2xl border border-slate-200 p-4">
           <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
             More options
@@ -1017,23 +1154,15 @@ function AfterPhase({
                 {showVisuals ? "Hide photo capture" : "Add visual evidence"}
               </button>
             ) : null}
-            {interaction.opportunityId ? (
-              <Link
-                className="secondary-button min-h-14 text-center text-base"
-                href={`/opportunities/${interaction.opportunityId}`}
-              >
-                Open opportunity workspace
-              </Link>
-            ) : null}
             <Link
               className="secondary-button min-h-14 text-center text-base"
               href={
                 interaction.companyId
-                  ? `/companies/${interaction.companyId}`
-                  : "/companies"
+                  ? `/conversations/accounts/${interaction.companyId}`
+                  : "/conversations"
               }
             >
-              Open Revenue Brain
+              Open conversation history
             </Link>
           </div>
         </details>

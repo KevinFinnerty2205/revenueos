@@ -574,6 +574,9 @@ class ActionService:
     ) -> list[ActionCandidate]:
         values: list[ActionCandidate] = []
         for gap in gaps:
+            # Conversation-scoped preparation gaps must not create CRM actions.
+            if gap.projection_id is None:
+                continue
             source = ActionSourceReference(
                 source_type="methodology_projection",
                 source_id=gap.projection_id,
