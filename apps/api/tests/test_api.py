@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -46,6 +48,27 @@ def test_invalid_request_id_is_replaced(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] != "unsafe request id"
     assert len(response.headers["X-Request-ID"]) == 36
+
+
+def test_structured_request_log_omits_query_strings(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    private_search_token = "private-note-query-never-log"
+    caplog.set_level(logging.INFO, logger="revenueos.http")
+
+    response = client.get("/health", params={"search": private_search_token})
+
+    assert response.status_code == 200
+    request_records = [
+        record
+        for record in caplog.records
+        if record.name == "revenueos.http" and record.getMessage() == "request_completed"
+    ]
+    assert request_records
+    request_record_fields = request_records[-1].__dict__
+    assert request_record_fields["path"] == "/health"
+    assert private_search_token not in repr(request_record_fields)
 
 
 def test_ready_reports_configured_local_dependencies(client: TestClient) -> None:

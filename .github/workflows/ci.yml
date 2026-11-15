@@ -155,7 +155,7 @@ jobs:
       - name: Run browser-to-API persistence acceptance
         run: |
           set -euo pipefail
-          uv --directory apps/api run uvicorn revenueos.main:app --port 8000 \
+          uv --directory apps/api run uvicorn revenueos.main:app --port 8000 --no-access-log \
             >/tmp/revenueos-full-stack-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true' EXIT

@@ -163,6 +163,18 @@ class InteractionRepository:
                         CandidateEvidence.statement.ilike(pattern),
                     )
                     .exists(),
+                    select(ConversationUserWorkspace.id)
+                    .where(
+                        ConversationUserWorkspace.organisation_id == organisation_id,
+                        ConversationUserWorkspace.interaction_id == Interaction.id,
+                        ConversationUserWorkspace.user_id == user_id,
+                        or_(
+                            ConversationUserWorkspace.live_notes.ilike(pattern),
+                            ConversationUserWorkspace.enhanced_notes.ilike(pattern),
+                            ConversationUserWorkspace.follow_up_draft.ilike(pattern),
+                        ),
+                    )
+                    .exists(),
                 )
             )
         if company_id:

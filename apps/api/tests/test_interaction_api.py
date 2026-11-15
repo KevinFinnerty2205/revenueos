@@ -228,6 +228,123 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
     assert "Another member's private notes" not in str(exported)
 
 
+def test_interaction_search_matches_only_the_current_users_private_notes(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    interaction = create_interaction(client, title=f"Neutral search fixture {uuid4()}")
+    interaction_id = str(interaction["id"])
+    owner_tokens = {
+        "liveNotes": f"owner-live-{uuid4()}",
+        "enhancedNotes": f"owner-enhanced-{uuid4()}",
+        "followUpDraft": f"owner-follow-up-{uuid4()}",
+    }
+    saved = client.put(
+        f"/api/v1/interactions/{interaction_id}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            **owner_tokens,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    for token in owner_tokens.values():
+        match = client.get("/api/v1/interactions", params={"search": token})
+        assert match.status_code == 200, match.text
+        assert match.json()["total"] == 1
+        assert [item["id"] for item in match.json()["items"]] == [interaction_id]
+        assert all(private_token not in match.text for private_token in owner_tokens.values())
+        assert all(private_field not in match.text for private_field in ("liveNotes", "enhancedNotes", "followUpDraft"))
+
+    same_org_user_id = uuid4()
+    same_org_user = AuthenticatedUser(
+        user_id=same_org_user_id,
+        external_auth_id=f"private-search-{same_org_user_id}",
+        display_name="Private Search Colleague",
+        email=f"{same_org_user_id}@example.test",
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        organisation_name="Example Revenue Team",
+        organisation_slug="example-revenue-team",
+        role="member",
+        auth_mode="mock",
+    )
+
+    async def seed_same_org_user() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                session.add_all(
+                    (
+                        User(
+                            id=same_org_user_id,
+                            external_auth_id=same_org_user.external_auth_id,
+                            email=same_org_user.email,
+                            display_name=same_org_user.display_name,
+                        ),
+                        OrganisationMembership(
+                            organisation_id=PRIMARY_ORGANISATION_ID,
+                            user_id=same_org_user_id,
+                            role="member",
+                        ),
+                    )
+                )
+                await session.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(seed_same_org_user())
+    colleague_token = f"colleague-private-{uuid4()}"
+    try:
+        app.dependency_overrides[get_current_user] = cast_auth_dependency(same_org_user)
+        for token in owner_tokens.values():
+            hidden = client.get("/api/v1/interactions", params={"search": token})
+            assert hidden.status_code == 200, hidden.text
+            assert hidden.json()["total"] == 0
+
+        colleague_saved = client.put(
+            f"/api/v1/interactions/{interaction_id}/personal-workspace",
+            json={
+                "expectedLockVersion": 0,
+                "liveNotes": colleague_token,
+                "enhancedNotes": None,
+                "followUpDraft": None,
+                "followUpReviewed": False,
+                "generationFingerprint": None,
+            },
+        )
+        assert colleague_saved.status_code == 200, colleague_saved.text
+        colleague_match = client.get(
+            "/api/v1/interactions",
+            params={"search": colleague_token},
+        )
+        assert colleague_match.status_code == 200, colleague_match.text
+        assert colleague_match.json()["total"] == 1
+        assert [item["id"] for item in colleague_match.json()["items"]] == [interaction_id]
+        assert colleague_token not in colleague_match.text
+        assert all(
+            private_field not in colleague_match.text
+            for private_field in ("liveNotes", "enhancedNotes", "followUpDraft")
+        )
+
+        app.dependency_overrides.pop(get_current_user, None)
+        owner_cannot_find_colleague_note = client.get(
+            "/api/v1/interactions",
+            params={"search": colleague_token},
+        )
+        assert owner_cannot_find_colleague_note.status_code == 200
+        assert owner_cannot_find_colleague_note.json()["total"] == 0
+
+        app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
+        for token in (*owner_tokens.values(), colleague_token):
+            cross_tenant = client.get("/api/v1/interactions", params={"search": token})
+            assert cross_tenant.status_code == 200, cross_tenant.text
+            assert cross_tenant.json()["total"] == 0
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_phone_call_metadata_contact_tenant_safety_outcomes_and_duration(client: TestClient) -> None:
     company_id = str(create_company(client, name="Phone account")["id"])
     contact_id = str(create_contact(client, company_id, first_name="Priya")["id"])

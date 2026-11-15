@@ -56,6 +56,11 @@ The default web experience must satisfy these behaviours:
   stale-session conflict, Oryntela presents the local and latest saved private note
   separately. The user must explicitly use the latest note or save a reviewed merge;
   neither version is replaced automatically.
+- Search can locate a conversation from its title, relationship, transcript or the
+  authenticated user's own live notes, enhanced notes and follow-up draft. A private
+  note match returns conversation metadata only: it never exposes note text or lets
+  one member's private note influence another member's results. This deterministic
+  lookup is separate from Ask and shared conversation intelligence.
 
 Legacy CRM, pipeline, campaign, forecast and content-production records remain
 available through their existing compatibility routes. They are not collected into
@@ -97,7 +102,7 @@ local; this contract does not activate a live AI provider.
 | Business learning             | Reviewed website/file knowledge ingestion and source-aware preparation exist behind controlled boundaries      | Approved real-source ingestion, correction/reapproval and evidence that organisation language improves useful guidance                                           |
 | Before-conversation delivery  | Timezone-aware deterministic brief preparation and a disabled-by-default private outbox exist                  | Target-environment calendar/email activation, deduplication, cancellation, delivery and owner acceptance evidence                                                |
 | Long relationships            | Explicit initiatives separate unrelated work and retain dated, conflicting evidence                            | Owner review across many conversations, changing stakeholders, dormant relationships and parallel initiatives                                                    |
-| Search and knowledge          | Account/conversation navigation plus existing tenant-scoped Ask and knowledge paths                            | Private notes-content search, broader cross-conversation retrieval and sharing verified end to end                                                               |
+| Search and knowledge          | Account/conversation navigation, owner-private notes-content search and existing tenant-scoped Ask paths       | Broader cross-conversation retrieval and sharing verified end to end                                                                                             |
 | Simple daily use              | One conversation-first journey with legacy administration outside the default path                             | Desktop/mobile visual review, real-browser acceptance and owner usability evidence                                                                               |
 
 Native applications, live providers and target-environment integrations are separate

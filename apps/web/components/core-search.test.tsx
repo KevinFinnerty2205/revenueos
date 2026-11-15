@@ -63,7 +63,33 @@ describe("CoreSearch", () => {
         /opportunities|contacts/.test(String(url)),
       ),
     ).toBe(false);
-    expect(screen.getByText(/account’s conversation history/i)).toBeVisible();
+    expect(screen.getByText(/transcript or your private notes/i)).toBeVisible();
+    expect(screen.getByRole("searchbox")).toHaveAttribute(
+      "placeholder",
+      "Try a conversation, private note or account",
+    );
+  });
+
+  it("keeps private-note search guidance in the empty state", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response([]))
+      .mockImplementationOnce(() => response([]));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "remembered phrase" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("No matching work found")).toBeVisible();
+    expect(
+      screen.getByText(
+        /shorter phrase from a conversation, your private notes/i,
+      ),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not send a one-character search", () => {

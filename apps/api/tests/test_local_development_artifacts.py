@@ -9,6 +9,7 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_PATH = REPOSITORY_ROOT / "package.json"
 COMPOSE_PATH = REPOSITORY_ROOT / "infra/docker/compose.yml"
+CI_WORKFLOW_PATH = REPOSITORY_ROOT / ".github/workflows/ci.yml"
 OWNER_DEMO_RUNBOOK_PATH = REPOSITORY_ROOT / "docs/03-engineering/owner-demo-runbook.md"
 
 
@@ -21,6 +22,21 @@ def test_local_development_services_bind_only_to_loopback() -> None:
     services = cast(dict[str, object], compose["services"])
     postgres = cast(dict[str, object], services["postgres"])
     assert postgres["ports"] == ["127.0.0.1:5432:5432"]
+
+
+def test_local_and_full_stack_api_servers_disable_query_string_access_logs() -> None:
+    package = cast(dict[str, object], json.loads(PACKAGE_PATH.read_text(encoding="utf-8")))
+    scripts = cast(dict[str, str], package["scripts"])
+    assert "--no-access-log" in scripts["dev:api"].split()
+
+    workflow = cast(dict[str, object], yaml.safe_load(CI_WORKFLOW_PATH.read_text(encoding="utf-8")))
+    jobs = cast(dict[str, object], workflow["jobs"])
+    conversation_persistence = cast(dict[str, object], jobs["conversation-persistence"])
+    steps = cast(list[dict[str, object]], conversation_persistence["steps"])
+    start_command = next(
+        cast(str, step["run"]) for step in steps if step.get("name") == "Run browser-to-API persistence acceptance"
+    )
+    assert "--no-access-log" in start_command.split()
 
 
 def test_owner_demo_runbook_bootstraps_identity_before_seed_and_keeps_boundaries() -> None:
