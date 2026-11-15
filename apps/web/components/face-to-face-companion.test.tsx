@@ -105,10 +105,18 @@ const completedBrief: PreInteractionBriefResponse = {
 function installApi(
   initialInteraction: Interaction,
   {
+    aiCompanionEnabled = true,
+    liveInteractionIntelligenceEnabled = false,
+    capabilitiesResponse,
+    failedCompanionEndpoint,
     personalWorkspaceSaveFails = false,
     personalWorkspaceSaveResponse,
     personalWorkspaceLoadResponse,
   }: {
+    aiCompanionEnabled?: boolean;
+    liveInteractionIntelligenceEnabled?: boolean;
+    capabilitiesResponse?: Promise<Response>;
+    failedCompanionEndpoint?: "capabilities" | "brief" | "markers";
     personalWorkspaceSaveFails?: boolean;
     personalWorkspaceSaveResponse?: Promise<Response>;
     personalWorkspaceLoadResponse?: Promise<Response>;
@@ -140,21 +148,56 @@ function installApi(
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/beta/capabilities")) {
+      if (capabilitiesResponse) return capabilitiesResponse;
+      if (failedCompanionEndpoint === "capabilities") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "companion_unavailable",
+              message: "Companion controls are temporarily unavailable.",
+            },
+            503,
+          ),
+        );
+      }
       return Promise.resolve(
         jsonResponse({
           featureFlags: {
-            aiCompanion: true,
+            aiCompanion: aiCompanionEnabled,
             aiDebrief: true,
             recordingCapture: true,
             visualEvidence: true,
+            liveInteractionIntelligence: liveInteractionIntelligenceEnabled,
           },
         }),
       );
     }
     if (url.endsWith("/companion/brief")) {
+      if (failedCompanionEndpoint === "brief") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "brief_unavailable",
+              message: "Preparation guidance is temporarily unavailable.",
+            },
+            503,
+          ),
+        );
+      }
       return Promise.resolve(jsonResponse(completedBrief));
     }
     if (url.endsWith("/companion/markers") && method === "GET") {
+      if (failedCompanionEndpoint === "markers") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "markers_unavailable",
+              message: "Conversation markers are temporarily unavailable.",
+            },
+            503,
+          ),
+        );
+      }
       return Promise.resolve(jsonResponse(markers));
     }
     if (url.endsWith("/companion/markers") && method === "POST") {
@@ -337,6 +380,285 @@ describe("FaceToFaceCompanion", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Recording status")).not.toBeInTheDocument();
   });
+
+  it("keeps one private-notes editor usable when AI Companion is disabled", async () => {
+    const initialInteraction = interaction({
+      companyId: null,
+      opportunityId: null,
+      interactionType: "manual_interaction",
+      title: "Event notes",
+    });
+    const fetchMock = installApi(initialInteraction, {
+      aiCompanionEnabled: false,
+      liveInteractionIntelligenceEnabled: true,
+    });
+
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+        embedded
+      />,
+    );
+
+    const notes = await screen.findByLabelText("Private live notes");
+    await waitFor(() => expect(notes).toBeEnabled());
+    expect(screen.getAllByLabelText("Private live notes")).toHaveLength(1);
+    fireEvent.change(notes, {
+      target: { value: "Met the operations team at the industry event." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save private notes" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/personal-workspace") &&
+            init?.method === "PUT",
+        ),
+      ).toBe(true),
+    );
+    const saveCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/personal-workspace") && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({
+      liveNotes: "Met the operations team at the industry event.",
+    });
+    expect(
+      await screen.findByText("Private notes are still available"),
+    ).toBeVisible();
+    const start = screen.getByRole("button", { name: "Start interaction" });
+    expect(start).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Record interaction" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue without recording" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add marker" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Checking Live Intelligence…"),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/companion/brief"),
+      ),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/companion/markers"),
+      ),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        /\/(recordings|visual-evidence)$/.test(String(input)),
+      ),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/live-intelligence"),
+      ),
+    ).toBe(false);
+
+    fireEvent.click(start);
+    const end = await screen.findByRole("button", { name: "End interaction" });
+    expect(end).toBeEnabled();
+    expect(screen.getAllByLabelText("Private live notes")).toHaveLength(1);
+    expect(
+      screen.queryByRole("heading", { name: "How should Companion help?" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add marker" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(end);
+    expect(
+      await screen.findByRole("heading", { name: "Conversation ended" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/start"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/complete"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it.each([
+    {
+      endpoint: "capabilities" as const,
+      warning: /Companion availability could not be checked/i,
+    },
+    {
+      endpoint: "brief" as const,
+      warning: /Preparation guidance could not be loaded/i,
+    },
+    {
+      endpoint: "markers" as const,
+      warning: /Conversation markers could not be loaded/i,
+    },
+  ])(
+    "keeps private notes usable when the $endpoint request fails",
+    async ({ endpoint, warning }) => {
+      window.sessionStorage.setItem(
+        "revenueos:companion:capture-choice:interaction-1",
+        "passive",
+      );
+      const initialInteraction = interaction({
+        lifecycleStatus: "in_progress",
+        actualStartAt: "2026-08-15T02:00:00Z",
+      });
+      const fetchMock = installApi(initialInteraction, {
+        failedCompanionEndpoint: endpoint,
+      });
+
+      render(
+        <FaceToFaceCompanion
+          interactionId="interaction-1"
+          initialInteraction={initialInteraction}
+          embedded
+        />,
+      );
+
+      const notes = await screen.findByLabelText("Private live notes");
+      await waitFor(() => expect(notes).toBeEnabled());
+      expect(screen.getAllByLabelText("Private live notes")).toHaveLength(1);
+      expect(await screen.findByText(warning)).toBeVisible();
+      fireEvent.change(notes, {
+        target: { value: `Notes survive a ${endpoint} failure.` },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save private notes" }),
+      );
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.some(
+            ([input, init]) =>
+              String(input).endsWith("/personal-workspace") &&
+              init?.method === "PUT",
+          ),
+        ).toBe(true),
+      );
+      expect(notes).toHaveValue(`Notes survive a ${endpoint} failure.`);
+
+      if (endpoint === "capabilities") {
+        expect(
+          screen.queryByRole("heading", {
+            name: "How should Companion help?",
+          }),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: "End interaction" }),
+        ).toBeEnabled();
+        expect(
+          screen.queryByRole("button", { name: "Record interaction" }),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: "Continue without recording" }),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: "Add marker" }),
+        ).not.toBeInTheDocument();
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            String(input).includes("/companion/brief"),
+          ),
+        ).toBe(false);
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            String(input).includes("/companion/markers"),
+          ),
+        ).toBe(false);
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            /\/(recordings|visual-evidence)$/.test(String(input)),
+          ),
+        ).toBe(false);
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            String(input).includes("/live-intelligence"),
+          ),
+        ).toBe(false);
+        expect(
+          screen.queryByText("Checking Live Intelligence…"),
+        ).not.toBeInTheDocument();
+      }
+
+      if (endpoint === "markers") {
+        expect(
+          screen.queryByRole("button", { name: "Add marker" }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  it.each([
+    { embedded: true, route: "conversation workspace" },
+    { embedded: false, route: "direct Companion route" },
+  ])(
+    "keeps one canonical private-notes editor in the $route while capture controls change",
+    async ({ embedded }) => {
+      let resolveCapabilities!: (value: Response) => void;
+      const pendingCapabilities = new Promise<Response>((resolve) => {
+        resolveCapabilities = resolve;
+      });
+      window.sessionStorage.setItem(
+        "revenueos:companion:capture-choice:interaction-1",
+        "passive",
+      );
+      const initialInteraction = interaction({
+        lifecycleStatus: "in_progress",
+        actualStartAt: "2026-08-15T02:00:00Z",
+      });
+      installApi(initialInteraction, {
+        capabilitiesResponse: pendingCapabilities,
+      });
+
+      render(
+        <FaceToFaceCompanion
+          interactionId="interaction-1"
+          initialInteraction={initialInteraction}
+          embedded={embedded}
+        />,
+      );
+
+      const notesBeforeCapabilityCheck =
+        await screen.findByLabelText("Private live notes");
+      fireEvent.change(notesBeforeCapabilityCheck, {
+        target: { value: "Keep this draft mounted." },
+      });
+      await act(async () => {
+        resolveCapabilities(
+          jsonResponse({
+            featureFlags: {
+              aiCompanion: true,
+              aiDebrief: false,
+              recordingCapture: false,
+              visualEvidence: false,
+              liveInteractionIntelligence: false,
+            },
+          }),
+        );
+        await pendingCapabilities;
+      });
+      expect(
+        await screen.findByRole("heading", {
+          name: "No recording or listening",
+        }),
+      ).toBeVisible();
+      expect(screen.getAllByLabelText("Private live notes")).toHaveLength(1);
+      expect(screen.getByLabelText("Private live notes")).toBe(
+        notesBeforeCapabilityCheck,
+      );
+      expect(notesBeforeCapabilityCheck).toHaveValue(
+        "Keep this draft mounted.",
+      );
+    },
+  );
 
   it("keeps direct notes disabled until the private workspace has loaded", async () => {
     let resolveWorkspace!: (value: Response) => void;

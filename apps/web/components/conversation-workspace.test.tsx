@@ -4,10 +4,21 @@ import { useEffect, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationWorkspace } from "@/components/conversation-workspace";
 
-const state = vi.hoisted(() => ({ stopped: vi.fn(), reviewLoaded: vi.fn() }));
+const state = vi.hoisted(() => ({
+  aiCompanionEnabled: true,
+  stopped: vi.fn(),
+  reviewLoaded: vi.fn(),
+}));
 
 vi.mock("@/components/beta-feature-gate", () => ({
-  BetaFeatureGate: ({ children }: { children: ReactNode }) => children,
+  BetaFeatureGate: ({
+    children,
+    feature,
+  }: {
+    children: ReactNode;
+    feature: string;
+  }) =>
+    feature === "aiCompanion" && !state.aiCompanionEnabled ? null : children,
 }));
 vi.mock("@/components/pre-interaction-brief", () => ({
   PreInteractionBrief: ({ onBriefChange }: { onBriefChange?: () => void }) => (
@@ -81,6 +92,7 @@ function response(lifecycleStatus = "planned") {
 
 describe("ConversationWorkspace", () => {
   afterEach(() => {
+    state.aiCompanionEnabled = true;
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     window.history.replaceState({}, "", "/");
@@ -122,7 +134,8 @@ describe("ConversationWorkspace", () => {
     expect(state.stopped).not.toHaveBeenCalled();
   });
 
-  it("opens a simple note directly in the editor without requiring CRM context", async () => {
+  it("opens a simple note directly when AI Companion is disabled and CRM context is absent", async () => {
+    state.aiCompanionEnabled = false;
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
@@ -149,6 +162,14 @@ describe("ConversationWorkspace", () => {
     expect(
       screen.getByRole("button", { name: "Notes & capture" }),
     ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Prepared questions")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Preparation" }));
+    expect(screen.queryByText("Prepared questions")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open notes & capture" }),
+    );
+    expect(screen.getByLabelText("Private rough notes")).toBeVisible();
   });
 
   it("opens completed conversations in review and honours preparation links", async () => {

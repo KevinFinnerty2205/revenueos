@@ -27,6 +27,7 @@ import { formatInteractionDate } from "@/lib/interactions";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 type CaptureChoice = "undecided" | "recording" | "passive";
+type CompanionAvailability = "checking" | "ready" | "disabled" | "unavailable";
 
 interface Capabilities {
   featureFlags: Record<string, boolean>;
@@ -69,6 +70,7 @@ function durationLabel(seconds: number | null): string {
 
 export function FaceToFaceCompanion({
   interactionId,
+  initialInteraction,
   embedded = false,
   onInteractionChange,
   onOpenPreparation,
@@ -76,23 +78,32 @@ export function FaceToFaceCompanion({
   briefRefreshKey = 0,
 }: {
   interactionId: string;
+  initialInteraction?: Interaction;
   embedded?: boolean;
   onInteractionChange?: (interaction: Interaction) => void;
   onOpenPreparation?: () => void;
   onOpenReview?: () => void;
   briefRefreshKey?: number;
 }) {
-  const [interaction, setInteraction] = useState<Interaction | null>(null);
+  const seededInteraction =
+    initialInteraction?.id === interactionId ? initialInteraction : null;
+  const [interaction, setInteraction] = useState<Interaction | null>(
+    seededInteraction,
+  );
   const [brief, setBrief] = useState<PreInteractionBriefResponse | null>(null);
   const [markers, setMarkers] = useState<InteractionMarker[]>([]);
   const [recordings, setRecordings] = useState<RecordingSession[]>([]);
   const [visuals, setVisuals] = useState<VisualEvidence[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
+  const [companionAvailability, setCompanionAvailability] =
+    useState<CompanionAvailability>("checking");
+  const [companionWarnings, setCompanionWarnings] = useState<string[]>([]);
+  const [markersAvailable, setMarkersAvailable] = useState(false);
   const [captureChoice, setCaptureChoice] =
     useState<CaptureChoice>("undecided");
   const [showMarkers, setShowMarkers] = useState(false);
   const [showVisuals, setShowVisuals] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(seededInteraction === null);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,65 +120,117 @@ export function FaceToFaceCompanion({
       liveNotes: value,
     }));
   };
-  const liveNotesStatus = personalWorkspace.error
-    ? personalWorkspace.error
-    : personalWorkspace.loading
-      ? "Loading your private notes…"
-      : personalWorkspace.saveState === "saving"
-        ? "Saving private notes…"
-        : personalWorkspace.saveState === "saved"
-          ? personalWorkspace.dirtyFields.liveNotes
-            ? "An earlier note version was saved. Newer changes remain unsaved."
-            : "Private notes saved."
-          : personalWorkspace.saveState === "conflict"
-            ? "These notes changed in another session. Your local text is still visible; reload before saving again."
-            : personalWorkspace.saveState === "failed"
-              ? "Private notes could not be saved. Your local text is still visible."
+  const liveNotesStatus = personalWorkspace.loading
+    ? "Loading your private notes…"
+    : personalWorkspace.saveState === "saving"
+      ? "Saving private notes…"
+      : personalWorkspace.saveState === "saved"
+        ? personalWorkspace.dirtyFields.liveNotes
+          ? "An earlier note version was saved. Newer changes remain unsaved."
+          : "Private notes saved."
+        : personalWorkspace.saveState === "conflict"
+          ? "These notes changed in another session. Your local text is still visible; reload before saving again."
+          : personalWorkspace.saveState === "failed"
+            ? "Private notes could not be saved. Your local text is still visible."
+            : personalWorkspace.error
+              ? personalWorkspace.error
               : "Private to you until you deliberately include something in review.";
 
   const fetchCompanion = useCallback(async () => {
-    const [loadedInteraction, loadedBrief, loadedMarkers, loadedCapabilities] =
-      await Promise.all([
-        apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`),
+    let loadedCapabilities: Capabilities;
+    try {
+      loadedCapabilities = await apiRequest<Capabilities>(
+        "/api/v1/beta/capabilities",
+      );
+    } catch {
+      return {
+        availability: "unavailable" as const,
+        brief: null,
+        markers: [],
+        markersAvailable: false,
+        recordings: [],
+        visuals: [],
+        capabilities: null,
+        warnings: [
+          "Companion availability could not be checked. Your private notes remain available.",
+        ],
+      };
+    }
+    if (loadedCapabilities.featureFlags.aiCompanion !== true) {
+      return {
+        availability: "disabled" as const,
+        brief: null,
+        markers: [],
+        markersAvailable: false,
+        recordings: [],
+        visuals: [],
+        capabilities: loadedCapabilities,
+        warnings: [],
+      };
+    }
+    const [briefResult, markersResult, recordingsResult, visualsResult] =
+      await Promise.allSettled([
         apiRequest<PreInteractionBriefResponse>(
           `/api/v1/interactions/${interactionId}/companion/brief`,
         ),
         apiRequest<InteractionMarker[]>(
           `/api/v1/interactions/${interactionId}/companion/markers`,
         ),
-        apiRequest<Capabilities>("/api/v1/beta/capabilities"),
+        loadedCapabilities.featureFlags.recordingCapture === true
+          ? apiRequest<RecordingSession[]>(
+              `/api/v1/interactions/${interactionId}/recordings`,
+            )
+          : Promise.resolve<RecordingSession[]>([]),
+        loadedCapabilities.featureFlags.visualEvidence === true
+          ? apiRequest<VisualEvidence[]>(
+              `/api/v1/interactions/${interactionId}/visual-evidence`,
+            )
+          : Promise.resolve<VisualEvidence[]>([]),
       ]);
-    const [loadedRecordings, loadedVisuals] = await Promise.all([
-      loadedCapabilities.featureFlags.recordingCapture === true
-        ? apiRequest<RecordingSession[]>(
-            `/api/v1/interactions/${interactionId}/recordings`,
-          )
-        : Promise.resolve([]),
-      loadedCapabilities.featureFlags.visualEvidence === true
-        ? apiRequest<VisualEvidence[]>(
-            `/api/v1/interactions/${interactionId}/visual-evidence`,
-          )
-        : Promise.resolve([]),
-    ]);
+    const warnings: string[] = [];
+    if (briefResult.status === "rejected") {
+      warnings.push(
+        "Preparation guidance could not be loaded. Your private notes remain available.",
+      );
+    }
+    if (markersResult.status === "rejected") {
+      warnings.push(
+        "Conversation markers could not be loaded. Your private notes remain available.",
+      );
+    }
+    if (recordingsResult.status === "rejected") {
+      warnings.push(
+        "Previous recording details could not be loaded. Your private notes remain available.",
+      );
+    }
+    if (visualsResult.status === "rejected") {
+      warnings.push(
+        "Previous visual evidence could not be loaded. Your private notes remain available.",
+      );
+    }
     return {
-      interaction: loadedInteraction,
-      brief: loadedBrief,
-      markers: loadedMarkers,
-      recordings: loadedRecordings,
-      visuals: loadedVisuals,
+      availability: "ready" as const,
+      brief: briefResult.status === "fulfilled" ? briefResult.value : null,
+      markers: markersResult.status === "fulfilled" ? markersResult.value : [],
+      markersAvailable: markersResult.status === "fulfilled",
+      recordings:
+        recordingsResult.status === "fulfilled" ? recordingsResult.value : [],
+      visuals: visualsResult.status === "fulfilled" ? visualsResult.value : [],
       capabilities: loadedCapabilities,
+      warnings,
     };
   }, [interactionId]);
 
   const applyLoaded = useCallback(
     (loaded: Awaited<ReturnType<typeof fetchCompanion>>) => {
-      setInteraction(loaded.interaction);
-      onInteractionChange?.(loaded.interaction);
       setBrief(loaded.brief);
       setMarkers(loaded.markers);
+      setMarkersAvailable(loaded.markersAvailable);
       setRecordings(loaded.recordings);
       setVisuals(loaded.visuals);
       setCapabilities(loaded.capabilities);
+      setCompanionAvailability(loaded.availability);
+      setCompanionWarnings(loaded.warnings);
       const stored = window.sessionStorage.getItem(
         captureStorageKey(interactionId),
       );
@@ -175,14 +238,19 @@ export function FaceToFaceCompanion({
         setCaptureChoice(stored);
       }
     },
-    [interactionId, onInteractionChange],
+    [interactionId],
   );
 
   useEffect(() => {
+    if (seededInteraction) return;
     let cancelled = false;
-    void fetchCompanion()
-      .then((loaded) => {
-        if (!cancelled) applyLoaded(loaded);
+    void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`)
+      .then((loadedInteraction) => {
+        if (!cancelled) {
+          setInteraction(loadedInteraction);
+          onInteractionChange?.(loadedInteraction);
+          setError(null);
+        }
       })
       .catch((requestError: unknown) => {
         if (!cancelled) {
@@ -199,10 +267,26 @@ export function FaceToFaceCompanion({
     return () => {
       cancelled = true;
     };
-  }, [applyLoaded, fetchCompanion]);
+  }, [interactionId, onInteractionChange, seededInteraction]);
 
   useEffect(() => {
-    if (briefRefreshKey === 0) return;
+    let cancelled = false;
+    void fetchCompanion().then((loaded) => {
+      if (!cancelled) applyLoaded(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyLoaded, fetchCompanion]);
+
+  const appendCompanionWarning = useCallback((warning: string) => {
+    setCompanionWarnings((current) =>
+      current.includes(warning) ? current : [...current, warning],
+    );
+  }, []);
+
+  useEffect(() => {
+    if (briefRefreshKey === 0 || companionAvailability !== "ready") return;
     const controller = new AbortController();
     void apiRequest<PreInteractionBriefResponse>(
       `/api/v1/interactions/${interactionId}/companion/brief`,
@@ -219,15 +303,18 @@ export function FaceToFaceCompanion({
             requestError.name === "AbortError"
           )
         ) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "The refreshed preparation brief could not be loaded.",
+          appendCompanionWarning(
+            "The refreshed preparation brief could not be loaded. Your private notes remain available.",
           );
         }
       });
     return () => controller.abort();
-  }, [briefRefreshKey, interactionId]);
+  }, [
+    appendCompanionWarning,
+    briefRefreshKey,
+    companionAvailability,
+    interactionId,
+  ]);
 
   function chooseCapture(choice: Exclude<CaptureChoice, "undecided">) {
     setCaptureChoice(choice);
@@ -255,9 +342,11 @@ export function FaceToFaceCompanion({
       setInteraction(started);
       onInteractionChange?.(started);
       setMessage(
-        started.interactionType === "online_meeting"
-          ? "Meeting started. Choose whether to capture meeting audio or continue without recording."
-          : "Interaction started. Choose how you want Companion to help.",
+        companionAvailability === "ready"
+          ? started.interactionType === "online_meeting"
+            ? "Meeting started. Choose whether to capture meeting audio or continue without recording."
+            : "Interaction started. Choose how you want Companion to help."
+          : "Interaction started. Private notes are ready; optional Companion controls remain unavailable.",
       );
     } catch (requestError: unknown) {
       setError(
@@ -417,6 +506,24 @@ export function FaceToFaceCompanion({
   const effectiveCaptureChoice = canUseBrowserRecording
     ? captureChoice
     : "passive";
+  const showCanonicalNotes = phase === "BEFORE" || phase === "DURING";
+  const endLabel = personalWorkspace.dirtyFields.liveNotes
+    ? interaction.interactionType === "online_meeting"
+      ? "Save notes and end meeting"
+      : interaction.interactionType === "phone_call"
+        ? "Save notes and end connected call"
+        : "Save notes and end interaction"
+    : interaction.interactionType === "online_meeting"
+      ? "End meeting"
+      : interaction.interactionType === "phone_call"
+        ? "End connected call"
+        : "End interaction";
+  const endDisabled =
+    working ||
+    (personalWorkspace.dirtyFields.liveNotes &&
+      (personalWorkspace.loading ||
+        personalWorkspace.saveState === "saving")) ||
+    recordingActivity?.blocksInteractionCompletion === true;
 
   return (
     <div className="mx-auto max-w-3xl pb-12">
@@ -458,10 +565,24 @@ export function FaceToFaceCompanion({
           {error}
         </p>
       ) : null}
+      {companionWarnings.length ? (
+        <section
+          aria-label="Companion availability"
+          className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          <ul className="space-y-1">
+            {companionWarnings.map((warning) => (
+              <li key={warning} role="status">
+                {warning}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
-      {embedded && phase === "BEFORE" ? (
+      {showCanonicalNotes ? (
         <ConversationLiveNotes
-          inputId={`companion-prepared-notes-${interactionId}`}
+          inputId={`companion-private-notes-${interactionId}`}
           liveNotes={liveNotes}
           onLiveNotesChange={updateLiveNotes}
           onSave={() => void personalWorkspace.save()}
@@ -482,17 +603,44 @@ export function FaceToFaceCompanion({
           </p>
         </section>
       ) : phase === "BEFORE" ? (
-        <BeforePhase
-          interaction={interaction}
-          brief={brief}
-          working={working}
-          onPrepare={() => void prepareBrief()}
-          onStart={() => void startInteraction()}
-          onOpenPreparation={onOpenPreparation}
-        />
+        companionAvailability === "ready" ? (
+          <BeforePhase
+            interaction={interaction}
+            brief={brief}
+            working={working}
+            onPrepare={() => void prepareBrief()}
+            onStart={() => void startInteraction()}
+            onOpenPreparation={onOpenPreparation}
+          />
+        ) : (
+          <>
+            <CompanionAvailabilityNotice availability={companionAvailability} />
+            <CoreBeforeControls
+              interaction={interaction}
+              working={working}
+              onStart={() => void startInteraction()}
+            />
+          </>
+        )
       ) : phase === "DURING" ? (
         <>
-          {effectiveCaptureChoice === "undecided" ? (
+          {companionAvailability !== "ready" ? (
+            <>
+              <CompanionAvailabilityNotice
+                availability={companionAvailability}
+              />
+              <CoreDuringControls
+                interaction={interaction}
+                working={working}
+                endDisabled={endDisabled}
+                endLabel={endLabel}
+                onEnd={(outcome) => void endInteraction(outcome)}
+              />
+            </>
+          ) : null}
+
+          {companionAvailability === "ready" &&
+          effectiveCaptureChoice === "undecided" ? (
             <CaptureChoicePanel
               interaction={interaction}
               recordingEnabled={recordingEnabled}
@@ -500,7 +648,8 @@ export function FaceToFaceCompanion({
             />
           ) : null}
 
-          {effectiveCaptureChoice === "recording" &&
+          {companionAvailability === "ready" &&
+          effectiveCaptureChoice === "recording" &&
           recordingEnabled &&
           canUseBrowserRecording ? (
             <div className="mt-5">
@@ -520,6 +669,7 @@ export function FaceToFaceCompanion({
                   personalWorkspace.saveState === "saving"
                 }
                 liveNotesStatus={liveNotesStatus}
+                showLiveNotes={false}
                 onElapsedSecondsChange={(seconds) => {
                   elapsedSecondsRef.current = seconds;
                 }}
@@ -534,41 +684,30 @@ export function FaceToFaceCompanion({
             </div>
           ) : null}
 
-          {effectiveCaptureChoice === "passive" ? (
-            <>
-              <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-                  Passive Companion
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
-                  No recording or listening
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-700">
-                  {interaction.interactionType === "phone_call"
-                    ? "This browser cannot reliably record the same phone call, so no recording or listening has started."
-                    : interaction.interactionType === "online_meeting"
-                      ? "You chose not to capture this meeting, so no recording or listening has started."
-                      : "Add a photo or marker only when it is safe and appropriate. Markers contain a type and timestamp, never a note."}
-                </p>
-              </section>
-              <ConversationLiveNotes
-                inputId={`companion-live-notes-${interactionId}`}
-                liveNotes={liveNotes}
-                onLiveNotesChange={updateLiveNotes}
-                onSave={() => void personalWorkspace.save()}
-                saveDisabled={
-                  personalWorkspace.loading ||
-                  !personalWorkspace.workspace ||
-                  personalWorkspace.saveState === "saving"
-                }
-                status={liveNotesStatus}
-              />
-            </>
+          {companionAvailability === "ready" &&
+          effectiveCaptureChoice === "passive" ? (
+            <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+                Passive Companion
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                No recording or listening
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                {interaction.interactionType === "phone_call"
+                  ? "This browser cannot reliably record the same phone call, so no recording or listening has started."
+                  : interaction.interactionType === "online_meeting"
+                    ? "You chose not to capture this meeting, so no recording or listening has started."
+                    : "Add a photo or marker only when it is safe and appropriate. Markers contain a type and timestamp, never a note."}
+              </p>
+            </section>
           ) : null}
 
-          {effectiveCaptureChoice !== "undecided" ? (
+          {companionAvailability === "ready" &&
+          effectiveCaptureChoice !== "undecided" ? (
             <CompanionControls
               markers={markers}
+              markersAvailable={markersAvailable}
               working={working}
               visualEnabled={visualEnabled}
               showMarkers={showMarkers}
@@ -583,30 +722,13 @@ export function FaceToFaceCompanion({
                     : undefined,
                 )
               }
-              endLabel={
-                personalWorkspace.dirtyFields.liveNotes
-                  ? interaction.interactionType === "online_meeting"
-                    ? "Save notes and end meeting"
-                    : interaction.interactionType === "phone_call"
-                      ? "Save notes and end connected call"
-                      : "Save notes and end interaction"
-                  : interaction.interactionType === "online_meeting"
-                    ? "End meeting"
-                    : interaction.interactionType === "phone_call"
-                      ? "End connected call"
-                      : "End interaction"
-              }
-              endDisabled={
-                working ||
-                (personalWorkspace.dirtyFields.liveNotes &&
-                  (personalWorkspace.loading ||
-                    personalWorkspace.saveState === "saving")) ||
-                recordingActivity?.blocksInteractionCompletion === true
-              }
+              endLabel={endLabel}
+              endDisabled={endDisabled}
             />
           ) : null}
 
-          {interaction.interactionType === "phone_call" ? (
+          {companionAvailability === "ready" &&
+          interaction.interactionType === "phone_call" ? (
             <div className="mt-3 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -635,7 +757,7 @@ export function FaceToFaceCompanion({
             </div>
           ) : null}
 
-          {showVisuals && visualEnabled ? (
+          {companionAvailability === "ready" && showVisuals && visualEnabled ? (
             <div className="mt-5" id="companion-visuals">
               <VisualEvidenceCapture
                 interactionId={interactionId}
@@ -702,7 +824,8 @@ export function FaceToFaceCompanion({
           />
         </div>
       ) : null}
-      {capabilities?.featureFlags.liveInteractionIntelligence === true ? (
+      {companionAvailability === "ready" &&
+      capabilities?.featureFlags.liveInteractionIntelligence === true ? (
         <LiveInteractionIntelligence
           interactionId={interactionId}
           interactionInProgress={phase === "DURING"}
@@ -710,6 +833,149 @@ export function FaceToFaceCompanion({
         />
       ) : null}
     </div>
+  );
+}
+
+function CompanionAvailabilityNotice({
+  availability,
+}: {
+  availability: Exclude<CompanionAvailability, "ready">;
+}) {
+  const checking = availability === "checking";
+  return (
+    <section className="form-card mt-5" aria-live="polite">
+      <h2 className="text-lg font-semibold text-slate-950">
+        {checking
+          ? "Checking optional Companion controls…"
+          : "Private notes are still available"}
+      </h2>
+      {!checking ? (
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          {availability === "disabled"
+            ? "Companion controls are not enabled for this workspace. You can keep and save private notes without them."
+            : "Optional Companion controls are temporarily unavailable. You can keep and save private notes without them."}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function CoreBeforeControls({
+  interaction,
+  working,
+  onStart,
+}: {
+  interaction: Interaction;
+  working: boolean;
+  onStart(): void;
+}) {
+  return (
+    <section className="form-card mt-5">
+      <h2 className="text-lg font-semibold text-slate-950">
+        Conversation controls
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        Starting the conversation remains available without optional guidance,
+        capture or marker tools.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          className="primary-button min-h-12"
+          disabled={working}
+          onClick={onStart}
+        >
+          {working
+            ? "Starting…"
+            : interaction.interactionType === "online_meeting"
+              ? "Start meeting"
+              : interaction.interactionType === "phone_call"
+                ? "Start call"
+                : "Start interaction"}
+        </button>
+        {interaction.interactionType === "online_meeting" &&
+        interaction.meetingUrl ? (
+          <a
+            className="secondary-button min-h-12"
+            href={interaction.meetingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open meeting
+          </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function CoreDuringControls({
+  interaction,
+  working,
+  endDisabled,
+  endLabel,
+  onEnd,
+}: {
+  interaction: Interaction;
+  working: boolean;
+  endDisabled: boolean;
+  endLabel: string;
+  onEnd(outcome?: CallOutcome): void;
+}) {
+  return (
+    <section className="form-card mt-5">
+      <h2 className="text-lg font-semibold text-slate-950">
+        Conversation controls
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        Ending the conversation remains available without optional guidance,
+        capture or marker tools.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={endDisabled}
+          onClick={() =>
+            onEnd(
+              interaction.interactionType === "phone_call"
+                ? "connected"
+                : undefined,
+            )
+          }
+        >
+          {endLabel}
+        </button>
+        {interaction.interactionType === "phone_call" ? (
+          <>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={working || endDisabled}
+              onClick={() => onEnd("no_answer")}
+            >
+              No answer
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={working || endDisabled}
+              onClick={() => onEnd("voicemail")}
+            >
+              Left voicemail
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={working || endDisabled}
+              onClick={() => onEnd("cancelled")}
+            >
+              Cancel call
+            </button>
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -964,6 +1230,7 @@ function CaptureChoicePanel({
 
 function CompanionControls({
   markers,
+  markersAvailable,
   working,
   visualEnabled,
   showMarkers,
@@ -976,6 +1243,7 @@ function CompanionControls({
   endLabel,
 }: {
   markers: InteractionMarker[];
+  markersAvailable: boolean;
   working: boolean;
   visualEnabled: boolean;
   showMarkers: boolean;
@@ -1002,13 +1270,15 @@ function CompanionControls({
             Add photo
           </button>
         ) : null}
-        <button
-          type="button"
-          className="secondary-button min-h-16 text-base"
-          onClick={onToggleMarkers}
-        >
-          Add marker
-        </button>
+        {markersAvailable ? (
+          <button
+            type="button"
+            className="secondary-button min-h-16 text-base"
+            onClick={onToggleMarkers}
+          >
+            Add marker
+          </button>
+        ) : null}
         <button
           type="button"
           className="primary-button min-h-16 text-base"

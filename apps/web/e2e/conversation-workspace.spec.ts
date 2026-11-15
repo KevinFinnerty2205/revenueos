@@ -234,3 +234,158 @@ test("account history opens one CRM-independent conversation workspace and prese
     ),
   ).toBe(true);
 });
+
+test("a CRM-free private note saves and reloads when AI Companion is disabled", async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  const interaction = {
+    id: "private-note-proof",
+    organisationId: "organisation-proof",
+    companyId: null,
+    opportunityId: null,
+    contactId: null,
+    meetingId: null,
+    title: "Conference follow-up notes",
+    interactionType: "manual_interaction",
+    lifecycleStatus: "planned",
+    scheduledStartAt: null,
+    scheduledEndAt: null,
+    actualStartAt: null,
+    actualEndAt: null,
+    timezone: "Australia/Sydney",
+    captureMethods: [],
+    intelligenceState: "not_ready",
+    recordingAvailable: false,
+    callOutcome: null,
+    callDirection: null,
+    durationSeconds: null,
+    briefState: "not_generated",
+    createdAt: "2026-11-01T00:00:00Z",
+    updatedAt: "2026-11-01T00:00:00Z",
+  };
+  let workspace = {
+    exists: false,
+    ownerUserId: "owner-proof",
+    lockVersion: 0,
+    liveNotes: "",
+    enhancedNotes: "",
+    followUpDraft: "",
+    followUpReviewed: false,
+    generationFingerprint: null,
+    generationState: "not_started",
+    generationId: null,
+    generationTranscriptVersion: null,
+    generationPersonalNotesState: "not_included",
+    generationFailureCode: null,
+    generationRetryAvailable: false,
+    generationUpdateAvailable: false,
+    generationCompletedAt: null,
+    importedFromBrowserAt: null,
+    updatedAt: null,
+  };
+
+  await page.route("http://localhost:8000/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    requests.push(`${request.method()} ${path}`);
+
+    if (path === "/api/v1/beta/capabilities") {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            aiCompanion: false,
+            aiDebrief: false,
+            recordingCapture: false,
+            visualEvidence: false,
+            liveInteractionIntelligence: true,
+          },
+        },
+      });
+      return;
+    }
+    if (path === "/api/v1/interactions/private-note-proof/personal-workspace") {
+      if (request.method() === "PUT") {
+        workspace = {
+          ...workspace,
+          ...request.postDataJSON(),
+          exists: true,
+          lockVersion: workspace.lockVersion + 1,
+          updatedAt: "2026-11-01T00:05:00Z",
+        };
+      }
+      await route.fulfill({ json: workspace });
+      return;
+    }
+    if (path === "/api/v1/interactions/private-note-proof") {
+      await route.fulfill({ json: interaction });
+      return;
+    }
+    await route.fulfill({
+      status: 404,
+      json: { code: "not_found", message: "Not part of this test." },
+    });
+  });
+
+  await page.goto("/conversations/private-note-proof");
+
+  await expect(
+    page.getByRole("button", { name: "Notes & capture", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const notes = page.getByLabel("Private live notes");
+  await expect(notes).toBeEnabled();
+  await expect(notes).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Start interaction" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Record interaction" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Continue without recording" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add marker" })).toHaveCount(0);
+  await expect(page.getByText("Checking Live Intelligence…")).toHaveCount(0);
+
+  await notes.fill("Send the operations lead the rollout checklist.");
+  await page.getByRole("button", { name: "Save private notes" }).click();
+  await expect(
+    page.getByText("Private notes saved.", { exact: true }),
+  ).toBeVisible();
+  expect(workspace.liveNotes).toBe(
+    "Send the operations lead the rollout checklist.",
+  );
+
+  await page.reload();
+  await expect(page.getByLabel("Private live notes")).toHaveValue(
+    "Send the operations lead the rollout checklist.",
+  );
+
+  await page.goto("/interactions/private-note-proof/companion");
+  const directNotes = page.getByLabel("Private live notes");
+  await expect(directNotes).toHaveValue(
+    "Send the operations lead the rollout checklist.",
+  );
+  await expect(directNotes).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Start interaction" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Record interaction" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Continue without recording" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add marker" })).toHaveCount(0);
+  await expect(page.getByText("Checking Live Intelligence…")).toHaveCount(0);
+  expect(
+    requests.some(
+      (request) =>
+        request.includes("/companion/brief") ||
+        request.includes("/companion/markers") ||
+        request.endsWith("/recordings") ||
+        request.endsWith("/visual-evidence") ||
+        request.includes("/live-intelligence"),
+    ),
+  ).toBe(false);
+});

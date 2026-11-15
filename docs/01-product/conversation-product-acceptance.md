@@ -36,6 +36,10 @@ The default web experience must satisfy these behaviours:
   does not stop capture or discard local text.
 - A simple note opens directly in the notes editor. Title and conversation type are
   required; account, company, opportunity and scheduled time are optional context.
+- Private notes and core start/end controls remain available when optional Companion
+  capabilities are disabled or temporarily unavailable. Preparation, capture and
+  marker failures degrade only those controls; they do not remove the private note
+  editor, discard its local text or strand the conversation lifecycle.
 - Preparation works without a company or opportunity. Confirmed initiative history
   is used deliberately; unrelated work at the same company is not silently merged.
 - Framework questions come from supported, missing or stale evidence. Event and
