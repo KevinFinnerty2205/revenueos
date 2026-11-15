@@ -172,16 +172,15 @@ export function ConversationWorkspace({
 
       {opened.has("capture") ? (
         <div hidden={view !== "capture"}>
-          <BetaFeatureGate feature="aiCompanion">
-            <FaceToFaceCompanion
-              interactionId={interaction.id}
-              embedded
-              onInteractionChange={setInteraction}
-              onOpenPreparation={() => select("prepare")}
-              onOpenReview={() => select("review")}
-              briefRefreshKey={briefRefreshKey}
-            />
-          </BetaFeatureGate>
+          <FaceToFaceCompanion
+            interactionId={interaction.id}
+            initialInteraction={interaction}
+            embedded
+            onInteractionChange={setInteraction}
+            onOpenPreparation={() => select("prepare")}
+            onOpenReview={() => select("review")}
+            briefRefreshKey={briefRefreshKey}
+          />
         </div>
       ) : null}
 

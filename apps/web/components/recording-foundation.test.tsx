@@ -289,6 +289,30 @@ describe("RecordingFoundation", () => {
     ).toHaveAttribute("href", "#debrief");
   });
 
+  it("omits its nested notes editor when the conversation workspace owns private notes", () => {
+    vi.stubGlobal("MediaRecorder", undefined);
+    vi.stubGlobal("navigator", {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    );
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        liveNotes="The workspace owns this draft."
+        onLiveNotesChange={vi.fn()}
+        showLiveNotes={false}
+      />,
+    );
+
+    expect(
+      screen.queryByLabelText("Private live notes"),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not offer misleading browser audio capture for a phone call", async () => {
     installSupportedBrowser(() => Promise.reject(new Error("not requested")));
     vi.stubGlobal(

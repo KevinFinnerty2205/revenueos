@@ -273,6 +273,7 @@ export function RecordingFoundation({
   onSaveLiveNotes,
   liveNotesSaveDisabled,
   liveNotesStatus,
+  showLiveNotes = true,
 }: {
   interactionId: string;
   interactionType: InteractionType;
@@ -288,6 +289,7 @@ export function RecordingFoundation({
   onSaveLiveNotes?: () => void;
   liveNotesSaveDisabled?: boolean;
   liveNotesStatus?: string | null;
+  showLiveNotes?: boolean;
 }) {
   const [state, setState] = useState<RecorderState>("checking");
   const [recording, setRecording] = useState<RecordingSession | null>(null);
@@ -1292,14 +1294,16 @@ export function RecordingFoundation({
         until the session expires.
       </p>
 
-      <ConversationLiveNotes
-        inputId={`recording-live-notes-${interactionId}`}
-        liveNotes={currentLiveNotes}
-        onLiveNotesChange={updateLiveNotes}
-        onSave={onSaveLiveNotes}
-        saveDisabled={liveNotesSaveDisabled}
-        status={liveNotesStatus}
-      />
+      {showLiveNotes ? (
+        <ConversationLiveNotes
+          inputId={`recording-live-notes-${interactionId}`}
+          liveNotes={currentLiveNotes}
+          onLiveNotesChange={updateLiveNotes}
+          onSave={onSaveLiveNotes}
+          saveDisabled={liveNotesSaveDisabled}
+          status={liveNotesStatus}
+        />
+      ) : null}
 
       {!browserCaptureApplies ? (
         <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">

@@ -196,5 +196,10 @@ never briefing bodies or addresses.
 requires a migrated PostgreSQL database and a running local API on port 8000;
 Playwright starts the web app, changes briefing preferences through the UI,
 confirms the new row through the API, verifies it in an independent browser
-context, and restores the original values. CI provisions an isolated
-PostgreSQL service, migrates it and starts the API before running this gate.
+context, and restores the original values. It also creates a synthetic
+meeting-backed conversation, proves that a private note survives a reload, and
+proves that a stale second browser receives an optimistic-lock conflict without
+losing its local text or replacing the committed note. The acceptance scrubs
+the synthetic private workspace before soft-deleting its meeting fixture. CI
+provisions an isolated PostgreSQL service, migrates it and starts the API before
+running this gate.
