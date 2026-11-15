@@ -35,18 +35,18 @@ export function InteractionDetail({
   const [retryKey, setRetryKey] = useState(0);
   const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
   const personalWorkspace = useConversationWorkspace({ interactionId });
-  const liveNotesStatus = personalWorkspace.error
-    ? personalWorkspace.error
-    : personalWorkspace.loading
-      ? "Loading your private notes…"
-      : personalWorkspace.saveState === "saving"
-        ? "Saving private notes…"
-        : personalWorkspace.saveState === "saved"
-          ? "Private notes saved."
-          : personalWorkspace.saveState === "conflict"
-            ? "These notes changed in another session. Your local text is still visible; reload before saving again."
-            : personalWorkspace.saveState === "failed"
-              ? "Private notes could not be saved. Your local text is still visible."
+  const liveNotesStatus = personalWorkspace.loading
+    ? "Loading your private notes…"
+    : personalWorkspace.saveState === "saving"
+      ? "Saving private notes…"
+      : personalWorkspace.saveState === "saved"
+        ? "Private notes saved."
+        : personalWorkspace.saveState === "conflict"
+          ? "Another session saved a different version. Your local text is unchanged; review both versions above before saving again."
+          : personalWorkspace.saveState === "failed"
+            ? "Private notes could not be saved. Your local text is still visible."
+            : personalWorkspace.error
+              ? personalWorkspace.error
               : "Private to you until you deliberately include something in review.";
 
   useEffect(() => {
@@ -556,7 +556,8 @@ export function InteractionDetail({
                   liveNotesSaveDisabled={
                     personalWorkspace.loading ||
                     !personalWorkspace.workspace ||
-                    personalWorkspace.saveState === "saving"
+                    personalWorkspace.saveState === "saving" ||
+                    personalWorkspace.saveState === "conflict"
                   }
                   liveNotesStatus={liveNotesStatus}
                 />

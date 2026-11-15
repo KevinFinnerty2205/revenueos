@@ -153,7 +153,7 @@ test("briefing preferences survive a new browser context through the real API an
   }
 });
 
-test("private notes survive reload while a stale browser keeps its local conflict text", async ({
+test("private notes support a reviewed stale-browser merge without replacing newer private drafts", async ({
   browser,
   request,
 }) => {
@@ -217,6 +217,32 @@ test("private notes survive reload while a stale browser keeps its local conflic
       firstPage.getByText("Private notes saved.", { exact: true }),
     ).toBeVisible();
 
+    const newerEnhancedNotes =
+      "Enhanced notes saved after the stale browser loaded.";
+    const newerFollowUpDraft =
+      "Private follow-up saved after the stale browser loaded.";
+    const unrelatedUpdateResponse = await request.put(workspaceUrl, {
+      data: {
+        expectedLockVersion: saved.lockVersion,
+        liveNotes: committedText,
+        enhancedNotes: newerEnhancedNotes,
+        followUpDraft: newerFollowUpDraft,
+        followUpReviewed: true,
+        generationFingerprint: saved.generationFingerprint,
+        importFromBrowser: false,
+      },
+    });
+    expect(unrelatedUpdateResponse.ok()).toBeTruthy();
+    const latestBeforeConflict =
+      (await unrelatedUpdateResponse.json()) as ConversationWorkspaceResponse;
+    expect(latestBeforeConflict).toMatchObject({
+      liveNotes: committedText,
+      enhancedNotes: newerEnhancedNotes,
+      followUpDraft: newerFollowUpDraft,
+      followUpReviewed: true,
+      lockVersion: saved.lockVersion + 1,
+    });
+
     const staleSaveResponsePromise = secondPage.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === workspacePath &&
@@ -232,14 +258,61 @@ test("private notes survive reload while a stale browser keeps its local conflic
     });
     await expect(secondNotes).toHaveValue(staleLocalText);
     await expect(
-      secondPage
-        .getByRole("status")
-        .filter({ hasText: /changed in another session/i }),
+      secondPage.getByRole("heading", {
+        name: "Private notes changed in another session",
+        exact: true,
+      }),
     ).toBeVisible();
+    await expect(
+      secondPage.getByLabel("Latest saved private note"),
+    ).toHaveValue(committedText, { timeout: 20_000 });
+    await expect(
+      secondPage.getByRole("button", {
+        name: "Use latest saved note",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await secondPage.screenshot({
+      path: "../../docs/07-sprints/assets/conversation-note-conflict-recovery.png",
+      fullPage: true,
+    });
 
-    await firstPage.reload();
-    await expect(firstPage.getByLabel("Private live notes")).toHaveValue(
-      committedText,
+    const authoritativeBeforeResolution = await request.get(workspaceUrl);
+    expect(authoritativeBeforeResolution.ok()).toBeTruthy();
+    expect(await authoritativeBeforeResolution.json()).toMatchObject({
+      liveNotes: committedText,
+      enhancedNotes: newerEnhancedNotes,
+      followUpDraft: newerFollowUpDraft,
+      followUpReviewed: true,
+      lockVersion: latestBeforeConflict.lockVersion,
+    });
+
+    const reviewedText = `${committedText}\n${staleLocalText}`;
+    await secondNotes.fill(reviewedText);
+    await expect(secondNotes).toHaveValue(reviewedText);
+    const reviewedSaveResponsePromise = secondPage.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === workspacePath &&
+        response.request().method() === "PUT" &&
+        response.status() === 200,
+    );
+    await secondPage
+      .getByRole("button", { name: "Save reviewed note", exact: true })
+      .click();
+    const reviewedSaveResponse = await reviewedSaveResponsePromise;
+    const reviewed =
+      (await reviewedSaveResponse.json()) as ConversationWorkspaceResponse;
+    expect(reviewed).toMatchObject({
+      liveNotes: reviewedText,
+      enhancedNotes: newerEnhancedNotes,
+      followUpDraft: newerFollowUpDraft,
+      followUpReviewed: true,
+      lockVersion: latestBeforeConflict.lockVersion + 1,
+    });
+
+    await secondPage.reload();
+    await expect(secondPage.getByLabel("Private live notes")).toHaveValue(
+      reviewedText,
       { timeout: 20_000 },
     );
 
@@ -249,8 +322,11 @@ test("private notes survive reload while a stale browser keeps its local conflic
       (await persistedResponse.json()) as ConversationWorkspaceResponse;
     expect(persisted).toMatchObject({
       exists: true,
-      liveNotes: committedText,
-      lockVersion: saved.lockVersion,
+      liveNotes: reviewedText,
+      enhancedNotes: newerEnhancedNotes,
+      followUpDraft: newerFollowUpDraft,
+      followUpReviewed: true,
+      lockVersion: reviewed.lockVersion,
     });
   } finally {
     await firstContext?.close();

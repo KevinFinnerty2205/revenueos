@@ -46,16 +46,21 @@ organisation and user ownership. PostgreSQL RLS requires the transaction-local
 trusted organisation and user settings, while repository queries repeat both
 predicates.
 
-Updates use a positive lock version. A stale browser receives a conflict and
-must reload; the server never silently replaces another session's version.
-Original debrief answers and accepted evidence remain in their existing
-records. A browser-local value can be explicitly imported only when its stored
-owner ID matches the authenticated server workspace owner. Older unscoped keys
-are detected but neither displayed nor imported because their owner cannot be
-verified. Owner-tagged browser drafts require an explicit authenticated
-ownership check before their contents are loaded. The browser-only view also
-exposes a manual `.txt` export for currently visible content before linking,
-without weakening the ownership boundary.
+Updates use a positive lock version. A stale browser receives a conflict; the
+client keeps its local text visible and loads the latest authenticated private
+workspace into a separate comparison snapshot. The user must explicitly use the
+latest saved note or save a reviewed version. A reviewed save starts from the
+latest workspace and lock, overlays only the reviewed local fields and therefore
+does not replace newer unrelated enhanced-note or follow-up fields. A second
+conflict repeats the comparison rather than forcing an overwrite.
+Original debrief answers and accepted evidence remain in their existing records.
+A browser-local value can be explicitly imported only when its stored owner ID
+matches the authenticated server workspace owner. Older unscoped keys are
+detected but neither displayed nor imported because their owner cannot be
+verified. Owner-tagged browser drafts require an explicit authenticated ownership
+check before their contents are loaded. The browser-only view also exposes a
+manual `.txt` export for currently visible content before linking, without
+weakening the ownership boundary.
 Live notes require an explicit save and survive media-capture failures in the
 web interface. They remain separate from generated enhanced notes. Regeneration
 presents an explicit replacement choice and leaves the current private draft
@@ -199,7 +204,10 @@ confirms the new row through the API, verifies it in an independent browser
 context, and restores the original values. It also creates a synthetic
 meeting-backed conversation, proves that a private note survives a reload, and
 proves that a stale second browser receives an optimistic-lock conflict without
-losing its local text or replacing the committed note. The acceptance scrubs
-the synthetic private workspace before soft-deleting its meeting fixture. CI
-provisions an isolated PostgreSQL service, migrates it and starts the API before
-running this gate.
+losing its local text or replacing the committed note. It then compares the local
+and latest saved notes, saves an explicitly reviewed merge at the latest lock,
+verifies that newer unrelated enhanced-note and follow-up fields survive, and
+proves the result through both a browser reload and an API read. The acceptance
+scrubs the synthetic private workspace before soft-deleting its meeting fixture.
+CI provisions an isolated PostgreSQL service, migrates it and starts the API
+before running this gate.

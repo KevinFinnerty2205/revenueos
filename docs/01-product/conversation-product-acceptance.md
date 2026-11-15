@@ -52,7 +52,10 @@ The default web experience must satisfy these behaviours:
   users are not diverted into legacy meeting or opportunity administration.
 - Local note text is not replaced while the authenticated workspace is loading.
   Changed notes are saved before explicitly ending a conversation. A failed save
-  leaves the text visible and blocks completion until the user resolves it.
+  leaves the text visible and blocks completion until the user resolves it. On a
+  stale-session conflict, Oryntela presents the local and latest saved private note
+  separately. The user must explicitly use the latest note or save a reviewed merge;
+  neither version is replaced automatically.
 
 Legacy CRM, pipeline, campaign, forecast and content-production records remain
 available through their existing compatibility routes. They are not collected into
@@ -64,7 +67,8 @@ their data.
 Live notes are authenticated organisation-and-user private data. They remain
 separate from shared intelligence, the transcript and generated enhanced notes.
 Optimistic locking prevents another session from silently replacing the user's
-workspace.
+workspace. A reviewed conflict save uses the latest lock and carries forward newer
+unrelated private enhanced-note and follow-up fields.
 
 For automatic post-conversation generation, Oryntela may pin one nonblank snapshot
 of at most 20,000 characters from the source owner's private live notes. The

@@ -21,6 +21,7 @@ import type {
   StakeholderIntelligenceContent,
 } from "@revenueos/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ConversationWorkspaceConflictRecovery } from "@/components/conversation-workspace-conflict-recovery";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
@@ -28,6 +29,13 @@ import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 const POLLING_INTERVAL_MS = 3_000;
 const tones: FollowUpEmailTone[] = ["professional", "friendly", "executive"];
+const FOLLOW_UP_CONFLICT_FIELDS = [
+  {
+    key: "followUpDraft" as const,
+    label: "Latest saved follow-up draft",
+    emptyLabel: "The latest saved version has no follow-up draft.",
+  },
+] as const;
 
 const capabilityEndpoints: Record<MeetingIntelligenceCapabilityName, string> = {
   executive_summary: "executive-summary",
@@ -1635,6 +1643,10 @@ function PersistedFollowUpEmailView({
   if (!content) return <MissingContent />;
 
   async function saveDraft(reviewed: boolean) {
+    workspace.setValues((current) => ({
+      ...current,
+      followUpReviewed: reviewed,
+    }));
     await workspace.save({ followUpReviewed: reviewed });
   }
 
@@ -1652,6 +1664,11 @@ function PersistedFollowUpEmailView({
         parsed.ownerUserId !== workspace.workspace?.ownerUserId
       )
         return;
+      workspace.setValues((current) => ({
+        ...current,
+        followUpDraft: parsed.draft as string,
+        followUpReviewed: parsed.approved === true,
+      }));
       const saved = await workspace.save(
         {
           followUpDraft: parsed.draft,
@@ -1660,12 +1677,17 @@ function PersistedFollowUpEmailView({
         { importFromBrowser: true },
       );
       if (saved) {
-        window.localStorage.removeItem(legacyKey);
-        setLegacyRecoveryAvailable(false);
+        clearLegacyRecovery();
       }
     } catch {
       // Keep malformed legacy content isolated in the browser for manual recovery.
     }
+  }
+
+  function clearLegacyRecovery() {
+    window.localStorage.removeItem(legacyKey);
+    setLegacyRecoveryAvailable(false);
+    setLegacyOwnershipBlocked(false);
   }
 
   function exportDraft() {
@@ -1717,6 +1739,11 @@ function PersistedFollowUpEmailView({
         <button
           type="button"
           className="secondary-button mt-3"
+          disabled={
+            workspace.loading ||
+            workspace.saveState === "saving" ||
+            workspace.saveState === "conflict"
+          }
           onClick={() => void recoverLegacyDraft()}
         >
           Import earlier browser draft
@@ -1754,18 +1781,25 @@ function PersistedFollowUpEmailView({
           </button>
         </div>
       ) : null}
-      {workspace.error ? (
+      <ConversationWorkspaceConflictRecovery
+        idPrefix={`intelligence-follow-up-conflict-${interactionId}`}
+        controller={workspace}
+        fields={FOLLOW_UP_CONFLICT_FIELDS}
+        reviewedValues={{
+          followUpDraft: workspace.values.followUpDraft,
+          followUpReviewed: workspace.values.followUpReviewed,
+        }}
+        saveLabel="Save reviewed follow-up"
+        latestLabel="Use latest saved draft"
+        onSaved={() => {
+          if (workspace.conflictRecovery.importFromBrowser) {
+            clearLegacyRecovery();
+          }
+        }}
+      />
+      {workspace.error && workspace.saveState !== "conflict" ? (
         <div role="alert" className="mt-3 text-sm text-rose-800">
           <p>{workspace.error}</p>
-          {workspace.saveState === "conflict" ? (
-            <button
-              type="button"
-              className="secondary-button mt-3"
-              onClick={() => void workspace.reload()}
-            >
-              Reload latest saved draft
-            </button>
-          ) : null}
         </div>
       ) : null}
       {copyStatus ? (
@@ -1801,7 +1835,11 @@ function PersistedFollowUpEmailView({
           <button
             type="button"
             className="secondary-button"
-            disabled={workspace.loading || workspace.saveState === "saving"}
+            disabled={
+              workspace.loading ||
+              workspace.saveState === "saving" ||
+              workspace.saveState === "conflict"
+            }
             onClick={() => void saveDraft(false)}
           >
             Save draft
@@ -1809,7 +1847,11 @@ function PersistedFollowUpEmailView({
           <button
             type="button"
             className="secondary-button"
-            disabled={workspace.loading || workspace.saveState === "saving"}
+            disabled={
+              workspace.loading ||
+              workspace.saveState === "saving" ||
+              workspace.saveState === "conflict"
+            }
             onClick={() => void saveDraft(true)}
           >
             Mark reviewed
