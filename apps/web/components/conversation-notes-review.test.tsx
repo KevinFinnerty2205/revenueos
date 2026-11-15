@@ -151,7 +151,7 @@ describe("ConversationNotesReview", () => {
     expect(screen.getByText("Unsaved changes")).toBeVisible();
   });
 
-  it("keeps local text on conflict and reloads only after an explicit discard", async () => {
+  it("keeps local text beside the latest version until it is explicitly used", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response(readyWorkspace))
@@ -188,16 +188,133 @@ describe("ConversationNotesReview", () => {
       await screen.findByText(/changed in another session/i),
     ).toBeVisible();
     expect(enhanced).toHaveValue("Keep this local wording after the 409.");
+    expect(
+      await screen.findByLabelText("Latest saved enhanced notes"),
+    ).toHaveValue("Latest saved wording from the other session.");
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Discard local changes and reload",
+        name: "Use latest saved version",
       }),
     );
-    await waitFor(() =>
-      expect(enhanced).toHaveValue(
-        "Latest saved wording from the other session.",
-      ),
+    expect(enhanced).toHaveValue(
+      "Latest saved wording from the other session.",
     );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("blocks generated-version replacement while a no-dirty-fields conflict is unresolved", async () => {
+    const generatedUpdate = {
+      ...readyWorkspace,
+      generationUpdateAvailable: true,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(generatedUpdate))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...generatedUpdate,
+          lockVersion: 5,
+          enhancedNotes: "Latest saved enhanced version.",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewHarness />);
+
+    await screen.findByLabelText("Enhanced conversation notes");
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save enhanced notes" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Private notes changed in another session",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Use generated version 1" }),
+    ).toBeDisabled();
+  });
+
+  it("saves reviewed conflict edits without replacing newer unrelated fields", async () => {
+    const latestWorkspace = {
+      ...readyWorkspace,
+      lockVersion: 5,
+      liveNotes: "Newer rough notes saved in the other session.",
+      enhancedNotes: "Newer enhanced wording from the other session.",
+      followUpDraft: "Newer private follow-up from the other session.",
+      followUpReviewed: true,
+      generationFingerprint: "b".repeat(64),
+    };
+    const reviewedEnhanced =
+      "My reviewed enhanced wording, reconciled with the latest version.";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(readyWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...latestWorkspace,
+          lockVersion: 6,
+          enhancedNotes: reviewedEnhanced,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewHarness />);
+
+    const enhanced = await screen.findByLabelText(
+      "Enhanced conversation notes",
+    );
+    fireEvent.change(enhanced, {
+      target: { value: "My local enhanced wording." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save enhanced notes" }),
+    );
+
+    expect(
+      await screen.findByLabelText("Latest saved enhanced notes"),
+    ).toHaveValue(latestWorkspace.enhancedNotes);
+    expect(enhanced).toHaveValue("My local enhanced wording.");
+    fireEvent.change(enhanced, { target: { value: reviewedEnhanced } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save reviewed changes" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(enhanced).toHaveValue(reviewedEnhanced);
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
+      expectedLockVersion: 5,
+      liveNotes: latestWorkspace.liveNotes,
+      enhancedNotes: reviewedEnhanced,
+      followUpDraft: latestWorkspace.followUpDraft,
+      followUpReviewed: true,
+      generationFingerprint: latestWorkspace.generationFingerprint,
+      importFromBrowser: false,
+    });
+    expect(
+      screen.queryByRole("heading", {
+        name: "Private notes changed in another session",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not claim changed rough notes match the generated version", async () => {

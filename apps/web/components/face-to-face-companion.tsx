@@ -21,6 +21,7 @@ import {
   type RecordingActivity,
 } from "@/components/recording-foundation";
 import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
+import { ConversationWorkspaceConflictRecovery } from "@/components/conversation-workspace-conflict-recovery";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
@@ -50,6 +51,14 @@ const MARKERS: Array<{
   { type: "stakeholder", label: "Stakeholder" },
   { type: "timeline", label: "Timeline" },
 ];
+
+const LIVE_NOTE_CONFLICT_FIELDS = [
+  {
+    key: "liveNotes" as const,
+    label: "Latest saved private note",
+    emptyLabel: "The latest saved version has no private note.",
+  },
+] as const;
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -129,7 +138,7 @@ export function FaceToFaceCompanion({
           ? "An earlier note version was saved. Newer changes remain unsaved."
           : "Private notes saved."
         : personalWorkspace.saveState === "conflict"
-          ? "These notes changed in another session. Your local text is still visible; reload before saving again."
+          ? "Another session saved a different version. Your local text is unchanged; compare both versions below."
           : personalWorkspace.saveState === "failed"
             ? "Private notes could not be saved. Your local text is still visible."
             : personalWorkspace.error
@@ -520,6 +529,8 @@ export function FaceToFaceCompanion({
         : "End interaction";
   const endDisabled =
     working ||
+    personalWorkspace.saveState === "conflict" ||
+    personalWorkspace.conflictRecovery.state === "saving" ||
     (personalWorkspace.dirtyFields.liveNotes &&
       (personalWorkspace.loading ||
         personalWorkspace.saveState === "saving")) ||
@@ -586,12 +597,28 @@ export function FaceToFaceCompanion({
           liveNotes={liveNotes}
           onLiveNotesChange={updateLiveNotes}
           onSave={() => void personalWorkspace.save()}
+          inputDisabled={
+            personalWorkspace.loading || !personalWorkspace.workspace
+          }
           saveDisabled={
             personalWorkspace.loading ||
             !personalWorkspace.workspace ||
-            personalWorkspace.saveState === "saving"
+            personalWorkspace.saveState === "saving" ||
+            personalWorkspace.saveState === "conflict"
           }
           status={liveNotesStatus}
+        />
+      ) : null}
+
+      {showCanonicalNotes ? (
+        <ConversationWorkspaceConflictRecovery
+          idPrefix={`capture-private-note-conflict-${interactionId}`}
+          controller={personalWorkspace}
+          fields={LIVE_NOTE_CONFLICT_FIELDS}
+          reviewedValues={{ liveNotes }}
+          saveLabel="Save reviewed note"
+          latestLabel="Use latest saved note"
+          onResolved={() => setError(null)}
         />
       ) : null}
 

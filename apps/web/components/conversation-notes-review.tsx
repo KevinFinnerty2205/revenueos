@@ -2,10 +2,30 @@
 
 import type { ConversationWorkspaceResponse } from "@revenueos/shared";
 import { useState } from "react";
+import { ConversationWorkspaceConflictRecovery } from "@/components/conversation-workspace-conflict-recovery";
 import type {
   ConversationWorkspaceController,
   WorkspaceGenerationActionState,
+  WorkspaceValues,
 } from "@/lib/use-conversation-workspace";
+
+const REVIEW_CONFLICT_FIELD_DETAILS = {
+  liveNotes: {
+    key: "liveNotes" as const,
+    label: "Latest saved rough notes",
+    emptyLabel: "The latest saved version has no rough notes.",
+  },
+  enhancedNotes: {
+    key: "enhancedNotes" as const,
+    label: "Latest saved enhanced notes",
+    emptyLabel: "The latest saved version has no enhanced notes.",
+  },
+  followUpDraft: {
+    key: "followUpDraft" as const,
+    label: "Latest saved follow-up draft",
+    emptyLabel: "The latest saved version has no follow-up draft.",
+  },
+} as const;
 
 export function ConversationNotesReview({
   controller,
@@ -54,7 +74,61 @@ export function ConversationNotesReview({
     );
   }
 
-  const saveDisabled = controller.loading || controller.saveState === "saving";
+  const conflictActive =
+    controller.saveState === "conflict" ||
+    controller.conflictRecovery.state !== "idle";
+  const saveDisabled =
+    controller.loading ||
+    controller.saveState === "saving" ||
+    conflictActive ||
+    controller.conflictRecovery.state === "saving";
+  const submittedConflictFields = controller.conflictRecovery.submittedFields;
+  const reviewedConflictValues: Partial<WorkspaceValues> = {};
+  if (controller.dirtyFields.liveNotes || submittedConflictFields.liveNotes) {
+    reviewedConflictValues.liveNotes = controller.values.liveNotes;
+  }
+  if (
+    controller.dirtyFields.enhancedNotes ||
+    submittedConflictFields.enhancedNotes
+  ) {
+    reviewedConflictValues.enhancedNotes = controller.values.enhancedNotes;
+  }
+  if (
+    controller.dirtyFields.followUpDraft ||
+    submittedConflictFields.followUpDraft
+  ) {
+    reviewedConflictValues.followUpDraft = controller.values.followUpDraft;
+    reviewedConflictValues.followUpReviewed =
+      controller.values.followUpReviewed;
+  } else if (
+    controller.dirtyFields.followUpReviewed ||
+    submittedConflictFields.followUpReviewed
+  ) {
+    reviewedConflictValues.followUpReviewed =
+      controller.values.followUpReviewed;
+  }
+  const conflictFieldDetails = [
+    ...(controller.dirtyFields.liveNotes || submittedConflictFields.liveNotes
+      ? [REVIEW_CONFLICT_FIELD_DETAILS.liveNotes]
+      : []),
+    ...(controller.dirtyFields.enhancedNotes ||
+    submittedConflictFields.enhancedNotes
+      ? [REVIEW_CONFLICT_FIELD_DETAILS.enhancedNotes]
+      : []),
+    ...(controller.dirtyFields.followUpDraft ||
+    controller.dirtyFields.followUpReviewed ||
+    submittedConflictFields.followUpDraft ||
+    submittedConflictFields.followUpReviewed
+      ? [REVIEW_CONFLICT_FIELD_DETAILS.followUpDraft]
+      : []),
+  ];
+  if (conflictFieldDetails.length === 0) {
+    conflictFieldDetails.push(
+      REVIEW_CONFLICT_FIELD_DETAILS.liveNotes,
+      REVIEW_CONFLICT_FIELD_DETAILS.enhancedNotes,
+      REVIEW_CONFLICT_FIELD_DETAILS.followUpDraft,
+    );
+  }
 
   async function copyFollowUp() {
     setCopyStatus(null);
@@ -96,6 +170,8 @@ export function ConversationNotesReview({
         actionState={controller.generationActionState}
         actionError={controller.generationError}
         checking={controller.loading}
+        refreshDisabled={conflictActive}
+        workspaceActionsDisabled={conflictActive}
         hasUnsavedChanges={controller.isDirty}
         personalNotesChangedLocally={controller.dirtyFields.liveNotes}
         onRetry={() => void controller.retryGeneration()}
@@ -222,7 +298,13 @@ export function ConversationNotesReview({
             type="button"
             className="secondary-button"
             disabled={saveDisabled}
-            onClick={() => void controller.save({ followUpReviewed: false })}
+            onClick={() => {
+              controller.setValues((current) => ({
+                ...current,
+                followUpReviewed: false,
+              }));
+              void controller.save({ followUpReviewed: false });
+            }}
           >
             Save follow-up draft
           </button>
@@ -230,7 +312,13 @@ export function ConversationNotesReview({
             type="button"
             className="secondary-button"
             disabled={saveDisabled || !controller.values.followUpDraft.trim()}
-            onClick={() => void controller.save({ followUpReviewed: true })}
+            onClick={() => {
+              controller.setValues((current) => ({
+                ...current,
+                followUpReviewed: true,
+              }));
+              void controller.save({ followUpReviewed: true });
+            }}
           >
             Mark reviewed
           </button>
@@ -249,6 +337,14 @@ export function ConversationNotesReview({
           </p>
         ) : null}
       </section>
+
+      <ConversationWorkspaceConflictRecovery
+        idPrefix="review-private-notes-conflict"
+        controller={controller}
+        fields={conflictFieldDetails}
+        reviewedValues={reviewedConflictValues}
+        saveLabel="Save reviewed changes"
+      />
 
       <WorkspaceSaveStatus controller={controller} />
     </section>
@@ -272,25 +368,11 @@ function WorkspaceSaveStatus({
       </p>
     );
   }
+  if (controller.saveState === "conflict") return null;
   if (!controller.error) return null;
   return (
     <div role="alert" className="mt-5 text-sm font-semibold text-rose-800">
       <p>{controller.error}</p>
-      {controller.saveState === "conflict" ? (
-        <>
-          <p className="mt-2 font-normal">
-            Your local text remains visible. Reloading will discard those local
-            changes and show the latest saved version.
-          </p>
-          <button
-            type="button"
-            className="secondary-button mt-3"
-            onClick={() => void controller.reload()}
-          >
-            Discard local changes and reload
-          </button>
-        </>
-      ) : null}
     </div>
   );
 }
@@ -300,6 +382,8 @@ export function PostConversationDraftStatus({
   actionState,
   actionError,
   checking = false,
+  refreshDisabled = false,
+  workspaceActionsDisabled = false,
   hasUnsavedChanges = false,
   personalNotesChangedLocally = false,
   onRetry,
@@ -310,6 +394,8 @@ export function PostConversationDraftStatus({
   actionState: WorkspaceGenerationActionState;
   actionError: string | null;
   checking?: boolean;
+  refreshDisabled?: boolean;
+  workspaceActionsDisabled?: boolean;
   hasUnsavedChanges?: boolean;
   personalNotesChangedLocally?: boolean;
   onRetry: () => void;
@@ -360,7 +446,7 @@ export function PostConversationDraftStatus({
           <button
             type="button"
             className="secondary-button mt-3"
-            disabled={checking}
+            disabled={checking || refreshDisabled}
             onClick={onRefresh}
           >
             {checking ? "Checking…" : "Check status"}
@@ -377,7 +463,7 @@ export function PostConversationDraftStatus({
             <button
               type="button"
               className="secondary-button mt-3"
-              disabled={actionPending}
+              disabled={actionPending || workspaceActionsDisabled}
               onClick={onRetry}
             >
               {actionState === "retrying" ? "Retrying…" : "Retry private draft"}
@@ -408,7 +494,9 @@ export function PostConversationDraftStatus({
               <button
                 type="button"
                 className="secondary-button mt-3"
-                disabled={actionPending || hasUnsavedChanges}
+                disabled={
+                  actionPending || hasUnsavedChanges || workspaceActionsDisabled
+                }
                 onClick={onApply}
               >
                 {actionState === "applying"

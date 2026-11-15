@@ -88,6 +88,13 @@ describe("useConversationWorkspace", () => {
           },
           409,
         ),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...savedWorkspace,
+          lockVersion: 5,
+          followUpDraft: "Latest saved wording from the other session.",
+        }),
       );
     vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() =>
@@ -107,6 +114,580 @@ describe("useConversationWorkspace", () => {
     expect(result.current.saveState).toBe("conflict");
     expect(result.current.values.followUpDraft).toBe(
       "Keep this unsaved browser edit visible.",
+    );
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "ready",
+      latestWorkspace: { lockVersion: 5 },
+      latestValues: {
+        followUpDraft: "Latest saved wording from the other session.",
+      },
+      submittedValues: {
+        followUpDraft: "Keep this unsaved browser edit visible.",
+      },
+      submittedFields: {
+        liveNotes: false,
+        enhancedNotes: false,
+        followUpDraft: true,
+        followUpReviewed: false,
+      },
+      error: null,
+    });
+  });
+
+  it("explicitly adopts the separately loaded latest conflict version", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Latest saved note from the other session.",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Local note that must remain until I choose otherwise.",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+
+    expect(result.current.values.liveNotes).toBe(
+      "Local note that must remain until I choose otherwise.",
+    );
+    act(() => {
+      expect(result.current.useLatestConflict()).toBe(true);
+    });
+    expect(result.current.values.liveNotes).toBe(
+      "Latest saved note from the other session.",
+    );
+    expect(result.current.workspace?.lockVersion).toBe(5);
+    expect(result.current.saveState).toBe("idle");
+    expect(result.current.conflictRecovery.state).toBe("idle");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not let an unrelated refresh dismiss a conflict with no dirty visible fields", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      enhancedNotes: "Latest saved wording from the other session.",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...latestWorkspace,
+          lockVersion: 6,
+          generationState: "processing",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isDirty).toBe(false);
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("ready");
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.saveState).toBe("conflict");
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "ready",
+      latestWorkspace: { lockVersion: 5 },
+    });
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.values.enhancedNotes).toBe(
+      savedWorkspace.enhancedNotes,
+    );
+    expect(result.current.workspace?.generationState).toBe("processing");
+  });
+
+  it("rebases clean fields while keeping a submitted review bound to its follow-up draft", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Remote live note",
+      enhancedNotes: "Remote enhanced note",
+      followUpDraft: "Remote follow-up draft",
+      followUpReviewed: false,
+      generationFingerprint: "b".repeat(64),
+    };
+    const resolvedWorkspace = {
+      ...latestWorkspace,
+      lockVersion: 6,
+      liveNotes: "Reviewed local live note",
+      followUpDraft: savedWorkspace.followUpDraft,
+      followUpReviewed: true,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(response(resolvedWorkspace));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Reviewed local live note",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save({ followUpReviewed: true })).toBe(false);
+    });
+    expect(result.current.conflictRecovery.submittedFields).toEqual({
+      liveNotes: true,
+      enhancedNotes: false,
+      followUpDraft: true,
+      followUpReviewed: true,
+    });
+
+    const callsBeforeBlockedSave = fetchMock.mock.calls.length;
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(callsBeforeBlockedSave);
+
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(true);
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
+      expectedLockVersion: 5,
+      liveNotes: "Reviewed local live note",
+      enhancedNotes: "Remote enhanced note",
+      followUpDraft: savedWorkspace.followUpDraft,
+      followUpReviewed: true,
+      generationFingerprint: "b".repeat(64),
+      importFromBrowser: false,
+    });
+    expect(result.current.workspace?.lockVersion).toBe(6);
+    expect(result.current.values).toMatchObject({
+      liveNotes: "Reviewed local live note",
+      enhancedNotes: "Remote enhanced note",
+      followUpDraft: savedWorkspace.followUpDraft,
+      followUpReviewed: true,
+    });
+    expect(result.current.saveState).toBe("saved");
+    expect(result.current.conflictRecovery.state).toBe("idle");
+  });
+
+  it("preserves browser-import provenance through reviewed conflict recovery", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      followUpDraft: "Latest saved follow-up",
+    };
+    const importedDraft = "Verified owner-tagged browser draft";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...latestWorkspace,
+          lockVersion: 6,
+          followUpDraft: importedDraft,
+          importedFromBrowserAt: "2026-10-31T00:02:00Z",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      expect(
+        await result.current.save(
+          { followUpDraft: importedDraft, followUpReviewed: false },
+          { importFromBrowser: true },
+        ),
+      ).toBe(false);
+    });
+    expect(result.current.conflictRecovery.importFromBrowser).toBe(true);
+
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(true);
+    });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body)),
+    ).toMatchObject({
+      expectedLockVersion: 5,
+      followUpDraft: importedDraft,
+      importFromBrowser: true,
+    });
+  });
+
+  it("requires a fresh read before using latest after a reviewed save request fails", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Latest saved note remains available after the failure.",
+    };
+    const refreshedWorkspace = {
+      ...latestWorkspace,
+      lockVersion: 6,
+      liveNotes: "Freshly read note after the ambiguous save failure.",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "workspace_save_unavailable",
+            message: "The reviewed version could not be saved.",
+          },
+          503,
+        ),
+      )
+      .mockResolvedValueOnce(response(refreshedWorkspace));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Local reviewed note",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("failed");
+    expect(result.current.conflictRecovery.latestWorkspace?.lockVersion).toBe(
+      5,
+    );
+
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(false);
+    });
+    act(() => {
+      expect(result.current.useLatestConflict()).toBe(false);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    await act(async () => {
+      expect(await result.current.loadLatestConflict()).toBe(true);
+    });
+    act(() => {
+      expect(result.current.useLatestConflict()).toBe(true);
+    });
+    expect(result.current.values.liveNotes).toBe(refreshedWorkspace.liveNotes);
+    expect(result.current.saveState).toBe("idle");
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("keeps edits made while the latest conflict snapshot is loading", async () => {
+    let resolveLatest!: (value: Response) => void;
+    const pendingLatest = new Promise<Response>((resolve) => {
+      resolveLatest = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockReturnValueOnce(pendingLatest)
+      .mockResolvedValueOnce(
+        response({
+          ...savedWorkspace,
+          lockVersion: 6,
+          liveNotes: "Note submitted before the conflict.",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Note submitted before the conflict.",
+      }));
+    });
+    let savePromise!: Promise<boolean>;
+    act(() => {
+      savePromise = result.current.save();
+    });
+    await waitFor(() =>
+      expect(result.current.conflictRecovery.state).toBe("loading"),
+    );
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Newer note typed while the latest version loads.",
+      }));
+    });
+
+    await act(async () => {
+      resolveLatest(
+        response({
+          ...savedWorkspace,
+          lockVersion: 5,
+          liveNotes: "Latest server note",
+        }),
+      );
+      expect(await savePromise).toBe(false);
+    });
+    expect(result.current.values.liveNotes).toBe(
+      "Newer note typed while the latest version loads.",
+    );
+    expect(result.current.conflictRecovery.latestValues?.liveNotes).toBe(
+      "Latest server note",
+    );
+    expect(result.current.conflictRecovery.submittedValues?.liveNotes).toBe(
+      "Note submitted before the conflict.",
+    );
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(true);
+    });
+    expect(result.current.values.liveNotes).toBe(
+      "Newer note typed while the latest version loads.",
+    );
+    expect(result.current.dirtyFields.liveNotes).toBe(true);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body)),
+    ).toMatchObject({
+      expectedLockVersion: 5,
+      liveNotes: "Note submitted before the conflict.",
+    });
+  });
+
+  it("keeps newer edits made while a reviewed conflict resolution is saving", async () => {
+    let resolveResolution!: (value: Response) => void;
+    const pendingResolution = new Promise<Response>((resolve) => {
+      resolveResolution = resolve;
+    });
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Latest server note",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(response(savedWorkspace))
+        .mockResolvedValueOnce(
+          response(
+            {
+              code: "conversation_workspace_conflict",
+              message: "This private workspace changed in another session.",
+            },
+            409,
+          ),
+        )
+        .mockResolvedValueOnce(response(latestWorkspace))
+        .mockReturnValueOnce(pendingResolution),
+    );
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Reviewed note submitted for conflict resolution.",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    let resolutionPromise!: Promise<boolean>;
+    act(() => {
+      resolutionPromise = result.current.saveReviewedConflict();
+    });
+    await waitFor(() =>
+      expect(result.current.conflictRecovery.state).toBe("saving"),
+    );
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Newer edit typed while conflict resolution saves.",
+      }));
+    });
+
+    await act(async () => {
+      resolveResolution(
+        response({
+          ...latestWorkspace,
+          lockVersion: 6,
+          liveNotes: "Reviewed note submitted for conflict resolution.",
+        }),
+      );
+      expect(await resolutionPromise).toBe(true);
+    });
+    expect(result.current.workspace?.lockVersion).toBe(6);
+    expect(result.current.values.liveNotes).toBe(
+      "Newer edit typed while conflict resolution saves.",
+    );
+    expect(result.current.dirtyFields.liveNotes).toBe(true);
+  });
+
+  it("loads a fresh snapshot after a second conflict and after a recovery fetch failure", async () => {
+    const firstLatest = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "First latest server note",
+    };
+    const secondLatest = {
+      ...savedWorkspace,
+      lockVersion: 6,
+      liveNotes: "Second latest server note",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "latest_workspace_unavailable",
+            message: "The latest private workspace is temporarily unavailable.",
+          },
+          503,
+        ),
+      )
+      .mockResolvedValueOnce(response(firstLatest))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed again.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(secondLatest));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Local text survives every recovery attempt.",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("failed");
+    expect(result.current.conflictRecovery.latestWorkspace).toBeNull();
+    expect(result.current.values.liveNotes).toBe(
+      "Local text survives every recovery attempt.",
+    );
+
+    await act(async () => {
+      expect(await result.current.loadLatestConflict()).toBe(true);
+    });
+    expect(result.current.conflictRecovery.latestWorkspace?.lockVersion).toBe(
+      5,
+    );
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("ready");
+    expect(result.current.conflictRecovery.latestWorkspace?.lockVersion).toBe(
+      6,
+    );
+    expect(result.current.values.liveNotes).toBe(
+      "Local text survives every recovery attempt.",
     );
   });
 
@@ -132,9 +713,13 @@ describe("useConversationWorkspace", () => {
       }));
     });
     let savePromise!: Promise<boolean>;
+    let duplicateSavePromise!: Promise<boolean>;
     act(() => {
       savePromise = result.current.save();
+      duplicateSavePromise = result.current.save();
     });
+    await expect(duplicateSavePromise).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(result.current.saveState).toBe("saving"));
     act(() => {
       result.current.setValues((current) => ({
@@ -284,6 +869,59 @@ describe("useConversationWorkspace", () => {
       enhancedNotes: "Reviewed debrief notes",
       followUpDraft: "Reviewed debrief follow-up",
     });
+  });
+
+  it("shows an authoritative empty latest field instead of a generated local default", async () => {
+    const serverWithoutDraft = {
+      ...savedWorkspace,
+      followUpDraft: null,
+      followUpReviewed: false,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(serverWithoutDraft))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...serverWithoutDraft,
+          lockVersion: 5,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({
+        interactionId: "interaction-1",
+        initialFollowUpDraft: "Unsaved generated local follow-up",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.followUpDraft).toBe(
+      "Unsaved generated local follow-up",
+    );
+    await act(async () => {
+      expect(await result.current.save({ followUpReviewed: false })).toBe(
+        false,
+      );
+    });
+
+    expect(result.current.values.followUpDraft).toBe(
+      "Unsaved generated local follow-up",
+    );
+    expect(result.current.conflictRecovery.latestValues?.followUpDraft).toBe(
+      "",
+    );
+    expect(result.current.conflictRecovery.submittedFields.followUpDraft).toBe(
+      true,
+    );
   });
 
   it("refreshes generation metadata without replacing dirty local text", async () => {
@@ -466,5 +1104,71 @@ describe("useConversationWorkspace", () => {
         followUpDraft: "Corrected private follow-up",
       }),
     );
+  });
+
+  it("keeps a conflict and local text when its refresh key changes", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Latest note saved in another session",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...latestWorkspace,
+          lockVersion: 6,
+          generationState: "processing",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ refreshKey }: { refreshKey: number }) =>
+        useConversationWorkspace({
+          interactionId: "interaction-1",
+          refreshKey,
+        }),
+      { initialProps: { refreshKey: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Unsaved local note that must stay visible",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("ready");
+
+    rerender({ refreshKey: 1 });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(result.current.saveState).toBe("conflict");
+    expect(result.current.values.liveNotes).toBe(
+      "Unsaved local note that must stay visible",
+    );
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.workspace?.generationState).toBe("processing");
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "ready",
+      latestWorkspace: { lockVersion: 5 },
+      latestValues: {
+        liveNotes: "Latest note saved in another session",
+      },
+    });
   });
 });

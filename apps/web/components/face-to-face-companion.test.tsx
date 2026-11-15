@@ -110,6 +110,7 @@ function installApi(
     capabilitiesResponse,
     failedCompanionEndpoint,
     personalWorkspaceSaveFails = false,
+    personalWorkspaceConflictsOnce,
     personalWorkspaceSaveResponse,
     personalWorkspaceLoadResponse,
   }: {
@@ -118,11 +119,18 @@ function installApi(
     capabilitiesResponse?: Promise<Response>;
     failedCompanionEndpoint?: "capabilities" | "brief" | "markers";
     personalWorkspaceSaveFails?: boolean;
+    personalWorkspaceConflictsOnce?: {
+      liveNotes: string;
+      enhancedNotes?: string;
+      followUpDraft?: string;
+      followUpReviewed?: boolean;
+    };
     personalWorkspaceSaveResponse?: Promise<Response>;
     personalWorkspaceLoadResponse?: Promise<Response>;
   } = {},
 ) {
   let currentInteraction = initialInteraction;
+  let workspaceConflictReturned = false;
   const markers: object[] = [];
   let privateWorkspace = {
     exists: false,
@@ -230,6 +238,34 @@ function installApi(
         return personalWorkspaceSaveResponse;
       }
       if (personalWorkspaceSaveFails) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "conversation_workspace_conflict",
+              message: "This private workspace changed in another session.",
+            },
+            409,
+          ),
+        );
+      }
+      if (personalWorkspaceConflictsOnce && !workspaceConflictReturned) {
+        workspaceConflictReturned = true;
+        privateWorkspace = {
+          ...privateWorkspace,
+          exists: true,
+          lockVersion: privateWorkspace.lockVersion + 1,
+          liveNotes: personalWorkspaceConflictsOnce.liveNotes,
+          enhancedNotes:
+            personalWorkspaceConflictsOnce.enhancedNotes ??
+            privateWorkspace.enhancedNotes,
+          followUpDraft:
+            personalWorkspaceConflictsOnce.followUpDraft ??
+            privateWorkspace.followUpDraft,
+          followUpReviewed:
+            personalWorkspaceConflictsOnce.followUpReviewed ??
+            privateWorkspace.followUpReviewed,
+          updatedAt: "2026-08-15T02:55:00Z",
+        };
         return Promise.resolve(
           jsonResponse(
             {
@@ -735,6 +771,105 @@ describe("FaceToFaceCompanion", () => {
     ).toBe(false);
     expect(
       screen.getByRole("button", { name: "Save notes and end interaction" }),
+    ).toBeVisible();
+  });
+
+  it("compares and safely saves a stale private note before ending", async () => {
+    const latestSavedNote =
+      "The first session saved a Friday implementation review.";
+    const latestEnhancedNotes =
+      "The first session also refined the private enhanced notes.";
+    const latestFollowUp =
+      "Private follow-up wording saved by the first session.";
+    const fetchMock = installApi(
+      interaction({
+        lifecycleStatus: "in_progress",
+        actualStartAt: "2026-08-15T02:00:00Z",
+      }),
+      {
+        personalWorkspaceConflictsOnce: {
+          liveNotes: latestSavedNote,
+          enhancedNotes: latestEnhancedNotes,
+          followUpDraft: latestFollowUp,
+          followUpReviewed: true,
+        },
+      },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+
+    await screen.findByRole("heading", { name: "How should Companion help?" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue without recording" }),
+    );
+    const liveNotes = screen.getByLabelText("Private live notes");
+    fireEvent.change(liveNotes, {
+      target: { value: "My unsaved note from the second session." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Save notes and end interaction",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Private notes changed in another session",
+      }),
+    ).toBeVisible();
+    expect(liveNotes).toBeEnabled();
+    expect(liveNotes).toHaveValue("My unsaved note from the second session.");
+    expect(
+      await screen.findByLabelText("Latest saved private note"),
+    ).toHaveValue(latestSavedNote);
+    expect(
+      screen.getByRole("button", {
+        name: "Save notes and end interaction",
+      }),
+    ).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/complete") && init?.method === "POST",
+      ),
+    ).toBe(false);
+
+    const mergedNote = `${latestSavedNote}\n\nMy note: signer confirmation is still open.`;
+    fireEvent.change(liveNotes, { target: { value: mergedNote } });
+    fireEvent.click(screen.getByRole("button", { name: "Save reviewed note" }));
+
+    expect(
+      await screen.findByText("Private notes saved.", { exact: true }),
+    ).toBeVisible();
+    const workspacePutCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/personal-workspace") && init?.method === "PUT",
+    );
+    expect(workspacePutCalls).toHaveLength(2);
+    expect(
+      JSON.parse(
+        String(workspacePutCalls[workspacePutCalls.length - 1]?.[1]?.body),
+      ),
+    ).toMatchObject({
+      expectedLockVersion: 1,
+      liveNotes: mergedNote,
+      enhancedNotes: latestEnhancedNotes,
+      followUpDraft: latestFollowUp,
+      followUpReviewed: true,
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/complete") && init?.method === "POST",
+      ),
+    ).toBe(false);
+
+    const end = screen.getByRole("button", { name: "End interaction" });
+    expect(end).toBeEnabled();
+    fireEvent.click(end);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Fill the gaps while they are fresh",
+      }),
     ).toBeVisible();
   });
 

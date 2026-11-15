@@ -1258,6 +1258,161 @@ describe("MeetingIntelligenceWorkspace", () => {
     );
   });
 
+  it("reviews a stale browser import without losing provenance or newer private fields", async () => {
+    const initialWorkspace = {
+      exists: true,
+      ownerUserId: "user-1",
+      lockVersion: 2,
+      liveNotes: "Earlier rough notes",
+      enhancedNotes: "Earlier enhanced notes",
+      followUpDraft: "Earlier saved follow-up",
+      followUpReviewed: false,
+      generationFingerprint: null,
+      generationState: "not_started" as const,
+      generationId: null,
+      generationTranscriptVersion: null,
+      generationPersonalNotesState: "not_included" as const,
+      generationFailureCode: null,
+      generationRetryAvailable: false,
+      generationUpdateAvailable: false,
+      generationCompletedAt: null,
+      importedFromBrowserAt: null,
+      updatedAt: "2026-10-31T00:00:00Z",
+    };
+    const latestWorkspace = {
+      ...initialWorkspace,
+      lockVersion: 3,
+      liveNotes: "Newer rough notes from the other session",
+      enhancedNotes: "Newer enhanced notes from the other session",
+      followUpDraft: "Latest saved follow-up from the other session",
+      followUpReviewed: true,
+      updatedAt: "2026-10-31T00:05:00Z",
+    };
+    const secondLatestWorkspace = {
+      ...latestWorkspace,
+      lockVersion: 4,
+      liveNotes: "Newest rough notes after another remote save",
+      enhancedNotes: "Newest enhanced notes after another remote save",
+      updatedAt: "2026-10-31T00:06:00Z",
+    };
+    const localDraft = "My reviewed local follow-up wording.";
+    const legacyKey = "revenueos:follow-up-draft:meeting-1";
+    window.localStorage.setItem(
+      legacyKey,
+      JSON.stringify({
+        draft: localDraft,
+        approved: false,
+        ownerUserId: "user-1",
+      }),
+    );
+    let workspaceGetCount = 0;
+    let workspacePutCount = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/personal-workspace") && method === "GET") {
+        workspaceGetCount += 1;
+        return Promise.resolve(
+          jsonResponse(
+            workspaceGetCount === 1
+              ? initialWorkspace
+              : workspaceGetCount === 2
+                ? latestWorkspace
+                : secondLatestWorkspace,
+          ),
+        );
+      }
+      if (url.endsWith("/personal-workspace") && method === "PUT") {
+        workspacePutCount += 1;
+        if (workspacePutCount <= 2) {
+          return Promise.resolve(
+            jsonResponse(
+              {
+                code: "conversation_workspace_conflict",
+                message: "This private workspace changed in another session.",
+              },
+              409,
+            ),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({
+            ...secondLatestWorkspace,
+            lockVersion: 5,
+            followUpDraft: localDraft,
+            followUpReviewed: false,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(completedWorkspace()));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-1"
+        interactionId="interaction-1"
+      />,
+    );
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    await waitFor(() => expect(draft).toHaveValue("Earlier saved follow-up"));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Import earlier browser draft",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Private notes changed in another session",
+      }),
+    ).toBeVisible();
+    expect(draft).toBeEnabled();
+    expect(draft).toHaveValue(localDraft);
+    expect(
+      await screen.findByLabelText("Latest saved follow-up draft"),
+    ).toHaveValue(latestWorkspace.followUpDraft);
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use latest saved draft" }),
+    );
+    expect(draft).toHaveValue(latestWorkspace.followUpDraft);
+    expect(window.localStorage.getItem(legacyKey)).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import earlier browser draft" }),
+    );
+    expect(
+      await screen.findByLabelText("Latest saved follow-up draft"),
+    ).toHaveValue(secondLatestWorkspace.followUpDraft);
+    expect(draft).toHaveValue(localDraft);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save reviewed follow-up" }),
+    );
+    await waitFor(() => expect(workspacePutCount).toBe(3));
+
+    const workspacePuts = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/personal-workspace") && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(workspacePuts[2]?.[1]?.body))).toMatchObject({
+      expectedLockVersion: 4,
+      liveNotes: secondLatestWorkspace.liveNotes,
+      enhancedNotes: secondLatestWorkspace.enhancedNotes,
+      followUpDraft: localDraft,
+      followUpReviewed: false,
+      importFromBrowser: true,
+    });
+    expect(window.localStorage.getItem(legacyKey)).toBeNull();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Private notes changed in another session",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("aborts an in-flight aggregate request when unmounted", () => {
     let capturedSignal: AbortSignal | null = null;
     vi.stubGlobal(
