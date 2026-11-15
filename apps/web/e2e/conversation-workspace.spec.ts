@@ -355,6 +355,10 @@ test("a CRM-free private note saves and reloads when AI Companion is disabled", 
   expect(workspace.liveNotes).toBe(
     "Send the operations lead the rollout checklist.",
   );
+  await page.screenshot({
+    path: "../../docs/07-sprints/assets/conversation-resilient-private-notes.png",
+    fullPage: true,
+  });
 
   await page.reload();
   await expect(page.getByLabel("Private live notes")).toHaveValue(
