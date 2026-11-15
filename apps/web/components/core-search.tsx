@@ -106,7 +106,8 @@ export function CoreSearch({
             Search your workspace
           </label>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Find a conversation or an account’s conversation history.
+            Find a conversation by title, relationship, transcript or your
+            private notes, or open an account’s conversation history.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <input
@@ -115,7 +116,7 @@ export function CoreSearch({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="form-input flex-1"
-              placeholder="Try a conversation or account"
+              placeholder="Try a conversation, private note or account"
               autoComplete="off"
             />
             <button type="submit" className="primary-button" disabled={loading}>
@@ -148,8 +149,8 @@ export function CoreSearch({
                   No matching work found
                 </h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Check the spelling or search using a shorter conversation,
-                  account name.
+                  Check the spelling or try a shorter phrase from a
+                  conversation, your private notes or an account name.
                 </p>
               </div>
             ) : (

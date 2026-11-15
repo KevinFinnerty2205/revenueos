@@ -53,6 +53,14 @@ latest saved note or save a reviewed version. A reviewed save starts from the
 latest workspace and lock, overlays only the reviewed local fields and therefore
 does not replace newer unrelated enhanced-note or follow-up fields. A second
 conflict repeats the comparison rather than forcing an overwrite.
+
+Deterministic conversation search may match the authenticated owner's live notes,
+enhanced notes and follow-up draft through a correlated lookup that repeats the
+organisation, interaction and user predicates. Results remain ordinary conversation
+metadata; private text, snippets and match reasons are not returned. Another member's
+workspace cannot affect result existence, and private note matching is not projected
+into Ask, shared memory or shared intelligence.
+
 Original debrief answers and accepted evidence remain in their existing records.
 A browser-local value can be explicitly imported only when its stored owner ID
 matches the authenticated server workspace owner. Older unscoped keys are
@@ -207,7 +215,15 @@ proves that a stale second browser receives an optimistic-lock conflict without
 losing its local text or replacing the committed note. It then compares the local
 and latest saved notes, saves an explicitly reviewed merge at the latest lock,
 verifies that newer unrelated enhanced-note and follow-up fields survive, and
-proves the result through both a browser reload and an API read. The acceptance
-scrubs the synthetic private workspace before soft-deleting its meeting fixture.
+proves the result through both a browser reload and an API read. A separate synthetic
+conversation proves that an owner's private-note phrase can find its conversation
+without returning private note fields or a different private sentinel. Each acceptance
+scrubs its synthetic private workspace before soft-deleting its meeting fixture.
 CI provisions an isolated PostgreSQL service, migrates it and starts the API
 before running this gate.
+
+Uvicorn access logs are disabled in local, CI and production start commands because
+their default format includes query strings. The existing structured HTTP log retains
+the method, path, status, duration, request ID and trusted identity metadata without
+search content. Managed-ingress query logging is not asserted by this repository and
+must be checked with synthetic target-environment canaries before real-data activation.

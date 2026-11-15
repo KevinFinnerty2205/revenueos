@@ -43,4 +43,4 @@ COPY --chown=revenueos:revenueos apps/api/alembic ./alembic
 
 USER revenueos
 EXPOSE 8080 8081
-CMD ["uvicorn", "revenueos.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
+CMD ["uvicorn", "revenueos.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers", "--no-access-log"]

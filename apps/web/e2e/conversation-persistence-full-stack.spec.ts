@@ -334,3 +334,62 @@ test("private notes support a reviewed stale-browser merge without replacing new
     if (meeting) await scrubWorkspaceAndDeleteMeeting(request, meeting);
   }
 });
+
+test("private-note search finds only conversation metadata through the real API and PostgreSQL", async ({
+  page,
+  request,
+}) => {
+  let meeting: Meeting | null = null;
+
+  try {
+    meeting = await createMeetingBackedConversation(request);
+    const workspaceUrl = `${apiBaseUrl}/api/v1/interactions/${meeting.interactionId}/personal-workspace`;
+    const searchToken = `owner-note-search-${crypto.randomUUID()}`;
+    const privateSentinel = `private-note-sentinel-${crypto.randomUUID()}`;
+    const savedResponse = await request.put(workspaceUrl, {
+      data: {
+        expectedLockVersion: 0,
+        liveNotes: `Remember ${searchToken} before the next conversation.`,
+        enhancedNotes: privateSentinel,
+        followUpDraft: null,
+        followUpReviewed: false,
+        generationFingerprint: null,
+        importFromBrowser: false,
+      },
+    });
+    expect(savedResponse.ok()).toBeTruthy();
+
+    await page.goto("/assistant");
+    const searchResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === "/api/v1/interactions" &&
+        url.searchParams.get("search") === searchToken &&
+        response.request().method() === "GET"
+      );
+    });
+    await page
+      .getByRole("searchbox", { name: "Search your workspace" })
+      .fill(searchToken);
+    await page.getByRole("button", { name: "Search" }).click();
+
+    const searchResponse = await searchResponsePromise;
+    expect(searchResponse.ok()).toBeTruthy();
+    const responseText = await searchResponse.text();
+    expect(responseText).not.toContain(privateSentinel);
+    expect(responseText).not.toContain("liveNotes");
+    expect(responseText).not.toContain("enhancedNotes");
+    expect(responseText).not.toContain("followUpDraft");
+
+    const result = page.getByRole("link", { name: new RegExp(meeting.title) });
+    await expect(result).toHaveAttribute(
+      "href",
+      `/conversations/${meeting.interactionId}`,
+    );
+    expect(await page.locator("body").innerText()).not.toContain(
+      privateSentinel,
+    );
+  } finally {
+    if (meeting) await scrubWorkspaceAndDeleteMeeting(request, meeting);
+  }
+});

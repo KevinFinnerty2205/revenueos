@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "dev:web": "pnpm --filter @revenueos/web dev --hostname 127.0.0.1",
-    "dev:api": "uv --directory apps/api run uvicorn revenueos.main:app --reload --port 8000",
+    "dev:api": "uv --directory apps/api run uvicorn revenueos.main:app --reload --port 8000 --no-access-log",
     "dev:worker": "uv --directory apps/api run revenueos-ai-worker",
     "demo:owner": "uv --directory apps/api run revenueos-demo-data owner-demo --organisation-id 00000000-0000-4000-8000-000000000002 --user-id 00000000-0000-4000-8000-000000000001",
     "demo:reset": "uv --directory apps/api run revenueos-demo-data reset --organisation-id 00000000-0000-4000-8000-000000000002",

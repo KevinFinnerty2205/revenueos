@@ -11,6 +11,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 APP_SPEC_PATH = REPOSITORY_ROOT / "infra/digitalocean/app.production.template.yaml"
 PRODUCTION_ENV_PATH = REPOSITORY_ROOT / "infra/environments/production.env.example"
 WEB_DOCKERFILE_PATH = REPOSITORY_ROOT / "infra/docker/web.Dockerfile"
+API_DOCKERFILE_PATH = REPOSITORY_ROOT / "infra/docker/api.Dockerfile"
 BACKUP_LIFECYCLE_PATH = REPOSITORY_ROOT / "infra/aws/independent-backup-lifecycle.json"
 
 
@@ -59,6 +60,16 @@ def _production_environment_contract() -> dict[str, str]:
         assert key not in environment, f"duplicate production environment key: {key}"
         environment[key] = value
     return environment
+
+
+def test_production_api_disables_query_string_access_logs() -> None:
+    dockerfile = API_DOCKERFILE_PATH.read_text(encoding="utf-8")
+    command_line = next(line for line in dockerfile.splitlines() if line.startswith("CMD "))
+    command = json.loads(command_line.removeprefix("CMD "))
+
+    assert isinstance(command, list)
+    assert command[:2] == ["uvicorn", "revenueos.main:app"]
+    assert "--no-access-log" in command
 
 
 def test_digitalocean_topology_and_production_defaults_are_fail_closed() -> None:
