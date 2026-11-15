@@ -330,15 +330,15 @@ def test_generation_is_versioned_idempotent_reviewable_and_visible_in_list(
     assert asyncio.run(verify()) == (2, 2)
 
 
-def test_unavailable_notice_feature_and_tenant_fail_closed(
+def test_no_context_notice_feature_and_tenant_fail_closed(
     app: FastAPI,
     client: TestClient,
 ) -> None:
     no_context = create_interaction(client, interaction_type="manual_interaction")
-    unavailable = client.get(_brief_url(str(no_context["id"])))
-    assert unavailable.status_code == 200
-    assert unavailable.json()["state"] == "unavailable"
-    assert unavailable.json()["generationAvailable"] is False
+    available = client.get(_brief_url(str(no_context["id"])))
+    assert available.status_code == 200
+    assert available.json()["state"] == "not_generated"
+    assert available.json()["generationAvailable"] is True
 
     company_id = str(create_company(client)["id"])
     opportunity_id = str(create_opportunity(client, company_id)["id"])
@@ -816,7 +816,7 @@ def test_company_only_partial_context_and_terminal_states_are_product_safe(clien
     partial = create_interaction(client, interaction_type="executive_lunch", company_id=company_id)
     generated = client.post(_brief_url(str(partial["id"])))
     assert generated.status_code == 200
-    assert "No linked opportunity" in generated.json()["brief"]["accountContext"]
+    assert "confirm the people's priorities" in generated.json()["brief"]["accountContext"]
     assert generated.json()["brief"]["stakeholderFocus"] == []
     assert generated.json()["brief"]["risksToWatch"] == []
 
@@ -875,3 +875,90 @@ def test_quota_exhaustion_is_safe_and_equivalent_reuse_is_free(client: TestClien
         exhausted = quota_client.post(_brief_url(str(second["id"])))
         assert exhausted.status_code == 429
         assert exhausted.json()["code"] == "daily_generation_limit_exceeded"
+
+
+@pytest.mark.parametrize(
+    "framework",
+    ["bant", "spin", "spiced", "meddic", "meddicc", "meddpicc"],
+)
+def test_preparation_uses_selected_framework_without_crm_opportunity(
+    client: TestClient,
+    framework: str,
+) -> None:
+    selection = client.patch(
+        "/api/v1/methodologies/current",
+        json={"selection": framework},
+    )
+    assert selection.status_code == 200, selection.text
+    interaction = create_interaction(
+        client,
+        title="First discovery",
+        interaction_type="face_to_face_meeting",
+    )
+    assert interaction["companyId"] is None
+    assert interaction["opportunityId"] is None
+
+    prepared = client.post(_brief_url(str(interaction["id"])))
+
+    assert prepared.status_code == 200, prepared.text
+    body = prepared.json()
+    assert body["created"] is True
+    assert body["state"] == "completed"
+    assert "No company context has been added" in body["brief"]["accountContext"]
+    assert any("evidence gap" in question["purpose"] for question in body["brief"]["questionsToAsk"])
+    assert "Sales framework gaps" in body["sourceLabels"]
+
+
+def test_general_note_does_not_receive_sales_framework_prompts(client: TestClient) -> None:
+    selection = client.patch(
+        "/api/v1/methodologies/current",
+        json={"selection": "meddpicc"},
+    )
+    assert selection.status_code == 200, selection.text
+    interaction = create_interaction(
+        client,
+        title="Relationship note",
+        interaction_type="manual_interaction",
+    )
+
+    prepared = client.post(_brief_url(str(interaction["id"])))
+
+    assert prepared.status_code == 200, prepared.text
+    body = prepared.json()
+    assert body["state"] == "completed"
+    assert "Sales framework gaps" not in body["sourceLabels"]
+    assert all("evidence gap" not in question["purpose"] for question in body["brief"]["questionsToAsk"])
+
+
+def test_framework_change_versions_crm_independent_preparation(
+    client: TestClient,
+) -> None:
+    assert (
+        client.patch(
+            "/api/v1/methodologies/current",
+            json={"selection": "bant"},
+        ).status_code
+        == 200
+    )
+    interaction = create_interaction(
+        client,
+        title="Framework-neutral preparation",
+        interaction_type="online_meeting",
+    )
+    first = client.post(_brief_url(str(interaction["id"])))
+    assert first.status_code == 200, first.text
+    assert first.json()["brief"]["briefVersion"] == 1
+
+    assert (
+        client.patch(
+            "/api/v1/methodologies/current",
+            json={"selection": "meddpicc"},
+        ).status_code
+        == 200
+    )
+    second = client.post(_brief_url(str(interaction["id"])))
+
+    assert second.status_code == 200, second.text
+    assert second.json()["created"] is True
+    assert second.json()["brief"]["briefVersion"] == 2
+    assert second.json()["priorVersions"][0]["briefVersion"] == 1

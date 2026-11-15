@@ -84,7 +84,7 @@ describe("AccountConversationPanel", () => {
     expect(screen.getByText("Jordan Lee")).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Open live workspace" }),
-    ).toHaveAttribute("href", "/conversations/interaction-1/workspace");
+    ).toHaveAttribute("href", "/conversations/interaction-1?view=capture");
     expect(
       screen.getByRole("link", { name: "Add conversation" }),
     ).toHaveAttribute("href", "/conversations/new?companyId=company%2Fone");

@@ -161,7 +161,7 @@ describe("InteractionDetail", () => {
     ).toHaveTextContent("Planned");
     expect(
       screen.getByRole("link", { name: "Prepare and start" }),
-    ).toHaveAttribute("href", "/conversations/interaction-1/workspace");
+    ).toHaveAttribute("href", "/conversations/interaction-1?view=capture");
     fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
     expect(
       await screen.findByRole("button", { name: "End meeting" }),

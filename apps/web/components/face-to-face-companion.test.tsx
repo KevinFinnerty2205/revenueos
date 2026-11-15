@@ -107,9 +107,11 @@ function installApi(
   {
     personalWorkspaceSaveFails = false,
     personalWorkspaceSaveResponse,
+    personalWorkspaceLoadResponse,
   }: {
     personalWorkspaceSaveFails?: boolean;
     personalWorkspaceSaveResponse?: Promise<Response>;
+    personalWorkspaceLoadResponse?: Promise<Response>;
   } = {},
 ) {
   let currentInteraction = initialInteraction;
@@ -175,7 +177,10 @@ function installApi(
       return Promise.resolve(jsonResponse([]));
     }
     if (url.endsWith("/personal-workspace") && method === "GET") {
-      return Promise.resolve(jsonResponse(privateWorkspace));
+      return (
+        personalWorkspaceLoadResponse ??
+        Promise.resolve(jsonResponse(privateWorkspace))
+      );
     }
     if (url.endsWith("/personal-workspace") && method === "PUT") {
       if (personalWorkspaceSaveResponse) {
@@ -288,8 +293,8 @@ describe("FaceToFaceCompanion", () => {
     ).toBeVisible();
     fireEvent.click(screen.getByText("More options"));
     expect(
-      screen.getByRole("link", { name: "Open Revenue Brain" }),
-    ).toHaveAttribute("href", "/companies/company-1");
+      screen.getByRole("link", { name: "Open conversation history" }),
+    ).toHaveAttribute("href", "/conversations/accounts/company-1");
     expect(screen.getByText("1", { selector: "dd" })).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/complete"),
@@ -331,6 +336,47 @@ describe("FaceToFaceCompanion", () => {
       screen.queryByRole("button", { name: "Record interaction" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Recording status")).not.toBeInTheDocument();
+  });
+
+  it("keeps direct notes disabled until the private workspace has loaded", async () => {
+    let resolveWorkspace!: (value: Response) => void;
+    const pendingWorkspace = new Promise<Response>((resolve) => {
+      resolveWorkspace = resolve;
+    });
+    installApi(interaction(), {
+      personalWorkspaceLoadResponse: pendingWorkspace,
+    });
+
+    render(<FaceToFaceCompanion interactionId="interaction-1" embedded />);
+
+    const notes = await screen.findByLabelText("Private live notes");
+    expect(notes).toBeDisabled();
+    await act(async () => {
+      resolveWorkspace(
+        jsonResponse({
+          exists: false,
+          ownerUserId: "user-1",
+          lockVersion: 0,
+          liveNotes: null,
+          enhancedNotes: null,
+          followUpDraft: null,
+          followUpReviewed: false,
+          generationFingerprint: null,
+          generationState: "not_started",
+          generationId: null,
+          generationTranscriptVersion: null,
+          generationPersonalNotesState: "not_included",
+          generationFailureCode: null,
+          generationRetryAvailable: false,
+          generationUpdateAvailable: false,
+          generationCompletedAt: null,
+          importedFromBrowserAt: null,
+          updatedAt: null,
+        }),
+      );
+      await pendingWorkspace;
+    });
+    await waitFor(() => expect(notes).toBeEnabled());
   });
 
   it("keeps the interaction open when dirty private notes cannot be saved", async () => {

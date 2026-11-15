@@ -627,6 +627,45 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
       await route.fulfill({ json: [] });
       return;
     }
+    if (
+      path === "/api/v1/interactions/interaction-methodology/companion/markers"
+    ) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (
+      path === "/api/v1/interactions/interaction-methodology/personal-workspace"
+    ) {
+      await route.fulfill({
+        json: {
+          exists: false,
+          ownerUserId: "user-1",
+          lockVersion: 0,
+          liveNotes: "",
+          enhancedNotes: "",
+          followUpDraft: "",
+          followUpReviewed: false,
+          generationFingerprint: null,
+          generationState: "not_available",
+          generationId: null,
+          generationTranscriptVersion: null,
+          generationPersonalNotesState: "not_included",
+          generationFailureCode: null,
+          generationRetryAvailable: false,
+          generationUpdateAvailable: false,
+          generationCompletedAt: null,
+          importedFromBrowserAt: null,
+          updatedAt: null,
+        },
+      });
+      return;
+    }
+    if (
+      path === "/api/v1/interactions/interaction-methodology/debrief/latest"
+    ) {
+      await route.fulfill({ json: null });
+      return;
+    }
     if (path === "/api/v1/interactions/interaction-methodology") {
       await route.fulfill({ json: interaction });
       return;
@@ -699,8 +738,14 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
     ),
   ).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await page
+    .getByRole("button", { name: "Notes & capture", exact: true })
+    .click();
   await page.getByRole("button", { name: "Start call" }).click();
   await page.getByRole("button", { name: "End connected call" }).click();
+  await page
+    .getByRole("button", { name: "Open Review & follow-up", exact: true })
+    .click();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
   await page.getByRole("button", { name: "Start personal notes" }).click();
   await expect(

@@ -331,9 +331,11 @@ function PhoneCallBriefContent({
 export function PreInteractionBrief({
   interactionId,
   interactionType,
+  onBriefChange,
 }: {
   interactionId: string;
   interactionType: InteractionType;
+  onBriefChange?: () => void;
 }) {
   const [response, setResponse] = useState<PreInteractionBriefResponse | null>(
     null,
@@ -377,12 +379,12 @@ export function PreInteractionBrief({
     setError(null);
     setNoticeRequired(false);
     try {
-      setResponse(
-        await apiRequest<PreInteractionBriefRequestResponse>(
-          `/api/v1/interactions/${interactionId}/companion/brief`,
-          { method: "POST", body: "{}" },
-        ),
+      const updated = await apiRequest<PreInteractionBriefRequestResponse>(
+        `/api/v1/interactions/${interactionId}/companion/brief`,
+        { method: "POST", body: "{}" },
       );
+      setResponse(updated);
+      onBriefChange?.();
     } catch (requestError: unknown) {
       setError(
         requestError instanceof Error
@@ -402,12 +404,12 @@ export function PreInteractionBrief({
     setWorking(true);
     setError(null);
     try {
-      setResponse(
-        await apiRequest<PreInteractionBriefResponse>(
-          `/api/v1/interactions/${interactionId}/companion/brief/review`,
-          { method: "POST", body: "{}" },
-        ),
+      const updated = await apiRequest<PreInteractionBriefResponse>(
+        `/api/v1/interactions/${interactionId}/companion/brief/review`,
+        { method: "POST", body: "{}" },
       );
+      setResponse(updated);
+      onBriefChange?.();
     } catch (requestError: unknown) {
       setError(
         requestError instanceof Error

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from uuid import UUID
 
 from fastapi import FastAPI
@@ -8,7 +9,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from revenueos.action_services import ActionService
 from revenueos.auth import get_current_user
+from revenueos.methodology_contracts import MethodologyGapContext
 from revenueos.models import (
     ActionAuditEvent,
     ActionProposal,
@@ -90,6 +93,27 @@ def _database_state(action_id: str) -> dict[str, object]:
         return result
 
     return asyncio.run(read())
+
+
+def test_conversation_scoped_methodology_gap_does_not_create_crm_action() -> None:
+    gap = MethodologyGapContext(
+        projection_id=None,
+        methodology_key="meddpicc",
+        field_key="economic_buyer",
+        display_name="Economic buyer",
+        state="unknown",
+        conclusion=None,
+        suggested_question="Who has final commercial authority?",
+        sources=(),
+    )
+
+    assert (
+        ActionService._methodology_candidates(
+            cast(Opportunity, object()),
+            (gap,),
+        )
+        == []
+    )
 
 
 def test_generation_requires_final_validated_sources_and_is_idempotent(client: TestClient) -> None:

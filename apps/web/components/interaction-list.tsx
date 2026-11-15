@@ -335,7 +335,11 @@ export function InteractionList() {
                   <li key={company.id}>
                     <Link
                       className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-semibold text-slate-800 hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-focus"
-                      href={"/companies/" + company.id + "#conversations"}
+                      href={
+                        "/conversations/accounts/" +
+                        company.id +
+                        "#conversations"
+                      }
                     >
                       <AccountAvatar
                         accountId={company.id}
@@ -576,7 +580,7 @@ function AccountConversationCard({
           <h3 className="text-xl font-semibold text-slate-950">
             <Link
               className="rounded underline-offset-4 group-hover:underline focus:outline-none focus:ring-2 focus:ring-brand-focus"
-              href={"/companies/" + company.id + "#conversations"}
+              href={"/conversations/accounts/" + company.id + "#conversations"}
             >
               {company.name}
             </Link>
@@ -611,7 +615,7 @@ function AccountConversationCard({
       ) : null}
       <Link
         className="mt-5 inline-flex text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-        href={"/companies/" + company.id + "#conversations"}
+        href={"/conversations/accounts/" + company.id + "#conversations"}
       >
         View conversations and notes
       </Link>

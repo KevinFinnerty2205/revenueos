@@ -20,8 +20,12 @@ import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 export function InteractionDetail({
   interactionId,
+  reviewOnly = false,
+  onOpenCapture,
 }: {
   interactionId: string;
+  reviewOnly?: boolean;
+  onOpenCapture?: () => void;
 }) {
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,249 +164,276 @@ export function InteractionDetail({
         ? "Continue in Companion"
         : "Review capture in Companion";
   return (
-    <section aria-labelledby="interaction-detail-title">
-      <Link
-        className="text-sm font-bold text-brand-secondary hover:underline"
-        href="/conversations"
-      >
-        Back to conversations
-      </Link>
-      <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
-          <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-brand-secondary">
-            {humanise(interaction.interactionType)}
-          </span>
-          <span
-            role="status"
-            aria-label="Conversation lifecycle status"
-            className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
-          >
-            {humanise(interaction.lifecycleStatus)}
-          </span>
-        </div>
-        <h1
-          id="interaction-detail-title"
-          className="mt-5 text-4xl font-semibold text-slate-950"
-        >
-          {interaction.title}
-        </h1>
-        <dl className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Scheduled
-            </dt>
-            <dd className="mt-1 text-slate-800">
-              {formatInteractionDate(interaction.scheduledStartAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              Completed
-            </dt>
-            <dd className="mt-1 text-slate-800">
-              {formatInteractionDate(interaction.actualEndAt)}
-            </dd>
-          </div>
-          {interaction.interactionType === "phone_call" ? (
-            <>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Direction
-                </dt>
-                <dd className="mt-1 text-slate-800">
-                  {humanise(interaction.callDirection ?? "unknown")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Outcome · duration
-                </dt>
-                <dd className="mt-1 text-slate-800">
-                  {interaction.callOutcome
-                    ? humanise(interaction.callOutcome)
-                    : "Not set"}
-                  {interaction.durationSeconds !== null
-                    ? ` · ${formatDuration(interaction.durationSeconds)}`
-                    : ""}
-                </dd>
-              </div>
-            </>
-          ) : null}
-          {interaction.interactionType === "online_meeting" ? (
-            <>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Platform
-                </dt>
-                <dd className="mt-1 text-slate-800">
-                  {humanise(interaction.meetingPlatform ?? "other")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Capture
-                </dt>
-                <dd className="mt-1 text-slate-800">
-                  {interaction.captureSource
-                    ? humanise(interaction.captureSource)
-                    : "Choose after meeting"}
-                  {interaction.ingestionState
-                    ? ` · ${humanise(interaction.ingestionState)}`
-                    : ""}
-                </dd>
-              </div>
-            </>
-          ) : null}
-        </dl>
-        {error ? (
-          <p
-            role="alert"
-            className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-900"
-          >
-            {error}
-          </p>
-        ) : null}
-        <p className="mt-7 border-t border-slate-100 pt-5 text-sm font-semibold text-slate-500">
-          Prepare <span aria-hidden="true">→</span> Capture{" "}
-          <span aria-hidden="true">→</span> Review{" "}
-          <span aria-hidden="true">→</span> Follow through
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
+    <section
+      aria-labelledby={reviewOnly ? undefined : "interaction-detail-title"}
+    >
+      {!reviewOnly ? (
+        <>
           <Link
-            className={
-              isActive || isCompleted ? "secondary-button" : "primary-button"
-            }
-            href={`/conversations/${interaction.id}/workspace`}
+            className="text-sm font-bold text-brand-secondary hover:underline"
+            href="/conversations"
           >
-            {companionLabel}
+            Back to conversations
           </Link>
-          {interaction.interactionType === "phone_call" &&
-          interaction.lifecycleStatus === "planned" ? (
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={starting || completing}
-              onClick={() => void start()}
+          <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
+              <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-brand-secondary">
+                {humanise(interaction.interactionType)}
+              </span>
+              <span
+                role="status"
+                aria-label="Conversation lifecycle status"
+                className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
+              >
+                {humanise(interaction.lifecycleStatus)}
+              </span>
+            </div>
+            <h1
+              id="interaction-detail-title"
+              className="mt-5 text-4xl font-semibold text-slate-950"
             >
-              {starting ? "Starting…" : "Start call"}
-            </button>
-          ) : null}
-          {interaction.interactionType === "online_meeting" &&
-          interaction.lifecycleStatus === "planned" ? (
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={starting || completing}
-              onClick={() => void start()}
-            >
-              {starting ? "Starting…" : "Start meeting"}
-            </button>
-          ) : null}
-          {interaction.lifecycleStatus === "planned" &&
-          interaction.interactionType !== "phone_call" &&
-          interaction.interactionType !== "online_meeting" ? (
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={starting || completing}
-              onClick={() => void start()}
-            >
-              {starting ? "Starting…" : "Start interaction"}
-            </button>
-          ) : null}
-          {isActive &&
-          interaction.interactionType !== "phone_call" &&
-          interaction.interactionType !== "online_meeting" ? (
-            <button
-              type="button"
-              className="primary-button"
-              disabled={completing}
-              onClick={() => void complete()}
-            >
-              {completing ? "Completing…" : "Finish interaction"}
-            </button>
-          ) : null}
-          {isActive && interaction.interactionType === "online_meeting" ? (
-            <button
-              type="button"
-              className="primary-button"
-              disabled={completing}
-              onClick={() => void complete()}
-            >
-              {completing ? "Ending…" : "End meeting"}
-            </button>
-          ) : null}
-          {isActive && interaction.interactionType === "phone_call" ? (
-            <>
-              {interaction.lifecycleStatus === "in_progress" ? (
+              {interaction.title}
+            </h1>
+            <dl className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Scheduled
+                </dt>
+                <dd className="mt-1 text-slate-800">
+                  {formatInteractionDate(interaction.scheduledStartAt)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Completed
+                </dt>
+                <dd className="mt-1 text-slate-800">
+                  {formatInteractionDate(interaction.actualEndAt)}
+                </dd>
+              </div>
+              {interaction.interactionType === "phone_call" ? (
+                <>
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Direction
+                    </dt>
+                    <dd className="mt-1 text-slate-800">
+                      {humanise(interaction.callDirection ?? "unknown")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Outcome · duration
+                    </dt>
+                    <dd className="mt-1 text-slate-800">
+                      {interaction.callOutcome
+                        ? humanise(interaction.callOutcome)
+                        : "Not set"}
+                      {interaction.durationSeconds !== null
+                        ? ` · ${formatDuration(interaction.durationSeconds)}`
+                        : ""}
+                    </dd>
+                  </div>
+                </>
+              ) : null}
+              {interaction.interactionType === "online_meeting" ? (
+                <>
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Platform
+                    </dt>
+                    <dd className="mt-1 text-slate-800">
+                      {humanise(interaction.meetingPlatform ?? "other")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Capture
+                    </dt>
+                    <dd className="mt-1 text-slate-800">
+                      {interaction.captureSource
+                        ? humanise(interaction.captureSource)
+                        : "Choose after meeting"}
+                      {interaction.ingestionState
+                        ? ` · ${humanise(interaction.ingestionState)}`
+                        : ""}
+                    </dd>
+                  </div>
+                </>
+              ) : null}
+            </dl>
+            {error ? (
+              <p
+                role="alert"
+                className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-900"
+              >
+                {error}
+              </p>
+            ) : null}
+            <p className="mt-7 border-t border-slate-100 pt-5 text-sm font-semibold text-slate-500">
+              Prepare <span aria-hidden="true">→</span> Capture{" "}
+              <span aria-hidden="true">→</span> Review{" "}
+              <span aria-hidden="true">→</span> Follow through
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                className={
+                  isActive || isCompleted
+                    ? "secondary-button"
+                    : "primary-button"
+                }
+                href={`/conversations/${interaction.id}?view=capture`}
+              >
+                {companionLabel}
+              </Link>
+              {interaction.interactionType === "phone_call" &&
+              interaction.lifecycleStatus === "planned" ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={starting || completing}
+                  onClick={() => void start()}
+                >
+                  {starting ? "Starting…" : "Start call"}
+                </button>
+              ) : null}
+              {interaction.interactionType === "online_meeting" &&
+              interaction.lifecycleStatus === "planned" ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={starting || completing}
+                  onClick={() => void start()}
+                >
+                  {starting ? "Starting…" : "Start meeting"}
+                </button>
+              ) : null}
+              {interaction.lifecycleStatus === "planned" &&
+              interaction.interactionType !== "phone_call" &&
+              interaction.interactionType !== "online_meeting" ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={starting || completing}
+                  onClick={() => void start()}
+                >
+                  {starting ? "Starting…" : "Start interaction"}
+                </button>
+              ) : null}
+              {isActive &&
+              interaction.interactionType !== "phone_call" &&
+              interaction.interactionType !== "online_meeting" ? (
                 <button
                   type="button"
                   className="primary-button"
                   disabled={completing}
-                  onClick={() => void complete("connected")}
+                  onClick={() => void complete()}
                 >
-                  {completing ? "Ending…" : "End connected call"}
+                  {completing ? "Completing…" : "Finish interaction"}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={completing}
-                onClick={() => void complete("no_answer")}
-              >
-                No answer
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={completing}
-                onClick={() => void complete("voicemail")}
-              >
-                Left voicemail
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={completing}
-                onClick={() => void complete("cancelled")}
-              >
-                Cancel call
-              </button>
-            </>
-          ) : null}
-          {isCompleted ? (
-            <a className="primary-button" href="#enhanced-notes">
-              Review notes and follow-up
-            </a>
-          ) : null}
-          {interaction.interactionType === "online_meeting" &&
-          interaction.meetingUrl ? (
-            <a
-              className="secondary-button"
-              href={interaction.meetingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open meeting
-            </a>
-          ) : null}
-        </div>
-      </div>
-      <div className="mt-6" id="conversation-memory">
-        <ConversationMemory
-          interactionId={interaction.id}
-          companyId={interaction.companyId}
-        />
-      </div>
-      {!isCompleted ? (
-        <div className="mt-6" id="preparation">
-          <BetaFeatureGate feature="aiCompanion">
-            <PreInteractionBrief
+              {isActive && interaction.interactionType === "online_meeting" ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={completing}
+                  onClick={() => void complete()}
+                >
+                  {completing ? "Ending…" : "End meeting"}
+                </button>
+              ) : null}
+              {isActive && interaction.interactionType === "phone_call" ? (
+                <>
+                  {interaction.lifecycleStatus === "in_progress" ? (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={completing}
+                      onClick={() => void complete("connected")}
+                    >
+                      {completing ? "Ending…" : "End connected call"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={completing}
+                    onClick={() => void complete("no_answer")}
+                  >
+                    No answer
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={completing}
+                    onClick={() => void complete("voicemail")}
+                  >
+                    Left voicemail
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={completing}
+                    onClick={() => void complete("cancelled")}
+                  >
+                    Cancel call
+                  </button>
+                </>
+              ) : null}
+              {isCompleted ? (
+                <a className="primary-button" href="#enhanced-notes">
+                  Review notes and follow-up
+                </a>
+              ) : null}
+              {interaction.interactionType === "online_meeting" &&
+              interaction.meetingUrl ? (
+                <a
+                  className="secondary-button"
+                  href={interaction.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open meeting
+                </a>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-6" id="conversation-memory">
+            <ConversationMemory
               interactionId={interaction.id}
-              interactionType={interaction.interactionType}
+              companyId={interaction.companyId}
             />
-          </BetaFeatureGate>
-        </div>
+          </div>
+          {!isCompleted ? (
+            <div className="mt-6" id="preparation">
+              <BetaFeatureGate feature="aiCompanion">
+                <PreInteractionBrief
+                  interactionId={interaction.id}
+                  interactionType={interaction.interactionType}
+                />
+              </BetaFeatureGate>
+            </div>
+          ) : null}
+        </>
+      ) : !isCompleted ? (
+        <section className="form-card" aria-labelledby="review-not-ready-title">
+          <h2 id="review-not-ready-title" className="form-legend">
+            Review is available after the conversation ends
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Keep private notes in Notes & capture. Your review, summary and
+            follow-up stay here once the conversation is complete.
+          </p>
+          {onOpenCapture ? (
+            <button
+              type="button"
+              className="primary-button mt-5"
+              onClick={onOpenCapture}
+            >
+              Open notes & capture
+            </button>
+          ) : null}
+        </section>
       ) : null}
       {isCompleted ? (
         <div className="mt-6 scroll-mt-6" id="enhanced-notes">
@@ -435,7 +466,7 @@ export function InteractionDetail({
           />
         </div>
       ) : null}
-      {!isCompleted ? (
+      {!reviewOnly && !isCompleted ? (
         <div className="mt-6">
           {interaction.interactionType === "online_meeting" ? (
             <section
@@ -494,7 +525,16 @@ export function InteractionDetail({
           </p>
           <div className="mt-5" id="recording">
             {interaction.interactionType === "online_meeting" ? (
-              <OnlineMeetingCapture interaction={interaction} />
+              <OnlineMeetingCapture
+                interaction={interaction}
+                onTranscriptImported={(result) =>
+                  setInteraction((current) =>
+                    current
+                      ? { ...current, meetingId: result.meetingId }
+                      : current,
+                  )
+                }
+              />
             ) : interaction.interactionType === "phone_call" ? (
               <BetaFeatureGate feature="recordingCapture">
                 <ImportedCallRecording interactionId={interaction.id} />
@@ -515,6 +555,7 @@ export function InteractionDetail({
                   onSaveLiveNotes={() => void personalWorkspace.save()}
                   liveNotesSaveDisabled={
                     personalWorkspace.loading ||
+                    !personalWorkspace.workspace ||
                     personalWorkspace.saveState === "saving"
                   }
                   liveNotesStatus={liveNotesStatus}

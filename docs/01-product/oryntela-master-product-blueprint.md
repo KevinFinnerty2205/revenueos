@@ -10,6 +10,22 @@ work orders and ADRs remain the record of what was built and why. Where a later
 explicit owner or Checkpoint decision changes forward direction, this blueprint
 governs the product plan without rewriting that history.
 
+## Current product focus — Backdrop + Granola in one
+
+The owner-confirmed product shorthand is **Backdrop + Granola in one**. Oryntela's
+default experience combines source-aware relationship context and sales guidance
+with quiet preparation, personal notes, deliberate capture, enhanced notes and
+follow-through. The shorthand explains the intended product shape; it is not a
+claim to reproduce either reference product or every feature they offer.
+
+The primary daily journey is conversation-first and must remain useful without CRM
+administration. CRM, pipeline, prospecting, campaigns, forecasts and other existing
+modules may provide supporting context or compatibility, but they must not displace
+the account-and-conversation workflow. Existing records and tenant controls remain
+intact. The [conversation product acceptance contract](conversation-product-acceptance.md)
+defines the coherent daily loop, truthful current boundary and outstanding native,
+provider and usability evidence.
+
 ## Executive decision
 
 Oryntela already has enough coherent product breadth to begin supervised customer
