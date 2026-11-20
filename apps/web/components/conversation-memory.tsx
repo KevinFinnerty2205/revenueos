@@ -10,7 +10,7 @@ import type {
   MethodologyProjectionItem,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
@@ -182,36 +182,64 @@ export function ConversationMemory({
   const [selectedThreadId, setSelectedThreadId] = useState("");
   const [newThreadName, setNewThreadName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [threadDirectoryState, setThreadDirectoryState] = useState<
+    "loading" | "available" | "unavailable"
+  >("loading");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const threadDirectoryRequestId = useRef(0);
+
+  const loadThreadDirectory = useCallback(async (signal?: AbortSignal) => {
+    const requestId = threadDirectoryRequestId.current + 1;
+    threadDirectoryRequestId.current = requestId;
+    setThreadDirectoryState("loading");
+    try {
+      const payload = await apiRequest<unknown>(
+        "/api/v1/conversation-threads",
+        { signal },
+      );
+      if (
+        !Array.isArray(payload) ||
+        !payload.every(isConversationThreadSummary)
+      ) {
+        throw new Error("Unexpected initiative directory response.");
+      }
+      if (signal?.aborted || threadDirectoryRequestId.current !== requestId)
+        return;
+      setThreads(payload);
+      setThreadDirectoryState("available");
+    } catch (requestError: unknown) {
+      if (
+        requestError instanceof DOMException &&
+        requestError.name === "AbortError"
+      ) {
+        return;
+      }
+      if (signal?.aborted || threadDirectoryRequestId.current !== requestId)
+        return;
+      setThreads([]);
+      setThreadDirectoryState("unavailable");
+    }
+  }, []);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
+      void loadThreadDirectory(signal);
       try {
-        const [memoryPayload, threadsPayload] = await Promise.all([
-          apiRequest<unknown>(
-            `/api/v1/interactions/${interactionId}/conversation-memory`,
-            { signal },
-          ),
-          apiRequest<unknown>("/api/v1/conversation-threads", { signal }),
-        ]);
-        if (
-          !isConversationMemoryResponse(memoryPayload) ||
-          !Array.isArray(threadsPayload) ||
-          !threadsPayload.every(isConversationThreadSummary)
-        ) {
+        const memoryPayload = await apiRequest<unknown>(
+          `/api/v1/interactions/${interactionId}/conversation-memory`,
+          { signal },
+        );
+        if (!isConversationMemoryResponse(memoryPayload)) {
           setMemory(null);
-          setThreads([]);
           throw new Error(
             "Conversation memory returned an unexpected response. Reload this section to try again.",
           );
         }
         const nextMemory = memoryPayload;
-        const nextThreads = threadsPayload;
         setMemory(nextMemory);
-        setThreads(nextThreads);
         setSelectedThreadId(nextMemory.assignment.thread?.id ?? "");
       } catch (requestError: unknown) {
         if (
@@ -229,7 +257,7 @@ export function ConversationMemory({
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [interactionId],
+    [interactionId, loadThreadDirectory],
   );
 
   useEffect(() => {
@@ -363,38 +391,65 @@ export function ConversationMemory({
             <p className="mt-1 text-sm leading-6 text-slate-600">
               {memory.safeMessage}
             </p>
-            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <label className="text-sm font-semibold text-slate-800">
-                Choose an existing initiative
-                <select
-                  className="form-control mt-2"
-                  value={selectedThreadId}
-                  disabled={saving}
-                  onChange={(event) => setSelectedThreadId(event.target.value)}
-                >
-                  <option value="">Not grouped</option>
-                  {threads
-                    .filter((thread) => thread.status === "active")
-                    .map((thread) => (
-                      <option key={thread.id} value={thread.id}>
-                        {thread.name} · {thread.interactionCount} conversation
-                        {thread.interactionCount === 1 ? "" : "s"}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="secondary-button self-end"
-                disabled={
-                  saving ||
-                  selectedThreadId === (memory.assignment.thread?.id ?? "")
-                }
-                onClick={() => void assign(selectedThreadId || null)}
+            {threadDirectoryState === "loading" ? (
+              <p className="mt-4 text-sm text-slate-600" role="status">
+                Loading initiative choices…
+              </p>
+            ) : null}
+            {threadDirectoryState === "unavailable" ? (
+              <div
+                className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+                role="status"
               >
-                {saving ? "Saving…" : "Confirm grouping"}
-              </button>
-            </div>
+                <p>
+                  Initiative choices are temporarily unavailable. Conversation
+                  memory remains available.
+                </p>
+                <button
+                  type="button"
+                  className="secondary-button mt-3"
+                  onClick={() => void loadThreadDirectory()}
+                >
+                  Retry initiative choices
+                </button>
+              </div>
+            ) : null}
+            {threadDirectoryState === "available" ? (
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <label className="text-sm font-semibold text-slate-800">
+                  Choose an existing initiative
+                  <select
+                    className="form-control mt-2"
+                    value={selectedThreadId}
+                    disabled={saving}
+                    onChange={(event) =>
+                      setSelectedThreadId(event.target.value)
+                    }
+                  >
+                    <option value="">Not grouped</option>
+                    {threads
+                      .filter((thread) => thread.status === "active")
+                      .map((thread) => (
+                        <option key={thread.id} value={thread.id}>
+                          {thread.name} · {thread.interactionCount} conversation
+                          {thread.interactionCount === 1 ? "" : "s"}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button self-end"
+                  disabled={
+                    saving ||
+                    selectedThreadId === (memory.assignment.thread?.id ?? "")
+                  }
+                  onClick={() => void assign(selectedThreadId || null)}
+                >
+                  {saving ? "Saving…" : "Confirm grouping"}
+                </button>
+              </div>
+            ) : null}
             {memory.suggestions.length ? (
               <div className="mt-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
