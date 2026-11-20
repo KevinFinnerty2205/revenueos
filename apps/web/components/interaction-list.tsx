@@ -52,33 +52,24 @@ export function InteractionList() {
       interactionType,
       interactionStatus,
     );
-    Promise.all([
-      apiRequest<EntityPage<Interaction>>(
-        "/api/v1/interactions?" + parameters.toString(),
-        { signal: controller.signal },
-      ),
+    const interactionRequest = apiRequest<EntityPage<Interaction>>(
+      "/api/v1/interactions?" + parameters.toString(),
+      { signal: controller.signal },
+    );
+    const contextPageRequests = Promise.allSettled([
       apiRequest<EntityPage<Company>>("/api/v1/companies?pageSize=100", {
         signal: controller.signal,
       }),
       apiRequest<EntityPage<Contact>>("/api/v1/contacts?pageSize=100", {
         signal: controller.signal,
       }),
-    ])
-      .then(async ([interactions, companyPage, contactPage]) => {
-        const context = await hydrateLinkedContext(
-          interactions.items,
-          companyPage.items,
-          contactPage.items,
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setResult(interactions);
-        setCompanies(context.companies);
-        setContacts(context.contacts);
-        setLoadedAt(Date.now());
-        setLoadMoreError(null);
-      })
-      .catch((requestError: unknown) => {
+    ]);
+
+    void (async () => {
+      let interactions: EntityPage<Interaction>;
+      try {
+        interactions = await interactionRequest;
+      } catch (requestError: unknown) {
         if (
           requestError instanceof DOMException &&
           requestError.name === "AbortError"
@@ -90,10 +81,44 @@ export function InteractionList() {
             ? requestError.message
             : "Conversations could not be loaded.",
         );
-      })
-      .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
-      });
+        return;
+      }
+
+      if (controller.signal.aborted) return;
+      setResult(interactions);
+      setCompanies([]);
+      setContacts([]);
+      setLoadedAt(Date.now());
+      setLoadMoreError(null);
+      setError(null);
+      setLoading(false);
+
+      try {
+        const [companyPageResult, contactPageResult] =
+          await contextPageRequests;
+        if (controller.signal.aborted) return;
+        const initialCompanies =
+          companyPageResult.status === "fulfilled"
+            ? companyPageResult.value.items
+            : [];
+        const initialContacts =
+          contactPageResult.status === "fulfilled"
+            ? contactPageResult.value.items
+            : [];
+        const context = await hydrateLinkedContext(
+          interactions.items,
+          initialCompanies,
+          initialContacts,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setCompanies((current) => mergeById(current, context.companies));
+        setContacts((current) => mergeById(current, context.contacts));
+      } catch {
+        // Context labels are optional; the generic labels remain usable.
+      }
+    })();
     return () => controller.abort();
   }, [interactionStatus, interactionType, retryKey, search]);
 
@@ -153,6 +178,7 @@ export function InteractionList() {
     if (!result || result.page >= result.pages || loadingMore) return;
     setLoadingMore(true);
     setLoadMoreError(null);
+    let nextPage: EntityPage<Interaction>;
     try {
       const parameters = interactionParameters(
         search,
@@ -160,16 +186,9 @@ export function InteractionList() {
         interactionStatus,
         result.page + 1,
       );
-      const nextPage = await apiRequest<EntityPage<Interaction>>(
+      nextPage = await apiRequest<EntityPage<Interaction>>(
         "/api/v1/interactions?" + parameters.toString(),
       );
-      const context = await hydrateLinkedContext(
-        nextPage.items,
-        companies,
-        contacts,
-      );
-      setCompanies(context.companies);
-      setContacts(context.contacts);
       setLoadedAt(Date.now());
       setResult((current) =>
         current
@@ -185,6 +204,20 @@ export function InteractionList() {
           ? requestError.message
           : "More conversations could not be loaded.",
       );
+      setLoadingMore(false);
+      return;
+    }
+
+    try {
+      const context = await hydrateLinkedContext(
+        nextPage.items,
+        companies,
+        contacts,
+      );
+      setCompanies((current) => mergeById(current, context.companies));
+      setContacts((current) => mergeById(current, context.contacts));
+    } catch {
+      // Context labels are optional; the appended conversations remain usable.
     } finally {
       setLoadingMore(false);
     }
@@ -503,24 +536,40 @@ async function hydrateLinkedContext(
         .filter((value): value is string => Boolean(value)),
     ),
   ].filter((contactId) => !knownContactIds.has(contactId));
-  const [linkedCompanies, linkedContacts] = await Promise.all([
-    Promise.all(
-      missingCompanyIds.map((companyId) =>
-        apiRequest<Company>(
+  const [companyResults, contactResults] = await Promise.all([
+    Promise.allSettled(
+      missingCompanyIds.map(async (companyId) => ({
+        requestedId: companyId,
+        value: await apiRequest<Company>(
           "/api/v1/companies/" + encodeURIComponent(companyId),
           signal ? { signal } : undefined,
         ),
-      ),
+      })),
     ),
-    Promise.all(
-      missingContactIds.map((contactId) =>
-        apiRequest<Contact>(
+    Promise.allSettled(
+      missingContactIds.map(async (contactId) => ({
+        requestedId: contactId,
+        value: await apiRequest<Contact>(
           "/api/v1/contacts/" + encodeURIComponent(contactId),
           signal ? { signal } : undefined,
         ),
-      ),
+      })),
     ),
   ]);
+  const linkedCompanies = companyResults.flatMap((result) =>
+    result.status === "fulfilled" &&
+    result.value.value.id === result.value.requestedId &&
+    result.value.value.archivedAt === null
+      ? [result.value.value]
+      : [],
+  );
+  const linkedContacts = contactResults.flatMap((result) =>
+    result.status === "fulfilled" &&
+    result.value.value.id === result.value.requestedId &&
+    result.value.value.archivedAt === null
+      ? [result.value.value]
+      : [],
+  );
   return {
     companies: mergeById(companies, linkedCompanies),
     contacts: mergeById(contacts, linkedContacts),
