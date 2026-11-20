@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Interaction } from "@revenueos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InteractionDetail } from "@/components/interaction-detail";
 import { PostConversationDraftStatus } from "@/components/conversation-notes-review";
@@ -95,11 +96,12 @@ function jsonResponse(body: object, status = 200): Response {
   });
 }
 
-const interaction = {
+const interaction: Interaction = {
   id: "interaction-1",
   organisationId: "organisation-1",
   companyId: null,
   opportunityId: null,
+  contactId: null,
   meetingId: "meeting-1",
   interactionType: "online_meeting",
   lifecycleStatus: "planned",
@@ -110,7 +112,15 @@ const interaction = {
   actualEndAt: null,
   timezone: "Australia/Sydney",
   creationOrigin: "meeting_compatibility",
+  callDirection: null,
+  callOutcome: null,
+  durationSeconds: null,
+  captureMethods: [],
+  intelligenceState: "not_ready",
+  recordingAvailable: false,
   createdByUserId: "user-1",
+  briefState: "not_generated",
+  briefGeneratedAt: null,
   createdAt: "2026-07-26T00:00:00Z",
   updatedAt: "2026-07-26T00:00:00Z",
 };
@@ -199,27 +209,128 @@ describe("InteractionDetail", () => {
     );
   });
 
-  it("renders a safe error state", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() =>
-        Promise.resolve(
-          jsonResponse(
-            {
-              code: "interaction_not_found",
-              message: "Interaction not found.",
-              requestId: "request-3",
-            },
-            404,
-          ),
-        ),
-      ),
-    );
+  it("keeps the standalone detail failure retryable", async () => {
+    let detailAttempts = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).endsWith("/api/v1/interactions/interaction-1")) {
+        detailAttempts += 1;
+        if (detailAttempts === 1) {
+          return Promise.resolve(
+            jsonResponse(
+              {
+                code: "interaction_not_found",
+                message: "Interaction not found.",
+                requestId: "request-3",
+              },
+              404,
+            ),
+          );
+        }
+      }
+      return Promise.resolve(jsonResponse(interaction));
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
-    render(<InteractionDetail interactionId="missing" />);
+    render(<InteractionDetail interactionId="interaction-1" />);
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Interaction not found.",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByRole("heading", { name: "Acme discovery" }),
+    ).toBeVisible();
+    expect(detailAttempts).toBe(2);
+  });
+
+  it("uses a matching seeded interaction without repeating the detail request", async () => {
+    conversationWorkspaceMock.use.mockReturnValue(
+      workspaceController({
+        workspace: generatedWorkspace,
+        values: {
+          liveNotes: generatedWorkspace.liveNotes,
+          enhancedNotes: generatedWorkspace.enhancedNotes,
+          followUpDraft: generatedWorkspace.followUpDraft,
+          followUpReviewed: false,
+        },
+      }),
+    );
+    const fetchMock = vi.fn((_input: RequestInfo | URL) =>
+      Promise.resolve(
+        jsonResponse(
+          {
+            code: "interaction_unavailable",
+            message: "Conversation temporarily unavailable.",
+            requestId: "request-seeded",
+          },
+          503,
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <InteractionDetail
+        interactionId="interaction-1"
+        initialInteraction={{
+          ...interaction,
+          lifecycleStatus: "completed",
+          actualEndAt: "2026-08-01T01:00:00Z",
+        }}
+        reviewOnly
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation notes" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Your rough notes (original)")).toHaveValue(
+      "Original live notes",
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/interactions/interaction-1"),
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a seed belonging to another interaction", async () => {
+    const completedInteraction: Interaction = {
+      ...interaction,
+      lifecycleStatus: "completed",
+      actualEndAt: "2026-08-01T01:00:00Z",
+    };
+    conversationWorkspaceMock.use.mockReturnValue(
+      workspaceController({
+        workspace: generatedWorkspace,
+        values: {
+          liveNotes: generatedWorkspace.liveNotes,
+          enhancedNotes: generatedWorkspace.enhancedNotes,
+          followUpDraft: generatedWorkspace.followUpDraft,
+          followUpReviewed: false,
+        },
+      }),
+    );
+    const fetchMock = vi.fn((_input: RequestInfo | URL) =>
+      Promise.resolve(jsonResponse(completedInteraction)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <InteractionDetail
+        interactionId="interaction-1"
+        initialInteraction={{ ...completedInteraction, id: "interaction-2" }}
+        reviewOnly
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation notes" }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/interactions/interaction-1"),
+      ),
+    ).toBe(true);
   });
 
   it("starts and ends a normal phone-system call without offering browser call recording", async () => {

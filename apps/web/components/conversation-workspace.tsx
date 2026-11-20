@@ -187,8 +187,9 @@ export function ConversationWorkspace({
       {opened.has("review") ? (
         <div hidden={view !== "review"}>
           <InteractionDetail
-            key={interaction.lifecycleStatus}
+            key={`${interaction.id}:${interaction.lifecycleStatus}`}
             interactionId={interaction.id}
+            initialInteraction={interaction}
             reviewOnly
             onOpenCapture={() => select("capture")}
           />
