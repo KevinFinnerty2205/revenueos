@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from revenueos.contracts import APIModel
+from revenueos.domain import InteractionLifecycleStatus, InteractionType
 from revenueos.interaction_contracts import normalise_api_datetime
 from revenueos.methodology_contracts import (
     MethodologyDefinitionSummary,
@@ -101,6 +102,33 @@ class ConversationFrameworkCoverage(APIModel):
     source_conversations: tuple[ConversationSourceContext, ...]
 
 
+class ConversationInitiativeHistoryItem(APIModel):
+    interaction_id: UUID
+    title: str
+    interaction_type: InteractionType
+    lifecycle_status: InteractionLifecycleStatus
+    occurred_at: datetime
+
+    @field_validator("occurred_at", mode="before")
+    @classmethod
+    def occurred_at_is_utc(cls, value: datetime) -> datetime:
+        return normalise_api_datetime(value)
+
+
+class ConversationInitiativeHistory(APIModel):
+    items: tuple[ConversationInitiativeHistoryItem, ...] = Field(max_length=20)
+    total: int = Field(ge=0)
+    truncated: bool
+
+    @model_validator(mode="after")
+    def total_and_truncation_match_items(self) -> ConversationInitiativeHistory:
+        if self.total < len(self.items):
+            raise ValueError("total cannot be smaller than the returned initiative history")
+        if self.truncated != (self.total > len(self.items)):
+            raise ValueError("truncated must reflect whether earlier initiative history was omitted")
+        return self
+
+
 class ConversationMemoryResponse(APIModel):
     state: Literal["not_configured", "current"]
     safe_message: str
@@ -109,6 +137,7 @@ class ConversationMemoryResponse(APIModel):
     suggestions: tuple[ConversationThreadSuggestion, ...]
     current_conversation: ConversationFrameworkCoverage | None
     confirmed_thread: ConversationFrameworkCoverage | None
+    confirmed_initiative_history: ConversationInitiativeHistory
     generated_at: datetime
 
     @field_validator("generated_at", mode="before")

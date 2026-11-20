@@ -49,6 +49,20 @@ test("account history opens one CRM-independent conversation workspace and prese
     importedFromBrowserAt: null,
     updatedAt: null,
   };
+  const confirmedThread = {
+    id: "thread-expansion-proof",
+    organisationId: "organisation-proof",
+    companyId: "northstar-proof",
+    name: "Northstar expansion",
+    status: "active",
+    interactionCount: 2,
+    lastInteractionAt: "2026-11-01T02:10:00Z",
+    lockVersion: 1,
+    createdByUserId: "owner-proof",
+    updatedByUserId: "owner-proof",
+    createdAt: "2026-08-15T02:00:00Z",
+    updatedAt: "2026-11-01T02:10:00Z",
+  };
 
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
@@ -85,6 +99,48 @@ test("account history opens one CRM-independent conversation workspace and prese
       await route.fulfill({
         json: { items: [], total: 0, page: 1, pageSize: 100, pages: 0 },
       });
+      return;
+    }
+    if (
+      path === "/api/v1/interactions/conversation-proof/conversation-memory"
+    ) {
+      await route.fulfill({
+        json: {
+          state: "not_configured",
+          safeMessage:
+            "No framework is selected. Earlier conversations in the confirmed initiative remain available.",
+          definition: null,
+          assignment: {
+            interactionId: "conversation-proof",
+            thread: confirmedThread,
+            lockVersion: 1,
+            confirmationKind: "user_confirmed",
+            confirmedByUserId: "owner-proof",
+            confirmedAt: "2026-11-01T02:10:00Z",
+          },
+          suggestions: [],
+          currentConversation: null,
+          confirmedThread: null,
+          confirmedInitiativeHistory: {
+            items: [
+              {
+                interactionId: "conversation-earlier-proof",
+                title: "Northstar rollout workshop",
+                interactionType: "workshop",
+                lifecycleStatus: "completed",
+                occurredAt: "2026-09-18T02:00:00Z",
+              },
+            ],
+            total: 1,
+            truncated: false,
+          },
+          generatedAt: "2026-11-01T02:10:00Z",
+        },
+      });
+      return;
+    }
+    if (path === "/api/v1/conversation-threads") {
+      await route.fulfill({ json: [confirmedThread] });
       return;
     }
     if (path === "/api/v1/interactions") {
@@ -224,7 +280,36 @@ test("account history opens one CRM-independent conversation workspace and prese
   ).toHaveCount(1);
   expect(requests.some((path) => path.includes("/opportunities"))).toBe(false);
 
+  await page
+    .getByRole("button", { name: "Relationship history", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Earlier conversations in this initiative",
+    }),
+  ).toBeVisible();
+  const earlierConversation = page.getByRole("link", {
+    name: "Northstar rollout workshop",
+  });
+  await expect(earlierConversation).toHaveAttribute(
+    "href",
+    "/conversations/conversation-earlier-proof",
+  );
+  await page.getByPlaceholder("For example, APAC renewal programme").focus();
+  await page.keyboard.press("Tab");
+  await expect(earlierConversation).toBeFocused();
+  await expect(page.getByRole("heading", { name: /Cumulative/ })).toHaveCount(
+    0,
+  );
+  if (process.env.CAPTURE_CONVERSATION_WORKSPACE_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/initiative-conversation-history.png",
+      fullPage: true,
+    });
+  }
+
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(earlierConversation).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Notes & capture", exact: true }),
   ).toBeVisible();

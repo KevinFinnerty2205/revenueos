@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.config import Settings
 from revenueos.conversation_thread_contracts import (
     ConversationFrameworkCoverage,
+    ConversationInitiativeHistory,
+    ConversationInitiativeHistoryItem,
     ConversationMemoryResponse,
     ConversationSourceContext,
     ConversationThreadAssignmentResponse,
@@ -28,6 +30,7 @@ from revenueos.conversation_thread_repositories import (
     ConversationThreadRepository,
 )
 from revenueos.database import set_tenant_database_context
+from revenueos.domain import InteractionLifecycleStatus, InteractionType
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_repositories import InteractionRepository
 from revenueos.methodology_contracts import (
@@ -47,6 +50,8 @@ from revenueos.models import (
     Interaction,
 )
 from revenueos.tenant import TenantContext
+
+CONFIRMED_INITIATIVE_HISTORY_LIMIT = 20
 
 
 class ConversationThreadService:
@@ -290,11 +295,48 @@ class ConversationThreadService:
         selection = await self.methodology.current_selection()
         now = datetime.now(UTC)
         assignment = self._assignment_response(interaction_id, assignment_record)
+        confirmed_initiative_history = ConversationInitiativeHistory(
+            items=(),
+            total=0,
+            truncated=False,
+        )
+        cutoff_at = (
+            interaction.actual_end_at
+            or interaction.actual_start_at
+            or interaction.scheduled_start_at
+            or interaction.created_at
+        )
+        # SQLite returns naive values for timezone-aware SQL columns; storage is UTC.
+        cutoff_at = cutoff_at.replace(tzinfo=UTC) if cutoff_at.tzinfo is None else cutoff_at.astimezone(UTC)
+        through_at = min(cutoff_at, now)
+        if assignment_record is not None and assignment_record.thread is not None:
+            history_result = await self.repository.thread_interaction_history(
+                self.tenant.organisation_id,
+                assignment_record.thread.thread.id,
+                current_interaction_id=interaction_id,
+                through_at=through_at,
+                limit=CONFIRMED_INITIATIVE_HISTORY_LIMIT,
+            )
+            confirmed_initiative_history = ConversationInitiativeHistory(
+                items=tuple(
+                    ConversationInitiativeHistoryItem(
+                        interaction_id=item.interaction_id,
+                        title=item.title,
+                        interaction_type=cast(InteractionType, item.interaction_type),
+                        lifecycle_status=cast(InteractionLifecycleStatus, item.lifecycle_status),
+                        occurred_at=item.occurred_at,
+                    )
+                    for item in history_result.items
+                ),
+                total=history_result.total,
+                truncated=history_result.truncated,
+            )
         if selection.selection == "none" or selection.effective_definition is None:
             return ConversationMemoryResponse(
                 state="not_configured",
                 safe_message=(
-                    "No framework is selected. The confirmed initiative is still preserved without CRM data."
+                    "No framework is selected. Earlier conversations from the confirmed initiative remain "
+                    "available without CRM data."
                     if assignment.thread is not None
                     else "No framework is selected. Confirm an initiative when related conversations should share memory."
                 ),
@@ -303,6 +345,7 @@ class ConversationThreadService:
                 suggestions=tuple(suggestions),
                 current_conversation=None,
                 confirmed_thread=None,
+                confirmed_initiative_history=confirmed_initiative_history,
                 generated_at=now,
             )
         current_records = await self.repository.current_snapshot_records(
@@ -312,19 +355,16 @@ class ConversationThreadService:
         current = self._coverage(selection.effective_definition.fields, current_records, now)
         cumulative: ConversationFrameworkCoverage | None = None
         if assignment_record is not None and assignment_record.thread is not None:
-            before_at = (
-                interaction.actual_end_at or interaction.actual_start_at or interaction.scheduled_start_at or now
-            )
             thread_records = await self.repository.thread_snapshot_records(
                 self.tenant.organisation_id,
                 assignment_record.thread.thread.id,
-                before_at=before_at,
+                before_at=through_at,
             )
             cumulative = self._coverage(selection.effective_definition.fields, thread_records, now)
         return ConversationMemoryResponse(
             state="current",
             safe_message=(
-                "Current-conversation coverage is separate from the user-confirmed initiative history."
+                "Earlier conversation links and framework coverage remain separate in the user-confirmed initiative."
                 if assignment_record is not None and assignment_record.thread is not None
                 else "Current-conversation coverage is available. Confirm or create an initiative before cumulative history is used."
             ),
@@ -333,6 +373,7 @@ class ConversationThreadService:
             suggestions=tuple(suggestions),
             current_conversation=current,
             confirmed_thread=cumulative,
+            confirmed_initiative_history=confirmed_initiative_history,
             generated_at=now,
         )
 

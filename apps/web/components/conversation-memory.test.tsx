@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationMemory } from "@/components/conversation-memory";
 
@@ -83,6 +89,27 @@ const coverage = {
   ],
 } as const;
 
+const initiativeHistory = {
+  items: [
+    {
+      interactionId: "interaction-march",
+      title: "March expansion review",
+      interactionType: "online_meeting",
+      lifecycleStatus: "completed",
+      occurredAt: "2026-03-18T02:00:00Z",
+    },
+    {
+      interactionId: "interaction-january",
+      title: "January expansion discovery",
+      interactionType: "phone_call",
+      lifecycleStatus: "completed",
+      occurredAt: "2026-01-15T02:00:00Z",
+    },
+  ],
+  total: 2,
+  truncated: false,
+} as const;
+
 function memory(assigned: boolean) {
   return {
     state: "current",
@@ -109,6 +136,9 @@ function memory(assigned: boolean) {
         ],
     currentConversation: coverage,
     confirmedThread: assigned ? coverage : null,
+    confirmedInitiativeHistory: assigned
+      ? initiativeHistory
+      : { items: [], total: 0, truncated: false },
     generatedAt: "2026-10-31T00:00:00Z",
   };
 }
@@ -179,10 +209,24 @@ describe("ConversationMemory", () => {
 
     expect(await screen.findByText("Not grouped")).toBeVisible();
     expect(
-      await screen.findByText(/will not use a company-wide fallback/i),
+      (await screen.findAllByText(/will not use a company-wide fallback/i))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", {
+        name: "Earlier conversations in this initiative",
+      }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("list", {
+        name: "Earlier conversations in this initiative",
+      }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Timing"));
     expect(screen.getByText("April expansion follow-up")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "April expansion follow-up" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
         name: "Expansion · Same company, 1 participant in common",
@@ -241,5 +285,158 @@ describe("ConversationMemory", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("shows source-linked initiative history without a selected framework", async () => {
+    const noFrameworkMemory = {
+      ...memory(true),
+      state: "not_configured",
+      safeMessage:
+        "No framework is selected. Earlier conversations in the confirmed initiative remain available.",
+      definition: null,
+      currentConversation: null,
+      confirmedThread: null,
+      confirmedInitiativeHistory: {
+        ...initiativeHistory,
+        total: 23,
+        truncated: true,
+      },
+    };
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/conversation-memory"))
+        return jsonResponse(noFrameworkMemory);
+      if (url.endsWith("/conversation-threads")) return jsonResponse([thread]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <ConversationMemory
+        interactionId="interaction-1"
+        companyId="company-1"
+      />,
+    );
+
+    const historyList = await screen.findByRole("list", {
+      name: "Earlier conversations in this initiative",
+    });
+    const historyLinks = within(historyList).getAllByRole("link");
+    expect(historyLinks.map((link) => link.textContent)).toEqual([
+      "March expansion review",
+      "January expansion discovery",
+    ]);
+    expect(historyLinks[0]).toHaveAttribute(
+      "href",
+      "/conversations/interaction-march",
+    );
+    expect(historyLinks[1]).toHaveAttribute(
+      "href",
+      "/conversations/interaction-january",
+    );
+    expect(
+      screen.getByText(
+        /showing the 2 most recent of 23 earlier conversations/i,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "This conversation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /Cumulative/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the assigned-empty state without falling back to company history", async () => {
+    const assignedEmpty = {
+      ...memory(true),
+      confirmedInitiativeHistory: {
+        items: [],
+        total: 0,
+        truncated: false,
+      },
+    };
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/conversation-memory"))
+        return jsonResponse(assignedEmpty);
+      if (url.endsWith("/conversation-threads")) return jsonResponse([thread]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <ConversationMemory
+        interactionId="interaction-1"
+        companyId="company-1"
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        /no earlier conversations are available in this confirmed initiative/i,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("list", {
+        name: "Earlier conversations in this initiative",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "an unknown interaction type",
+      {
+        ...initiativeHistory,
+        items: [
+          { ...initiativeHistory.items[0], interactionType: "video_call" },
+        ],
+        total: 1,
+      },
+    ],
+    [
+      "an unknown lifecycle status",
+      {
+        ...initiativeHistory,
+        items: [{ ...initiativeHistory.items[0], lifecycleStatus: "recorded" }],
+        total: 1,
+      },
+    ],
+    [
+      "a timestamp without time or timezone",
+      {
+        ...initiativeHistory,
+        items: [{ ...initiativeHistory.items[0], occurredAt: "2026-03-18" }],
+        total: 1,
+      },
+    ],
+    [
+      "inconsistent total and truncation metadata",
+      { ...initiativeHistory, total: 3, truncated: false },
+    ],
+  ])("fails closed when initiative history contains %s", async (_, history) => {
+    const malformed = {
+      ...memory(true),
+      confirmedInitiativeHistory: history,
+    };
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/conversation-memory")) return jsonResponse(malformed);
+      if (url.endsWith("/conversation-threads")) return jsonResponse([thread]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <ConversationMemory
+        interactionId="interaction-1"
+        companyId="company-1"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/conversation memory returned an unexpected/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "March expansion review" }),
+    ).not.toBeInTheDocument();
   });
 });
