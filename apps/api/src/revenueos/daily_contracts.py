@@ -99,6 +99,21 @@ class DailyActionSection(APIModel):
     truncated: bool
 
 
+class DailyPrivateFollowUp(APIModel):
+    interaction_id: UUID
+    interaction_title: SafeText
+    company_name: SafeText | None
+    updated_at: datetime
+    cta_label: Literal["Review"] = "Review"
+    href: str = Field(min_length=1, max_length=500, pattern=r"^/")
+
+
+class DailyPrivateFollowUpSection(APIModel):
+    attention_count: int = Field(ge=0)
+    items: list[DailyPrivateFollowUp] = Field(max_length=5)
+    truncated: bool
+
+
 class DailyDealReason(APIModel):
     code: DailyDealReasonCode
     text: SafeText
@@ -153,6 +168,7 @@ class DailyRecommendation(APIModel):
 class DailyAvailability(APIModel):
     interactions: bool
     actions: bool
+    private_follow_ups: bool
     deal_attention: bool
     pipeline: bool
     recommendations: bool
@@ -171,6 +187,7 @@ class DailyResponse(APIModel):
     next_interaction: DailyInteraction | None
     today_interactions: list[DailyInteraction] = Field(max_length=5)
     total_today_interactions: int = Field(ge=0)
+    private_follow_ups: DailyPrivateFollowUpSection
     actions: DailyActionSection
     deal_attention: DailyDealSection
     pipeline: DailyPipelineSummary

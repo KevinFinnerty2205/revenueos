@@ -185,4 +185,20 @@ describe("ConversationWorkspace", () => {
     render(<ConversationWorkspace interactionId="call-1" />);
     expect(await screen.findByText("Prepared questions")).toBeVisible();
   });
+
+  it("opens a planned conversation in review for a follow-up deep link", async () => {
+    window.history.replaceState({}, "", "/conversations/call-1#follow-up");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(response("planned"))),
+    );
+
+    render(<ConversationWorkspace interactionId="call-1" />);
+
+    expect(await screen.findByText("Conversation review")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Review & follow-up" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Prepared questions")).not.toBeInTheDocument();
+  });
 });

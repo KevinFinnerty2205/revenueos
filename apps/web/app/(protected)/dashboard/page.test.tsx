@@ -4,7 +4,7 @@ import type {
   EntityPage,
   Interaction,
 } from "@revenueos/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "@/app/(protected)/dashboard/page";
 import { apiRequest } from "@/lib/api";
@@ -64,6 +64,20 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
         },
       ],
     },
+    privateFollowUps: {
+      attentionCount: 1,
+      items: [
+        {
+          interactionId: "interaction-private-follow-up",
+          interactionTitle: "Founder debrief follow-up",
+          companyName: null,
+          updatedAt: "2026-08-16T02:00:00Z",
+          ctaLabel: "Review",
+          href: "/conversations/interaction-private-follow-up?view=review#follow-up",
+        },
+      ],
+      truncated: false,
+    },
     dealAttention: { attentionCount: 0, items: [], truncated: false },
     pipeline: {
       state: "empty",
@@ -77,6 +91,7 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
     availability: {
       interactions: true,
       actions: true,
+      privateFollowUps: true,
       dealAttention: true,
       pipeline: true,
       recommendations: true,
@@ -191,10 +206,23 @@ describe("conversation-first Home", () => {
     expect(
       screen.getByRole("heading", { name: "Follow-ups needing attention" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute(
-      "href",
-      "/conversations/interaction-2#follow-up",
+    const followUps = screen.getByRole("list", {
+      name: "Follow-ups needing attention",
+    });
+    const followUpRows = within(followUps).getAllByRole("listitem");
+    expect(followUpRows[0]).toHaveTextContent("Founder debrief follow-up");
+    expect(followUpRows[1]).toHaveTextContent(
+      "Send the agreed security summary",
     );
+    expect(
+      within(followUps).getByRole("link", { name: "Review private draft" }),
+    ).toHaveAttribute(
+      "href",
+      "/conversations/interaction-private-follow-up?view=review#follow-up",
+    );
+    expect(
+      within(followUps).getByRole("link", { name: "Review" }),
+    ).toHaveAttribute("href", "/conversations/interaction-2#follow-up");
     expect(
       screen.getByRole("link", { name: /Founder coffee notes/ }),
     ).toHaveAttribute("href", "/conversations/interaction-2");
@@ -215,6 +243,33 @@ describe("conversation-first Home", () => {
     );
   });
 
+  it("does not claim an empty queue when private follow-ups are unavailable", async () => {
+    mockHome(
+      dailyFixture({
+        privateFollowUps: {
+          attentionCount: 0,
+          items: [],
+          truncated: false,
+        },
+        availability: {
+          ...dailyFixture().availability,
+          privateFollowUps: false,
+        },
+      }),
+    );
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByText(
+        "Private follow-up drafts are temporarily unavailable. Shared follow-ups are still shown when available.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("Send the agreed security summary")).toBeVisible();
+    expect(
+      screen.queryByText("No follow-ups need attention right now."),
+    ).not.toBeInTheDocument();
+  });
+
   it("starts with knowledge or a conversation instead of CRM setup", async () => {
     mockHome(
       dailyFixture({
@@ -227,6 +282,11 @@ describe("conversation-first Home", () => {
           dueTodayCount: 0,
           pendingReviewCount: 0,
           approvedOpenCount: 0,
+          items: [],
+          truncated: false,
+        },
+        privateFollowUps: {
+          attentionCount: 0,
           items: [],
           truncated: false,
         },
@@ -244,5 +304,8 @@ describe("conversation-first Home", () => {
       screen.getByRole("link", { name: "Set up company knowledge" }),
     ).toHaveAttribute("href", "/knowledge");
     expect(screen.queryByText(/add an opportunity/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No follow-ups need attention right now."),
+    ).toBeVisible();
   });
 });

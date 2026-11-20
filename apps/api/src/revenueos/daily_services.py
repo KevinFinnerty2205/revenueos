@@ -28,6 +28,8 @@ from revenueos.daily_contracts import (
     DailyPipelineCurrency,
     DailyPipelineSummary,
     DailyPriority,
+    DailyPrivateFollowUp,
+    DailyPrivateFollowUpSection,
     DailyRecommendation,
     DailyResponse,
     DeliveryPreferenceResponse,
@@ -39,6 +41,7 @@ from revenueos.daily_repositories import (
     DailyInteractionRecord,
     DailyOpportunityRecord,
     DailyPipelineRecords,
+    DailyPrivateFollowUpRecords,
     DailyRecommendationRecord,
     DailyRepository,
 )
@@ -786,6 +789,8 @@ class RevenueOSDailyService:
             )
         if daily.actions.attention_count:
             lines.append(f"Follow-up: {daily.actions.attention_count} item(s) need attention.")
+        if daily.private_follow_ups.attention_count:
+            lines.append(f"Private follow-up: {daily.private_follow_ups.attention_count} draft(s) need review.")
         if daily.deal_attention.attention_count:
             lines.append(f"Deal attention: {daily.deal_attention.attention_count} opportunity item(s).")
         if daily.caught_up:
@@ -865,6 +870,13 @@ class RevenueOSDailyService:
             if self.settings.feature_action_layer_enabled
             else ([], DailyActionCounts(0, 0, 0, 0, 0))
         )
+        private_follow_up_source = await self._safe_source(
+            "private_follow_ups",
+            lambda: self.repository.private_follow_ups(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+            ),
+        )
         opportunity_records = await self._safe_source(
             "opportunities",
             lambda: self.repository.opportunities(self.tenant.organisation_id, self.tenant.user_id),
@@ -923,6 +935,7 @@ class RevenueOSDailyService:
         else:
             action_records, action_counts = action_source
         actions = self._actions(action_records, action_counts, generated_at, start_at, end_at)
+        private_follow_ups = self._private_follow_ups(private_follow_up_source)
         surfaced_action_opportunities = {item.opportunity_id for item in actions.items}
         deal_attention = self._deal_attention(
             opportunity_records or [],
@@ -938,6 +951,7 @@ class RevenueOSDailyService:
         availability = DailyAvailability(
             interactions=interaction_records is not None,
             actions=action_source is not None and self.settings.feature_action_layer_enabled,
+            private_follow_ups=private_follow_up_source is not None,
             deal_attention=opportunity_records is not None,
             pipeline=pipeline_records is not None,
             recommendations=recommendation_rows is not None and self.settings.feature_revenue_brain_enabled,
@@ -948,6 +962,7 @@ class RevenueOSDailyService:
             (
                 interaction_records is None,
                 self.settings.feature_action_layer_enabled and action_source is None,
+                private_follow_up_source is None,
                 opportunity_records is None,
                 pipeline_records is None,
                 self.settings.feature_sales_methodology_enabled and projection_rows is None,
@@ -965,6 +980,7 @@ class RevenueOSDailyService:
         caught_up = (
             not source_failure
             and top_priority is None
+            and private_follow_ups.attention_count == 0
             and actions.attention_count == 0
             and deal_attention.attention_count == 0
             and not today_interactions
@@ -978,6 +994,7 @@ class RevenueOSDailyService:
             next_interaction=next_interaction,
             today_interactions=today_interactions,
             total_today_interactions=sum(item.starts_at < end_at for item in interactions),
+            private_follow_ups=private_follow_ups,
             actions=actions,
             deal_attention=deal_attention,
             pipeline=pipeline,
@@ -996,6 +1013,8 @@ class RevenueOSDailyService:
                 "timezone": timezone.key,
                 "top_priority_type": top_priority.kind if top_priority is not None else None,
                 "today_interaction_count": response.total_today_interactions,
+                "private_follow_up_attention_count": private_follow_ups.attention_count,
+                "private_follow_ups_available": availability.private_follow_ups,
                 "action_attention_count": actions.attention_count,
                 "deal_attention_count": deal_attention.attention_count,
                 "partial": source_failure,
@@ -1156,6 +1175,32 @@ class RevenueOSDailyService:
             approved_open_count=counts.approved_open,
             items=items,
             truncated=counts.attention > len(items),
+        )
+
+    @staticmethod
+    def _private_follow_ups(
+        records: DailyPrivateFollowUpRecords | None,
+    ) -> DailyPrivateFollowUpSection:
+        if records is None:
+            return DailyPrivateFollowUpSection(
+                attention_count=0,
+                items=[],
+                truncated=False,
+            )
+        items = [
+            DailyPrivateFollowUp(
+                interaction_id=record.interaction_id,
+                interaction_title=record.interaction_title,
+                company_name=record.company_name,
+                updated_at=RevenueOSDailyService._aware_utc(record.updated_at),
+                href=f"/conversations/{record.interaction_id}?view=review#follow-up",
+            )
+            for record in records.items
+        ]
+        return DailyPrivateFollowUpSection(
+            attention_count=records.total,
+            items=items,
+            truncated=records.truncated,
         )
 
     @staticmethod

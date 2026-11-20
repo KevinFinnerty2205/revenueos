@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.ask_services import AskRevenueOSService
 from revenueos.config import Settings, get_settings
-from revenueos.database import get_db, set_tenant_database_context
+from revenueos.database import get_db, set_private_user_database_context, set_tenant_database_context
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
@@ -15,4 +15,5 @@ async def get_ask_service(
     settings: Settings = Depends(get_settings),
 ) -> AsyncIterator[AskRevenueOSService]:
     await set_tenant_database_context(session, tenant.organisation_id)
+    await set_private_user_database_context(session, tenant.user_id)
     yield AskRevenueOSService(session, tenant, settings)

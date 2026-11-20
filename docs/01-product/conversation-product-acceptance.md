@@ -65,6 +65,10 @@ The default web experience must satisfy these behaviours:
   note match returns conversation metadata only: it never exposes note text or lets
   one member's private note influence another member's results. This deterministic
   lookup is separate from Ask and shared conversation intelligence.
+- Home brings the authenticated user's own nonblank, unreviewed follow-up drafts
+  back as a bounded metadata-only review queue. It links to the private Review &
+  follow-up section without exposing draft text, requiring CRM data or including
+  another member's workspace.
 
 Legacy CRM, pipeline, campaign, forecast and content-production records remain
 available through their existing compatibility routes. They are not collected into

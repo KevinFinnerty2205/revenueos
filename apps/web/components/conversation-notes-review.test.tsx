@@ -47,9 +47,54 @@ function ReviewHarness() {
   );
 }
 
-afterEach(() => vi.unstubAllGlobals());
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+  window.history.replaceState({}, "", "/");
+  if (originalScrollIntoView === undefined) {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  } else {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: originalScrollIntoView,
+    });
+  }
+});
 
 describe("ConversationNotesReview", () => {
+  it("focuses the async follow-up target once for a direct deep link", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/conversations/interaction-1?view=review#follow-up",
+    );
+    const fetchMock = vi.fn(() => Promise.resolve(response(readyWorkspace)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ReviewHarness />);
+
+    const followUp = await screen.findByRole("region", {
+      name: "Follow-up review",
+    });
+    await waitFor(() => expect(followUp).toHaveFocus());
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "start",
+      behavior: "auto",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save rough notes" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+  });
+
   it("shows an automatic private draft without requiring a completed debrief", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(readyWorkspace)));
 

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConversationWorkspaceResponse } from "@revenueos/shared";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConversationWorkspaceConflictRecovery } from "@/components/conversation-workspace-conflict-recovery";
 import type {
   ConversationWorkspaceController,
@@ -36,6 +36,23 @@ export function ConversationNotesReview({
 }) {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const workspace = controller.workspace;
+  const followUpSectionRef = useRef<HTMLElement>(null);
+  const followedDeepLink = useRef(false);
+
+  useEffect(() => {
+    if (
+      workspace === null ||
+      followedDeepLink.current ||
+      window.location.hash !== "#follow-up"
+    ) {
+      return;
+    }
+    const followUpSection = followUpSectionRef.current;
+    if (followUpSection === null) return;
+    followedDeepLink.current = true;
+    followUpSection.scrollIntoView({ block: "start", behavior: "auto" });
+    followUpSection.focus({ preventScroll: true });
+  }, [workspace]);
 
   if (controller.loading && workspace === null) {
     return (
@@ -261,10 +278,22 @@ export function ConversationNotesReview({
         </section>
       </div>
 
-      <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <section
+        ref={followUpSectionRef}
+        id="follow-up"
+        tabIndex={-1}
+        aria-labelledby="conversation-follow-up-title"
+        className="mt-6 scroll-mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
+      >
+        <h3
+          id="conversation-follow-up-title"
+          className="font-semibold text-amber-950"
+        >
+          Follow-up review
+        </h3>
         <label
           htmlFor="conversation-follow-up-draft"
-          className="font-semibold text-amber-950"
+          className="mt-3 block font-semibold text-amber-950"
         >
           Private follow-up draft
         </label>

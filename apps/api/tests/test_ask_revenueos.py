@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -9,15 +9,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.ask_contracts import AskAnswer, AskRequest, AskScope, AskSource, AskSummaryPoint
 from revenueos.ask_services import AskCandidate, AskIntentClassifier, AskRevenueOSService
 from revenueos.auth import get_current_user
 from revenueos.config import Settings
+from revenueos.daily_repositories import DailyRepository
 from revenueos.demo_data import demo_source_evidence_ids, seed_demo_data
 from revenueos.main import create_app
-from revenueos.models import BetaSystemEvent, Evidence, OrganisationMembership, RevenueBrainSourceSnapshot
+from revenueos.models import (
+    BetaSystemEvent,
+    ConversationUserWorkspace,
+    Evidence,
+    Interaction,
+    OrganisationMembership,
+    RevenueBrainSourceSnapshot,
+)
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -104,6 +113,102 @@ def test_request_contract_rejects_implicit_scope_extra_fields_and_oversized_ques
                 "arbitrarySql": "select * from opportunities",
             }
         )
+
+
+def test_daily_focus_does_not_claim_caught_up_when_private_follow_up_remains(
+    client: TestClient,
+) -> None:
+    draft_sentinel = "ASK-PRIVATE-FOLLOW-UP-SENTINEL"
+
+    async def seed_private_follow_up() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        interaction_id = uuid4()
+        occurred_at = datetime.now(UTC) - timedelta(days=10)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add_all(
+                (
+                    Interaction(
+                        id=interaction_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_type="manual_interaction",
+                        lifecycle_status="completed",
+                        title="Private follow-up source",
+                        scheduled_start_at=occurred_at,
+                        actual_start_at=occurred_at,
+                        actual_end_at=occurred_at + timedelta(hours=1),
+                        timezone="Australia/Sydney",
+                        creation_origin="manual",
+                        created_by_user_id=PRIMARY_USER_ID,
+                    ),
+                    ConversationUserWorkspace(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=interaction_id,
+                        user_id=PRIMARY_USER_ID,
+                        follow_up_draft=draft_sentinel,
+                        follow_up_reviewed=False,
+                        lock_version=1,
+                    ),
+                )
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed_private_follow_up())
+    response = client.post(
+        "/api/v1/ask",
+        json=_scope_payload("workspace", None, "What do I need to do today?"),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["questionClass"] == "daily_focus"
+    assert body["answerStatus"] == "unknown"
+    assert body["answer"] == (
+        "Private follow-up work remains in Oryntela Daily, but there is no single supported priority to recommend right now."
+    )
+    assert body["sources"] == []
+    assert body["suggestedAction"] is None
+    assert draft_sentinel not in response.text
+
+
+def test_daily_focus_reports_caught_up_only_when_daily_is_caught_up(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/ask",
+        json=_scope_payload("workspace", None, "What do I need to do today?"),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["answerStatus"] == "unknown"
+    assert body["answer"] == (
+        "You’re caught up based on the current Oryntela Daily view. "
+        "No supported priority needs your attention right now."
+    )
+
+
+def test_daily_focus_is_uncertain_when_private_follow_up_source_is_unavailable(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_private_follow_ups(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise OperationalError("SELECT conversation_user_workspaces", {}, RuntimeError("private sentinel"))
+
+    monkeypatch.setattr(DailyRepository, "private_follow_ups", fail_private_follow_ups)
+    response = client.post(
+        "/api/v1/ask",
+        json=_scope_payload("workspace", None, "What do I need to do today?"),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["answerStatus"] == "unknown"
+    assert body["answer"] == (
+        "Oryntela Daily cannot confirm that you’re caught up, and there is no "
+        "single supported priority to recommend right now."
+    )
+    assert body["sources"] == []
+    assert "private sentinel" not in response.text
 
 
 def test_answer_contract_rejects_fabricated_or_out_of_retrieval_citations() -> None:
