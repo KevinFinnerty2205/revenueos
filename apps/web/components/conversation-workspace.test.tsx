@@ -4,10 +4,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationWorkspace } from "@/components/conversation-workspace";
 
+type ReviewSeedLoad = {
+  interactionId: string;
+  id: string | null;
+  lifecycleStatus: string | null;
+};
+
 const state = vi.hoisted(() => ({
   aiCompanionEnabled: true,
   stopped: vi.fn(),
-  reviewLoaded: vi.fn(),
+  reviewLoaded: vi.fn<(value: ReviewSeedLoad) => void>(),
 }));
 
 vi.mock("@/components/beta-feature-gate", () => ({
@@ -247,6 +253,20 @@ describe("ConversationWorkspace", () => {
     expect(
       await screen.findByText("Review seed call-2 · completed"),
     ).toBeVisible();
-    expect(state.reviewLoaded).toHaveBeenCalledTimes(2);
+    expect(state.reviewLoaded).toHaveBeenCalledWith({
+      interactionId: "call-1",
+      id: "call-1",
+      lifecycleStatus: "completed",
+    });
+    expect(state.reviewLoaded).toHaveBeenLastCalledWith({
+      interactionId: "call-2",
+      id: "call-2",
+      lifecycleStatus: "completed",
+    });
+    expect(
+      state.reviewLoaded.mock.calls.every(
+        ([loaded]) => loaded.interactionId === loaded.id,
+      ),
+    ).toBe(true);
   });
 });
