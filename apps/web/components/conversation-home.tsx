@@ -182,15 +182,33 @@ export function ConversationHome() {
           title="Follow-ups needing attention"
           action={{ href: "/conversations", label: "Conversation history" }}
         >
-          {daily.actions.items.length ? (
-            <ul className="divide-y divide-slate-100">
+          {!daily.availability.privateFollowUps ? (
+            <p
+              className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-950"
+              role="status"
+            >
+              Private follow-up drafts are temporarily unavailable. Shared
+              follow-ups are still shown when available.
+            </p>
+          ) : null}
+          {daily.privateFollowUps.items.length || daily.actions.items.length ? (
+            <ul
+              className={`${daily.availability.privateFollowUps ? "" : "mt-3 "}divide-y divide-slate-100`}
+              aria-label="Follow-ups needing attention"
+            >
+              {daily.privateFollowUps.items.map((followUp) => (
+                <PrivateFollowUpRow
+                  key={followUp.interactionId}
+                  followUp={followUp}
+                />
+              ))}
               {daily.actions.items.slice(0, 4).map((action) => (
                 <FollowUpRow key={action.id} action={action} />
               ))}
             </ul>
-          ) : (
+          ) : daily.availability.privateFollowUps ? (
             <EmptyLine>No follow-ups need attention right now.</EmptyLine>
-          )}
+          ) : null}
         </HomeSection>
 
         <div className="xl:col-span-2">
@@ -445,6 +463,34 @@ function FollowUpRow({ action }: { action: DailyAction }) {
         }
       >
         Review
+      </Link>
+    </li>
+  );
+}
+
+function PrivateFollowUpRow({
+  followUp,
+}: {
+  followUp: DailyResponse["privateFollowUps"]["items"][number];
+}) {
+  return (
+    <li className="flex min-h-20 items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Private draft · {formatInteractionDate(followUp.updatedAt)}
+        </p>
+        <p className="mt-1 break-words font-semibold text-slate-950">
+          {followUp.interactionTitle}
+        </p>
+        {followUp.companyName ? (
+          <p className="mt-1 text-sm text-slate-500">{followUp.companyName}</p>
+        ) : null}
+      </div>
+      <Link
+        className="shrink-0 text-sm font-bold text-brand-primary hover:underline focus:outline-none focus:ring-2 focus:ring-brand-focus"
+        href={followUp.href}
+      >
+        {followUp.ctaLabel} private draft
       </Link>
     </li>
   );

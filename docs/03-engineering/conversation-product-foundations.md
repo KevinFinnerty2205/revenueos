@@ -74,6 +74,15 @@ metadata; private text, snippets and match reasons are not returned. Another mem
 workspace cannot affect result existence, and private note matching is not projected
 into Ask, shared memory or shared intelligence.
 
+The Daily surface separately projects a maximum of five nonblank, unreviewed
+follow-up drafts for the authenticated owner. Its repository query selects only
+conversation metadata, repeats organisation and user predicates, excludes deleted
+or unfinished conversations and orders by private-workspace update time with a
+stable interaction-ID tie-break. Draft text and workspace identifiers never leave
+the private table. A failed private source degrades to an unavailable empty section
+without declaring the user caught up; Home treats that availability flag as a
+partial failure instead of presenting a false empty-queue message.
+
 Original debrief answers and accepted evidence remain in their existing records.
 A browser-local value can be explicitly imported only when its stored owner ID
 matches the authenticated server workspace owner. Older unscoped keys are

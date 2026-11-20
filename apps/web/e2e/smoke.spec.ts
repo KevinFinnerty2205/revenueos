@@ -73,6 +73,11 @@ test("development user can open the protected dashboard shell", async ({
           items: [],
           truncated: false,
         },
+        privateFollowUps: {
+          attentionCount: 0,
+          items: [],
+          truncated: false,
+        },
         dealAttention: { attentionCount: 0, items: [], truncated: false },
         pipeline: {
           state: "empty",
@@ -87,6 +92,7 @@ test("development user can open the protected dashboard shell", async ({
         availability: {
           interactions: true,
           actions: true,
+          privateFollowUps: true,
           dealAttention: true,
           pipeline: true,
           recommendations: true,

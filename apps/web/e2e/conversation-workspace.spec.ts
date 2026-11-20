@@ -47,7 +47,7 @@ test("account history opens one CRM-independent conversation workspace and prese
     generationUpdateAvailable: false,
     generationCompletedAt: null,
     importedFromBrowserAt: null,
-    updatedAt: null,
+    updatedAt: null as string | null,
   };
   const confirmedThread = {
     id: "thread-expansion-proof",
@@ -313,6 +313,28 @@ test("account history opens one CRM-independent conversation workspace and prese
   await expect(
     page.getByRole("button", { name: "Notes & capture", exact: true }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+
+  workspace = {
+    ...workspace,
+    exists: true,
+    followUpDraft: "Private CRM-free follow-up ready for review.",
+    followUpReviewed: false,
+    updatedAt: "2026-11-01T02:15:00Z",
+  };
+  await page.goto("/conversations/conversation-proof?view=review#follow-up");
+  const followUp = page.getByRole("region", {
+    name: "Follow-up review",
+  });
+  await expect(followUp).toBeFocused();
+  await expect(followUp).toBeInViewport();
+  await expect(page.getByLabel("Private follow-up draft")).toHaveValue(
+    "Private CRM-free follow-up ready for review.",
+  );
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

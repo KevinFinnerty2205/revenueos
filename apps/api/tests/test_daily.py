@@ -37,6 +37,7 @@ from revenueos.models import (
     Company,
     Contact,
     ConversationBriefingOutbox,
+    ConversationUserWorkspace,
     IntegrationConnection,
     Interaction,
     Meeting,
@@ -434,6 +435,139 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
     return asyncio.run(seed())
 
 
+def _seed_private_follow_up_scenario() -> dict[str, object]:
+    async def seed() -> dict[str, object]:
+        engine = create_async_engine(TEST_DB_URL)
+        now = datetime.now(UTC)
+        same_org_other_user_id = uuid.uuid4()
+        company_id = uuid.uuid4()
+        visible_ids = [uuid.uuid4() for _ in range(6)]
+        visible_draft_sentinels = [f"PRIVATE-DRAFT-SENTINEL-{index}" for index in range(6)]
+        visible_offsets = (50, 40, 30, 20, 10, 10)
+
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add_all(
+                (
+                    User(
+                        id=same_org_other_user_id,
+                        external_auth_id=f"daily-private-{same_org_other_user_id}",
+                        email=f"daily-private-{same_org_other_user_id}@example.test",
+                        display_name="Other Daily owner",
+                    ),
+                    OrganisationMembership(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        user_id=same_org_other_user_id,
+                        role="member",
+                    ),
+                    Company(
+                        id=company_id,
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        name="Private follow-up account",
+                        status="active",
+                        owner_user_id=PRIMARY_USER_ID,
+                    ),
+                )
+            )
+
+            def add_workspace(
+                *,
+                organisation_id: uuid.UUID,
+                user_id: uuid.UUID,
+                interaction_id: uuid.UUID,
+                title: str,
+                draft: str | None,
+                reviewed: bool = False,
+                lifecycle_status: str = "completed",
+                deleted_at: datetime | None = None,
+                company: uuid.UUID | None = None,
+                updated_at: datetime | None = None,
+            ) -> None:
+                occurred_at = now - timedelta(days=2)
+                session.add_all(
+                    (
+                        Interaction(
+                            id=interaction_id,
+                            organisation_id=organisation_id,
+                            company_id=company,
+                            interaction_type="manual_interaction",
+                            lifecycle_status=lifecycle_status,
+                            title=title,
+                            scheduled_start_at=occurred_at,
+                            actual_start_at=occurred_at if lifecycle_status == "completed" else None,
+                            actual_end_at=(occurred_at + timedelta(hours=1))
+                            if lifecycle_status == "completed"
+                            else None,
+                            timezone="Australia/Sydney",
+                            creation_origin="manual",
+                            created_by_user_id=user_id,
+                            deleted_at=deleted_at,
+                        ),
+                        ConversationUserWorkspace(
+                            organisation_id=organisation_id,
+                            interaction_id=interaction_id,
+                            user_id=user_id,
+                            live_notes="PRIVATE-LIVE-NOTES-SENTINEL",
+                            enhanced_notes="PRIVATE-ENHANCED-NOTES-SENTINEL",
+                            follow_up_draft=draft,
+                            follow_up_reviewed=reviewed,
+                            lock_version=1,
+                            updated_at=updated_at or now,
+                        ),
+                    )
+                )
+
+            for index, interaction_id in enumerate(visible_ids):
+                add_workspace(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    user_id=PRIMARY_USER_ID,
+                    interaction_id=interaction_id,
+                    title=f"Private follow-up {index}",
+                    draft=visible_draft_sentinels[index],
+                    company=company_id if index == 5 else None,
+                    updated_at=now - timedelta(minutes=visible_offsets[index]),
+                )
+
+            excluded = (
+                ("Whitespace private follow-up", " \r\n\t ", False, "completed", None),
+                ("Reviewed private follow-up", "REVIEWED-DRAFT-SENTINEL", True, "completed", None),
+                ("Deleted private follow-up", "DELETED-DRAFT-SENTINEL", False, "completed", now),
+                ("Planned private follow-up", "PLANNED-DRAFT-SENTINEL", False, "planned", None),
+            )
+            for title, draft, reviewed, lifecycle_status, deleted_at in excluded:
+                add_workspace(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    user_id=PRIMARY_USER_ID,
+                    interaction_id=uuid.uuid4(),
+                    title=title,
+                    draft=draft,
+                    reviewed=reviewed,
+                    lifecycle_status=lifecycle_status,
+                    deleted_at=deleted_at,
+                )
+            add_workspace(
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                user_id=same_org_other_user_id,
+                interaction_id=uuid.uuid4(),
+                title="Other owner private follow-up",
+                draft="OTHER-OWNER-DRAFT-SENTINEL",
+            )
+            add_workspace(
+                organisation_id=SECONDARY_ORGANISATION_ID,
+                user_id=SECONDARY_USER_ID,
+                interaction_id=uuid.uuid4(),
+                title="Other tenant private follow-up",
+                draft="OTHER-TENANT-DRAFT-SENTINEL",
+            )
+            await session.commit()
+        await engine.dispose()
+        return {
+            "visible_ids": tuple(str(value) for value in visible_ids),
+            "draft_sentinels": tuple(visible_draft_sentinels),
+        }
+
+    return asyncio.run(seed())
+
+
 def test_daily_empty_state_is_bounded_and_does_not_invent_forecast(client: TestClient) -> None:
     response = client.get("/api/v1/daily", params={"timezone": "Australia/Sydney"})
 
@@ -443,6 +577,11 @@ def test_daily_empty_state_is_bounded_and_does_not_invent_forecast(client: TestC
     assert body["userDisplayName"] == "Alex Morgan"
     assert body["topPriority"] is None
     assert body["todayInteractions"] == []
+    assert body["privateFollowUps"] == {
+        "attentionCount": 0,
+        "items": [],
+        "truncated": False,
+    }
     assert body["actions"]["items"] == []
     assert body["dealAttention"]["items"] == []
     assert body["pipeline"]["state"] == "empty"
@@ -454,6 +593,84 @@ def test_daily_empty_state_is_bounded_and_does_not_invent_forecast(client: TestC
     assert "evidence" not in response.text.casefold()
     assert "transcript" not in response.text.casefold()
     assert "provider" not in response.text.casefold()
+
+
+def test_daily_private_follow_ups_are_owner_scoped_bounded_and_metadata_only(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    identifiers = _seed_private_follow_up_scenario()
+    caplog.set_level(logging.INFO, logger="revenueos.daily")
+
+    response = client.get("/api/v1/daily", params={"timezone": "Australia/Sydney"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    section = body["privateFollowUps"]
+    visible_ids = identifiers["visible_ids"]
+    assert isinstance(visible_ids, tuple)
+    newest_tied = sorted((visible_ids[4], visible_ids[5]))
+    expected_ids = [*newest_tied, visible_ids[3], visible_ids[2], visible_ids[1]]
+    assert [item["interactionId"] for item in section["items"]] == expected_ids
+    assert section["attentionCount"] == 6
+    assert section["truncated"] is True
+    assert visible_ids[0] not in expected_ids
+    assert set(section["items"][0]) == {
+        "interactionId",
+        "interactionTitle",
+        "companyName",
+        "updatedAt",
+        "ctaLabel",
+        "href",
+    }
+    assert all(item["ctaLabel"] == "Review" for item in section["items"])
+    assert all(
+        item["href"] == f"/conversations/{item['interactionId']}?view=review#follow-up" for item in section["items"]
+    )
+    crm_free = next(item for item in section["items"] if item["interactionId"] == visible_ids[3])
+    assert crm_free["companyName"] is None
+    company_item = next(item for item in section["items"] if item["interactionId"] == visible_ids[5])
+    assert company_item["companyName"] == "Private follow-up account"
+    assert body["availability"]["privateFollowUps"] is True
+    assert body["caughtUp"] is False
+    assert body["topPriority"] is None
+    assert all(sentinel not in response.text for sentinel in identifiers["draft_sentinels"])
+    assert all(
+        sentinel not in response.text
+        for sentinel in (
+            "PRIVATE-LIVE-NOTES-SENTINEL",
+            "PRIVATE-ENHANCED-NOTES-SENTINEL",
+            "REVIEWED-DRAFT-SENTINEL",
+            "DELETED-DRAFT-SENTINEL",
+            "PLANNED-DRAFT-SENTINEL",
+            "OTHER-OWNER-DRAFT-SENTINEL",
+            "OTHER-TENANT-DRAFT-SENTINEL",
+        )
+    )
+    assert all(
+        title not in response.text
+        for title in (
+            "Whitespace private follow-up",
+            "Reviewed private follow-up",
+            "Deleted private follow-up",
+            "Planned private follow-up",
+            "Other owner private follow-up",
+            "Other tenant private follow-up",
+        )
+    )
+    daily = DailyResponse.model_validate(body)
+    digest = RevenueOSDailyService._morning_digest_body(daily)
+    assert "Private follow-up: 6 draft(s) need review." in digest
+    assert all(sentinel not in digest for sentinel in identifiers["draft_sentinels"])
+    records = [record for record in caplog.records if record.name == "revenueos.daily"]
+    opened = next(record for record in records if record.getMessage() == "daily_opened")
+    assert opened.private_follow_up_attention_count == 6
+    assert opened.private_follow_ups_available is True
+    logged = " ".join(str(record.__dict__) for record in records)
+    assert "Private follow-up account" not in logged
+    assert "Private follow-up 5" not in logged
+    assert all(value not in logged for value in visible_ids)
+    assert all(sentinel not in logged for sentinel in identifiers["draft_sentinels"])
 
 
 def test_daily_open_telemetry_contains_metadata_only(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
@@ -1200,7 +1417,7 @@ def test_daily_bounds_lists_and_query_count_does_not_scale_per_item(client: Test
     assert "\r" not in safe_subject and "\n" not in safe_subject
     # The final bounded query batches attendee names for all surfaced
     # interactions; it does not scale with the number of conversations.
-    assert select_count <= 16
+    assert select_count <= 17
 
 
 def test_daily_degrades_one_source_failure_without_exposing_error(
@@ -1222,6 +1439,29 @@ def test_daily_degrades_one_source_failure_without_exposing_error(
     assert body["availability"]["interactions"] is True
     assert body["actions"]["items"] == []
     assert "synthetic failure" not in response.text
+
+
+def test_daily_private_follow_up_failure_degrades_without_false_caught_up(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_private_follow_ups(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise OperationalError("SELECT conversation_user_workspaces", {}, RuntimeError("private sentinel"))
+
+    monkeypatch.setattr(DailyRepository, "private_follow_ups", fail_private_follow_ups)
+    response = client.get("/api/v1/daily", params={"timezone": "Australia/Sydney"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["availability"]["privateFollowUps"] is False
+    assert body["privateFollowUps"] == {
+        "attentionCount": 0,
+        "items": [],
+        "truncated": False,
+    }
+    assert body["caughtUp"] is False
+    assert "private sentinel" not in response.text
 
 
 def test_daily_does_not_show_new_user_state_when_opportunities_are_temporarily_unavailable(
@@ -1267,6 +1507,7 @@ def test_daily_respects_current_feature_availability(client: TestClient) -> None
     assert body["actions"]["items"] == []
     assert body["recommendations"] == []
     assert body["availability"]["actions"] is False
+    assert body["availability"]["privateFollowUps"] is True
     assert body["availability"]["recommendations"] is False
     assert body["availability"]["methodology"] is False
     assert body["availability"]["revenueBrain"] is False

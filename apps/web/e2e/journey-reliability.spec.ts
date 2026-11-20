@@ -1496,6 +1496,11 @@ async function routeFlagship(page: Page) {
           items: [],
           truncated: false,
         },
+        privateFollowUps: {
+          attentionCount: 0,
+          items: [],
+          truncated: false,
+        },
         dealAttention: { attentionCount: 0, items: [], truncated: false },
         pipeline: {
           state: state.closedWon ? "empty" : "single_currency",
@@ -1524,6 +1529,7 @@ async function routeFlagship(page: Page) {
         availability: {
           interactions: true,
           actions: true,
+          privateFollowUps: true,
           dealAttention: true,
           pipeline: true,
           recommendations: true,

@@ -21,6 +21,7 @@ from revenueos.models import (
     Contact,
     ConversationBriefingOutbox,
     ConversationDeliveryPreference,
+    ConversationUserWorkspace,
     IntegrationConnection,
     Interaction,
     InteractionIntelligenceSnapshot,
@@ -66,6 +67,21 @@ class DailyActionCounts:
     due_today: int
     pending_review: int
     approved_open: int
+
+
+@dataclass(frozen=True)
+class DailyPrivateFollowUpRecord:
+    interaction_id: UUID
+    interaction_title: str
+    company_name: str | None
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class DailyPrivateFollowUpRecords:
+    items: tuple[DailyPrivateFollowUpRecord, ...]
+    total: int
+    truncated: bool
 
 
 @dataclass(frozen=True)
@@ -1024,6 +1040,82 @@ class DailyRepository:
                 pending_review=int(count_row[3] or 0),
                 approved_open=int(count_row[4] or 0),
             ),
+        )
+
+    async def private_follow_ups(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        *,
+        limit: int = 5,
+    ) -> DailyPrivateFollowUpRecords:
+        rows = (
+            await self.session.execute(
+                select(
+                    ConversationUserWorkspace.interaction_id,
+                    Interaction.title,
+                    Company.name,
+                    ConversationUserWorkspace.updated_at,
+                    func.count().over().label("total"),
+                )
+                .join(
+                    Interaction,
+                    and_(
+                        Interaction.organisation_id == ConversationUserWorkspace.organisation_id,
+                        Interaction.id == ConversationUserWorkspace.interaction_id,
+                    ),
+                )
+                .outerjoin(
+                    Company,
+                    and_(
+                        Company.organisation_id == Interaction.organisation_id,
+                        Company.id == Interaction.company_id,
+                    ),
+                )
+                .where(
+                    ConversationUserWorkspace.organisation_id == organisation_id,
+                    ConversationUserWorkspace.user_id == user_id,
+                    ConversationUserWorkspace.follow_up_reviewed.is_(False),
+                    ConversationUserWorkspace.follow_up_draft.is_not(None),
+                    func.length(
+                        func.trim(
+                            func.replace(
+                                func.replace(
+                                    func.replace(ConversationUserWorkspace.follow_up_draft, "\r", ""),
+                                    "\n",
+                                    "",
+                                ),
+                                "\t",
+                                "",
+                            )
+                        )
+                    )
+                    > 0,
+                    Interaction.organisation_id == organisation_id,
+                    Interaction.lifecycle_status == "completed",
+                    Interaction.deleted_at.is_(None),
+                )
+                .order_by(
+                    ConversationUserWorkspace.updated_at.desc(),
+                    ConversationUserWorkspace.interaction_id.asc(),
+                )
+                .limit(limit)
+            )
+        ).all()
+        items = tuple(
+            DailyPrivateFollowUpRecord(
+                interaction_id=cast(UUID, row[0]),
+                interaction_title=cast(str, row[1]),
+                company_name=cast(str | None, row[2]),
+                updated_at=cast(datetime, row[3]),
+            )
+            for row in rows
+        )
+        total = int(rows[0][4]) if rows else 0
+        return DailyPrivateFollowUpRecords(
+            items=items,
+            total=total,
+            truncated=total > len(items),
         )
 
     async def opportunities(

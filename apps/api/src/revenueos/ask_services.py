@@ -551,12 +551,27 @@ class AskRevenueOSService:
     ) -> AskAnswer:
         daily = await RevenueOSDailyService(self.session, self.tenant, self.settings).read(timezone)
         if daily.top_priority is None:
+            if daily.caught_up:
+                message = (
+                    "You’re caught up based on the current Oryntela Daily view. "
+                    "No supported priority needs your attention right now."
+                )
+            elif daily.private_follow_ups.attention_count:
+                message = (
+                    "Private follow-up work remains in Oryntela Daily, but there is no "
+                    "single supported priority to recommend right now."
+                )
+            else:
+                message = (
+                    "Oryntela Daily cannot confirm that you’re caught up, and there is no "
+                    "single supported priority to recommend right now."
+                )
             return self._unknown_answer(
                 request_id,
                 generated_at,
                 scope,
                 "daily_focus",
-                "You’re caught up based on the current Oryntela Daily view. No supported priority needs your attention right now.",
+                message,
             )
         priority = daily.top_priority
         source = AskSource(

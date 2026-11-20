@@ -48,7 +48,7 @@ export function ConversationWorkspace({
           initialView ??
           (hash === "#preparation"
             ? "prepare"
-            : ["#debrief", "#enhanced-notes"].includes(hash)
+            : ["#debrief", "#enhanced-notes", "#follow-up"].includes(hash)
               ? "review"
               : loaded.lifecycleStatus === "completed"
                 ? "review"

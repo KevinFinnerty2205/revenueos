@@ -66,6 +66,20 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
         },
       ],
     },
+    privateFollowUps: {
+      attentionCount: 1,
+      items: [
+        {
+          interactionId: "interaction-private-follow-up",
+          interactionTitle: "Founder coffee follow-up",
+          companyName: null,
+          updatedAt: "2026-10-30T02:00:00Z",
+          ctaLabel: "Review",
+          href: "/conversations/interaction-private-follow-up?view=review#follow-up",
+        },
+      ],
+      truncated: false,
+    },
     dealAttention: { attentionCount: 0, items: [], truncated: false },
     pipeline: {
       state: "empty",
@@ -79,6 +93,7 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
     availability: {
       interactions: true,
       actions: true,
+      privateFollowUps: true,
       dealAttention: true,
       pipeline: true,
       recommendations: true,
@@ -169,9 +184,23 @@ test("Home keeps the next conversation, follow-up and memory central", async ({
   await expect(
     page.getByRole("heading", { name: "Follow-ups needing attention" }),
   ).toBeVisible();
+  await expect(page.getByText("Founder coffee follow-up")).toBeVisible();
+  const followUps = page.getByRole("list", {
+    name: "Follow-ups needing attention",
+  });
+  await expect(followUps.getByRole("listitem")).toHaveCount(2);
+  await expect(followUps.getByRole("listitem").nth(0)).toContainText(
+    "Founder coffee follow-up",
+  );
+  await expect(followUps.getByRole("listitem").nth(1)).toContainText(
+    "Send the agreed security summary",
+  );
   await expect(
-    page.getByText("Send the agreed security summary"),
-  ).toBeVisible();
+    followUps.getByRole("link", { name: "Review private draft" }),
+  ).toHaveAttribute(
+    "href",
+    "/conversations/interaction-private-follow-up?view=review#follow-up",
+  );
   await expect(
     page.getByRole("link", { name: /Founder coffee notes/ }),
   ).toHaveAttribute("href", "/conversations/interaction-recent");
@@ -196,6 +225,12 @@ test("Home keeps the next conversation, follow-up and memory central", async ({
   if (process.env.CAPTURE_CONVERSATION_INTELLIGENCE_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/conversation-intelligence-home-desktop.png",
+      fullPage: true,
+    });
+  }
+  if (process.env.CAPTURE_PRIVATE_FOLLOWUP_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/private-followup-home.png",
       fullPage: true,
     });
   }
@@ -227,6 +262,11 @@ test("Home starts with knowledge or a conversation without CRM setup", async ({
       todayInteractions: [],
       totalTodayInteractions: 0,
       actions: { ...base.actions, attentionCount: 0, items: [] },
+      privateFollowUps: {
+        attentionCount: 0,
+        items: [],
+        truncated: false,
+      },
       caughtUp: true,
     }),
   );
@@ -242,6 +282,9 @@ test("Home starts with knowledge or a conversation without CRM setup", async ({
     page.getByRole("link", { name: "Set up company knowledge" }),
   ).toHaveAttribute("href", "/knowledge");
   await expect(page.getByText(/create an opportunity/i)).toHaveCount(0);
+  await expect(
+    page.getByText("No follow-ups need attention right now."),
+  ).toBeVisible();
 });
 
 test("Home presents a safe retry state when persisted data is unavailable", async ({

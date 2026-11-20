@@ -1236,6 +1236,21 @@ export interface DailyAction {
   href: string;
 }
 
+export interface DailyPrivateFollowUp {
+  interactionId: string;
+  interactionTitle: string;
+  companyName: string | null;
+  updatedAt: string;
+  ctaLabel: "Review";
+  href: string;
+}
+
+export interface DailyPrivateFollowUpSection {
+  attentionCount: number;
+  items: DailyPrivateFollowUp[];
+  truncated: boolean;
+}
+
 export interface DailyActionSection {
   attentionCount: number;
   overdueCount: number;
@@ -1299,6 +1314,7 @@ export interface DailyRecommendation {
 
 export interface DailyAvailability {
   interactions: boolean;
+  privateFollowUps: boolean;
   actions: boolean;
   dealAttention: boolean;
   pipeline: boolean;
@@ -1318,6 +1334,7 @@ export interface DailyResponse {
   nextInteraction: DailyInteraction | null;
   todayInteractions: DailyInteraction[];
   totalTodayInteractions: number;
+  privateFollowUps: DailyPrivateFollowUpSection;
   actions: DailyActionSection;
   dealAttention: DailyDealSection;
   pipeline: DailyPipelineSummary;
