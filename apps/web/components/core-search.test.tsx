@@ -17,6 +17,19 @@ function response(items: object[]) {
   );
 }
 
+function unavailable(message = "Search is temporarily unavailable.") {
+  return Promise.resolve(
+    new Response(
+      JSON.stringify({
+        code: "search_unavailable",
+        message,
+        requestId: "request-search-unavailable",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    ),
+  );
+}
+
 describe("CoreSearch", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -90,6 +103,122 @@ describe("CoreSearch", () => {
       ),
     ).toBeVisible();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps conversation results visible when account search is unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => unavailable())
+      .mockImplementationOnce(() =>
+        response([
+          {
+            id: "interaction-private-note",
+            title: "Remembered customer detail",
+            interactionType: "meeting",
+            lifecycleStatus: "completed",
+          },
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "remembered detail" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByRole("link", { name: /Remembered customer detail/i }),
+    ).toHaveAttribute("href", "/conversations/interaction-private-note");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Account results are temporarily unavailable",
+    );
+    expect(screen.getByText("1 available result")).toBeVisible();
+    expect(
+      screen.queryByText("No matching work found"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps account results visible when conversation search is unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        response([{ id: "company-available", name: "Acme", industry: null }]),
+      )
+      .mockImplementationOnce(() => unavailable());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Acme" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByRole("link", { name: /Acme Account/i }),
+    ).toHaveAttribute("href", "/conversations/accounts/company-available");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Conversation results are temporarily unavailable",
+    );
+    expect(
+      screen.queryByText("No matching work found"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the recoverable search error without a false empty state when both sources fail", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => unavailable("Do not expose account error."))
+      .mockImplementationOnce(() =>
+        unavailable("Do not expose conversation error."),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Acme" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Search could not be completed. Please try again.",
+    );
+    expect(
+      screen.queryByText("No matching work found"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Do not expose/)).not.toBeInTheDocument();
+  });
+
+  it("clears a partial-results warning after the next complete search", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => unavailable())
+      .mockImplementationOnce(() => response([]))
+      .mockImplementationOnce(() => response([]))
+      .mockImplementationOnce(() => response([]));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "first search" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Account results are temporarily unavailable",
+    );
+    expect(screen.getByText("0 available results")).toBeVisible();
+    expect(
+      screen.queryByText("No matching work found"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "second search" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("No matching work found")).toBeVisible();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("does not send a one-character search", () => {

@@ -16,6 +16,11 @@ interface SearchResults {
   interactions: Interaction[];
 }
 
+interface SearchAvailability {
+  companies: boolean;
+  interactions: boolean;
+}
+
 const emptyResults: SearchResults = {
   companies: [],
   interactions: [],
@@ -36,6 +41,9 @@ export function CoreSearch({
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [results, setResults] = useState<SearchResults>(emptyResults);
+  const [availability, setAvailability] = useState<SearchAvailability | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +59,7 @@ export function CoreSearch({
     setError(null);
     const encoded = encodeURIComponent(value);
     try {
-      const [companies, interactions] = await Promise.all([
+      const [companies, interactions] = await Promise.allSettled([
         apiRequest<EntityPage<Company>>(
           `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
         ),
@@ -59,23 +67,38 @@ export function CoreSearch({
           `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
         ),
       ]);
+
+      if (
+        companies.status === "rejected" &&
+        interactions.status === "rejected"
+      ) {
+        setResults(emptyResults);
+        setAvailability(null);
+        setSubmittedQuery("");
+        setError("Search could not be completed. Please try again.");
+        return;
+      }
+
       setResults({
-        companies: companies.items,
-        interactions: interactions.items,
+        companies:
+          companies.status === "fulfilled" ? companies.value.items : [],
+        interactions:
+          interactions.status === "fulfilled" ? interactions.value.items : [],
+      });
+      setAvailability({
+        companies: companies.status === "fulfilled",
+        interactions: interactions.status === "fulfilled",
       });
       setSubmittedQuery(value);
-    } catch (reason: unknown) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Search could not be completed.",
-      );
     } finally {
       setLoading(false);
     }
   }
 
   const resultCount = results.companies.length + results.interactions.length;
+  const partialResults =
+    availability !== null &&
+    (!availability.companies || !availability.interactions);
 
   if (mode === "ask") {
     return (
@@ -134,7 +157,8 @@ export function CoreSearch({
           <section aria-labelledby="search-results-title" className="space-y-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-                {resultCount} {resultCount === 1 ? "result" : "results"}
+                {resultCount} {partialResults ? "available " : ""}
+                {resultCount === 1 ? "result" : "results"}
               </p>
               <h2
                 id="search-results-title"
@@ -143,7 +167,25 @@ export function CoreSearch({
                 Results for “{submittedQuery}”
               </h2>
             </div>
-            {resultCount === 0 ? (
+            {availability && !availability.companies ? (
+              <p
+                role="status"
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"
+              >
+                Account results are temporarily unavailable. Conversation
+                results are shown when available.
+              </p>
+            ) : null}
+            {availability && !availability.interactions ? (
+              <p
+                role="status"
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"
+              >
+                Conversation results are temporarily unavailable. Account
+                results are shown when available.
+              </p>
+            ) : null}
+            {resultCount === 0 && !partialResults ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6">
                 <h3 className="font-semibold text-slate-950">
                   No matching work found
@@ -153,7 +195,7 @@ export function CoreSearch({
                   conversation, your private notes or an account name.
                 </p>
               </div>
-            ) : (
+            ) : resultCount > 0 ? (
               <div className="grid gap-4">
                 <ResultGroup
                   title="Conversations"
@@ -174,7 +216,7 @@ export function CoreSearch({
                   }))}
                 />
               </div>
-            )}
+            ) : null}
           </section>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
