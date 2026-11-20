@@ -531,11 +531,11 @@ function PreInteractionBriefSession({
         {!loading && response?.state === "unavailable" ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
             <h3 className="font-semibold text-slate-900">
-              Link account or opportunity context
+              Preparation is not available yet
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {response.safeMessage ??
-                "A linked company or opportunity is required before a useful brief can be prepared."}
+                "You can continue with notes, capture and review while this preparation view is unavailable."}
             </p>
           </div>
         ) : null}

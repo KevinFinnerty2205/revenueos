@@ -466,7 +466,7 @@ describe("PreInteractionBrief", () => {
   });
 
   it.each([
-    ["unavailable", "Link account or opportunity context"],
+    ["unavailable", "Preparation is not available yet"],
     ["queued", "Preparing the latest brief"],
     ["running", "Preparing the latest brief"],
     ["failed", "The brief is not ready"],
@@ -496,5 +496,16 @@ describe("PreInteractionBrief", () => {
       />,
     );
     expect(await screen.findByText(new RegExp(expected, "i"))).toBeVisible();
+
+    if (state === "unavailable") {
+      expect(
+        screen.getByText(
+          "You can continue with notes, capture and review while this preparation view is unavailable.",
+        ),
+      ).toBeVisible();
+      expect(document.body).not.toHaveTextContent(
+        /account|company|opportunity|required/i,
+      );
+    }
   });
 });
