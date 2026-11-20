@@ -153,6 +153,31 @@ function recentPage() {
   };
 }
 
+function accountPage() {
+  return {
+    items: [
+      {
+        id: "company-daily",
+        organisationId: "organisation-1",
+        name: "Northstar Facilities",
+        website: "https://northstar.example.test",
+        industry: "Facilities",
+        location: "Sydney",
+        employeeCount: 120,
+        status: "prospect",
+        ownerUserId: "user-1",
+        archivedAt: null,
+        createdAt: "2026-10-29T00:00:00Z",
+        updatedAt: "2026-10-29T00:30:00Z",
+      },
+    ],
+    page: 1,
+    pageSize: 8,
+    total: 1,
+    pages: 1,
+  };
+}
+
 async function routeHome(page: Page, day = dailyResponse()) {
   await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
     await route.fulfill({ json: day });
@@ -161,6 +186,12 @@ async function routeHome(page: Page, day = dailyResponse()) {
     "http://localhost:8000/api/v1/interactions**",
     async (route) => {
       await route.fulfill({ json: recentPage() });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      await route.fulfill({ json: accountPage() });
     },
   );
 }
@@ -287,7 +318,7 @@ test("Home starts with knowledge or a conversation without CRM setup", async ({
   ).toBeVisible();
 });
 
-test("Home presents a safe retry state when persisted data is unavailable", async ({
+test("Home keeps available relationship memory when Daily is unavailable", async ({
   page,
 }) => {
   await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
@@ -306,10 +337,48 @@ test("Home presents a safe retry state when persisted data is unavailable", asyn
       await route.fulfill({ json: recentPage() });
     },
   );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      await route.fulfill({ json: accountPage() });
+    },
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/dashboard");
 
-  await expect(page.locator('section[role="alert"]')).toContainText(
-    "Conversation history is temporarily unavailable.",
+  await expect(
+    page.getByRole("heading", { name: "Conversation workspace" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /Today's schedule and follow-ups are temporarily unavailable/u,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Founder coffee notes/u }),
+  ).toHaveAttribute("href", "/conversations/interaction-recent");
+  await expect(
+    page.getByRole("link", {
+      name: /Northstar Facilities.*conversation memory/u,
+    }),
+  ).toHaveAttribute(
+    "href",
+    "/conversations/accounts/company-daily#conversations",
   );
-  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Try Daily again" }),
+  ).toBeVisible();
+  await expect(page.locator('section[role="alert"]')).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Upcoming conversations" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Follow-ups needing attention" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Conversation history is temporarily unavailable."),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
 });

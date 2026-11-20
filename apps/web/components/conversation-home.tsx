@@ -21,80 +21,121 @@ function conversationHref(href: string): string {
     .replace(/\/companion(?=$|#)/u, "/workspace");
 }
 
+type SourceState = "loading" | "available" | "unavailable";
+
 export function ConversationHome() {
   const [daily, setDaily] = useState<DailyResponse | null>(null);
   const [recent, setRecent] = useState<Interaction[]>([]);
   const [accounts, setAccounts] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [historyWarning, setHistoryWarning] = useState<string | null>(null);
+  const [dailyState, setDailyState] = useState<SourceState>("loading");
+  const [historyState, setHistoryState] = useState<SourceState>("loading");
+  const [accountState, setAccountState] = useState<SourceState>("loading");
+  const [retrying, setRetrying] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    Promise.allSettled([
-      apiRequest<DailyResponse>(
-        `/api/v1/daily?${new URLSearchParams({ timezone }).toString()}`,
-        { signal: controller.signal },
-      ),
-      apiRequest<EntityPage<Interaction>>(
-        "/api/v1/interactions?page=1&pageSize=6&status=completed&sortBy=start_at&sortOrder=desc",
-        { signal: controller.signal },
-      ),
-      apiRequest<EntityPage<Company>>(
-        "/api/v1/companies?page=1&pageSize=8&sortBy=name&sortOrder=asc",
-        { signal: controller.signal },
-      ),
-    ])
-      .then(([dayResult, historyResult, accountResult]) => {
-        if (dayResult.status === "rejected") throw dayResult.reason;
-        setDaily(dayResult.value);
-        setError(null);
-        if (historyResult.status === "fulfilled") {
-          setRecent(historyResult.value.items);
-          setHistoryWarning(null);
-        } else {
-          setHistoryWarning(
-            "Recent conversation history is temporarily unavailable. Your next conversation is still shown.",
-          );
-        }
-        if (accountResult.status === "fulfilled") {
-          setAccounts(accountResult.value.items);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
-          return;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Your conversation workspace could not be loaded.",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    const dailyRequest = apiRequest<DailyResponse>(
+      `/api/v1/daily?${new URLSearchParams({ timezone }).toString()}`,
+      { signal: controller.signal },
+    ).then(
+      (value) => {
+        if (controller.signal.aborted) return;
+        setDaily(value);
+        setDailyState("available");
+        setRetrying(false);
+      },
+      () => {
+        if (controller.signal.aborted) return;
+        setDaily(null);
+        setDailyState("unavailable");
+        setRetrying(false);
+      },
+    );
+    const historyRequest = apiRequest<EntityPage<Interaction>>(
+      "/api/v1/interactions?page=1&pageSize=6&status=completed&sortBy=start_at&sortOrder=desc",
+      { signal: controller.signal },
+    ).then(
+      (value) => {
+        if (controller.signal.aborted) return;
+        setRecent(value.items);
+        setHistoryState("available");
+      },
+      () => {
+        if (controller.signal.aborted) return;
+        setRecent([]);
+        setHistoryState("unavailable");
+      },
+    );
+    const accountRequest = apiRequest<EntityPage<Company>>(
+      "/api/v1/companies?page=1&pageSize=8&sortBy=name&sortOrder=asc",
+      { signal: controller.signal },
+    ).then(
+      (value) => {
+        if (controller.signal.aborted) return;
+        setAccounts(value.items);
+        setAccountState("available");
+      },
+      () => {
+        if (controller.signal.aborted) return;
+        setAccounts([]);
+        setAccountState("unavailable");
+      },
+    );
+
+    void dailyRequest;
+    void historyRequest;
+    void accountRequest;
     return () => controller.abort();
   }, [retryKey]);
 
-  if (loading && !daily) return <HomeLoading />;
+  const usefulSecondarySource =
+    historyState === "available" || accountState === "available";
+
+  if (dailyState === "loading") {
+    return <HomeLoading />;
+  }
   if (!daily) {
+    if (usefulSecondarySource) {
+      return (
+        <ReducedConversationHome
+          accounts={accounts}
+          accountState={accountState}
+          historyState={historyState}
+          recent={recent}
+          retrying={retrying}
+          retry={() => {
+            setRetrying(true);
+            setRetryKey((value) => value + 1);
+          }}
+        />
+      );
+    }
+
+    if (historyState === "loading" || accountState === "loading") {
+      return <HomeLoading />;
+    }
+
     return (
       <section className="form-card border-rose-200 bg-rose-50" role="alert">
         <h1 className="text-3xl font-semibold text-rose-950">
           Oryntela couldn’t load your conversations.
         </h1>
-        <p className="mt-3 text-sm text-rose-900">{error}</p>
+        <p className="mt-3 text-sm text-rose-900">
+          Your conversation workspace is temporarily unavailable. Please try
+          again.
+        </p>
         <button
           type="button"
           className="primary-button mt-5"
+          disabled={retrying}
           onClick={() => {
-            setLoading(true);
+            setRetrying(true);
             setRetryKey((value) => value + 1);
           }}
         >
-          Try again
+          {retrying ? "Trying again…" : "Try again"}
         </button>
       </section>
     );
@@ -127,21 +168,38 @@ export function ConversationHome() {
           Ask Oryntela
         </Link>
       </header>
-      {historyWarning ? (
+      {historyState === "unavailable" ? (
         <p
           role="status"
           className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
         >
-          {historyWarning}
+          Recent conversation history is temporarily unavailable. Your next
+          conversation is still shown.
         </p>
       ) : null}
-
-      {error ? (
+      {accountState === "unavailable" ? (
         <p
           role="status"
-          className="mb-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-950"
+          className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
         >
-          Your last loaded view is shown. Refresh the page to try again.
+          Account conversation links are temporarily unavailable. The rest of
+          your conversation workspace is still shown.
+        </p>
+      ) : null}
+      {historyState === "loading" ? (
+        <p
+          role="status"
+          className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600"
+        >
+          Recent conversation history is still loading.
+        </p>
+      ) : null}
+      {accountState === "loading" ? (
+        <p
+          role="status"
+          className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600"
+        >
+          Account conversation links are still loading.
         </p>
       ) : null}
 
@@ -211,45 +269,184 @@ export function ConversationHome() {
           ) : null}
         </HomeSection>
 
-        <div className="xl:col-span-2">
+        {historyState === "available" ? (
+          <div className="xl:col-span-2">
+            <HomeSection
+              eyebrow="Memory"
+              title="Recent conversations"
+              action={{ href: "/assistant", label: "Search or ask" }}
+            >
+              <RecentConversationGrid recent={recent} />
+            </HomeSection>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ReducedConversationHome({
+  accounts,
+  accountState,
+  historyState,
+  recent,
+  retry,
+  retrying,
+}: {
+  accounts: Company[];
+  accountState: SourceState;
+  historyState: SourceState;
+  recent: Interaction[];
+  retry: () => void;
+  retrying: boolean;
+}) {
+  const optionalSourceLoading =
+    accountState === "loading" || historyState === "loading";
+
+  return (
+    <section
+      aria-labelledby="conversation-home-title"
+      aria-busy={retrying || optionalSourceLoading}
+    >
+      <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
+            Relationship memory
+          </p>
+          <h1
+            id="conversation-home-title"
+            className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-5xl"
+          >
+            Conversation workspace
+          </h1>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+            Keep working from the conversation history and account memory that
+            are available now.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link className="primary-button" href="/conversations/new">
+            Add conversation
+          </Link>
+          <Link className="secondary-button" href="/assistant">
+            Search or ask
+          </Link>
+        </div>
+      </header>
+
+      <div
+        className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950"
+        role="status"
+      >
+        <p>
+          Today&apos;s schedule and follow-ups are temporarily unavailable. No
+          schedule or follow-up status is shown until that source recovers.
+        </p>
+        <button
+          type="button"
+          className="secondary-button mt-4"
+          disabled={retrying}
+          onClick={retry}
+        >
+          {retrying ? "Trying again…" : "Try Daily again"}
+        </button>
+      </div>
+
+      {historyState === "unavailable" ? (
+        <p
+          role="status"
+          className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          Recent conversation history is temporarily unavailable.
+        </p>
+      ) : null}
+      {accountState === "unavailable" ? (
+        <p
+          role="status"
+          className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          Account conversation links are temporarily unavailable.
+        </p>
+      ) : null}
+      {historyState === "loading" ? (
+        <p
+          role="status"
+          className="mt-5 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600"
+        >
+          Recent conversation history is still loading.
+        </p>
+      ) : null}
+      {accountState === "loading" ? (
+        <p
+          role="status"
+          className="mt-5 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600"
+        >
+          Account conversation links are still loading.
+        </p>
+      ) : null}
+
+      {accountState === "available" ? (
+        accounts.length ? (
+          <AccountDirectory accounts={accounts} />
+        ) : (
+          <div className="mt-7">
+            <HomeSection
+              eyebrow="Relationship memory"
+              title="Accounts"
+              action={{ href: "/conversations", label: "View all" }}
+            >
+              <EmptyLine>
+                Accounts will appear here when a conversation is linked to one.
+              </EmptyLine>
+            </HomeSection>
+          </div>
+        )
+      ) : null}
+
+      {historyState === "available" ? (
+        <div className="mt-7">
           <HomeSection
             eyebrow="Memory"
             title="Recent conversations"
             action={{ href: "/assistant", label: "Search or ask" }}
           >
-            {recent.length ? (
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {recent.slice(0, 6).map((item) => (
-                  <li key={item.id}>
-                    <Link
-                      href={`/conversations/${item.id}`}
-                      className="block h-full rounded-2xl border border-slate-200 p-4 transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
-                    >
-                      <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
-                        {humanise(item.interactionType)}
-                      </p>
-                      <h3 className="mt-2 font-semibold text-slate-950">
-                        {item.title}
-                      </h3>
-                      <p className="mt-2 text-sm text-slate-500">
-                        {formatInteractionDate(
-                          item.actualEndAt ?? item.scheduledStartAt,
-                        )}
-                      </p>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyLine>
-                Completed conversations will become your searchable relationship
-                history.
-              </EmptyLine>
-            )}
+            <RecentConversationGrid recent={recent} />
           </HomeSection>
         </div>
-      </div>
+      ) : null}
     </section>
+  );
+}
+
+function RecentConversationGrid({ recent }: { recent: Interaction[] }) {
+  if (!recent.length) {
+    return (
+      <EmptyLine>
+        Completed conversations will become your searchable relationship
+        history.
+      </EmptyLine>
+    );
+  }
+
+  return (
+    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {recent.slice(0, 6).map((item) => (
+        <li key={item.id}>
+          <Link
+            href={`/conversations/${item.id}`}
+            className="block h-full rounded-2xl border border-slate-200 p-4 transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
+              {humanise(item.interactionType)}
+            </p>
+            <h3 className="mt-2 font-semibold text-slate-950">{item.title}</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {formatInteractionDate(item.actualEndAt ?? item.scheduledStartAt)}
+            </p>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 
