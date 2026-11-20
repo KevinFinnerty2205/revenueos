@@ -342,6 +342,119 @@ test("account history opens one CRM-independent conversation workspace and prese
   ).toBe(true);
 });
 
+test("account history survives unavailable contact enrichment", async ({
+  page,
+}) => {
+  await page.route("http://localhost:8000/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    const { pathname } = url;
+
+    if (pathname === "/api/v1/companies/resilient-account") {
+      await route.fulfill({
+        json: {
+          id: "resilient-account",
+          organisationId: "organisation-proof",
+          name: "Resilient account",
+          website: null,
+          industry: null,
+          location: "Sydney",
+          employeeCount: null,
+          status: "prospect",
+          ownerUserId: "owner-proof",
+          archivedAt: null,
+          createdAt: "2026-11-01T00:00:00Z",
+          updatedAt: "2026-11-01T00:00:00Z",
+        },
+      });
+      return;
+    }
+    if (pathname === "/api/v1/interactions") {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "resilient-conversation",
+              organisationId: "organisation-proof",
+              companyId: "resilient-account",
+              opportunityId: null,
+              contactId: "private-contact-id",
+              meetingId: null,
+              title: "Resilient account call",
+              interactionType: "phone_call",
+              lifecycleStatus: "planned",
+              scheduledStartAt: "2026-11-25T00:00:00Z",
+              scheduledEndAt: null,
+              actualStartAt: null,
+              actualEndAt: null,
+              timezone: "Australia/Sydney",
+              creationOrigin: "manual",
+              captureMethods: [],
+              intelligenceState: "not_ready",
+              recordingAvailable: false,
+              callOutcome: null,
+              callDirection: "outbound",
+              durationSeconds: null,
+              briefState: "not_generated",
+              createdAt: "2026-11-01T00:00:00Z",
+              updatedAt: "2026-11-01T00:00:00Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 100,
+          pages: 1,
+        },
+      });
+      return;
+    }
+    if (pathname === "/api/v1/contacts" && url.searchParams.has("page")) {
+      await route.fulfill({
+        json: { items: [], total: 0, page: 1, pageSize: 100, pages: 0 },
+      });
+      return;
+    }
+    if (pathname === "/api/v1/contacts") {
+      await route.fulfill({
+        status: 503,
+        json: {
+          code: "contact_list_unavailable",
+          message: "Private contact list failure details",
+        },
+      });
+      return;
+    }
+    if (pathname === "/api/v1/contacts/private-contact-id") {
+      await route.fulfill({
+        status: 404,
+        json: {
+          code: "contact_not_found",
+          message: "Private contact lookup failure details",
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 404,
+      json: { code: "not_found", message: "Not part of this test." },
+    });
+  });
+
+  await page.goto("/conversations/accounts/resilient-account");
+
+  await expect(
+    page.getByRole("heading", { name: "Resilient account", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Resilient account call" }),
+  ).toBeVisible();
+  await expect(page.getByText("Linked contact")).toBeVisible();
+  await expect(page.getByText(/private-contact-id/)).toHaveCount(0);
+  await expect(
+    page.getByText(/Private contact .* failure details/),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+});
+
 test("a CRM-free private note saves and reloads when AI Companion is disabled", async ({
   page,
 }) => {
