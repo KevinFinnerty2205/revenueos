@@ -53,6 +53,22 @@ class ConversationSnapshotRecord:
     occurred_at: datetime
 
 
+@dataclass(frozen=True)
+class ConversationInitiativeHistoryRecord:
+    interaction_id: UUID
+    title: str
+    interaction_type: str
+    lifecycle_status: str
+    occurred_at: datetime
+
+
+@dataclass(frozen=True)
+class ConversationInitiativeHistoryResult:
+    items: tuple[ConversationInitiativeHistoryRecord, ...]
+    total: int
+    truncated: bool
+
+
 class ConversationThreadRepository:
     """Tenant-scoped initiative grouping and validated-memory reads."""
 
@@ -380,6 +396,67 @@ class ConversationThreadRepository:
             organisation_id,
             interaction_ids=ids,
             completed_only=True,
+        )
+
+    async def thread_interaction_history(
+        self,
+        organisation_id: UUID,
+        thread_id: UUID,
+        *,
+        current_interaction_id: UUID,
+        through_at: datetime,
+        limit: int,
+    ) -> ConversationInitiativeHistoryResult:
+        effective_at = func.coalesce(
+            Interaction.actual_end_at,
+            Interaction.actual_start_at,
+            Interaction.scheduled_start_at,
+            Interaction.created_at,
+        )
+        rows = (
+            await self.session.execute(
+                select(
+                    Interaction.id,
+                    Interaction.title,
+                    Interaction.interaction_type,
+                    Interaction.lifecycle_status,
+                    effective_at.label("occurred_at"),
+                    func.count().over().label("total"),
+                )
+                .join(
+                    ConversationThreadAssignment,
+                    and_(
+                        ConversationThreadAssignment.organisation_id == Interaction.organisation_id,
+                        ConversationThreadAssignment.interaction_id == Interaction.id,
+                    ),
+                )
+                .where(
+                    ConversationThreadAssignment.organisation_id == organisation_id,
+                    ConversationThreadAssignment.thread_id == thread_id,
+                    Interaction.organisation_id == organisation_id,
+                    Interaction.id != current_interaction_id,
+                    Interaction.deleted_at.is_(None),
+                    effective_at <= through_at,
+                )
+                .order_by(effective_at.desc(), Interaction.id.asc())
+                .limit(limit)
+            )
+        ).all()
+        items = tuple(
+            ConversationInitiativeHistoryRecord(
+                interaction_id=cast(UUID, row[0]),
+                title=cast(str, row[1]),
+                interaction_type=cast(str, row[2]),
+                lifecycle_status=cast(str, row[3]),
+                occurred_at=cast(datetime, row[4]),
+            )
+            for row in rows
+        )
+        total = int(rows[0][5]) if rows else 0
+        return ConversationInitiativeHistoryResult(
+            items=items,
+            total=total,
+            truncated=total > len(items),
         )
 
     async def _snapshot_records(

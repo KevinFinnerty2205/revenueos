@@ -42,6 +42,10 @@ The default web experience must satisfy these behaviours:
   editor, discard its local text or strand the conversation lifecycle.
 - Preparation works without a company or opportunity. Confirmed initiative history
   is used deliberately; unrelated work at the same company is not silently merged.
+- Relationship history lists a bounded set of earlier conversations only from the
+  explicitly confirmed initiative, even when no sales framework or intelligence
+  output exists. Each metadata-only item links back to its source conversation;
+  there is no company-wide fallback and no private note or transcript excerpt.
 - Framework questions come from supported, missing or stale evidence. Event and
   general notes do not automatically receive sales-qualification prompts.
 - Live question suggestions are conservative and inspectable. Only supported,
@@ -101,7 +105,7 @@ local; this contract does not activate a live AI provider.
 | Meeting feedback and scoring  | Evidence coverage distinguishes confirmed, partial, missing, stale and conflicting information                 | An explained per-conversation assessment rubric, selectable goals and evidence-calibrated validation; coverage is not a win probability or quality score         |
 | Business learning             | Reviewed website/file knowledge ingestion and source-aware preparation exist behind controlled boundaries      | Approved real-source ingestion, correction/reapproval and evidence that organisation language improves useful guidance                                           |
 | Before-conversation delivery  | Timezone-aware deterministic brief preparation and a disabled-by-default private outbox exist                  | Target-environment calendar/email activation, deduplication, cancellation, delivery and owner acceptance evidence                                                |
-| Long relationships            | Explicit initiatives separate unrelated work and retain dated, conflicting evidence                            | Owner review across many conversations, changing stakeholders, dormant relationships and parallel initiatives                                                    |
+| Long relationships            | Explicit initiatives separate unrelated work and expose bounded, source-linked earlier-conversation history    | Owner review across many conversations, changing stakeholders, dormant relationships and parallel initiatives                                                    |
 | Search and knowledge          | Account/conversation navigation, owner-private notes-content search and existing tenant-scoped Ask paths       | Broader cross-conversation retrieval and sharing verified end to end                                                                                             |
 | Simple daily use              | One conversation-first journey with legacy administration outside the default path                             | Desktop/mobile visual review, real-browser acceptance and owner usability evidence                                                                               |
 

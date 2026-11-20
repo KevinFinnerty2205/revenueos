@@ -3063,6 +3063,20 @@ export interface ConversationFrameworkCoverage {
   sourceConversations: ConversationSourceContext[];
 }
 
+export interface ConversationInitiativeHistoryItem {
+  interactionId: string;
+  title: string;
+  interactionType: InteractionType;
+  lifecycleStatus: InteractionLifecycleStatus;
+  occurredAt: string;
+}
+
+export interface ConversationInitiativeHistory {
+  items: ConversationInitiativeHistoryItem[];
+  total: number;
+  truncated: boolean;
+}
+
 export interface ConversationMemoryResponse {
   state: "not_configured" | "current";
   safeMessage: string;
@@ -3071,6 +3085,7 @@ export interface ConversationMemoryResponse {
   suggestions: ConversationThreadSuggestion[];
   currentConversation: ConversationFrameworkCoverage | null;
   confirmedThread: ConversationFrameworkCoverage | null;
+  confirmedInitiativeHistory: ConversationInitiativeHistory;
   generatedAt: string;
 }
 

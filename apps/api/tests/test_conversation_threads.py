@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI
@@ -172,6 +172,11 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
     assert ungrouped.status_code == 200, ungrouped.text
     assert ungrouped.json()["assignment"]["thread"] is None
     assert ungrouped.json()["confirmedThread"] is None
+    assert ungrouped.json()["confirmedInitiativeHistory"] == {
+        "items": [],
+        "total": 0,
+        "truncated": False,
+    }
     assert [item["interactionTitle"] for item in ungrouped.json()["currentConversation"]["sourceConversations"]] == [
         "April expansion follow-up"
     ]
@@ -199,6 +204,11 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
 
     suggested = client.get(f"/api/v1/interactions/{april['id']}/conversation-memory").json()
     assert suggested["assignment"]["thread"] is None
+    assert suggested["confirmedInitiativeHistory"] == {
+        "items": [],
+        "total": 0,
+        "truncated": False,
+    }
     assert {item["thread"]["name"] for item in suggested["suggestions"]} == {
         "Expansion programme",
         "Renewal",
@@ -228,6 +238,19 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
     assert current_titles == {"April expansion follow-up"}
     assert cumulative_titles == {"January expansion discovery", "April expansion follow-up"}
     assert "February renewal discussion" not in cumulative_titles
+    assert body["confirmedInitiativeHistory"] == {
+        "items": [
+            {
+                "interactionId": january["id"],
+                "title": "January expansion discovery",
+                "interactionType": "phone_call",
+                "lifecycleStatus": "completed",
+                "occurredAt": "2026-01-15T02:00:00Z",
+            }
+        ],
+        "total": 1,
+        "truncated": False,
+    }
     timing = next(item for item in body["confirmedThread"]["items"] if item["fieldKey"] == "timing")
     assert timing["state"] == "conflicting"
     assert len(timing["conflicts"]) >= 1
@@ -282,6 +305,9 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
     corrected_memory = client.get(f"/api/v1/interactions/{april['id']}/conversation-memory").json()
     corrected_titles = {item["interactionTitle"] for item in corrected_memory["confirmedThread"]["sourceConversations"]}
     assert corrected_titles == {"February renewal discussion", "April expansion follow-up"}
+    assert [item["title"] for item in corrected_memory["confirmedInitiativeHistory"]["items"]] == [
+        "February renewal discussion"
+    ]
 
     async def audit_actions() -> set[str]:
         async with app.state.session_factory() as session:
@@ -293,6 +319,213 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
             return set(actions.all())
 
     assert {"created", "assigned", "reassigned", "unassigned"}.issubset(asyncio.run(audit_actions()))
+
+
+def test_confirmed_initiative_history_works_without_framework_or_intelligence_and_stays_metadata_only(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    source = create_interaction(
+        client,
+        title="CRM-free relationship note",
+        interaction_type="manual_interaction",
+    )
+    deleted = create_interaction(
+        client,
+        title="Deleted initiative note",
+        interaction_type="manual_interaction",
+    )
+    target = create_interaction(
+        client,
+        title="Current CRM-free conversation",
+        interaction_type="manual_interaction",
+    )
+    ungrouped = create_interaction(
+        client,
+        title="Separate ungrouped note",
+        interaction_type="manual_interaction",
+    )
+    source_id = UUID(str(source["id"]))
+    deleted_id = UUID(str(deleted["id"]))
+    target_id = UUID(str(target["id"]))
+
+    async def set_history_times() -> None:
+        async with app.state.session_factory() as session:
+            rows = {
+                interaction.id: interaction
+                for interaction in (
+                    await session.scalars(
+                        select(Interaction).where(
+                            Interaction.organisation_id == PRIMARY_ORGANISATION_ID,
+                            Interaction.id.in_((source_id, deleted_id, target_id)),
+                        )
+                    )
+                ).all()
+            }
+            assert set(rows) == {source_id, deleted_id, target_id}
+            rows[source_id].lifecycle_status = "completed"
+            rows[source_id].actual_start_at = datetime(2026, 1, 10, 2, 0, tzinfo=UTC)
+            rows[source_id].actual_end_at = datetime(2026, 1, 10, 3, 0, tzinfo=UTC)
+            rows[deleted_id].scheduled_start_at = datetime(2026, 2, 10, 2, 0, tzinfo=UTC)
+            rows[target_id].scheduled_start_at = datetime(2026, 4, 10, 2, 0, tzinfo=UTC)
+            await session.commit()
+
+    asyncio.run(set_history_times())
+    selected = client.patch("/api/v1/methodologies/current", json={"selection": "none"})
+    assert selected.status_code == 200, selected.text
+
+    private_tokens = {
+        "liveNotes": f"private-live-{uuid4()}",
+        "enhancedNotes": f"private-enhanced-{uuid4()}",
+        "followUpDraft": f"private-follow-up-{uuid4()}",
+    }
+    workspace = client.put(
+        f"/api/v1/interactions/{source['id']}/personal-workspace",
+        json={
+            "expectedLockVersion": 0,
+            **private_tokens,
+            "followUpReviewed": False,
+            "generationFingerprint": None,
+        },
+    )
+    assert workspace.status_code == 200, workspace.text
+
+    thread = client.post(
+        "/api/v1/conversation-threads",
+        json={
+            "name": "CRM-free initiative",
+            "initialInteractionId": source["id"],
+            "expectedAssignmentLockVersion": 0,
+        },
+    )
+    assert thread.status_code == 201, thread.text
+    for interaction in (deleted, target):
+        assigned = client.put(
+            f"/api/v1/interactions/{interaction['id']}/thread-assignment",
+            json={"threadId": thread.json()["id"], "expectedLockVersion": 0},
+        )
+        assert assigned.status_code == 200, assigned.text
+
+    async def soft_delete_assigned_history() -> None:
+        async with app.state.session_factory() as session:
+            interaction = await session.scalar(
+                select(Interaction).where(
+                    Interaction.organisation_id == PRIMARY_ORGANISATION_ID,
+                    Interaction.id == deleted_id,
+                )
+            )
+            assert interaction is not None
+            interaction.deleted_at = datetime(2026, 2, 11, 2, 0, tzinfo=UTC)
+            await session.commit()
+
+    asyncio.run(soft_delete_assigned_history())
+
+    memory = client.get(f"/api/v1/interactions/{target['id']}/conversation-memory")
+    assert memory.status_code == 200, memory.text
+    body = memory.json()
+    assert body["state"] == "not_configured"
+    assert body["definition"] is None
+    assert body["currentConversation"] is None
+    assert body["confirmedThread"] is None
+    history = body["confirmedInitiativeHistory"]
+    assert history["total"] == 1
+    assert history["truncated"] is False
+    assert history["items"] == [
+        {
+            "interactionId": source["id"],
+            "title": "CRM-free relationship note",
+            "interactionType": "manual_interaction",
+            "lifecycleStatus": "completed",
+            "occurredAt": "2026-01-10T03:00:00Z",
+        }
+    ]
+    assert deleted["id"] not in memory.text
+    assert set(history["items"][0]) == {
+        "interactionId",
+        "title",
+        "interactionType",
+        "lifecycleStatus",
+        "occurredAt",
+    }
+    assert all(token not in memory.text for token in private_tokens.values())
+    assert all(
+        f'"{private_field}"' not in memory.text
+        for private_field in (
+            "liveNotes",
+            "enhancedNotes",
+            "followUpDraft",
+            "rawText",
+            "transcript",
+            "evidence",
+            "contentJson",
+        )
+    )
+
+    ungrouped_memory = client.get(f"/api/v1/interactions/{ungrouped['id']}/conversation-memory")
+    assert ungrouped_memory.status_code == 200, ungrouped_memory.text
+    assert ungrouped_memory.json()["confirmedInitiativeHistory"] == {
+        "items": [],
+        "total": 0,
+        "truncated": False,
+    }
+
+
+def test_confirmed_initiative_history_is_bounded_and_deterministic(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    conversations = [create_interaction(client, title=f"History order {index:02d}") for index in range(21)]
+    target = create_interaction(client, title="History boundary target")
+    thread = client.post(
+        "/api/v1/conversation-threads",
+        json={
+            "name": "Bounded history",
+            "initialInteractionId": conversations[0]["id"],
+            "expectedAssignmentLockVersion": 0,
+        },
+    )
+    assert thread.status_code == 201, thread.text
+    for interaction in (*conversations[1:], target):
+        assigned = client.put(
+            f"/api/v1/interactions/{interaction['id']}/thread-assignment",
+            json={"threadId": thread.json()["id"], "expectedLockVersion": 0},
+        )
+        assert assigned.status_code == 200, assigned.text
+
+    async def seed_distinct_history_times() -> None:
+        interaction_ids = [UUID(str(interaction["id"])) for interaction in conversations]
+        async with app.state.session_factory() as session:
+            records = (
+                await session.scalars(
+                    select(Interaction).where(
+                        Interaction.organisation_id == PRIMARY_ORGANISATION_ID,
+                        Interaction.id.in_(interaction_ids),
+                    )
+                )
+            ).all()
+            records_by_id = {record.id: record for record in records}
+            for index, interaction_id in enumerate(interaction_ids):
+                record = records_by_id[interaction_id]
+                # The final two records share the newest timestamp so the test
+                # exercises the UUID tie-break as well as newest-first ordering.
+                day_offset = min(index, len(interaction_ids) - 2)
+                occurred_at = datetime(2026, 1, 1, 2, 0, tzinfo=UTC) + timedelta(days=day_offset)
+                record.scheduled_start_at = occurred_at
+                record.scheduled_end_at = occurred_at + timedelta(hours=1)
+            await session.commit()
+
+    asyncio.run(seed_distinct_history_times())
+
+    memory = client.get(f"/api/v1/interactions/{target['id']}/conversation-memory")
+    assert memory.status_code == 200, memory.text
+    history = memory.json()["confirmedInitiativeHistory"]
+    newest_tied_ids = sorted(str(interaction["id"]) for interaction in conversations[-2:])
+    expected_ids = newest_tied_ids + [str(interaction["id"]) for interaction in reversed(conversations[1:-2])]
+    assert [item["interactionId"] for item in history["items"]] == expected_ids
+    assert history["total"] == 21
+    assert history["truncated"] is True
+    assert conversations[0]["id"] not in expected_ids
+    assert target["id"] not in {item["interactionId"] for item in history["items"]}
 
 
 def test_memory_excludes_snapshot_when_its_evidence_is_deleted(
@@ -621,35 +854,83 @@ def test_conversation_threads_are_tenant_scoped_and_hide_cross_tenant_attachment
     app: FastAPI,
     client: TestClient,
 ) -> None:
-    primary_interaction = create_interaction(client, title="Primary tenant conversation")
-    primary_thread = client.post("/api/v1/conversation-threads", json={"name": "Primary initiative"})
-    assert primary_thread.status_code == 201, primary_thread.text
-
-    app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
-    secondary_company = create_company(client, name="Secondary thread company")
-    secondary_interaction = create_interaction(
-        client,
-        title="Secondary tenant conversation",
-        company_id=str(secondary_company["id"]),
-    )
-    secondary_thread = client.post(
+    primary_source = create_interaction(client, title="Primary tenant source")
+    primary_target = create_interaction(client, title="Primary tenant target")
+    primary_candidate = create_interaction(client, title="Primary attachment candidate")
+    primary_thread = client.post(
         "/api/v1/conversation-threads",
-        json={"name": "Secondary initiative", "companyId": secondary_company["id"]},
+        json={
+            "name": "Primary initiative",
+            "initialInteractionId": primary_source["id"],
+            "expectedAssignmentLockVersion": 0,
+        },
     )
-    assert secondary_thread.status_code == 201, secondary_thread.text
-    hidden_primary_attachment = client.put(
-        f"/api/v1/interactions/{secondary_interaction['id']}/thread-assignment",
+    assert primary_thread.status_code == 201, primary_thread.text
+    primary_assigned = client.put(
+        f"/api/v1/interactions/{primary_target['id']}/thread-assignment",
         json={"threadId": primary_thread.json()["id"], "expectedLockVersion": 0},
     )
-    assert hidden_primary_attachment.status_code == 404
-    assert hidden_primary_attachment.json()["code"] == "conversation_thread_not_found"
-    app.dependency_overrides.pop(get_current_user)
+    assert primary_assigned.status_code == 200, primary_assigned.text
+
+    try:
+        app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
+        secondary_company = create_company(client, name="Secondary thread company")
+        secondary_source = create_interaction(
+            client,
+            title="Secondary tenant source",
+            company_id=str(secondary_company["id"]),
+        )
+        secondary_target = create_interaction(
+            client,
+            title="Secondary tenant target",
+            company_id=str(secondary_company["id"]),
+        )
+        secondary_candidate = create_interaction(
+            client,
+            title="Secondary attachment candidate",
+            company_id=str(secondary_company["id"]),
+        )
+        secondary_thread = client.post(
+            "/api/v1/conversation-threads",
+            json={
+                "name": "Secondary initiative",
+                "companyId": secondary_company["id"],
+                "initialInteractionId": secondary_source["id"],
+                "expectedAssignmentLockVersion": 0,
+            },
+        )
+        assert secondary_thread.status_code == 201, secondary_thread.text
+        secondary_assigned = client.put(
+            f"/api/v1/interactions/{secondary_target['id']}/thread-assignment",
+            json={"threadId": secondary_thread.json()["id"], "expectedLockVersion": 0},
+        )
+        assert secondary_assigned.status_code == 200, secondary_assigned.text
+        secondary_memory = client.get(f"/api/v1/interactions/{secondary_target['id']}/conversation-memory")
+        assert secondary_memory.status_code == 200, secondary_memory.text
+        assert [item["title"] for item in secondary_memory.json()["confirmedInitiativeHistory"]["items"]] == [
+            "Secondary tenant source"
+        ]
+        assert "Primary tenant source" not in secondary_memory.text
+        hidden_primary_attachment = client.put(
+            f"/api/v1/interactions/{secondary_candidate['id']}/thread-assignment",
+            json={"threadId": primary_thread.json()["id"], "expectedLockVersion": 0},
+        )
+        assert hidden_primary_attachment.status_code == 404
+        assert hidden_primary_attachment.json()["code"] == "conversation_thread_not_found"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
     listed_ids = {item["id"] for item in client.get("/api/v1/conversation-threads").json()}
     assert primary_thread.json()["id"] in listed_ids
     assert secondary_thread.json()["id"] not in listed_ids
-    assert client.get(f"/api/v1/interactions/{secondary_interaction['id']}/conversation-memory").status_code == 404
-    assert client.get(f"/api/v1/interactions/{secondary_interaction['id']}/thread-assignment").status_code == 404
+    primary_memory = client.get(f"/api/v1/interactions/{primary_target['id']}/conversation-memory")
+    assert primary_memory.status_code == 200, primary_memory.text
+    assert [item["title"] for item in primary_memory.json()["confirmedInitiativeHistory"]["items"]] == [
+        "Primary tenant source"
+    ]
+    assert "Secondary tenant source" not in primary_memory.text
+    assert client.get(f"/api/v1/interactions/{secondary_target['id']}/conversation-memory").status_code == 404
+    assert client.get(f"/api/v1/interactions/{secondary_target['id']}/thread-assignment").status_code == 404
     assert (
         client.patch(
             f"/api/v1/conversation-threads/{secondary_thread.json()['id']}",
@@ -658,7 +939,7 @@ def test_conversation_threads_are_tenant_scoped_and_hide_cross_tenant_attachment
         == 404
     )
     hidden_secondary_attachment = client.put(
-        f"/api/v1/interactions/{primary_interaction['id']}/thread-assignment",
+        f"/api/v1/interactions/{primary_candidate['id']}/thread-assignment",
         json={"threadId": secondary_thread.json()["id"], "expectedLockVersion": 0},
     )
     assert hidden_secondary_attachment.status_code == 404

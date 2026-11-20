@@ -2,16 +2,46 @@
 
 import type {
   ConversationFrameworkCoverage,
+  ConversationInitiativeHistory,
   ConversationMemoryResponse,
   ConversationThreadSummary,
+  InteractionLifecycleStatus,
+  InteractionType,
   MethodologyProjectionItem,
 } from "@revenueos/shared";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import {
+  formatInteractionDate,
+  interactionStatuses,
+  interactionTypes,
+} from "@/lib/interactions";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isDateTime(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T/.test(value) &&
+    /(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+function isInteractionType(value: unknown): value is InteractionType {
+  return interactionTypes.some((interactionType) => interactionType === value);
+}
+
+function isInteractionStatus(
+  value: unknown,
+): value is InteractionLifecycleStatus {
+  return interactionStatuses.some(
+    (interactionStatus) => interactionStatus === value,
+  );
 }
 
 function isConversationThreadSummary(
@@ -59,10 +89,43 @@ function isCoverage(value: unknown): value is ConversationFrameworkCoverage {
       (source) =>
         isRecord(source) &&
         typeof source.sourceId === "string" &&
+        typeof source.interactionId === "string" &&
         typeof source.interactionTitle === "string" &&
-        typeof source.occurredAt === "string",
+        isDateTime(source.occurredAt),
     );
   return validCounts && validItems && validSources;
+}
+
+function isInitiativeHistory(
+  value: unknown,
+): value is ConversationInitiativeHistory {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.items) ||
+    typeof value.total !== "number" ||
+    !Number.isInteger(value.total) ||
+    value.total < 0 ||
+    typeof value.truncated !== "boolean"
+  ) {
+    return false;
+  }
+  const total = value.total;
+  const validItems =
+    value.items.length <= 20 &&
+    value.items.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.interactionId === "string" &&
+        typeof item.title === "string" &&
+        isInteractionType(item.interactionType) &&
+        isInteractionStatus(item.lifecycleStatus) &&
+        isDateTime(item.occurredAt),
+    );
+  return (
+    validItems &&
+    total >= value.items.length &&
+    value.truncated === total > value.items.length
+  );
 }
 
 function isConversationMemoryResponse(
@@ -89,6 +152,9 @@ function isConversationMemoryResponse(
     value.currentConversation === null || isCoverage(value.currentConversation);
   const validThreadCoverage =
     value.confirmedThread === null || isCoverage(value.confirmedThread);
+  const validInitiativeHistory = isInitiativeHistory(
+    value.confirmedInitiativeHistory,
+  );
   return (
     (value.state === "not_configured" || value.state === "current") &&
     typeof value.safeMessage === "string" &&
@@ -99,6 +165,7 @@ function isConversationMemoryResponse(
     validSuggestions &&
     validCurrentCoverage &&
     validThreadCoverage &&
+    validInitiativeHistory &&
     typeof value.generatedAt === "string"
   );
 }
@@ -381,6 +448,11 @@ export function ConversationMemory({
             </div>
           </div>
 
+          <InitiativeHistoryPanel
+            history={memory.confirmedInitiativeHistory}
+            confirmed={memory.assignment.thread !== null}
+          />
+
           {memory.definition && memory.currentConversation ? (
             <div className="mt-6 grid gap-5 xl:grid-cols-2">
               <CoveragePanel
@@ -412,6 +484,79 @@ export function ConversationMemory({
           ) : null}
         </>
       ) : null}
+    </section>
+  );
+}
+
+function InitiativeHistoryPanel({
+  history,
+  confirmed,
+}: {
+  history: ConversationInitiativeHistory;
+  confirmed: boolean;
+}) {
+  return (
+    <section
+      className="mt-6 rounded-2xl border border-slate-200 p-5"
+      aria-labelledby="initiative-conversation-history-title"
+    >
+      <h3
+        id="initiative-conversation-history-title"
+        className="font-semibold text-slate-950"
+      >
+        Earlier conversations in this initiative
+      </h3>
+      <p className="mt-1 text-sm leading-6 text-slate-600">
+        Conversation membership is user-confirmed context. It does not mean the
+        conversation was validated as framework evidence.
+      </p>
+      {!confirmed ? (
+        <p className="mt-4 text-sm leading-6 text-slate-600">
+          Confirm an initiative to see its earlier conversations. Oryntela will
+          not use company-wide history.
+        </p>
+      ) : history.items.length ? (
+        <>
+          <ol
+            className="mt-4 space-y-3"
+            aria-label="Earlier conversations in this initiative"
+          >
+            {history.items.map((item) => (
+              <li
+                key={item.interactionId}
+                className="min-w-0 rounded-xl bg-slate-50 p-4"
+              >
+                <Link
+                  href={`/conversations/${item.interactionId}`}
+                  className="break-words text-sm font-bold text-brand-primary underline decoration-brand-primary/30 underline-offset-4 hover:decoration-brand-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focus"
+                >
+                  {item.title}
+                </Link>
+                <p className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-600">
+                  <span>{humanise(item.interactionType)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{humanise(item.lifecycleStatus)}</span>
+                  <span aria-hidden="true">·</span>
+                  <time dateTime={item.occurredAt}>
+                    {formatInteractionDate(item.occurredAt)}
+                  </time>
+                </p>
+              </li>
+            ))}
+          </ol>
+          {history.truncated ? (
+            <p className="mt-4 text-xs leading-5 text-slate-500">
+              Showing the {history.items.length} most recent of {history.total}{" "}
+              earlier conversations.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-4 text-sm leading-6 text-slate-600">
+          No earlier conversations are available in this confirmed initiative
+          yet.
+        </p>
+      )}
     </section>
   );
 }

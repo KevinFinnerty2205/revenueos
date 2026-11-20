@@ -33,6 +33,19 @@ dates and reuse the existing conflict and staleness rules. There is deliberately
 no company-wide fallback: separate initiatives at one company remain separate,
 and private user workspaces are never projected into shared thread memory.
 
+Confirmed initiative history is a separate metadata-only projection. It returns
+at most the 20 most recent earlier, non-deleted conversations that a user
+explicitly assigned to the same initiative, ordered by their effective
+conversation time and bounded by both the current conversation and the current
+time. The current and later conversations are excluded. Each item contains only
+the Interaction identifier, title, type, lifecycle status and effective timestamp
+and links back to its source. The projection is available when no methodology is
+selected and does not imply that the conversation contains validated framework
+evidence. Repository joins repeat the organisation predicate on assignments and
+Interactions; PostgreSQL RLS remains defence in depth. It never joins private
+workspaces, transcripts, Evidence or intelligence content and never falls back
+to all conversations at the same company.
+
 ### Private user work
 
 Live notes, enhanced notes and follow-up drafts are stored in
