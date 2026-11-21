@@ -7,7 +7,7 @@ import type {
   Interaction,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { AskRevenueOS } from "@/components/ask-revenueos";
 
@@ -15,6 +15,13 @@ interface SearchResults {
   companies: Company[];
   interactions: Interaction[];
 }
+
+interface SearchAvailability {
+  companies: SearchSourceState;
+  interactions: SearchSourceState;
+}
+
+type SearchSourceState = "pending" | "available" | "unavailable";
 
 const emptyResults: SearchResults = {
   companies: [],
@@ -36,46 +43,124 @@ export function CoreSearch({
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [results, setResults] = useState<SearchResults>(emptyResults);
+  const [availability, setAvailability] = useState<SearchAvailability | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeQuery, setActiveQuery] = useState<string | null>(null);
+  const searchGeneration = useRef(0);
+  const activeSearch = useRef<{
+    controller: AbortController;
+    query: string;
+  } | null>(null);
 
-  async function search(event: FormEvent<HTMLFormElement>) {
+  useEffect(
+    () => () => {
+      searchGeneration.current += 1;
+      activeSearch.current?.controller.abort();
+      activeSearch.current = null;
+    },
+    [],
+  );
+
+  function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
     if (value.length < 2) {
+      searchGeneration.current += 1;
+      activeSearch.current?.controller.abort();
+      activeSearch.current = null;
+      setActiveQuery(null);
+      setLoading(false);
+      setResults(emptyResults);
+      setAvailability(null);
+      setSubmittedQuery("");
       setError("Enter at least two characters to search.");
       return;
     }
+    if (activeSearch.current?.query === value) return;
 
+    const generation = searchGeneration.current + 1;
+    searchGeneration.current = generation;
+    activeSearch.current?.controller.abort();
+    const controller = new AbortController();
+    activeSearch.current = { controller, query: value };
+    setActiveQuery(value);
+    const sourceState: SearchAvailability = {
+      companies: "pending",
+      interactions: "pending",
+    };
+    let settledSources = 0;
     setLoading(true);
     setError(null);
+    setResults(emptyResults);
+    setAvailability({ ...sourceState });
+    setSubmittedQuery(value);
     const encoded = encodeURIComponent(value);
-    try {
-      const [companies, interactions] = await Promise.all([
-        apiRequest<EntityPage<Company>>(
-          `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
-        ),
-        apiRequest<EntityPage<Interaction>>(
-          `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
-        ),
-      ]);
-      setResults({
-        companies: companies.items,
-        interactions: interactions.items,
-      });
-      setSubmittedQuery(value);
-    } catch (reason: unknown) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Search could not be completed.",
-      );
-    } finally {
+
+    function settleSource(
+      source: keyof SearchAvailability,
+      state: Exclude<SearchSourceState, "pending">,
+      items: Company[] | Interaction[] = [],
+    ) {
+      if (generation !== searchGeneration.current) return;
+      sourceState[source] = state;
+      settledSources += 1;
+      setResults((current) => ({
+        ...current,
+        [source]: state === "available" ? items : [],
+      }));
+      setAvailability({ ...sourceState });
+      if (settledSources < 2) return;
+
+      if (activeSearch.current?.controller === controller) {
+        activeSearch.current = null;
+        setActiveQuery(null);
+      }
       setLoading(false);
+      if (
+        sourceState.companies === "unavailable" &&
+        sourceState.interactions === "unavailable"
+      ) {
+        setResults(emptyResults);
+        setAvailability(null);
+        setSubmittedQuery("");
+        setError("Search could not be completed. Please try again.");
+      }
     }
+
+    void apiRequest<EntityPage<Company>>(
+      `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
+      { signal: controller.signal },
+    ).then(
+      (companies) => settleSource("companies", "available", companies.items),
+      () => settleSource("companies", "unavailable"),
+    );
+    void apiRequest<EntityPage<Interaction>>(
+      `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
+      { signal: controller.signal },
+    ).then(
+      (interactions) =>
+        settleSource("interactions", "available", interactions.items),
+      () => settleSource("interactions", "unavailable"),
+    );
   }
 
   const resultCount = results.companies.length + results.interactions.length;
+  const partialResults =
+    availability !== null &&
+    (availability.companies === "unavailable" ||
+      availability.interactions === "unavailable");
+  const pendingResults =
+    availability !== null &&
+    (availability.companies === "pending" ||
+      availability.interactions === "pending");
+  const incompleteResults = partialResults || pendingResults;
+  const noSourcesSettled =
+    availability?.companies === "pending" &&
+    availability.interactions === "pending";
+  const searchingCurrentQuery = loading && activeQuery === query.trim();
 
   if (mode === "ask") {
     return (
@@ -101,7 +186,7 @@ export function CoreSearch({
         aria-labelledby="search-mode-tab"
         className="space-y-6"
       >
-        <form onSubmit={(event) => void search(event)} className="form-card">
+        <form onSubmit={search} className="form-card">
           <label htmlFor="core-search" className="form-label">
             Search your workspace
           </label>
@@ -119,8 +204,12 @@ export function CoreSearch({
               placeholder="Try a conversation, private note or account"
               autoComplete="off"
             />
-            <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? "Searching…" : "Search"}
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={searchingCurrentQuery}
+            >
+              {searchingCurrentQuery ? "Searching…" : "Search"}
             </button>
           </div>
           {error ? (
@@ -134,7 +223,14 @@ export function CoreSearch({
           <section aria-labelledby="search-results-title" className="space-y-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-                {resultCount} {resultCount === 1 ? "result" : "results"}
+                {noSourcesSettled ? (
+                  "Search in progress"
+                ) : (
+                  <>
+                    {resultCount} {incompleteResults ? "available " : ""}
+                    {resultCount === 1 ? "result" : "results"}
+                  </>
+                )}
               </p>
               <h2
                 id="search-results-title"
@@ -143,7 +239,35 @@ export function CoreSearch({
                 Results for “{submittedQuery}”
               </h2>
             </div>
-            {resultCount === 0 ? (
+            {availability?.companies === "pending" ? (
+              <p role="status" className="text-sm text-slate-600">
+                Searching account results…
+              </p>
+            ) : null}
+            {availability?.interactions === "pending" ? (
+              <p role="status" className="text-sm text-slate-600">
+                Searching conversation results…
+              </p>
+            ) : null}
+            {availability?.companies === "unavailable" ? (
+              <p
+                role="status"
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"
+              >
+                Account results are temporarily unavailable. Conversation
+                results are shown when available.
+              </p>
+            ) : null}
+            {availability?.interactions === "unavailable" ? (
+              <p
+                role="status"
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"
+              >
+                Conversation results are temporarily unavailable. Account
+                results are shown when available.
+              </p>
+            ) : null}
+            {resultCount === 0 && !incompleteResults ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6">
                 <h3 className="font-semibold text-slate-950">
                   No matching work found
@@ -153,7 +277,7 @@ export function CoreSearch({
                   conversation, your private notes or an account name.
                 </p>
               </div>
-            ) : (
+            ) : resultCount > 0 ? (
               <div className="grid gap-4">
                 <ResultGroup
                   title="Conversations"
@@ -174,7 +298,7 @@ export function CoreSearch({
                   }))}
                 />
               </div>
-            )}
+            ) : null}
           </section>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm leading-6 text-slate-600">
