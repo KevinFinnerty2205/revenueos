@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest, apiUpload } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
 
 const MAX_RECORDING_BYTES = 512 * 1024 * 1024;
 const CHUNK_BYTES = 8 * 1024 * 1024;
@@ -221,6 +222,12 @@ export function ImportedCallRecording({
             }),
           },
         );
+        assertRecordingChunkUploadIdentity(chunk, {
+          recordingSessionId: recording.id,
+          sequenceNumber,
+          byteSize: chunkBlob.size,
+          checksumSha256,
+        });
         await apiUpload(chunk.uploadUrl, chunkBlob, mimeType);
         await apiRequest(
           `/api/v1/interactions/${interactionId}/recordings/${recording.id}/chunks/${chunk.id}/complete`,

@@ -10,6 +10,13 @@
 5. List chunks after interruption and retry only missing/unverified sequences.
 6. Stop and finalise with the declared last sequence, duration and final MIME.
 
+Before either browser-captured or imported audio is sent, the web client checks that
+the reserved upload response echoes the exact recording session, sequence, byte size
+and checksum it requested. Any mismatch fails closed before the returned upload URL,
+chunk completion or recording finalisation is used; the existing queued/retry or
+cancel path remains available. This client check is defence in depth and does not
+replace the API's tenant, grant or object-integrity enforcement.
+
 Out-of-order receipt is accepted. `(organisation_id, recording_session_id,
 sequence_number)` is unique. Repeating the same sequence/checksum is safe; changing
 size/checksum conflicts. Completion verifies stored bytes. Finalisation locks the
