@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DebriefSession } from "@revenueos/shared";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
@@ -12,6 +18,21 @@ function response(body: object, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function deferred<T>() {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolvePromise)
+        throw new Error("Deferred promise was not initialised.");
+      resolvePromise(value);
+    },
+  };
 }
 
 function session(overrides: Partial<DebriefSession> = {}): DebriefSession {
@@ -39,6 +60,87 @@ function session(overrides: Partial<DebriefSession> = {}): DebriefSession {
     updatedAt: "2026-08-14T01:00:00Z",
     completedAt: null,
     ...overrides,
+  };
+}
+
+function privateWorkspaceController() {
+  let currentValues: WorkspaceValues = {
+    liveNotes: "",
+    enhancedNotes: "",
+    followUpDraft: "",
+    followUpReviewed: false,
+  };
+  const setValues = vi.fn(
+    (
+      update: WorkspaceValues | ((current: WorkspaceValues) => WorkspaceValues),
+    ) => {
+      currentValues =
+        typeof update === "function" ? update(currentValues) : update;
+    },
+  );
+  const controller = {
+    workspace: {
+      exists: true,
+      ownerUserId: "user-1",
+      lockVersion: 2,
+      liveNotes: null,
+      enhancedNotes: null,
+      followUpDraft: null,
+      followUpReviewed: false,
+      generationFingerprint: null,
+      generationState: "not_started" as const,
+      generationId: null,
+      generationTranscriptVersion: null,
+      generationPersonalNotesState: "not_included" as const,
+      generationFailureCode: null,
+      generationRetryAvailable: false,
+      generationUpdateAvailable: false,
+      generationCompletedAt: null,
+      importedFromBrowserAt: null,
+      updatedAt: "2026-08-14T01:00:00Z",
+    },
+    values: currentValues,
+    setValues,
+    loading: false,
+    saveState: "idle" as const,
+    error: null,
+    generationActionState: "idle" as const,
+    generationError: null,
+    conflictRecovery: {
+      state: "idle" as const,
+      latestWorkspace: null,
+      latestValues: null,
+      submittedValues: null,
+      localValuesAtSubmission: null,
+      submittedFields: {
+        liveNotes: false,
+        enhancedNotes: false,
+        followUpDraft: false,
+        followUpReviewed: false,
+      },
+      importFromBrowser: false,
+      error: null,
+    },
+    dirtyFields: {
+      liveNotes: false,
+      enhancedNotes: false,
+      followUpDraft: false,
+      followUpReviewed: false,
+    },
+    isDirty: false,
+    save: vi.fn(async () => true),
+    loadLatestConflict: vi.fn(async () => false),
+    useLatestConflict: vi.fn(() => false),
+    saveReviewedConflict: vi.fn(async () => false),
+    retryGeneration: vi.fn(async () => false),
+    applyGeneratedVersion: vi.fn(async () => false),
+    refresh: vi.fn(async () => undefined),
+    reload: vi.fn(async () => undefined),
+  } satisfies ConversationWorkspaceController;
+  return {
+    controller,
+    setValues,
+    currentValues: () => currentValues,
   };
 }
 
@@ -298,6 +400,92 @@ describe("PostInteractionCapture", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/interactions/interaction-1/debrief/session-1"),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("removes completed debrief seeds before restoring another interaction", async () => {
+    const completedSession = (
+      interactionId: string,
+      statement: string,
+    ): DebriefSession =>
+      session({
+        id: `session-${interactionId}`,
+        interactionId,
+        lifecycleStatus: "completed",
+        currentQuestion: null,
+        completedAt: "2026-08-14T01:05:00Z",
+        candidates: [
+          {
+            id: `candidate-${interactionId}`,
+            evidenceCategory: "decision",
+            statement,
+            originalStatement: statement,
+            origin: "salesperson_reported",
+            sourceLabel: "Reported by you",
+            supportClassification: "reported",
+            validationState: "verified",
+            conflictState: "not_assessed",
+            userReviewState: "accepted",
+            sourceCaptureSessionId: `session-${interactionId}`,
+            evidenceFragmentId: `fragment-${interactionId}`,
+            acceptedEvidenceId: `evidence-${interactionId}`,
+            entityReference: null,
+            explicitlyReportedAt: "2026-08-14T01:05:00Z",
+            edited: false,
+          },
+        ],
+      });
+    const statementA = "Private A selected the confidential rollout.";
+    const statementB = "Private B approved the staged launch.";
+    const restoredA = completedSession("interaction-a", statementA);
+    const restoredB = completedSession("interaction-b", statementB);
+    const interactionBRestore = deferred<Response>();
+    const workspaceA = privateWorkspaceController();
+    const workspaceB = privateWorkspaceController();
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("interaction-a")
+        ? Promise.resolve(response(restoredA))
+        : interactionBRestore.promise,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <PostInteractionCapture
+        interactionId="interaction-a"
+        interactionType="online_meeting"
+        restoreLatest
+        workspaceController={workspaceA.controller}
+      />,
+    );
+
+    expect(await screen.findByText("Debrief complete")).toBeVisible();
+    expect(screen.getAllByText(statementA).length).toBeGreaterThan(0);
+    await waitFor(() => expect(workspaceA.setValues).toHaveBeenCalled());
+    expect(workspaceA.currentValues().enhancedNotes).toContain(statementA);
+
+    rerender(
+      <PostInteractionCapture
+        interactionId="interaction-b"
+        interactionType="online_meeting"
+        restoreLatest
+        workspaceController={workspaceB.controller}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Restoring post-interaction capture",
+    );
+    expect(screen.queryByText(statementA)).not.toBeInTheDocument();
+    expect(workspaceB.setValues).not.toHaveBeenCalled();
+
+    await act(async () => interactionBRestore.resolve(response(restoredB)));
+    expect(await screen.findByText("Debrief complete")).toBeVisible();
+    expect(screen.getAllByText(statementB).length).toBeGreaterThan(0);
+    await waitFor(() => expect(workspaceB.setValues).toHaveBeenCalled());
+    expect(workspaceB.currentValues().enhancedNotes).toContain(statementB);
+    expect(workspaceB.currentValues().followUpDraft).toContain(statementB);
+    expect(JSON.stringify(workspaceB.currentValues())).not.toContain(
+      statementA,
     );
   });
 

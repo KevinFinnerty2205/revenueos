@@ -1,13 +1,38 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { useLayoutEffect, useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationNotesReview } from "@/components/conversation-notes-review";
-import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
+import {
+  type ConversationWorkspaceController,
+  useConversationWorkspace,
+} from "@/lib/use-conversation-workspace";
 
 function response(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function deferred<T>() {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolvePromise)
+        throw new Error("Deferred promise was not initialised.");
+      resolvePromise(value);
+    },
+  };
 }
 
 const readyWorkspace = {
@@ -33,18 +58,53 @@ const readyWorkspace = {
   updatedAt: "2026-11-08T00:00:00Z",
 };
 
-function ReviewHarness() {
+function ReviewHarness({
+  interactionId = "interaction-1",
+  probeOnCommit = false,
+}: {
+  interactionId?: string;
+  probeOnCommit?: boolean;
+}) {
   const controller = useConversationWorkspace({
-    interactionId: "interaction-1",
+    interactionId,
   });
   return (
-    <ConversationNotesReview
-      controller={controller}
-      onApplyGeneratedVersion={async () => {
-        await controller.applyGeneratedVersion();
-      }}
-    />
+    <>
+      <LayoutMutationProbe
+        active={probeOnCommit}
+        controller={controller}
+        interactionId={interactionId}
+      />
+      <ConversationNotesReview
+        controller={controller}
+        onApplyGeneratedVersion={async () => {
+          await controller.applyGeneratedVersion();
+        }}
+      />
+    </>
   );
+}
+
+function LayoutMutationProbe({
+  active,
+  controller,
+  interactionId,
+}: {
+  active: boolean;
+  controller: ConversationWorkspaceController;
+  interactionId: string;
+}) {
+  const probedInteraction = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (!active || probedInteraction.current === interactionId) return;
+    probedInteraction.current = interactionId;
+    controller.setValues((current) => ({
+      ...current,
+      liveNotes: "Commit-time text must not cross interactions",
+    }));
+    void controller.save();
+  }, [active, controller, interactionId]);
+  return null;
 }
 
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
@@ -380,6 +440,62 @@ describe("ConversationNotesReview", () => {
     ).toBeVisible();
     expect(
       screen.getByText(/Your current rough notes remain unchanged/i),
+    ).toBeVisible();
+  });
+
+  it("removes the previous conversation's private text immediately on navigation", async () => {
+    const interactionB = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(readyWorkspace))
+      .mockImplementationOnce(() => interactionB.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const { rerender } = render(
+      <ReviewHarness interactionId="interaction-a" />,
+    );
+
+    expect(
+      await screen.findByLabelText("Your rough notes (original)"),
+    ).toHaveValue(readyWorkspace.liveNotes);
+    expect(screen.getByLabelText("Enhanced conversation notes")).toHaveValue(
+      readyWorkspace.enhancedNotes,
+    );
+    expect(screen.getByLabelText("Private follow-up draft")).toHaveValue(
+      readyWorkspace.followUpDraft,
+    );
+
+    rerender(
+      <ReviewHarness interactionId="interaction-b" probeOnCommit={true} />,
+    );
+
+    expect(screen.getByText("Loading your private notes…")).toBeVisible();
+    expect(
+      screen.queryByText(readyWorkspace.liveNotes),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue(readyWorkspace.enhancedNotes),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue(readyWorkspace.followUpDraft),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await act(async () =>
+      interactionB.resolve(
+        response({
+          ...readyWorkspace,
+          lockVersion: 7,
+          liveNotes: "Interaction B private notes",
+          enhancedNotes: "Interaction B enhanced notes",
+          followUpDraft: "Interaction B follow-up",
+        }),
+      ),
+    );
+    expect(
+      await screen.findByDisplayValue("Interaction B private notes"),
     ).toBeVisible();
   });
 });

@@ -62,17 +62,30 @@ const overallLabels: Record<MeetingIntelligenceOverallState, string> = {
   failed: "Generation failed",
 };
 
-export function MeetingIntelligenceWorkspace({
-  meetingId,
-  interactionId,
-  privateFollowUpManagedExternally = false,
-  workspaceRefreshKey = 0,
-}: {
+interface MeetingIntelligenceWorkspaceProps {
   meetingId: string;
   interactionId?: string;
   privateFollowUpManagedExternally?: boolean;
   workspaceRefreshKey?: number;
-}) {
+}
+
+export function MeetingIntelligenceWorkspace(
+  props: MeetingIntelligenceWorkspaceProps,
+) {
+  return (
+    <StatefulMeetingIntelligenceWorkspace
+      key={`${props.meetingId}:${props.interactionId ?? "legacy"}`}
+      {...props}
+    />
+  );
+}
+
+function StatefulMeetingIntelligenceWorkspace({
+  meetingId,
+  interactionId,
+  privateFollowUpManagedExternally = false,
+  workspaceRefreshKey = 0,
+}: MeetingIntelligenceWorkspaceProps) {
   const [workspace, setWorkspace] =
     useState<MeetingIntelligenceResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1768,7 +1781,9 @@ function PersistedFollowUpEmailView({
           <button
             type="button"
             className="secondary-button mt-3"
+            disabled={workspace.loading || workspace.workspace === null}
             onClick={() => {
+              if (workspace.loading || workspace.workspace === null) return;
               workspace.setValues((current) => ({
                 ...current,
                 followUpDraft: regeneratedDraft,
