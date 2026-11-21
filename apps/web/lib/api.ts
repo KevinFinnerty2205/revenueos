@@ -182,11 +182,13 @@ export async function apiUpload(
   pathOrUrl: string,
   file: Blob,
   mimeType: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<void> {
   await apiBinaryFetch(pathOrUrl, {
     method: "PUT",
     body: file,
     headers: { "Content-Type": mimeType },
+    signal: options.signal,
   });
 }
 

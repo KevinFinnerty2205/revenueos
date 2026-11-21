@@ -1061,6 +1061,10 @@ test("a presentation supports browser image upload, explicit review and intellig
           sourceOwnership: body.sourceOwnership,
           contextLabel: body.contextLabel,
           filename: body.filename,
+          mimeType: body.mimeType,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          capturedAt: body.capturedAt,
           candidates: [],
         });
         await route.fulfill({
@@ -1932,6 +1936,7 @@ test("an authorised imported call recording uses the existing transcription and 
   let imported = false;
   let transcriptionReady = false;
   let createPayload: Record<string, unknown> | null = null;
+  let importedChunk: Record<string, unknown> | null = null;
   let debrief = debriefSession("collecting", {
     interactionId: "interaction-imported-call",
     maxQuestions: 2,
@@ -2026,21 +2031,24 @@ test("an authorised imported call recording uses the existing transcription and 
         return;
       }
       if (path.endsWith("/recording-imported-call/chunks")) {
-        await route.fulfill({
-          status: 201,
-          json: {
-            id: "chunk-imported-call",
-            recordingSessionId: "recording-imported-call",
-            sequenceNumber: 0,
-            byteSize: 20,
-            checksumSha256: "0".repeat(64),
-            uploadState: "pending",
-            uploadedAt: null,
-            createdAt: "2026-08-14T03:02:00Z",
-            uploadUrl: `${path}/chunk-imported-call/content?token=synthetic`,
-            uploadExpiresAt: "2026-08-14T03:07:00Z",
-          },
-        });
+        const body = request.postDataJSON() as {
+          byteSize: number;
+          checksumSha256: string;
+          sequenceNumber: number;
+        };
+        importedChunk = {
+          id: "chunk-imported-call",
+          recordingSessionId: "recording-imported-call",
+          sequenceNumber: body.sequenceNumber,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          uploadState: "pending",
+          uploadedAt: null,
+          createdAt: "2026-08-14T03:02:00Z",
+          uploadUrl: `${path}/chunk-imported-call/content?token=synthetic`,
+          uploadExpiresAt: "2026-08-14T03:07:00Z",
+        };
+        await route.fulfill({ status: 201, json: importedChunk });
         return;
       }
       if (path.endsWith("/chunk-imported-call/content")) {
@@ -2049,7 +2057,11 @@ test("an authorised imported call recording uses the existing transcription and 
       }
       if (path.endsWith("/chunk-imported-call/complete")) {
         await route.fulfill({
-          json: { uploadState: "verified", checksumSha256: "0".repeat(64) },
+          json: {
+            ...importedChunk,
+            uploadState: "verified",
+            uploadedAt: "2026-08-14T03:02:01Z",
+          },
         });
         return;
       }
@@ -2331,9 +2343,11 @@ test("mobile Companion recording path persists a consented transcript into exist
   let recordingLifecycle = "created";
   let transcriptionReads = 0;
   let chunkUploadAttempts = 0;
+  let activeRecordingChunk: Record<string, unknown> | null = null;
   let intelligenceGenerated = false;
   const markers: Array<Record<string, unknown>> = [];
   const visuals: Array<Record<string, unknown>> = [];
+  let activeVisual: Record<string, unknown> | null = null;
   let recordingDebrief = debriefSession("collecting", {
     interactionId: "interaction-recording",
     currentQuestion: {
@@ -2350,18 +2364,25 @@ test("mobile Companion recording path persists a consented transcript into exist
     interactionId: "interaction-recording",
     captureSessionId: "capture-recording-1",
     recordingType: "live_audio_recording",
+    recordingSource: null,
     lifecycleStatus: recordingLifecycle,
     consentState: "acknowledged",
-    startedAt: recordingCreated ? "2026-08-14T02:10:00Z" : null,
-    stoppedAt:
-      recordingLifecycle === "recording" ? null : "2026-08-14T02:11:00Z",
-    durationSeconds: recordingLifecycle === "recording" ? null : 60,
+    startedAt: recordingLifecycle === "created" ? null : "2026-08-14T02:10:00Z",
+    stoppedAt: ["created", "recording"].includes(recordingLifecycle)
+      ? null
+      : "2026-08-14T02:11:00Z",
+    durationSeconds: ["created", "recording"].includes(recordingLifecycle)
+      ? null
+      : 60,
     expectedMimeType: "audio/webm",
-    finalMimeType: recordingLifecycle === "recording" ? null : "audio/webm",
-    totalBytes: recordingLifecycle === "recording" ? 0 : 36,
-    chunkCount: recordingLifecycle === "recording" ? 0 : 1,
-    uploadCompletedAt:
-      recordingLifecycle === "recording" ? null : "2026-08-14T02:11:00Z",
+    finalMimeType: ["uploaded", "completed"].includes(recordingLifecycle)
+      ? "audio/webm"
+      : null,
+    totalBytes: ["created", "recording"].includes(recordingLifecycle) ? 0 : 36,
+    chunkCount: ["created", "recording"].includes(recordingLifecycle) ? 0 : 1,
+    uploadCompletedAt: ["uploaded", "completed"].includes(recordingLifecycle)
+      ? "2026-08-14T02:11:00Z"
+      : null,
     transcriptionStatus:
       recordingLifecycle === "completed"
         ? "completed"
@@ -2515,28 +2536,53 @@ test("mobile Companion recording path persists a consented transcript into exist
         return;
       }
       if (path.endsWith("/visual-evidence/uploads")) {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        activeVisual = visualEvidence("uploading", {
+          interactionId: "interaction-recording",
+          visualType: body.visualType,
+          sourceOwnership: body.sourceOwnership,
+          contextLabel: body.contextLabel,
+          filename: body.filename,
+          mimeType: body.mimeType,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          capturedAt: body.capturedAt,
+          candidates: [],
+        });
         await route.fulfill({
           status: 201,
-          json: visualEvidence("uploading", {
-            interactionId: "interaction-recording",
+          json: {
+            ...activeVisual,
             uploadUrl: `${path}/visual-1/content?token=recording-test`,
             uploadExpiresAt: "2026-08-14T02:20:00Z",
-          }),
+          },
         });
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/complete")) {
+        activeVisual = {
+          ...(activeVisual ??
+            visualEvidence("uploading", {
+              interactionId: "interaction-recording",
+            })),
+          processingStatus: "uploaded",
+          processingAttempts: 1,
+        };
         await route.fulfill({
-          json: visualEvidence("uploaded", {
-            interactionId: "interaction-recording",
-          }),
+          json: activeVisual,
         });
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/process")) {
-        const completedVisual = visualEvidence("completed", {
-          interactionId: "interaction-recording",
-        });
+        const completedVisual = {
+          ...(activeVisual ??
+            visualEvidence("uploaded", {
+              interactionId: "interaction-recording",
+            })),
+          processingStatus: "completed",
+          processingAttempts: 1,
+        };
+        activeVisual = completedVisual;
         visuals.splice(0, visuals.length, completedVisual);
         await route.fulfill({ json: completedVisual });
         return;
@@ -2593,21 +2639,19 @@ test("mobile Companion recording path persists a consented transcript into exist
           checksumSha256: string;
           sequenceNumber: number;
         };
-        await route.fulfill({
-          status: 201,
-          json: {
-            id: "chunk-1",
-            recordingSessionId: "recording-1",
-            sequenceNumber: body.sequenceNumber,
-            byteSize: body.byteSize,
-            checksumSha256: body.checksumSha256,
-            uploadState: "pending",
-            uploadedAt: null,
-            createdAt: "2026-08-14T02:10:00Z",
-            uploadUrl: `${path}/chunk-1/content?token=short-lived-test-token`,
-            uploadExpiresAt: "2026-08-14T02:15:00Z",
-          },
-        });
+        activeRecordingChunk = {
+          id: "chunk-1",
+          recordingSessionId: "recording-1",
+          sequenceNumber: body.sequenceNumber,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          uploadState: "pending",
+          uploadedAt: null,
+          createdAt: "2026-08-14T02:10:00Z",
+          uploadUrl: `${path}/chunk-1/content?token=short-lived-test-token`,
+          uploadExpiresAt: "2026-08-14T02:15:00Z",
+        };
+        await route.fulfill({ status: 201, json: activeRecordingChunk });
         return;
       }
       if (path.endsWith("/content") && request.method() === "PUT") {
@@ -2622,7 +2666,13 @@ test("mobile Companion recording path persists a consented transcript into exist
         return;
       }
       if (path.endsWith("/complete") && path.includes("/chunks/")) {
-        await route.fulfill({ json: { uploadState: "verified" } });
+        await route.fulfill({
+          json: {
+            ...activeRecordingChunk,
+            uploadState: "verified",
+            uploadedAt: "2026-08-14T02:11:00Z",
+          },
+        });
         return;
       }
       if (path.endsWith("/stop")) {
@@ -3048,6 +3098,7 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
   });
   const markers: Array<Record<string, unknown>> = [];
   const visuals: Array<Record<string, unknown>> = [];
+  let passiveVisual: Record<string, unknown> | null = null;
   let passiveDebrief = debriefSession("collecting", {
     interactionId: "interaction-passive",
   });
@@ -3099,13 +3150,26 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
         return;
       }
       if (path.endsWith("/visual-evidence/uploads")) {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        passiveVisual = visualEvidence("uploading", {
+          interactionId: "interaction-passive",
+          visualType: body.visualType,
+          sourceOwnership: body.sourceOwnership,
+          contextLabel: body.contextLabel,
+          filename: body.filename,
+          mimeType: body.mimeType,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          capturedAt: body.capturedAt,
+          candidates: [],
+        });
         await route.fulfill({
           status: 201,
-          json: visualEvidence("uploading", {
-            interactionId: "interaction-passive",
+          json: {
+            ...passiveVisual,
             uploadUrl: `${path}/visual-1/content?token=passive-test`,
             uploadExpiresAt: "2026-08-14T02:20:00Z",
-          }),
+          },
         });
         return;
       }
@@ -3114,17 +3178,29 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/complete")) {
+        passiveVisual = {
+          ...(passiveVisual ??
+            visualEvidence("uploading", {
+              interactionId: "interaction-passive",
+            })),
+          processingStatus: "uploaded",
+          processingAttempts: 1,
+        };
         await route.fulfill({
-          json: visualEvidence("uploaded", {
-            interactionId: "interaction-passive",
-          }),
+          json: passiveVisual,
         });
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/process")) {
-        const completedVisual = visualEvidence("completed", {
-          interactionId: "interaction-passive",
-        });
+        const completedVisual = {
+          ...(passiveVisual ??
+            visualEvidence("uploaded", {
+              interactionId: "interaction-passive",
+            })),
+          processingStatus: "completed",
+          processingAttempts: 1,
+        };
+        passiveVisual = completedVisual;
         visuals.splice(0, visuals.length, completedVisual);
         await route.fulfill({ json: completedVisual });
         return;

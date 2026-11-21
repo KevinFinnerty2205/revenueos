@@ -15,6 +15,7 @@ import {
   type DragEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -22,6 +23,21 @@ import { apiBlob, apiRequest, apiUpload } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
 type ReviewDecision = { decision: "accept" | "reject"; statement: string };
+
+type VisualUploadIdentity = Pick<
+  VisualEvidence,
+  | "id"
+  | "interactionId"
+  | "captureSessionId"
+  | "mimeType"
+  | "visualType"
+  | "sourceOwnership"
+>;
+
+const VISUAL_UPLOAD_IDENTITY_ERROR =
+  "The image upload could not be verified. Your selected image has been kept so you can try again.";
+const VISUAL_RESPONSE_IDENTITY_ERROR =
+  "Visual evidence could not be verified. Unverified data was not used; please try again.";
 
 const VISUAL_TYPES: VisualType[] = [
   "whiteboard",
@@ -81,15 +97,131 @@ function quickType(interactionType: InteractionType): VisualType {
   return "whiteboard";
 }
 
-export function VisualEvidenceCapture({
-  interactionId,
-  interactionType,
-  lifecycleStatus,
-}: {
+function isNonEmptyIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasCandidateSourceIdentity(response: VisualEvidence): boolean {
+  return (
+    Array.isArray(response.candidates) &&
+    response.candidates.every(
+      (candidate) =>
+        Boolean(candidate) &&
+        candidate.sourceVisualId === response.id &&
+        candidate.sourceOwnership === response.sourceOwnership,
+    )
+  );
+}
+
+function visualIdentity(visual: VisualEvidence): VisualUploadIdentity {
+  return {
+    id: visual.id,
+    interactionId: visual.interactionId,
+    captureSessionId: visual.captureSessionId,
+    mimeType: visual.mimeType,
+    visualType: visual.visualType,
+    sourceOwnership: visual.sourceOwnership,
+  };
+}
+
+function requireCreatedVisualIdentity(
+  created: VisualUploadCreateResponse,
+  requested: {
+    interactionId: string;
+    mimeType: string;
+    byteSize: number;
+    checksumSha256: string;
+    visualType: VisualType;
+    sourceOwnership: VisualSourceOwnership;
+  },
+): VisualUploadIdentity {
+  if (
+    !created ||
+    created.interactionId !== requested.interactionId ||
+    !isNonEmptyIdentifier(created.id) ||
+    !isNonEmptyIdentifier(created.captureSessionId) ||
+    created.captureSessionId !== created.id ||
+    created.mimeType !== requested.mimeType ||
+    created.byteSize !== requested.byteSize ||
+    created.checksumSha256 !== requested.checksumSha256 ||
+    created.visualType !== requested.visualType ||
+    created.sourceOwnership !== requested.sourceOwnership
+  ) {
+    throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
+  }
+  return {
+    id: created.id,
+    interactionId: created.interactionId,
+    captureSessionId: created.captureSessionId,
+    mimeType: created.mimeType,
+    visualType: created.visualType,
+    sourceOwnership: created.sourceOwnership,
+  };
+}
+
+function requireVisualIdentity(
+  response: VisualEvidence,
+  expected: VisualUploadIdentity,
+  errorMessage = VISUAL_UPLOAD_IDENTITY_ERROR,
+): void {
+  if (
+    !response ||
+    !isNonEmptyIdentifier(response.id) ||
+    !isNonEmptyIdentifier(response.captureSessionId) ||
+    response.captureSessionId !== response.id ||
+    response.id !== expected.id ||
+    response.interactionId !== expected.interactionId ||
+    response.captureSessionId !== expected.captureSessionId ||
+    response.mimeType !== expected.mimeType ||
+    response.visualType !== expected.visualType ||
+    response.sourceOwnership !== expected.sourceOwnership ||
+    !hasCandidateSourceIdentity(response)
+  ) {
+    throw new Error(errorMessage);
+  }
+}
+
+function requireVisualListIdentity(
+  response: VisualEvidence[],
+  interactionId: string,
+): VisualEvidence[] {
+  if (
+    !Array.isArray(response) ||
+    response.some(
+      (visual) =>
+        !visual ||
+        visual.interactionId !== interactionId ||
+        !isNonEmptyIdentifier(visual.id) ||
+        !isNonEmptyIdentifier(visual.captureSessionId) ||
+        visual.captureSessionId !== visual.id ||
+        !hasCandidateSourceIdentity(visual),
+    )
+  ) {
+    throw new Error(VISUAL_RESPONSE_IDENTITY_ERROR);
+  }
+  return response;
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "AbortError";
+}
+
+type VisualEvidenceCaptureProps = {
   interactionId: string;
   interactionType: InteractionType;
   lifecycleStatus: InteractionLifecycleStatus;
-}) {
+};
+
+export function VisualEvidenceCapture(props: VisualEvidenceCaptureProps) {
+  return <VisualEvidenceCaptureSession key={props.interactionId} {...props} />;
+}
+
+function VisualEvidenceCaptureSession({
+  interactionId,
+  interactionType,
+  lifecycleStatus,
+}: VisualEvidenceCaptureProps) {
+  const sessionActive = useRef(true);
   const [visuals, setVisuals] = useState<VisualEvidence[] | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -110,41 +242,74 @@ export function VisualEvidenceCapture({
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const listRequestGeneration = useRef(0);
+  const listRequestController = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
-    const loaded = await apiRequest<VisualEvidence[]>(
-      `/api/v1/interactions/${interactionId}/visual-evidence`,
-    );
-    setVisuals(loaded);
-    const awaiting = loaded.find(
-      (visual) => visual.processingStatus === "review",
-    );
-    if (awaiting) {
-      setReviewingId(awaiting.id);
-      setDecisions(initialDecisions(awaiting.candidates));
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
+
+  const load = useCallback(async (): Promise<void> => {
+    const requestGeneration = listRequestGeneration.current + 1;
+    listRequestGeneration.current = requestGeneration;
+    listRequestController.current?.abort();
+    const controller = new AbortController();
+    listRequestController.current = controller;
+    try {
+      const response = await apiRequest<VisualEvidence[]>(
+        `/api/v1/interactions/${interactionId}/visual-evidence`,
+        { signal: controller.signal },
+      );
+      if (
+        !sessionActive.current ||
+        controller.signal.aborted ||
+        requestGeneration !== listRequestGeneration.current
+      ) {
+        return;
+      }
+      const loaded = requireVisualListIdentity(response, interactionId);
+      if (
+        !sessionActive.current ||
+        controller.signal.aborted ||
+        requestGeneration !== listRequestGeneration.current
+      ) {
+        return;
+      }
+      setVisuals(loaded);
+      const awaiting = loaded.find(
+        (visual) => visual.processingStatus === "review",
+      );
+      setReviewingId(awaiting?.id ?? null);
+      setDecisions(awaiting ? initialDecisions(awaiting.candidates) : {});
+    } catch (requestError: unknown) {
+      if (
+        !sessionActive.current ||
+        controller.signal.aborted ||
+        requestGeneration !== listRequestGeneration.current ||
+        isAbortError(requestError)
+      ) {
+        return;
+      }
+      throw requestError;
+    } finally {
+      if (listRequestController.current === controller) {
+        listRequestController.current = null;
+      }
     }
   }, [interactionId]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    apiRequest<VisualEvidence[]>(
-      `/api/v1/interactions/${interactionId}/visual-evidence`,
-      { signal: controller.signal },
-    )
-      .then((loaded) => {
-        setVisuals(loaded);
-        const awaiting = loaded.find(
-          (visual) => visual.processingStatus === "review",
-        );
-        if (awaiting) {
-          setReviewingId(awaiting.id);
-          setDecisions(initialDecisions(awaiting.candidates));
-        }
-      })
-      .catch((requestError: unknown) => {
+    let effectActive = true;
+    queueMicrotask(() => {
+      if (!effectActive || !sessionActive.current) return;
+      void load().catch((requestError: unknown) => {
         if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
+          !effectActive ||
+          !sessionActive.current ||
+          isAbortError(requestError)
         ) {
           return;
         }
@@ -154,8 +319,14 @@ export function VisualEvidenceCapture({
             : "Visual evidence could not be loaded.",
         );
       });
-    return () => controller.abort();
-  }, [interactionId]);
+    });
+    return () => {
+      effectActive = false;
+      listRequestGeneration.current += 1;
+      listRequestController.current?.abort();
+      listRequestController.current = null;
+    };
+  }, [load]);
 
   useEffect(
     () => () => {
@@ -215,6 +386,7 @@ export function VisualEvidenceCapture({
     try {
       setProgress(10);
       const checksum = await sha256(file);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(25);
       const created = await apiRequest<VisualUploadCreateResponse>(
         `/api/v1/interactions/${interactionId}/visual-evidence/uploads`,
@@ -234,10 +406,20 @@ export function VisualEvidenceCapture({
           }),
         },
       );
+      const uploadIdentity = requireCreatedVisualIdentity(created, {
+        interactionId,
+        mimeType: file.type,
+        byteSize: file.size,
+        checksumSha256: checksum,
+        visualType,
+        sourceOwnership,
+      });
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(45);
       await apiUpload(created.uploadUrl, file, file.type);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(70);
-      await apiRequest<VisualEvidence>(
+      const completed = await apiRequest<VisualEvidence>(
         `/api/v1/interactions/${interactionId}/visual-evidence/${created.id}/complete`,
         {
           method: "POST",
@@ -247,6 +429,8 @@ export function VisualEvidenceCapture({
           }),
         },
       );
+      requireVisualIdentity(completed, uploadIdentity);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(85);
       const processed = await apiRequest<VisualEvidence>(
         `/api/v1/interactions/${interactionId}/visual-evidence/${created.id}/process`,
@@ -257,6 +441,8 @@ export function VisualEvidenceCapture({
           }),
         },
       );
+      requireVisualIdentity(processed, uploadIdentity);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(100);
       selectFile(null);
       setConsentConfirmed(false);
@@ -274,15 +460,17 @@ export function VisualEvidenceCapture({
             : "Image saved. No reviewable evidence was suggested.",
         );
       }
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       await load();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The image could not be uploaded and analysed.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
@@ -296,6 +484,11 @@ export function VisualEvidenceCapture({
           method: "POST",
           body: JSON.stringify({ idempotencyKey: requestKey("visual-retry") }),
         },
+      );
+      requireVisualIdentity(
+        processed,
+        visualIdentity(visual),
+        VISUAL_RESPONSE_IDENTITY_ERROR,
       );
       if (processed.processingStatus === "review") {
         setReviewingId(processed.id);
@@ -340,6 +533,11 @@ export function VisualEvidenceCapture({
             idempotencyKey: requestKey("visual-review"),
           }),
         },
+      );
+      requireVisualIdentity(
+        reviewed,
+        visualIdentity(visual),
+        VISUAL_RESPONSE_IDENTITY_ERROR,
       );
       setReviewingId(null);
       setDecisions({});
@@ -904,28 +1102,42 @@ function VisualReview({
 }
 
 function PrivateVisualPreview({ visual }: { visual: VisualEvidence }) {
-  const [source, setSource] = useState<string | null>(null);
+  const [source, setSource] = useState<{
+    requestedUrl: string;
+    objectUrl: string;
+  } | null>(null);
   useEffect(() => {
-    if (!visual.downloadUrl) return;
+    const requestedUrl = visual.downloadUrl;
     let objectUrl: string | null = null;
     let active = true;
-    apiBlob(visual.downloadUrl)
+
+    if (!requestedUrl) {
+      return () => {
+        active = false;
+      };
+    }
+
+    apiBlob(requestedUrl)
       .then((blob) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(blob);
-        setSource(objectUrl);
+        setSource({ requestedUrl, objectUrl });
       })
-      .catch(() => setSource(null));
+      .catch(() => {
+        if (active) setSource(null);
+      });
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [visual.downloadUrl]);
-  return source ? (
+  const visibleSource =
+    source?.requestedUrl === visual.downloadUrl ? source.objectUrl : null;
+  return visibleSource ? (
     // The source is a short-lived in-memory object URL loaded through an authenticated grant.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={source}
+      src={visibleSource}
       alt={visual.contextLabel ?? humanise(visual.visualType)}
       className="h-40 w-full rounded-xl bg-slate-100 object-contain"
     />
