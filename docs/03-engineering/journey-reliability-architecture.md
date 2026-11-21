@@ -16,6 +16,11 @@ targeted invalidation, not a client cache or new state platform.
 ## Frontend data revalidation guidance
 
 1. Treat the API response as authoritative; do not infer a successful transition.
+   For exact-resource reads and mutations that can expose or seed private content,
+   require the returned canonical identifier to equal the requested identifier
+   before rendering or applying the response. An initial mismatch fails closed; a
+   later mismatch preserves only the last verified active-resource state and offers
+   an explicit retry.
 2. Key stateful editors and workspaces by canonical resource type and identifier.
    Bind mutations to the rendered identity and committed snapshot, clear prior
    values, errors and lock metadata during the identity-change commit, and ignore

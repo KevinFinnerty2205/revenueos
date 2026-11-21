@@ -2387,6 +2387,7 @@ export interface MeetingIntelligenceProgress {
 }
 
 export interface MeetingIntelligenceResponse {
+  meetingId: string;
   overallState: MeetingIntelligenceOverallState;
   generationAvailable: boolean;
   retryAvailable: boolean;

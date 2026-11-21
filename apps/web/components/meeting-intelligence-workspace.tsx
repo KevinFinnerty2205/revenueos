@@ -28,6 +28,8 @@ import { formatMeetingDate } from "@/lib/meetings";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 const POLLING_INTERVAL_MS = 3_000;
+const MEETING_IDENTITY_ERROR =
+  "Meeting Intelligence could not be verified for this meeting. Try again.";
 const tones: FollowUpEmailTone[] = ["professional", "friendly", "executive"];
 const FOLLOW_UP_CONFLICT_FIELDS = [
   {
@@ -61,6 +63,16 @@ const overallLabels: Record<MeetingIntelligenceOverallState, string> = {
   partially_failed: "Partially ready",
   failed: "Generation failed",
 };
+
+function verifiedMeetingResponse<TResponse extends MeetingIntelligenceResponse>(
+  response: TResponse,
+  meetingId: string,
+): TResponse {
+  if (response.meetingId !== meetingId) {
+    throw new Error(MEETING_IDENTITY_ERROR);
+  }
+  return response;
+}
 
 interface MeetingIntelligenceWorkspaceProps {
   meetingId: string;
@@ -133,16 +145,22 @@ function StatefulMeetingIntelligenceWorkspace({
       }
       const queryString = query.size > 0 ? `?${query.toString()}` : "";
       try {
-        let next = await apiRequest<MeetingIntelligenceResponse>(
-          `/api/v1/meetings/${meetingId}/intelligence${queryString}`,
-          { signal: controller.signal },
+        let next = verifiedMeetingResponse(
+          await apiRequest<MeetingIntelligenceResponse>(
+            `/api/v1/meetings/${meetingId}/intelligence${queryString}`,
+            { signal: controller.signal },
+          ),
+          meetingId,
         );
         if (stopped || sequence !== requestSequence.current) return;
 
         if (shouldQueueComposers(next)) {
-          next = await apiRequest<MeetingIntelligenceGenerationResponse>(
-            `/api/v1/meetings/${meetingId}/intelligence/generate`,
-            { method: "POST", signal: controller.signal },
+          next = verifiedMeetingResponse(
+            await apiRequest<MeetingIntelligenceGenerationResponse>(
+              `/api/v1/meetings/${meetingId}/intelligence/generate`,
+              { method: "POST", signal: controller.signal },
+            ),
+            meetingId,
           );
         }
         if (stopped || sequence !== requestSequence.current) return;
@@ -159,6 +177,7 @@ function StatefulMeetingIntelligenceWorkspace({
         }
       } catch (requestError: unknown) {
         if (stopped || controller.signal.aborted) return;
+        pollingEvent.current = null;
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -199,9 +218,12 @@ function StatefulMeetingIntelligenceWorkspace({
     actionController.current = controller;
     const sequence = ++requestSequence.current;
     try {
-      const next = await apiRequest<MeetingIntelligenceGenerationResponse>(
-        `/api/v1/meetings/${meetingId}/intelligence/generate`,
-        { method: "POST", signal: controller.signal },
+      const next = verifiedMeetingResponse(
+        await apiRequest<MeetingIntelligenceGenerationResponse>(
+          `/api/v1/meetings/${meetingId}/intelligence/generate`,
+          { method: "POST", signal: controller.signal },
+        ),
+        meetingId,
       );
       if (sequence !== requestSequence.current) return;
       setWorkspace(next);
@@ -211,6 +233,7 @@ function StatefulMeetingIntelligenceWorkspace({
       setRefreshKey((value) => value + 1);
     } catch (requestError: unknown) {
       if (controller.signal.aborted) return;
+      pollingEvent.current = null;
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -274,6 +297,13 @@ function StatefulMeetingIntelligenceWorkspace({
     }
   }
 
+  function retryWorkspace() {
+    pollingEvent.current = null;
+    setError(null);
+    if (!workspace) setLoading(true);
+    setRefreshKey((value) => value + 1);
+  }
+
   if (loading && !workspace) {
     return (
       <div role="status" className="form-card min-h-48">
@@ -294,11 +324,7 @@ function StatefulMeetingIntelligenceWorkspace({
         <button
           type="button"
           className="mt-5 rounded-lg bg-rose-900 px-4 py-2 text-sm font-bold text-white"
-          onClick={() => {
-            setLoading(true);
-            setError(null);
-            setRefreshKey((value) => value + 1);
-          }}
+          onClick={retryWorkspace}
         >
           Try again
         </button>
@@ -369,12 +395,19 @@ function StatefulMeetingIntelligenceWorkspace({
           </div>
         </div>
         {error ? (
-          <p
+          <div
             role="alert"
-            className="mt-5 rounded-xl border border-rose-300/40 bg-rose-950/70 p-3 text-sm text-rose-100"
+            className="mt-5 flex flex-col gap-3 rounded-xl border border-rose-300/40 bg-rose-950/70 p-3 text-sm text-rose-100 sm:flex-row sm:items-center sm:justify-between"
           >
-            {error} Completed sections remain available below.
-          </p>
+            <p>{error} Completed verified sections remain available below.</p>
+            <button
+              type="button"
+              className="shrink-0 rounded-lg border border-rose-200/60 px-3 py-2 font-bold text-white transition hover:bg-white/10"
+              onClick={retryWorkspace}
+            >
+              Try again
+            </button>
+          </div>
         ) : null}
       </header>
 
