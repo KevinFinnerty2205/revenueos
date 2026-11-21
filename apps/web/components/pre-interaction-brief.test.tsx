@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PreInteractionBrief } from "@/components/pre-interaction-brief";
 
@@ -7,6 +13,14 @@ function jsonResponse(body: object, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
 }
 
 const emptyResponse = {
@@ -177,6 +191,178 @@ describe("PreInteractionBrief", () => {
       await screen.findByRole("heading", { name: "Presentation guidance" }),
     ).toBeVisible();
     expect(screen.getByText(/seller-prepared material/i)).toBeVisible();
+  });
+
+  it.each([
+    {
+      name: "not-generated",
+      response: emptyResponse,
+      expectedRole: "button" as const,
+      expectedName: "Prepare brief",
+    },
+    {
+      name: "completed",
+      response: completedResponse,
+      expectedRole: "heading" as const,
+      expectedName: "Confirm procurement ownership and agree the next step.",
+    },
+  ])(
+    "retries an ordinary load failure and recovers to $name",
+    async ({ response, expectedRole, expectedName }) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              code: "preparation_unavailable",
+              message: "Preparation is temporarily unavailable.",
+            },
+            503,
+          ),
+        )
+        .mockResolvedValueOnce(jsonResponse(response));
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <PreInteractionBrief
+          interactionId="interaction-retry"
+          interactionType="phone_call"
+        />,
+      );
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Preparation is temporarily unavailable.",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Loading preparation brief",
+      );
+      expect(
+        await screen.findByRole(expectedRole, { name: expectedName }),
+      ).toBeVisible();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("preserves the data-notice recovery action without offering a generic retry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse(
+            {
+              code: "data_notice_acknowledgement_required",
+              message: "Review the data notice before preparing a brief.",
+            },
+            403,
+          ),
+        ),
+      ),
+    );
+
+    render(
+      <PreInteractionBrief
+        interactionId="interaction-notice"
+        interactionType="phone_call"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Review data notice" }),
+    ).toHaveAttribute("href", "/onboarding");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("ignores a stale load when the interaction changes", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("interaction-first")
+        ? first.promise
+        : second.promise,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <PreInteractionBrief
+        interactionId="interaction-first"
+        interactionType="phone_call"
+      />,
+    );
+    rerender(
+      <PreInteractionBrief
+        interactionId="interaction-second"
+        interactionType="phone_call"
+      />,
+    );
+
+    await act(async () => {
+      second.resolve(jsonResponse(emptyResponse));
+    });
+    expect(
+      await screen.findByRole("button", { name: "Prepare brief" }),
+    ).toBeVisible();
+
+    await act(async () => {
+      first.resolve(jsonResponse(completedResponse));
+    });
+    expect(
+      screen.queryByRole("heading", {
+        name: "Confirm procurement ownership and agree the next step.",
+      }),
+    ).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a generation completion from the prior interaction during the navigation commit", async () => {
+    const generation = deferred<Response>();
+    const onBriefChange = vi.fn();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        init?.method === "POST" &&
+        String(input).includes("interaction-first")
+      ) {
+        return generation.promise;
+      }
+      return Promise.resolve(jsonResponse(emptyResponse));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <PreInteractionBrief
+        interactionId="interaction-first"
+        interactionType="phone_call"
+        onBriefChange={onBriefChange}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Prepare brief" }),
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      rerender(
+        <PreInteractionBrief
+          interactionId="interaction-second"
+          interactionType="phone_call"
+          onBriefChange={onBriefChange}
+        />,
+      );
+      generation.resolve(jsonResponse({ ...completedResponse, created: true }));
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Prepare brief" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Confirm procurement ownership and agree the next step.",
+      }),
+    ).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onBriefChange).not.toHaveBeenCalled();
   });
 
   it.each([
