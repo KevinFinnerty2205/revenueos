@@ -361,6 +361,9 @@ function PreInteractionBriefSession({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noticeRequired, setNoticeRequired] = useState(false);
+  const [errorSource, setErrorSource] = useState<"load" | "mutation" | null>(
+    null,
+  );
   const [retryKey, setRetryKey] = useState(0);
   const sessionActive = useRef(true);
 
@@ -378,7 +381,10 @@ function PreInteractionBriefSession({
       { signal: controller.signal },
     )
       .then((updated) => {
-        if (!controller.signal.aborted) setResponse(updated);
+        if (!controller.signal.aborted) {
+          setResponse(updated);
+          setErrorSource(null);
+        }
       })
       .catch((requestError: unknown) => {
         if (
@@ -397,6 +403,7 @@ function PreInteractionBriefSession({
             requestError instanceof ApiClientError &&
               requestError.code === "data_notice_acknowledgement_required",
           );
+          setErrorSource("load");
         }
       })
       .finally(() => {
@@ -409,6 +416,7 @@ function PreInteractionBriefSession({
     setLoading(true);
     setError(null);
     setNoticeRequired(false);
+    setErrorSource(null);
     setRetryKey((value) => value + 1);
   }
 
@@ -416,6 +424,7 @@ function PreInteractionBriefSession({
     setWorking(true);
     setError(null);
     setNoticeRequired(false);
+    setErrorSource(null);
     try {
       const updated = await apiRequest<PreInteractionBriefRequestResponse>(
         `/api/v1/interactions/${interactionId}/companion/brief`,
@@ -435,6 +444,7 @@ function PreInteractionBriefSession({
         requestError instanceof ApiClientError &&
           requestError.code === "data_notice_acknowledgement_required",
       );
+      setErrorSource("mutation");
     } finally {
       if (sessionActive.current) setWorking(false);
     }
@@ -443,6 +453,8 @@ function PreInteractionBriefSession({
   async function markReviewed() {
     setWorking(true);
     setError(null);
+    setNoticeRequired(false);
+    setErrorSource(null);
     try {
       const updated = await apiRequest<PreInteractionBriefResponse>(
         `/api/v1/interactions/${interactionId}/companion/brief/review`,
@@ -458,6 +470,7 @@ function PreInteractionBriefSession({
           ? requestError.message
           : "The review state could not be saved.",
       );
+      setErrorSource("mutation");
     } finally {
       if (sessionActive.current) setWorking(false);
     }
@@ -504,7 +517,7 @@ function PreInteractionBriefSession({
               <Link href="/onboarding" className="secondary-button mt-4">
                 Review data notice
               </Link>
-            ) : (
+            ) : errorSource === "load" ? (
               <button
                 type="button"
                 className="secondary-button mt-4"
@@ -512,7 +525,7 @@ function PreInteractionBriefSession({
               >
                 Try again
               </button>
-            )}
+            ) : null}
           </div>
         ) : null}
         {!loading && response?.state === "unavailable" ? (

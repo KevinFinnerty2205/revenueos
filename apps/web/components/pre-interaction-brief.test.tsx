@@ -275,6 +275,106 @@ describe("PreInteractionBrief", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
+  it("keeps failed generation on its own retry control without starting a load retry", async () => {
+    let generationAttempts = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        generationAttempts += 1;
+        return Promise.resolve(
+          generationAttempts === 1
+            ? jsonResponse(
+                {
+                  code: "preparation_unavailable",
+                  message: "The preparation brief could not be created.",
+                },
+                503,
+              )
+            : jsonResponse({ ...completedResponse, created: true }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyResponse));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PreInteractionBrief
+        interactionId="interaction-generation-retry"
+        interactionType="phone_call"
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Prepare brief" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The preparation brief could not be created.",
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Prepare brief" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Confirm procurement ownership and agree the next step.",
+      }),
+    ).toBeVisible();
+    expect(generationAttempts).toBe(2);
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method !== "POST"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps failed review on its own retry control without overlapping a load retry", async () => {
+    let reviewAttempts = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/review") && init?.method === "POST") {
+        reviewAttempts += 1;
+        return Promise.resolve(
+          reviewAttempts === 1
+            ? jsonResponse(
+                {
+                  code: "preparation_review_unavailable",
+                  message: "The review state could not be saved.",
+                },
+                503,
+              )
+            : jsonResponse({
+                ...completedResponse,
+                reviewed: true,
+                reviewedAt: "2026-08-14T02:05:00Z",
+              }),
+        );
+      }
+      return Promise.resolve(jsonResponse(completedResponse));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PreInteractionBrief
+        interactionId="interaction-review-retry"
+        interactionType="phone_call"
+      />,
+    );
+
+    const review = await screen.findByRole("button", {
+      name: "Mark as reviewed",
+    });
+    fireEvent.click(review);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The review state could not be saved.",
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(review).toBeEnabled();
+
+    fireEvent.click(review);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Reviewed" })).toBeDisabled(),
+    );
+    expect(reviewAttempts).toBe(2);
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method !== "POST"),
+    ).toHaveLength(1);
+  });
+
   it("ignores a stale load when the interaction changes", async () => {
     const first = deferred<Response>();
     const second = deferred<Response>();
