@@ -696,6 +696,162 @@ describe("AccountConversationPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["another account", "company-two"],
+    ["no account", null],
+  ])(
+    "fails a mixed initial page closed when one conversation belongs to %s",
+    async (_description, mismatchedCompanyId) => {
+      const foreignTitle = "Foreign account private conversation";
+      const mixedPage = {
+        ...interactionPage,
+        items: [
+          interactionPage.items[0],
+          {
+            ...interactionPage.items[0],
+            id: "interaction-foreign",
+            companyId: mismatchedCompanyId,
+            title: foreignTitle,
+          },
+        ],
+        total: 2,
+      };
+      let interactionReads = 0;
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/api/v1/interactions?")) {
+          interactionReads += 1;
+          return Promise.resolve(
+            jsonResponse(interactionReads === 1 ? mixedPage : interactionPage),
+          );
+        }
+        return Promise.resolve(jsonResponse(contactPage));
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<AccountConversationPanel companyId="company/one" />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Account conversations could not be loaded. Please try again.",
+      );
+      expect(
+        screen.queryByRole("heading", { name: "Account discovery call" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: foreignTitle }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "Open live workspace" }),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(
+        await screen.findByRole("heading", { name: "Account discovery call" }),
+      ).toBeVisible();
+      expect(await screen.findByText("Jordan Lee")).toBeVisible();
+      expect(interactionReads).toBe(2);
+    },
+  );
+
+  it("preserves confirmed history and retries a foreign pagination page", async () => {
+    const firstPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "interaction-page-one",
+          contactId: null,
+          title: "Confirmed account conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const foreignPage = {
+      ...firstPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "interaction-foreign-page",
+          companyId: "company-two",
+          contactId: null,
+          title: "Foreign paginated conversation",
+        },
+      ],
+      page: 2,
+    };
+    const validSecondPage = {
+      ...firstPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "interaction-page-two",
+          contactId: null,
+          title: "Later confirmed conversation",
+        },
+      ],
+      page: 2,
+    };
+    let pageTwoReads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/api/v1/interactions?")) {
+        if (!path.includes("page=2"))
+          return Promise.resolve(jsonResponse(firstPage));
+        pageTwoReads += 1;
+        return Promise.resolve(
+          jsonResponse(pageTwoReads === 1 ? foreignPage : validSecondPage),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({ ...contactPage, items: [], total: 0, pages: 0 }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AccountConversationPanel companyId="company/one" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Confirmed account conversation",
+      }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "More account conversations could not be loaded. Please try again.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Confirmed account conversation" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Foreign paginated conversation",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    ).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Later confirmed conversation",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Confirmed account conversation" }),
+    ).toBeVisible();
+    expect(pageTwoReads).toBe(2);
+  });
+
   it("presents a useful empty account history", async () => {
     vi.stubGlobal(
       "fetch",
