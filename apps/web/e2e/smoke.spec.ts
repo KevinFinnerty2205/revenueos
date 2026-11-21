@@ -1061,6 +1061,10 @@ test("a presentation supports browser image upload, explicit review and intellig
           sourceOwnership: body.sourceOwnership,
           contextLabel: body.contextLabel,
           filename: body.filename,
+          mimeType: body.mimeType,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          capturedAt: body.capturedAt,
           candidates: [],
         });
         await route.fulfill({
