@@ -408,6 +408,151 @@ describe("PostInteractionCapture", () => {
     ).toBe("session-1");
   });
 
+  it("rejects a voice response that swaps to another private session", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    const foreignAnswer = "Foreign voice transcript must never be shown.";
+    const trackStop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop: trackStop }],
+    } as unknown as MediaStream;
+
+    class FakeBlob {
+      readonly size = 1;
+      readonly type: string;
+
+      constructor(_parts?: BlobPart[], options?: BlobPropertyBag) {
+        this.type = options?.type ?? "";
+      }
+
+      arrayBuffer() {
+        return Promise.resolve(new Uint8Array([1]).buffer);
+      }
+    }
+
+    class FakeMediaRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+
+      state = "inactive";
+      private readonly listeners = new Map<string, EventListener[]>();
+
+      addEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+      ) {
+        const callback: EventListener =
+          typeof listener === "function"
+            ? listener
+            : (event) => listener.handleEvent(event);
+        this.listeners.set(type, [
+          ...(this.listeners.get(type) ?? []),
+          callback,
+        ]);
+      }
+
+      start() {
+        this.state = "recording";
+      }
+
+      pause() {
+        this.state = "paused";
+      }
+
+      resume() {
+        this.state = "recording";
+      }
+
+      stop() {
+        this.state = "inactive";
+        for (const listener of this.listeners.get("dataavailable") ?? []) {
+          listener({
+            data: new Blob(["voice"], { type: "audio/webm" }),
+          } as BlobEvent);
+        }
+        for (const listener of this.listeners.get("stop") ?? []) {
+          listener(new Event("stop"));
+        }
+      }
+    }
+
+    vi.stubGlobal("Blob", FakeBlob);
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: vi.fn(() => Promise.resolve(stream)),
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/voice-response")
+          ? Promise.resolve(
+              response(
+                session({
+                  id: "session-foreign",
+                  captureType: "voice_journal",
+                  questionCount: 1,
+                  turns: [
+                    {
+                      id: "turn-foreign",
+                      turnNumber: 1,
+                      question: session().currentQuestion!,
+                      answerText: foreignAnswer,
+                      inputMode: "voice",
+                      createdAt: "2026-08-14T01:01:00Z",
+                    },
+                  ],
+                }),
+              ),
+            )
+          : Promise.resolve(
+              response(session({ captureType: "voice_journal" }), 201),
+            ),
+      ),
+    );
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="phone_call"
+      />,
+    );
+
+    fireEvent.click(await screen.findByText("Other debrief options"));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /safely stopped/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Voice Journal records only my post-interaction report/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start Voice Journal" }),
+    );
+    expect(await screen.findByText("How did it go?")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Start microphone" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Stop and transcribe" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(screen.queryByText(foreignAnswer)).not.toBeInTheDocument();
+    expect(screen.getByText("How did it go?")).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Voice answer transcribed and saved. The audio was not retained.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(key)).toBe("session-1");
+    expect(trackStop).toHaveBeenCalled();
+  });
+
   it("keeps the current session collecting when finish returns another session", async () => {
     const key = "revenueos:post-interaction-capture:interaction-1";
     const collecting = session({ canFinish: true });
@@ -912,6 +1057,84 @@ describe("PostInteractionCapture", () => {
     expect(screen.getByText("What changed for interaction B?")).toBeVisible();
     expect(window.localStorage.getItem(keyA)).toBe("session-a");
     expect(window.localStorage.getItem(keyB)).toBe("session-b");
+  });
+
+  it("ignores an old interaction not-found restore after navigation", async () => {
+    const keyA = "revenueos:post-interaction-capture:interaction-a";
+    const keyB = "revenueos:post-interaction-capture:interaction-b";
+    window.localStorage.setItem(keyA, "session-a");
+    window.localStorage.setItem(keyB, "session-b");
+    const interactionARestore = deferred<Response>();
+    const restoredB = session({
+      id: "session-b",
+      interactionId: "interaction-b",
+      currentQuestion: {
+        status: "ask",
+        question: "What changed for interaction B?",
+        reason: "Keep B private and current.",
+        target: "other",
+        priority: "high",
+      },
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("interaction-a/debrief/session-a")) {
+        return interactionARestore.promise;
+      }
+      if (url.includes("interaction-a/debrief/latest")) {
+        return Promise.resolve(
+          response(
+            session({
+              id: "obsolete-latest-a",
+              interactionId: "interaction-a",
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(response(restoredB));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <PostInteractionCapture
+        interactionId="interaction-a"
+        interactionType="executive_lunch"
+        restoreLatest
+      />,
+    );
+    rerender(
+      <PostInteractionCapture
+        interactionId="interaction-b"
+        interactionType="executive_lunch"
+        restoreLatest
+      />,
+    );
+
+    expect(
+      await screen.findByText("What changed for interaction B?"),
+    ).toBeVisible();
+    await act(async () =>
+      interactionARestore.resolve(
+        response(
+          {
+            code: "debrief_not_found",
+            message: "The old saved capture was not found.",
+            requestId: "request-restore-a-not-found",
+          },
+          404,
+        ),
+      ),
+    );
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("What changed for interaction B?")).toBeVisible();
+    expect(window.localStorage.getItem(keyA)).toBe("session-a");
+    expect(window.localStorage.getItem(keyB)).toBe("session-b");
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("interaction-a/debrief/latest"),
+      ),
+    ).toBe(false);
   });
 
   it("removes completed debrief seeds before restoring another interaction", async () => {

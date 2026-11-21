@@ -202,6 +202,7 @@ function StatefulPostInteractionCapture({
               throw new Error("The saved capture returned no session.");
             }
           } catch (reason: unknown) {
+            if (controller.signal.aborted) return;
             if (!missingSession(reason)) throw reason;
             window.localStorage.removeItem(storageKey(interactionId));
             if (!restoreLatest) return;
