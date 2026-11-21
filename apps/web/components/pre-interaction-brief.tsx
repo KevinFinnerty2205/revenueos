@@ -471,8 +471,8 @@ export function PreInteractionBrief({
               Preparation is not available yet
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {response.safeMessage ??
-                "You can continue with notes, capture and review while this preparation view is unavailable."}
+              You can continue with notes, capture and review while this
+              preparation view is unavailable.
             </p>
           </div>
         ) : null}
