@@ -82,7 +82,7 @@ describe("MeetingForm", () => {
       await screen.findByRole("heading", { name: "Create meeting" }),
     ).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText(/title/i), {
+    fireEvent.change(await screen.findByLabelText(/title/i), {
       target: { value: "Acme discovery" },
     });
     fireEvent.change(screen.getByLabelText(/meeting date/i), {
