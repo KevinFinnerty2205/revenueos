@@ -947,6 +947,19 @@ describe("RecordingFoundation", () => {
     expect(screen.getByLabelText("Private live notes")).toHaveValue(
       "Keep the agreed renewal date.",
     );
+    await waitFor(() =>
+      expect(activityChanges).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          state: "recording",
+          active: true,
+          blocksInteractionCompletion: true,
+          elapsedSeconds: 1,
+          recording: expect.objectContaining({
+            lifecycleStatus: "recording",
+          }),
+        }),
+      ),
+    );
     const activityCountBeforeUnmount = activityChanges.mock.calls.length;
 
     view.unmount();
