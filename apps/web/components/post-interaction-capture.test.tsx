@@ -231,6 +231,250 @@ describe("PostInteractionCapture", () => {
     expect(requestBody.captureType).toBe("voice_journal");
   });
 
+  it("rejects a start response that belongs to another interaction", async () => {
+    const foreignQuestion = "Private prompt from another conversation";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          response(
+            session({
+              id: "session-foreign",
+              interactionId: "interaction-foreign",
+              currentQuestion: {
+                status: "ask",
+                question: foreignQuestion,
+                reason: "Private foreign context.",
+                target: "other",
+                priority: "high",
+              },
+            }),
+            201,
+          ),
+        ),
+      ),
+    );
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="phone_call"
+      />,
+    );
+
+    const start = await screen.findByRole("button", {
+      name: "Start personal notes",
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /safely stopped/i,
+      }),
+    );
+    fireEvent.click(start);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(screen.queryByText(foreignQuestion)).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        "revenueos:post-interaction-capture:interaction-1",
+      ),
+    ).toBeNull();
+    expect(start).toBeEnabled();
+  });
+
+  it("keeps the saved session key private when restore returns another session", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    const foreignQuestion = "Question from the wrong private session";
+    window.localStorage.setItem(key, "session-expected");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          response(
+            session({
+              id: "session-foreign",
+              currentQuestion: {
+                status: "ask",
+                question: foreignQuestion,
+                reason: "Private foreign context.",
+                target: "other",
+                priority: "high",
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="online_meeting"
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(screen.queryByText(foreignQuestion)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Your in-progress capture was restored."),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(key)).toBe("session-expected");
+  });
+
+  it("preserves an answer when its response swaps to another session", async () => {
+    const answer = "Keep this private answer in the editor.";
+    const foreignAnswer = "Foreign answer must never be shown.";
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/response")) {
+        return Promise.resolve(
+          response(
+            session({
+              id: "session-foreign",
+              questionCount: 1,
+              turns: [
+                {
+                  id: "turn-foreign",
+                  turnNumber: 1,
+                  question: session().currentQuestion!,
+                  answerText: foreignAnswer,
+                  inputMode: "text",
+                  createdAt: "2026-08-14T01:01:00Z",
+                },
+              ],
+            }),
+          ),
+        );
+      }
+      expect(init?.method).toBe("POST");
+      return Promise.resolve(response(session(), 201));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="phone_call"
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Start personal notes" });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /safely stopped/i,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start personal notes" }),
+    );
+    const editor = await screen.findByLabelText("Your answer");
+    fireEvent.change(editor, { target: { value: answer } });
+    fireEvent.click(screen.getByRole("button", { name: "Save answer" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(editor).toHaveValue(answer);
+    expect(screen.queryByText(foreignAnswer)).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        "revenueos:post-interaction-capture:interaction-1",
+      ),
+    ).toBe("session-1");
+  });
+
+  it("rejects a review response that swaps the private session", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    const candidate = {
+      id: "candidate-1",
+      evidenceCategory: "decision" as const,
+      statement: "The customer selected the staged rollout.",
+      originalStatement: "The customer selected the staged rollout.",
+      origin: "salesperson_reported" as const,
+      sourceLabel: "Reported by you" as const,
+      supportClassification: "reported" as const,
+      validationState: "unreviewed" as const,
+      conflictState: "not_assessed" as const,
+      userReviewState: "pending" as const,
+      sourceCaptureSessionId: "session-1",
+      evidenceFragmentId: "fragment-1",
+      acceptedEvidenceId: null,
+      entityReference: null,
+      explicitlyReportedAt: null,
+      edited: false,
+    };
+    const foreignStatement = "Foreign reviewed evidence must stay private.";
+    const reviewing = session({
+      lifecycleStatus: "review",
+      currentQuestion: null,
+      candidates: [candidate],
+    });
+    window.localStorage.setItem(key, reviewing.id);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/review")
+          ? Promise.resolve(
+              response({
+                ...session({
+                  id: "session-foreign",
+                  lifecycleStatus: "completed",
+                  currentQuestion: null,
+                  completedAt: "2026-08-14T01:05:00Z",
+                  candidates: [
+                    {
+                      ...candidate,
+                      id: "candidate-foreign",
+                      statement: foreignStatement,
+                      originalStatement: foreignStatement,
+                      sourceCaptureSessionId: "session-foreign",
+                    },
+                  ],
+                }),
+                acceptedCount: 1,
+                rejectedCount: 0,
+                interactionUpdated: true,
+                revenueBrainUpdated: true,
+              }),
+            )
+          : Promise.resolve(response(reviewing)),
+      ),
+    );
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="online_meeting"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review before updating intelligence",
+      }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Finish review and update intelligence",
+      }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(
+      screen.getByRole("heading", {
+        name: "Review before updating intelligence",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByText(foreignStatement)).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(key)).toBe("session-1");
+  });
+
   it("completes the typed answer and review journey with editable reported evidence", async () => {
     const candidate = {
       id: "candidate-1",

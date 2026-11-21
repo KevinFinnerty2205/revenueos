@@ -64,6 +64,13 @@ Session start, answer/voice upload, finish and review are idempotent at their du
 boundaries. Row locks and unique tenant-scoped keys prevent duplicate turns,
 candidates, accepted Evidence and intelligence composition.
 
+The browser treats response identity as a fail-closed boundary. Every returned
+Debrief Session must belong to the requested Interaction, and restore plus
+existing-session mutations must return the requested session identifier before any
+private content is rendered or the browser session key is updated. Server-side
+tenant and owner checks remain authoritative; the client check is defence in depth
+against malformed or stale successful responses.
+
 ## Configuration
 
 - `API_FEATURE_AI_DEBRIEF_ENABLED=true`
