@@ -10,12 +10,22 @@
 5. List chunks after interruption and retry only missing/unverified sequences.
 6. Stop and finalise with the declared last sequence, duration and final MIME.
 
-Before either browser-captured or imported audio is sent, the web client checks that
-the reserved upload response echoes the exact recording session, sequence, byte size
-and checksum it requested. Any mismatch fails closed before the returned upload URL,
-chunk completion or recording finalisation is used; the existing queued/retry or
-cancel path remains available. This client check is defence in depth and does not
-replace the API's tenant, grant or object-integrity enforcement.
+Before either browser-captured or imported audio is sent, the web client anchors the
+create response to the requested Interaction, recording type, source and normalised
+MIME, including non-empty recording and capture-session identifiers. Start and later
+lifecycle responses must retain those exact identifiers and attributes; stop must
+remain unfinalised and finalise must return the declared final MIME. Recording-list
+responses are also rejected if they are not anchored to the active Interaction.
+
+Only an anchored start response may select the recording path used for a chunk
+reservation. The client then checks that the reserved upload response echoes that
+exact recording session, sequence, byte size and checksum. Any mismatch fails closed
+before the returned upload URL or later completion/finalisation action is used. A
+foreign create identifier is never cancelled; a foreign start response can trigger
+best-effort cancellation only of the previously validated create session. Existing
+queued, retry and cancel paths remain available using the last validated session.
+These client checks are defence in depth and do not replace the API's tenant, grant
+or object-integrity enforcement.
 
 Out-of-order receipt is accepted. `(organisation_id, recording_session_id,
 sequence_number)` is unique. Repeating the same sequence/checksum is safe; changing

@@ -33,6 +33,11 @@ import {
   startProgressiveTranscriptionCapture,
 } from "@/lib/progressive-transcription-capture";
 import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
+import {
+  validateCreatedRecordingSession,
+  validateRecordingSession,
+  validateRecordingSessionsForInteraction,
+} from "@/lib/recording-session-identity";
 
 const MIME_PREFERENCES = [
   "audio/webm;codecs=opus",
@@ -358,8 +363,11 @@ export function RecordingFoundation({
   );
 
   const load = useCallback(async () => {
-    const recordings = await apiRequest<RecordingSession[]>(
-      `/api/v1/interactions/${interactionId}/recordings`,
+    const recordings = validateRecordingSessionsForInteraction(
+      await apiRequest<RecordingSession[]>(
+        `/api/v1/interactions/${interactionId}/recordings`,
+      ),
+      interactionId,
     );
     if (!mountedRef.current) return;
     const latest = recordings[0] ?? null;
@@ -817,19 +825,27 @@ export function RecordingFoundation({
       if (captureInterruptedRef.current) {
         throw new Error("An audio source ended before recording could start.");
       }
-      const created = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings`,
+      const created = validateCreatedRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              recordingType: "live_audio_recording",
+              expectedMimeType: mimeType,
+              language: "en-AU",
+              noticeVersion: NOTICE_VERSION,
+              consentMethod: "participant_notice_confirmed",
+              userAttestedAuthority: true,
+              idempotencyKey: requestKey("browser-recording"),
+            }),
+          },
+        ),
         {
-          method: "POST",
-          body: JSON.stringify({
-            recordingType: "live_audio_recording",
-            expectedMimeType: mimeType,
-            language: "en-AU",
-            noticeVersion: NOTICE_VERSION,
-            consentMethod: "participant_notice_confirmed",
-            userAttestedAuthority: true,
-            idempotencyKey: requestKey("browser-recording"),
-          }),
+          interactionId,
+          recordingType: "live_audio_recording",
+          recordingSource: null,
+          expectedMimeType: normaliseMimeType(mimeType),
         },
       );
       createdSession = created;
@@ -842,14 +858,18 @@ export function RecordingFoundation({
       if (captureInterruptedRef.current) {
         throw new Error("An audio source ended before recording could start.");
       }
-      const started = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings/${created.id}/start`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: requestKey("recording-start"),
-          }),
-        },
+      const started = validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${created.id}/start`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              idempotencyKey: requestKey("recording-start"),
+            }),
+          },
+        ),
+        created,
+        { finalMimeState: "not_finalised" },
       );
       createdSession = started;
       recordingRef.current = started;
@@ -1053,14 +1073,18 @@ export function RecordingFoundation({
     event: "pause" | "resume",
   ) {
     try {
-      await apiRequest(
-        `/api/v1/interactions/${interactionId}/recordings/${current.id}/${event}`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: requestKey(`recording-${event}`),
-          }),
-        },
+      validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${current.id}/${event}`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              idempotencyKey: requestKey(`recording-${event}`),
+            }),
+          },
+        ),
+        current,
+        { finalMimeState: "not_finalised" },
       );
     } catch (requestError) {
       if (!mountedRef.current) return;
@@ -1107,32 +1131,40 @@ export function RecordingFoundation({
         );
       }
       const durationSeconds = measuredElapsedSeconds();
-      const stopped = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings/${current.id}/stop`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            durationSeconds,
-            idempotencyKey: requestKey("recording-stop"),
-          }),
-        },
+      const stopped = validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${current.id}/stop`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              durationSeconds,
+              idempotencyKey: requestKey("recording-stop"),
+            }),
+          },
+        ),
+        current,
+        { finalMimeState: "not_finalised" },
       );
       if (!mountedRef.current || cancelledRef.current) return;
       setRecording(stopped);
       recordingRef.current = stopped;
-      const finalized = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings/${current.id}/finalize`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            lastSequenceNumber: nextSequenceRef.current - 1,
-            durationSeconds,
-            finalMimeType: normaliseMimeType(
-              mimeTypeRef.current ?? "audio/webm",
-            ),
-            idempotencyKey: requestKey("recording-finalize"),
-          }),
-        },
+      const finalized = validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${current.id}/finalize`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              lastSequenceNumber: nextSequenceRef.current - 1,
+              durationSeconds,
+              finalMimeType: normaliseMimeType(
+                mimeTypeRef.current ?? "audio/webm",
+              ),
+              idempotencyKey: requestKey("recording-finalize"),
+            }),
+          },
+        ),
+        stopped,
+        { finalMimeState: "finalised" },
       );
       if (!mountedRef.current || cancelledRef.current) return;
       setRecording(finalized);
@@ -1168,18 +1200,22 @@ export function RecordingFoundation({
     setState("uploading");
     setError(null);
     try {
-      const finalized = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings/${current.id}/finalize`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            lastSequenceNumber: nextSequenceRef.current - 1,
-            durationSeconds:
-              current.durationSeconds ?? Math.max(1, elapsedSeconds),
-            finalMimeType: current.finalMimeType ?? current.expectedMimeType,
-            idempotencyKey: requestKey("recording-finalize-retry"),
-          }),
-        },
+      const finalized = validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${current.id}/finalize`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              lastSequenceNumber: nextSequenceRef.current - 1,
+              durationSeconds:
+                current.durationSeconds ?? Math.max(1, elapsedSeconds),
+              finalMimeType: current.finalMimeType ?? current.expectedMimeType,
+              idempotencyKey: requestKey("recording-finalize-retry"),
+            }),
+          },
+        ),
+        current,
+        { finalMimeState: "finalised" },
       );
       if (!mountedRef.current) return;
       setRecording(finalized);

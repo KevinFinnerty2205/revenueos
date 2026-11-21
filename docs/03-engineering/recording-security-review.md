@@ -10,6 +10,7 @@ storage, provider/privacy and jurisdiction approval.
 | Unauthorised/covert recording | Versioned authority attestation, server flag and membership checks. Product cannot determine local law; organisation policy is required. |
 | Tenant leakage/enumeration | Trusted tenant context, tenant predicates/composite FKs, forced RLS, opaque not-found behaviour and tenant-prefixed object scope. |
 | Object/key enumeration | Random opaque keys and exact short-lived signed grants; public buckets and browser credentials prohibited. |
+| Confused lifecycle/upload response | The browser anchors create to the requested Interaction, recording type/source and normalised MIME, then requires exact recording/capture identity through start, pause/resume, stop and finalise before replacing active state. Imported and live capture cannot reserve a chunk from an unverified create/start response; only the last validated session may be cancelled or retried. Server tenant and grant validation remains authoritative. |
 | Replay/stale grants | Exact key/method/expiry signature plus chunk idempotency/checksum. A captured grant remains usable until its short expiry. |
 | Chunk tampering/gaps | SHA-256 at declaration, completion and worker assembly; contiguous manifest and total-size checks. SHA-256 supplies integrity, not malware scanning. |
 | MIME spoofing/polyglots/file bombs | Narrow MIME/header allowlist, per-chunk/count/total/duration bounds and streamed assembly. No transcoding or decompression platform is introduced. |

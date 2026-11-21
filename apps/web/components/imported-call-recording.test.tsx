@@ -103,12 +103,19 @@ describe("ImportedCallRecording", () => {
       }
       if (path.endsWith("/recordings") && init?.method === "POST") {
         return Promise.resolve(
-          jsonResponse({ ...recording, lifecycleStatus: "created" }, 201),
+          jsonResponse(
+            { ...recording, lifecycleStatus: "created", finalMimeType: null },
+            201,
+          ),
         );
       }
       if (path.endsWith("/start")) {
         return Promise.resolve(
-          jsonResponse({ ...recording, lifecycleStatus: "uploading" }),
+          jsonResponse({
+            ...recording,
+            lifecycleStatus: "uploading",
+            finalMimeType: null,
+          }),
         );
       }
       if (path.endsWith("/chunks") && init?.method === "POST") {
@@ -191,6 +198,160 @@ describe("ImportedCallRecording", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each(["create", "start"] as const)(
+    "rejects a foreign %s response before reserving or uploading a chunk",
+    async (mismatchStage) => {
+      vi.stubGlobal("crypto", {
+        randomUUID: vi.fn(() => "request-id"),
+        subtle: {
+          digest: vi.fn(() => Promise.resolve(new Uint8Array(32).buffer)),
+        },
+      });
+      const foreignUploadUrl =
+        "https://foreign-upload.example/imported-lifecycle-chunk";
+      const validCreated = {
+        ...recording,
+        lifecycleStatus: "created",
+        finalMimeType: null,
+      };
+      const foreignSession = {
+        ...validCreated,
+        id: "recording-foreign",
+        interactionId: "interaction-foreign",
+        captureSessionId: "capture-foreign",
+      };
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          const method = init?.method ?? "GET";
+          if (path.endsWith("/recordings") && method === "GET") {
+            return Promise.resolve(jsonResponse([]));
+          }
+          if (path.endsWith("/recordings") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse(
+                mismatchStage === "create" ? foreignSession : validCreated,
+                201,
+              ),
+            );
+          }
+          if (path.endsWith("/start") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse({
+                ...foreignSession,
+                lifecycleStatus: "uploading",
+              }),
+            );
+          }
+          if (path.endsWith("/chunks") && method === "POST") {
+            const request = JSON.parse(String(init?.body)) as {
+              sequenceNumber: number;
+              byteSize: number;
+              checksumSha256: string;
+            };
+            return Promise.resolve(
+              jsonResponse(
+                {
+                  id: "chunk-foreign",
+                  recordingSessionId: foreignSession.id,
+                  sequenceNumber: request.sequenceNumber,
+                  byteSize: request.byteSize,
+                  checksumSha256: request.checksumSha256,
+                  uploadState: "pending",
+                  uploadedAt: null,
+                  createdAt: "2026-08-15T00:00:00Z",
+                  uploadUrl: foreignUploadUrl,
+                  uploadExpiresAt: "2026-08-15T00:05:00Z",
+                },
+                201,
+              ),
+            );
+          }
+          if (path.endsWith("/cancel") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse({
+                ...validCreated,
+                lifecycleStatus: "cancelled",
+              }),
+            );
+          }
+          if (path === foreignUploadUrl && method === "PUT") {
+            return Promise.resolve(new Response(null, { status: 204 }));
+          }
+          return Promise.resolve(
+            jsonResponse({ code: "unexpected", message: path }, 500),
+          );
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<ImportedCallRecording interactionId="interaction-1" />);
+      const file = new File(
+        [new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])],
+        "call.webm",
+        { type: "audio/webm" },
+      );
+      fireEvent.change(screen.getByLabelText("Audio file"), {
+        target: { files: [file] },
+      });
+      fireEvent.change(screen.getByLabelText("Call duration in seconds"), {
+        target: { value: "45" },
+      });
+      fireEvent.click(
+        screen.getByRole("checkbox", {
+          name: /authorised business interaction/i,
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Import recording" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The recording response did not match this interaction. Try again.",
+      );
+      expect(screen.getByText("call.webm")).toBeVisible();
+      expect(
+        screen.getByRole("checkbox", {
+          name: /authorised business interaction/i,
+        }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("button", { name: "Import recording" }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByText("Recording imported securely"),
+      ).not.toBeInTheDocument();
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/chunks"),
+        ),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => String(input) === foreignUploadUrl,
+        ),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          /\/(complete|finalize)$/u.test(String(input)),
+        ),
+      ).toBe(false);
+      const cancelPaths = fetchMock.mock.calls
+        .filter(
+          ([input, init]) =>
+            String(input).endsWith("/cancel") && init?.method === "POST",
+        )
+        .map(([input]) => String(input));
+      expect(cancelPaths).toHaveLength(mismatchStage === "start" ? 1 : 0);
+      if (mismatchStage === "start") {
+        expect(cancelPaths[0]).toMatch(
+          /\/interactions\/interaction-1\/recordings\/recording-1\/cancel$/u,
+        );
+      }
+      expect(
+        cancelPaths.some((path) => path.includes("recording-foreign")),
+      ).toBe(false);
+    },
+  );
+
   it.each([
     {
       mismatch: "foreign recording session",
@@ -224,12 +385,23 @@ describe("ImportedCallRecording", () => {
           }
           if (path.endsWith("/recordings") && method === "POST") {
             return Promise.resolve(
-              jsonResponse({ ...recording, lifecycleStatus: "created" }, 201),
+              jsonResponse(
+                {
+                  ...recording,
+                  lifecycleStatus: "created",
+                  finalMimeType: null,
+                },
+                201,
+              ),
             );
           }
           if (path.endsWith("/start") && method === "POST") {
             return Promise.resolve(
-              jsonResponse({ ...recording, lifecycleStatus: "uploading" }),
+              jsonResponse({
+                ...recording,
+                lifecycleStatus: "uploading",
+                finalMimeType: null,
+              }),
             );
           }
           if (path.endsWith("/chunks") && method === "POST") {

@@ -2364,18 +2364,25 @@ test("mobile Companion recording path persists a consented transcript into exist
     interactionId: "interaction-recording",
     captureSessionId: "capture-recording-1",
     recordingType: "live_audio_recording",
+    recordingSource: null,
     lifecycleStatus: recordingLifecycle,
     consentState: "acknowledged",
-    startedAt: recordingCreated ? "2026-08-14T02:10:00Z" : null,
-    stoppedAt:
-      recordingLifecycle === "recording" ? null : "2026-08-14T02:11:00Z",
-    durationSeconds: recordingLifecycle === "recording" ? null : 60,
+    startedAt: recordingLifecycle === "created" ? null : "2026-08-14T02:10:00Z",
+    stoppedAt: ["created", "recording"].includes(recordingLifecycle)
+      ? null
+      : "2026-08-14T02:11:00Z",
+    durationSeconds: ["created", "recording"].includes(recordingLifecycle)
+      ? null
+      : 60,
     expectedMimeType: "audio/webm",
-    finalMimeType: recordingLifecycle === "recording" ? null : "audio/webm",
-    totalBytes: recordingLifecycle === "recording" ? 0 : 36,
-    chunkCount: recordingLifecycle === "recording" ? 0 : 1,
-    uploadCompletedAt:
-      recordingLifecycle === "recording" ? null : "2026-08-14T02:11:00Z",
+    finalMimeType: ["uploaded", "completed"].includes(recordingLifecycle)
+      ? "audio/webm"
+      : null,
+    totalBytes: ["created", "recording"].includes(recordingLifecycle) ? 0 : 36,
+    chunkCount: ["created", "recording"].includes(recordingLifecycle) ? 0 : 1,
+    uploadCompletedAt: ["uploaded", "completed"].includes(recordingLifecycle)
+      ? "2026-08-14T02:11:00Z"
+      : null,
     transcriptionStatus:
       recordingLifecycle === "completed"
         ? "completed"

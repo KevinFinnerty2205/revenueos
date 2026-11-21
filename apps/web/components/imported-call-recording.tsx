@@ -10,6 +10,12 @@ import { useCallback, useEffect, useState } from "react";
 import { apiRequest, apiUpload } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
+import {
+  RecordingSessionIdentityError,
+  validateCreatedRecordingSession,
+  validateRecordingSession,
+  validateRecordingSessionsForInteraction,
+} from "@/lib/recording-session-identity";
 
 const MAX_RECORDING_BYTES = 512 * 1024 * 1024;
 const CHUNK_BYTES = 8 * 1024 * 1024;
@@ -103,9 +109,12 @@ export function ImportedCallRecording({
       setRefreshing(true);
       try {
         setRecordings(
-          await apiRequest<RecordingSession[]>(
-            `/api/v1/interactions/${interactionId}/recordings`,
-            { signal },
+          validateRecordingSessionsForInteraction(
+            await apiRequest<RecordingSession[]>(
+              `/api/v1/interactions/${interactionId}/recordings`,
+              { signal },
+            ),
+            interactionId,
           ),
         );
       } catch (requestError: unknown) {
@@ -133,7 +142,11 @@ export function ImportedCallRecording({
       `/api/v1/interactions/${interactionId}/recordings`,
       { signal: controller.signal },
     )
-      .then(setRecordings)
+      .then((loaded) =>
+        setRecordings(
+          validateRecordingSessionsForInteraction(loaded, interactionId),
+        ),
+      )
       .catch((requestError: unknown) => {
         if (
           requestError instanceof DOMException &&
@@ -170,32 +183,48 @@ export function ImportedCallRecording({
     setWorking(true);
     setError(null);
     setProgress(0);
+    let validatedCreated: RecordingSession | null = null;
+    let validatedStarted: RecordingSession | null = null;
     try {
-      const recording = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings`,
+      const recording = validateCreatedRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              recordingType: "imported_audio_recording",
+              recordingSource,
+              expectedMimeType: mimeType,
+              language: "en-AU",
+              noticeVersion: NOTICE_VERSION,
+              consentMethod: "contractual_authority",
+              userAttestedAuthority: true,
+              idempotencyKey: requestKey(`${context}-import`),
+            }),
+          },
+        ),
         {
-          method: "POST",
-          body: JSON.stringify({
-            recordingType: "imported_audio_recording",
-            recordingSource,
-            expectedMimeType: mimeType,
-            language: "en-AU",
-            noticeVersion: NOTICE_VERSION,
-            consentMethod: "contractual_authority",
-            userAttestedAuthority: true,
-            idempotencyKey: requestKey(`${context}-import`),
-          }),
+          interactionId,
+          recordingType: "imported_audio_recording",
+          recordingSource,
+          expectedMimeType: mimeType,
         },
       );
-      await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings/${recording.id}/start`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: requestKey(`${context}-import-start`),
-          }),
-        },
+      validatedCreated = recording;
+      const started = validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${recording.id}/start`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              idempotencyKey: requestKey(`${context}-import-start`),
+            }),
+          },
+        ),
+        recording,
+        { finalMimeState: "not_finalised" },
       );
+      validatedStarted = started;
       const chunkCount = Math.ceil(file.size / CHUNK_BYTES);
       for (
         let sequenceNumber = 0;
@@ -209,7 +238,7 @@ export function ImportedCallRecording({
         );
         const checksumSha256 = await sha256(chunkBlob);
         const chunk = await apiRequest<RecordingChunkUpload>(
-          `/api/v1/interactions/${interactionId}/recordings/${recording.id}/chunks`,
+          `/api/v1/interactions/${interactionId}/recordings/${started.id}/chunks`,
           {
             method: "POST",
             body: JSON.stringify({
@@ -223,14 +252,14 @@ export function ImportedCallRecording({
           },
         );
         assertRecordingChunkUploadIdentity(chunk, {
-          recordingSessionId: recording.id,
+          recordingSessionId: started.id,
           sequenceNumber,
           byteSize: chunkBlob.size,
           checksumSha256,
         });
         await apiUpload(chunk.uploadUrl, chunkBlob, mimeType);
         await apiRequest(
-          `/api/v1/interactions/${interactionId}/recordings/${recording.id}/chunks/${chunk.id}/complete`,
+          `/api/v1/interactions/${interactionId}/recordings/${started.id}/chunks/${chunk.id}/complete`,
           {
             method: "POST",
             body: JSON.stringify({
@@ -243,17 +272,21 @@ export function ImportedCallRecording({
         );
         setProgress(Math.round(((sequenceNumber + 1) / chunkCount) * 100));
       }
-      const finalised = await apiRequest<RecordingSession>(
-        `/api/v1/interactions/${interactionId}/recordings/${recording.id}/finalize`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            lastSequenceNumber: chunkCount - 1,
-            durationSeconds: duration,
-            finalMimeType: mimeType,
-            idempotencyKey: requestKey(`${context}-import-finalise`),
-          }),
-        },
+      const finalised = validateRecordingSession(
+        await apiRequest<RecordingSession>(
+          `/api/v1/interactions/${interactionId}/recordings/${started.id}/finalize`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              lastSequenceNumber: chunkCount - 1,
+              durationSeconds: duration,
+              finalMimeType: mimeType,
+              idempotencyKey: requestKey(`${context}-import-finalise`),
+            }),
+          },
+        ),
+        started,
+        { finalMimeState: "finalised" },
       );
       setCompleted(finalised);
       setRecordings((current) => [
@@ -261,6 +294,21 @@ export function ImportedCallRecording({
         ...current.filter((item) => item.id !== finalised.id),
       ]);
     } catch (requestError: unknown) {
+      if (
+        requestError instanceof RecordingSessionIdentityError &&
+        validatedCreated &&
+        !validatedStarted
+      ) {
+        await apiRequest(
+          `/api/v1/interactions/${interactionId}/recordings/${validatedCreated.id}/cancel`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              idempotencyKey: requestKey(`${context}-import-cancel`),
+            }),
+          },
+        ).catch(() => undefined);
+      }
       setError(
         requestError instanceof Error
           ? requestError.message

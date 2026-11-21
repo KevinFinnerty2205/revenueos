@@ -32,6 +32,7 @@ const baseRecording = {
   interactionId: "interaction-1",
   captureSessionId: "capture-1",
   recordingType: "live_audio_recording",
+  recordingSource: null,
   lifecycleStatus: "created",
   consentState: "acknowledged",
   startedAt: null,
@@ -623,6 +624,7 @@ describe("RecordingFoundation", () => {
           jsonResponse({
             ...baseRecording,
             lifecycleStatus: "uploaded",
+            finalMimeType: "audio/webm",
             transcriptionStatus: "queued",
           }),
         );
@@ -700,6 +702,159 @@ describe("RecordingFoundation", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it.each(["create", "start"] as const)(
+    "rejects a foreign %s response before browser audio can be reserved or uploaded",
+    async (mismatchStage) => {
+      installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+      vi.stubGlobal("crypto", {
+        randomUUID: vi.fn(() => "request-id"),
+        subtle: {
+          digest: vi.fn(() => Promise.resolve(new Uint8Array(32).buffer)),
+        },
+      });
+      const foreignUploadUrl =
+        "https://foreign-upload.example/browser-lifecycle-chunk";
+      const foreignSession = {
+        ...baseRecording,
+        id: "recording-foreign",
+        interactionId: "interaction-foreign",
+        captureSessionId: "capture-foreign",
+      };
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/api/v1/beta/capabilities")) {
+            return Promise.resolve(
+              jsonResponse({
+                featureFlags: { progressiveTranscription: false },
+              }),
+            );
+          }
+          if (url.endsWith("/recordings") && method === "GET") {
+            return Promise.resolve(jsonResponse([]));
+          }
+          if (url.endsWith("/recordings") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse(
+                mismatchStage === "create" ? foreignSession : baseRecording,
+                201,
+              ),
+            );
+          }
+          if (url.endsWith("/start") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse({
+                ...foreignSession,
+                lifecycleStatus: "recording",
+              }),
+            );
+          }
+          if (url.endsWith("/chunks") && method === "POST") {
+            const request = JSON.parse(String(init?.body)) as {
+              sequenceNumber: number;
+              byteSize: number;
+              checksumSha256: string;
+            };
+            return Promise.resolve(
+              jsonResponse(
+                {
+                  id: "chunk-foreign",
+                  recordingSessionId: foreignSession.id,
+                  sequenceNumber: request.sequenceNumber,
+                  byteSize: request.byteSize,
+                  checksumSha256: request.checksumSha256,
+                  uploadState: "pending",
+                  uploadedAt: null,
+                  createdAt: "2026-08-15T00:00:00Z",
+                  uploadUrl: foreignUploadUrl,
+                  uploadExpiresAt: "2026-08-15T00:05:00Z",
+                },
+                201,
+              ),
+            );
+          }
+          if (url.endsWith("/cancel") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse({
+                ...baseRecording,
+                lifecycleStatus: "cancelled",
+              }),
+            );
+          }
+          if (url === foreignUploadUrl && method === "PUT") {
+            return Promise.resolve(new Response(null, { status: 204 }));
+          }
+          return Promise.resolve(
+            jsonResponse({ code: "unexpected", message: url }, 500),
+          );
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <RecordingFoundation
+          interactionId="interaction-1"
+          interactionType="face_to_face_meeting"
+          lifecycleStatus="in_progress"
+        />,
+      );
+      fireEvent.click(await screen.findByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The recording response did not match this interaction. Try again.",
+      );
+      expect(
+        screen.getByRole("button", { name: "Start recording" }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByRole("button", { name: "Pause" }),
+      ).not.toBeInTheDocument();
+      expect(FakeMediaRecorder.instances).toHaveLength(0);
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/chunks"),
+        ),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => String(input) === foreignUploadUrl,
+        ),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          /\/(complete|stop|finalize)$/u.test(String(input)),
+        ),
+      ).toBe(false);
+      const cancelPaths = fetchMock.mock.calls
+        .filter(
+          ([input, init]) =>
+            String(input).endsWith("/cancel") && init?.method === "POST",
+        )
+        .map(([input]) => String(input));
+      expect(cancelPaths).toHaveLength(mismatchStage === "start" ? 1 : 0);
+      if (mismatchStage === "start") {
+        expect(cancelPaths[0]).toMatch(
+          /\/interactions\/interaction-1\/recordings\/recording-1\/cancel$/u,
+        );
+      }
+      expect(
+        cancelPaths.some((path) => path.includes("recording-foreign")),
+      ).toBe(false);
+      if (mismatchStage === "create") {
+        expect(
+          fetchMock.mock.calls.some(([input]) =>
+            String(input).endsWith("/start"),
+          ),
+        ).toBe(false);
+      }
+    },
+  );
 
   it.each([
     {
@@ -834,6 +989,127 @@ describe("RecordingFoundation", () => {
       );
     },
   );
+
+  it("keeps the validated stopped session retryable when finalisation returns a foreign response", async () => {
+    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "request-id"),
+      subtle: {
+        digest: vi.fn(() => Promise.resolve(new Uint8Array(32).buffer)),
+      },
+    });
+    const onFinalized = vi.fn();
+    const foreignFinalized = {
+      ...baseRecording,
+      id: "recording-foreign",
+      interactionId: "interaction-foreign",
+      captureSessionId: "capture-foreign",
+      lifecycleStatus: "uploaded",
+      finalMimeType: "audio/webm",
+      transcriptionStatus: "queued",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/api/v1/beta/capabilities")) {
+        return Promise.resolve(
+          jsonResponse({
+            featureFlags: { progressiveTranscription: false },
+          }),
+        );
+      }
+      if (url.endsWith("/recordings") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith("/recordings") && method === "POST") {
+        return Promise.resolve(jsonResponse(baseRecording, 201));
+      }
+      if (url.endsWith("/start") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({ ...baseRecording, lifecycleStatus: "recording" }),
+        );
+      }
+      if (url.endsWith("/chunks") && method === "POST") {
+        const request = JSON.parse(String(init?.body)) as {
+          sequenceNumber: number;
+          byteSize: number;
+          checksumSha256: string;
+        };
+        return Promise.resolve(
+          jsonResponse(
+            {
+              id: "chunk-1",
+              recordingSessionId: baseRecording.id,
+              sequenceNumber: request.sequenceNumber,
+              byteSize: request.byteSize,
+              checksumSha256: request.checksumSha256,
+              uploadState: "pending",
+              uploadedAt: null,
+              createdAt: "2026-08-15T00:00:00Z",
+              uploadUrl: "/recording-upload",
+              uploadExpiresAt: "2026-08-15T00:05:00Z",
+            },
+            201,
+          ),
+        );
+      }
+      if (url.endsWith("/recording-upload") && method === "PUT") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (url.endsWith("/complete") && method === "POST") {
+        return Promise.resolve(jsonResponse({ uploadState: "verified" }));
+      }
+      if (url.endsWith("/stop") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({ ...baseRecording, lifecycleStatus: "uploading" }),
+        );
+      }
+      if (url.endsWith("/finalize") && method === "POST") {
+        return Promise.resolve(jsonResponse(foreignFinalized));
+      }
+      if (url.endsWith("/cancel") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            ...baseRecording,
+            lifecycleStatus: "cancelled",
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: url }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        onFinalized={onFinalized}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Stop and upload" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Retry finalisation" }),
+    ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The recording response did not match this interaction. Try again.",
+    );
+    expect(onFinalized).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Cancel recording" }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/finalize"),
+      ),
+    ).toHaveLength(1);
+  });
 
   it("prepares progressive capture before synchronously arming it with the batch recorder", async () => {
     installSupportedBrowser(() => Promise.resolve(microphoneStream()));
