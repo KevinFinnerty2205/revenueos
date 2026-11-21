@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -14,6 +15,14 @@ function jsonResponse(body: object, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
 }
 
 const capabilities: AskCapabilities = {
@@ -32,6 +41,13 @@ const capabilities: AskCapabilities = {
   safeMessage:
     "Ask answers from authorised Oryntela evidence. It does not search the public web or perform actions.",
 };
+
+function accountCapabilities(id: string, label: string): AskCapabilities {
+  return {
+    ...capabilities,
+    scope: { type: "account", id, label },
+  };
+}
 
 function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
   return {
@@ -73,6 +89,31 @@ function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
     generatedAt: "2026-08-24T01:00:00Z",
     ...overrides,
   };
+}
+
+function accountAnswer(
+  id: string,
+  label: string,
+  answerText: string,
+): AskAnswer {
+  return answer({
+    answer: answerText,
+    scope: { type: "account", id, label },
+    sources: [
+      {
+        ...answer().sources[0],
+        id: `evidence-${id}`,
+        label: `${label} verified note`,
+        href: `/conversations/accounts/${id}`,
+      },
+    ],
+    summaryPoints: [],
+    suggestedAction: {
+      label: `Review ${label}`,
+      href: `/conversations/accounts/${id}`,
+      sourceId: `evidence-${id}`,
+    },
+  });
 }
 
 describe("AskRevenueOS", () => {
@@ -330,5 +371,257 @@ describe("AskRevenueOS", () => {
     expect(
       await screen.findByText(/Security review is the clearest/),
     ).toBeVisible();
+  });
+
+  it("hides the previous answer synchronously while a new scope loads", async () => {
+    const accountCapability = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        return Promise.resolve(jsonResponse(answer()));
+      }
+      if (url.includes("scopeType=account")) {
+        return accountCapability.promise;
+      }
+      return Promise.resolve(jsonResponse(capabilities));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />,
+    );
+    await screen.findByText("About: Qantas expansion");
+    fireEvent.click(
+      screen.getByRole("button", { name: "What is holding this deal back?" }),
+    );
+    expect(
+      await screen.findByText(/Security review is the clearest/),
+    ).toBeVisible();
+
+    rerender(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checking Ask Oryntela availability",
+    );
+    expect(
+      screen.queryByText(/Security review is the clearest/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Review opportunity" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ask Oryntela")).not.toBeInTheDocument();
+
+    await act(async () => {
+      accountCapability.resolve(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      );
+      await accountCapability.promise;
+    });
+    expect(await screen.findByText("About: Bayside Health")).toBeVisible();
+  });
+
+  it("ignores a late answer from the previous scope", async () => {
+    const opportunityAnswer = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as {
+          scopeId: string | null;
+        };
+        return body.scopeId === "opportunity-1"
+          ? opportunityAnswer.promise
+          : Promise.resolve(
+              jsonResponse(
+                accountAnswer(
+                  "account-2",
+                  "Bayside Health",
+                  "Bayside confirmed the next workshop.",
+                ),
+              ),
+            );
+      }
+      return Promise.resolve(
+        jsonResponse(
+          url.includes("scopeType=account")
+            ? accountCapabilities("account-2", "Bayside Health")
+            : capabilities,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />,
+    );
+    await screen.findByText("About: Qantas expansion");
+    fireEvent.click(
+      screen.getByRole("button", { name: "What is holding this deal back?" }),
+    );
+
+    rerender(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    fireEvent.change(screen.getByLabelText("Ask Oryntela"), {
+      target: { value: "What changed for Bayside?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+
+    await act(async () => {
+      opportunityAnswer.resolve(jsonResponse(answer()));
+      await opportunityAnswer.promise;
+    });
+    expect(
+      screen.getByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Security review is the clearest/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+  });
+
+  it("fails closed when capability or answer scope does not match", async () => {
+    const mismatchedCapabilityFetch = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(capabilities));
+    vi.stubGlobal("fetch", mismatchedCapabilityFetch);
+    const capabilityView = render(
+      <AskRevenueOS scopeType="account" scopeId="account-2" />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ask Oryntela is unavailable right now.",
+    );
+    expect(
+      screen.queryByText("About: Qantas expansion"),
+    ).not.toBeInTheDocument();
+    capabilityView.unmount();
+
+    const answerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      )
+      .mockResolvedValueOnce(jsonResponse(answer()));
+    vi.stubGlobal("fetch", answerFetch);
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    fireEvent.change(screen.getByLabelText("Ask Oryntela"), {
+      target: { value: "What changed for Bayside?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ask Oryntela is unavailable right now.",
+    );
+    expect(
+      screen.queryByText(/Security review is the clearest/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Review opportunity" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+  });
+
+  it("keeps the newest overlapping answer when an older request settles late", async () => {
+    const firstAnswer = deferred<Response>();
+    let postCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          postCount += 1;
+          return postCount === 1
+            ? firstAnswer.promise
+            : Promise.resolve(
+                jsonResponse(
+                  accountAnswer(
+                    "account-2",
+                    "Bayside Health",
+                    "The newest scoped answer.",
+                  ),
+                ),
+              );
+        }
+        return Promise.resolve(
+          jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+        );
+      }),
+    );
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    const form = question.closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.change(question, { target: { value: "First question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    fireEvent.change(question, { target: { value: "Second question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await screen.findByText("The newest scoped answer.")).toBeVisible();
+    await act(async () => {
+      firstAnswer.resolve(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "The stale scoped answer.",
+          ),
+        ),
+      );
+      await firstAnswer.promise;
+    });
+    expect(screen.getByText("The newest scoped answer.")).toBeVisible();
+    expect(
+      screen.queryByText("The stale scoped answer."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+  });
+
+  it("invalidates an in-flight answer when a new submission is invalid", async () => {
+    const pendingAnswer = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        init?.method === "POST"
+          ? pendingAnswer.promise
+          : Promise.resolve(
+              jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+            ),
+      ),
+    );
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    const form = question.closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.change(question, { target: { value: "A valid question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    fireEvent.change(question, { target: { value: "x" } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter a question with at least two characters.",
+    );
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+
+    await act(async () => {
+      pendingAnswer.resolve(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "This invalidated answer must stay hidden.",
+          ),
+        ),
+      );
+      await pendingAnswer.promise;
+    });
+    expect(
+      screen.queryByText("This invalidated answer must stay hidden."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a question with at least two characters.",
+    );
   });
 });
