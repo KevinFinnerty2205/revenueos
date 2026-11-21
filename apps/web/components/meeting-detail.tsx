@@ -32,6 +32,10 @@ const meetingTabs: MeetingTab[] = [
 ];
 
 export function MeetingDetail({ meetingId }: { meetingId: string }) {
+  return <MeetingDetailSession key={meetingId} meetingId={meetingId} />;
+}
+
+function MeetingDetailSession({ meetingId }: { meetingId: string }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [participants, setParticipants] = useState<MeetingParticipant[]>([]);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
