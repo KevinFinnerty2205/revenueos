@@ -2030,14 +2030,19 @@ test("an authorised imported call recording uses the existing transcription and 
         return;
       }
       if (path.endsWith("/recording-imported-call/chunks")) {
+        const body = request.postDataJSON() as {
+          byteSize: number;
+          checksumSha256: string;
+          sequenceNumber: number;
+        };
         await route.fulfill({
           status: 201,
           json: {
             id: "chunk-imported-call",
             recordingSessionId: "recording-imported-call",
-            sequenceNumber: 0,
-            byteSize: 20,
-            checksumSha256: "0".repeat(64),
+            sequenceNumber: body.sequenceNumber,
+            byteSize: body.byteSize,
+            checksumSha256: body.checksumSha256,
             uploadState: "pending",
             uploadedAt: null,
             createdAt: "2026-08-14T03:02:00Z",
@@ -2052,8 +2057,12 @@ test("an authorised imported call recording uses the existing transcription and 
         return;
       }
       if (path.endsWith("/chunk-imported-call/complete")) {
+        const body = request.postDataJSON() as { checksumSha256: string };
         await route.fulfill({
-          json: { uploadState: "verified", checksumSha256: "0".repeat(64) },
+          json: {
+            uploadState: "verified",
+            checksumSha256: body.checksumSha256,
+          },
         });
         return;
       }
@@ -2338,6 +2347,7 @@ test("mobile Companion recording path persists a consented transcript into exist
   let intelligenceGenerated = false;
   const markers: Array<Record<string, unknown>> = [];
   const visuals: Array<Record<string, unknown>> = [];
+  let activeVisual: Record<string, unknown> | null = null;
   let recordingDebrief = debriefSession("collecting", {
     interactionId: "interaction-recording",
     currentQuestion: {
@@ -2519,28 +2529,53 @@ test("mobile Companion recording path persists a consented transcript into exist
         return;
       }
       if (path.endsWith("/visual-evidence/uploads")) {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        activeVisual = visualEvidence("uploading", {
+          interactionId: "interaction-recording",
+          visualType: body.visualType,
+          sourceOwnership: body.sourceOwnership,
+          contextLabel: body.contextLabel,
+          filename: body.filename,
+          mimeType: body.mimeType,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          capturedAt: body.capturedAt,
+          candidates: [],
+        });
         await route.fulfill({
           status: 201,
-          json: visualEvidence("uploading", {
-            interactionId: "interaction-recording",
+          json: {
+            ...activeVisual,
             uploadUrl: `${path}/visual-1/content?token=recording-test`,
             uploadExpiresAt: "2026-08-14T02:20:00Z",
-          }),
+          },
         });
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/complete")) {
+        activeVisual = {
+          ...(activeVisual ??
+            visualEvidence("uploading", {
+              interactionId: "interaction-recording",
+            })),
+          processingStatus: "uploaded",
+          processingAttempts: 1,
+        };
         await route.fulfill({
-          json: visualEvidence("uploaded", {
-            interactionId: "interaction-recording",
-          }),
+          json: activeVisual,
         });
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/process")) {
-        const completedVisual = visualEvidence("completed", {
-          interactionId: "interaction-recording",
-        });
+        const completedVisual = {
+          ...(activeVisual ??
+            visualEvidence("uploaded", {
+              interactionId: "interaction-recording",
+            })),
+          processingStatus: "completed",
+          processingAttempts: 1,
+        };
+        activeVisual = completedVisual;
         visuals.splice(0, visuals.length, completedVisual);
         await route.fulfill({ json: completedVisual });
         return;
