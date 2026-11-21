@@ -7,13 +7,33 @@ import type {
   TranscriptProvenance,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { ImportedCallRecording } from "@/components/imported-call-recording";
 
 const MAX_TRANSCRIPT_BYTES = 512 * 1024;
 const transcriptExtensions = new Set(["txt", "vtt", "srt"]);
+
+type CapabilitiesState =
+  | { interactionId: string; status: "loading" }
+  | {
+      interactionId: string;
+      status: "available";
+      value: OnlineMeetingCapabilities;
+    }
+  | { interactionId: string; status: "unavailable"; message: string };
+
+type HistoryState = {
+  interactionId: string;
+  status: "loading" | "available" | "unavailable";
+  items: OnlineMeetingTranscriptImport[];
+};
+
+type InteractionValue<T> = {
+  interactionId: string;
+  value: T;
+};
 
 function requestKey(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -30,68 +50,157 @@ function base64(bytes: Uint8Array): string {
   return btoa(encoded);
 }
 
-export function OnlineMeetingCapture({
-  interaction,
-  onTranscriptImported,
-}: {
+function mergeImports(
+  first: OnlineMeetingTranscriptImport[],
+  second: OnlineMeetingTranscriptImport[],
+): OnlineMeetingTranscriptImport[] {
+  const byId = new Map<string, OnlineMeetingTranscriptImport>();
+  for (const item of [...first, ...second]) {
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  }
+  return [...byId.values()];
+}
+
+type OnlineMeetingCaptureProps = {
   interaction: Interaction;
   onTranscriptImported?: (result: OnlineMeetingTranscriptImport) => void;
-}) {
-  const [capabilities, setCapabilities] =
-    useState<OnlineMeetingCapabilities | null>(null);
-  const [imports, setImports] = useState<OnlineMeetingTranscriptImport[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+};
+
+export function OnlineMeetingCapture(props: OnlineMeetingCaptureProps) {
+  return (
+    <OnlineMeetingCaptureForInteraction key={props.interaction.id} {...props} />
+  );
+}
+
+function OnlineMeetingCaptureForInteraction({
+  interaction,
+  onTranscriptImported,
+}: OnlineMeetingCaptureProps) {
+  const [capabilitiesState, setCapabilitiesState] = useState<CapabilitiesState>(
+    {
+      interactionId: interaction.id,
+      status: "loading",
+    },
+  );
+  const [historyState, setHistoryState] = useState<HistoryState>({
+    interactionId: interaction.id,
+    status: "loading",
+    items: [],
+  });
+  const [importError, setImportError] =
+    useState<InteractionValue<string> | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
   const [provenance, setProvenance] =
     useState<TranscriptProvenance>("platform_generated");
   const [authorityConfirmed, setAuthorityConfirmed] = useState(false);
   const [processingConfirmed, setProcessingConfirmed] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [completed, setCompleted] =
-    useState<OnlineMeetingTranscriptImport | null>(null);
+  const [importingInteractionId, setImportingInteractionId] = useState<
+    string | null
+  >(null);
+  const [completedState, setCompletedState] =
+    useState<InteractionValue<OnlineMeetingTranscriptImport> | null>(null);
+  const mounted = useRef(true);
+  const loadGeneration = useRef(0);
+  const mutationGeneration = useRef(0);
+  const importController = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    mounted.current = true;
+    const requestedInteractionId = interaction.id;
+    const generation = ++loadGeneration.current;
     const controller = new AbortController();
-    Promise.all([
-      apiRequest<OnlineMeetingCapabilities>(
-        `/api/v1/interactions/${interaction.id}/online-meeting/capabilities`,
-        { signal: controller.signal },
-      ),
-      apiRequest<OnlineMeetingTranscriptImport[]>(
-        `/api/v1/interactions/${interaction.id}/online-meeting/transcripts`,
-        { signal: controller.signal },
-      ),
-    ])
-      .then(([nextCapabilities, nextImports]) => {
-        setCapabilities(nextCapabilities);
-        setImports(nextImports);
-      })
-      .catch((requestError: unknown) => {
+    importController.current?.abort();
+    importController.current = null;
+    mutationGeneration.current += 1;
+    const isCurrent = () =>
+      mounted.current &&
+      !controller.signal.aborted &&
+      loadGeneration.current === generation;
+
+    void apiRequest<OnlineMeetingCapabilities>(
+      `/api/v1/interactions/${requestedInteractionId}/online-meeting/capabilities`,
+      { signal: controller.signal },
+    ).then(
+      (nextCapabilities) => {
+        if (!isCurrent()) return;
+        setCapabilitiesState({
+          interactionId: requestedInteractionId,
+          status: "available",
+          value: nextCapabilities,
+        });
+      },
+      (requestError: unknown) => {
         if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
+          !isCurrent() ||
+          (requestError instanceof DOMException &&
+            requestError.name === "AbortError")
         ) {
           return;
         }
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Online meeting capture options could not be loaded.",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
+        setCapabilitiesState({
+          interactionId: requestedInteractionId,
+          status: "unavailable",
+          message:
+            requestError instanceof Error
+              ? requestError.message
+              : "Online meeting capture options could not be loaded.",
+        });
+      },
+    );
+
+    void apiRequest<OnlineMeetingTranscriptImport[]>(
+      `/api/v1/interactions/${requestedInteractionId}/online-meeting/transcripts`,
+      { signal: controller.signal },
+    ).then(
+      (nextImports) => {
+        if (!isCurrent()) return;
+        setHistoryState((current) => {
+          if (current.interactionId !== requestedInteractionId) return current;
+          return {
+            interactionId: requestedInteractionId,
+            status: "available",
+            items: mergeImports(current.items, nextImports),
+          };
+        });
+      },
+      (requestError: unknown) => {
+        if (
+          !isCurrent() ||
+          (requestError instanceof DOMException &&
+            requestError.name === "AbortError")
+        ) {
+          return;
+        }
+        setHistoryState((current) => {
+          if (current.interactionId !== requestedInteractionId) return current;
+          return { ...current, status: "unavailable" };
+        });
+      },
+    );
+
+    return () => {
+      mounted.current = false;
+      controller.abort();
+      loadGeneration.current += 1;
+      mutationGeneration.current += 1;
+      importController.current?.abort();
+      importController.current = null;
+    };
   }, [interaction.id]);
 
   async function importTranscript(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
+    const requestedInteractionId = interaction.id;
+    setImportError(null);
+    const setCurrentError = (message: string) => {
+      if (!mounted.current) return;
+      setImportError({ interactionId: requestedInteractionId, value: message });
+    };
     if (!authorityConfirmed || !processingConfirmed) {
-      setError("Confirm both authority and processing acknowledgements.");
+      setCurrentError(
+        "Confirm both authority and processing acknowledgements.",
+      );
       return;
     }
     let fileName = "pasted-transcript.txt";
@@ -99,11 +208,11 @@ export function OnlineMeetingCapture({
     if (file !== null) {
       const extension = file.name.toLowerCase().split(".").pop() ?? "";
       if (!transcriptExtensions.has(extension)) {
-        setError("Choose a TXT, VTT or SRT transcript.");
+        setCurrentError("Choose a TXT, VTT or SRT transcript.");
         return;
       }
       if (file.size < 1 || file.size > MAX_TRANSCRIPT_BYTES) {
-        setError(
+        setCurrentError(
           "The transcript must be non-empty and no larger than 512 KiB.",
         );
         return;
@@ -113,21 +222,31 @@ export function OnlineMeetingCapture({
     } else {
       const content = pastedText.trim();
       if (!content) {
-        setError("Choose a transcript file or paste transcript text.");
+        setCurrentError("Choose a transcript file or paste transcript text.");
         return;
       }
       bytes = new TextEncoder().encode(content);
       if (bytes.byteLength > MAX_TRANSCRIPT_BYTES) {
-        setError("The transcript must be no larger than 512 KiB.");
+        setCurrentError("The transcript must be no larger than 512 KiB.");
         return;
       }
     }
-    setImporting(true);
+    if (!mounted.current) return;
+    const controller = new AbortController();
+    importController.current?.abort();
+    importController.current = controller;
+    const generation = ++mutationGeneration.current;
+    const isCurrent = () =>
+      mounted.current &&
+      !controller.signal.aborted &&
+      mutationGeneration.current === generation;
+    setImportingInteractionId(requestedInteractionId);
     try {
       const result = await apiRequest<OnlineMeetingTranscriptImport>(
-        `/api/v1/interactions/${interaction.id}/online-meeting/transcript`,
+        `/api/v1/interactions/${requestedInteractionId}/online-meeting/transcript`,
         {
           method: "POST",
+          signal: controller.signal,
           body: JSON.stringify({
             fileName,
             contentBase64: base64(bytes),
@@ -139,24 +258,61 @@ export function OnlineMeetingCapture({
           }),
         },
       );
-      setCompleted(result);
-      setImports((current) => [
-        result,
-        ...current.filter((item) => item.id !== result.id),
-      ]);
+      if (!isCurrent()) return;
+      setCompletedState({
+        interactionId: requestedInteractionId,
+        value: result,
+      });
+      setHistoryState((current) =>
+        current.interactionId === requestedInteractionId
+          ? { ...current, items: mergeImports([result], current.items) }
+          : current,
+      );
       onTranscriptImported?.(result);
     } catch (requestError: unknown) {
-      setError(
+      if (
+        !isCurrent() ||
+        (requestError instanceof DOMException &&
+          requestError.name === "AbortError")
+      ) {
+        return;
+      }
+      setCurrentError(
         requestError instanceof Error
           ? requestError.message
           : "The transcript could not be imported.",
       );
     } finally {
-      setImporting(false);
+      if (mutationGeneration.current === generation) {
+        importController.current = null;
+        if (mounted.current) {
+          setImportingInteractionId(null);
+        }
+      }
     }
   }
 
-  if (loading) {
+  const visibleCapabilitiesState =
+    capabilitiesState.interactionId === interaction.id
+      ? capabilitiesState
+      : ({ interactionId: interaction.id, status: "loading" } as const);
+  const visibleHistoryState =
+    historyState.interactionId === interaction.id
+      ? historyState
+      : ({
+          interactionId: interaction.id,
+          status: "loading",
+          items: [],
+        } as const);
+  const error =
+    importError?.interactionId === interaction.id ? importError.value : null;
+  const completed =
+    completedState?.interactionId === interaction.id
+      ? completedState.value
+      : null;
+  const importing = importingInteractionId === interaction.id;
+
+  if (visibleCapabilitiesState.status === "loading") {
     return (
       <p role="status" className="text-sm text-slate-600">
         Loading online meeting capture choices…
@@ -164,18 +320,20 @@ export function OnlineMeetingCapture({
     );
   }
 
-  if (!capabilities) {
+  if (visibleCapabilitiesState.status === "unavailable") {
     return (
       <section className="form-card" aria-labelledby="online-capture-error">
         <h2 id="online-capture-error" className="form-legend">
           Capture this meeting
         </h2>
         <p role="alert" className="mt-3 text-sm text-rose-800">
-          {error ?? "Online meeting capture is unavailable."}
+          {visibleCapabilitiesState.message}
         </p>
       </section>
     );
   }
+
+  const capabilities = visibleCapabilitiesState.value;
 
   return (
     <div className="grid gap-6">
@@ -244,6 +402,20 @@ export function OnlineMeetingCapture({
             preserved where present; labels remain unverified and are never
             treated as identity matches.
           </p>
+          {visibleHistoryState.status === "loading" ? (
+            <p className="mt-4 text-sm text-slate-600" role="status">
+              Loading previous transcript import history…
+            </p>
+          ) : null}
+          {visibleHistoryState.status === "unavailable" ? (
+            <p
+              className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+              role="status"
+            >
+              Previous transcript import history is temporarily unavailable. You
+              can still import an authorised transcript.
+            </p>
+          ) : null}
           {completed ? (
             <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
               <p role="status" className="font-semibold text-emerald-950">
@@ -265,11 +437,12 @@ export function OnlineMeetingCapture({
               <label className="grid gap-2 text-sm font-bold text-slate-800">
                 Transcript file
                 <input
+                  key={interaction.id}
                   type="file"
                   accept=".txt,.vtt,.srt,text/plain,text/vtt,application/x-subrip"
                   onChange={(event) => {
                     setFile(event.target.files?.[0] ?? null);
-                    setError(null);
+                    setImportError(null);
                   }}
                 />
               </label>
@@ -353,10 +526,12 @@ export function OnlineMeetingCapture({
               </button>
             </form>
           )}
-          {imports.length > 0 ? (
+          {visibleHistoryState.status === "available" &&
+          visibleHistoryState.items.length > 0 ? (
             <p className="mt-5 text-sm text-slate-600">
-              {imports.length} authorised transcript{" "}
-              {imports.length === 1 ? "version" : "versions"} imported.
+              {visibleHistoryState.items.length} authorised transcript{" "}
+              {visibleHistoryState.items.length === 1 ? "version" : "versions"}{" "}
+              imported.
             </p>
           ) : null}
         </section>
