@@ -94,6 +94,7 @@ describe("BusinessEntityForm", () => {
             {
               id: "company-1",
               name: "Acme Australia",
+              archivedAt: null,
             },
           ],
           page: 1,
@@ -124,6 +125,7 @@ describe("BusinessEntityForm", () => {
           expectedCloseDate: "2026-10-01",
           description: "Commercial expansion",
           updatedAt: "2026-07-24T10:00:00Z",
+          archivedAt: null,
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ fieldAuthority: {} }));
@@ -148,7 +150,13 @@ describe("BusinessEntityForm", () => {
       if (String(input).includes("/api/v1/companies")) {
         return Promise.resolve(
           jsonResponse({
-            items: [{ id: "company-1", name: "Acme Australia" }],
+            items: [
+              {
+                id: "company-1",
+                name: "Acme Australia",
+                archivedAt: null,
+              },
+            ],
             page: 1,
             pageSize: 100,
             total: 1,
@@ -175,13 +183,23 @@ describe("BusinessEntityForm", () => {
       const path = String(input);
       if (path.endsWith("/api/v1/companies/company-101")) {
         return Promise.resolve(
-          jsonResponse({ id: "company-101", name: "Beyond Page Account" }),
+          jsonResponse({
+            id: "company-101",
+            name: "Beyond Page Account",
+            archivedAt: null,
+          }),
         );
       }
       if (path.includes("/api/v1/companies?pageSize=100")) {
         return Promise.resolve(
           jsonResponse({
-            items: [{ id: "company-1", name: "First Page Account" }],
+            items: [
+              {
+                id: "company-1",
+                name: "First Page Account",
+                archivedAt: null,
+              },
+            ],
             page: 1,
             pageSize: 100,
             total: 101,
@@ -209,6 +227,224 @@ describe("BusinessEntityForm", () => {
       expect.any(Object),
     );
   });
+
+  it("isolates create values when the prefilled account changes", async () => {
+    const companyBPage = deferred<Response>();
+    const accountACreate = deferred<Response>();
+    let companyPageReads = 0;
+    let createWrites = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST" && url.endsWith("/api/v1/opportunities")) {
+        createWrites += 1;
+        if (createWrites === 1) return accountACreate.promise;
+        return Promise.resolve(jsonResponse({ id: "opportunity-b" }, 201));
+      }
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/companies?pageSize=100")) {
+        companyPageReads += 1;
+        if (companyPageReads === 2) return companyBPage.promise;
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              {
+                id: "company-a",
+                name: "Account A",
+                archivedAt: null,
+              },
+              {
+                id: "company-b",
+                name: "Account B",
+                archivedAt: null,
+              },
+            ],
+            total: 2,
+            pages: 1,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <BusinessEntityForm
+        entity="opportunities"
+        initialCompanyId="company-a"
+      />,
+    );
+    expect(await screen.findByLabelText("Account")).toHaveValue("company-a");
+    fireEvent.change(screen.getByLabelText(/Opportunity name/), {
+      target: { value: "Account A private draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create opportunity" }));
+    await waitFor(() => expect(createWrites).toBe(1));
+
+    await act(async () => {
+      rerender(
+        <BusinessEntityForm
+          entity="opportunities"
+          initialCompanyId="company-b"
+        />,
+      );
+      accountACreate.resolve(jsonResponse({ id: "opportunity-a" }, 201));
+      await accountACreate.promise;
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading form");
+    expect(
+      screen.queryByDisplayValue("Account A private draft"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create opportunity" }),
+    ).not.toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalled();
+
+    await act(async () => {
+      companyBPage.resolve(
+        jsonResponse({
+          ...emptyPage,
+          items: [{ id: "company-b", name: "Account B", archivedAt: null }],
+          total: 1,
+          pages: 1,
+        }),
+      );
+      await companyBPage.promise;
+    });
+
+    expect(await screen.findByLabelText("Account")).toHaveValue("company-b");
+    fireEvent.change(screen.getByLabelText(/Opportunity name/), {
+      target: { value: "Account B opportunity" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create opportunity" }));
+
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith("/opportunities/opportunity-b"),
+    );
+    const createCalls = fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        String(url).endsWith("/api/v1/opportunities") &&
+        init?.method === "POST",
+    );
+    expect(createCalls).toHaveLength(2);
+    const createCall = createCalls[1];
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      companyId: "company-b",
+      name: "Account B opportunity",
+    });
+    expect(String(createCall?.[1]?.body)).not.toContain("Account A");
+  });
+
+  it("does not offer archived relationship records", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/companies?pageSize=100")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              {
+                id: "company-active",
+                name: "Active Account",
+                archivedAt: null,
+              },
+              {
+                id: "company-archived",
+                name: "Archived Account",
+                archivedAt: "2026-11-21T00:00:00Z",
+              },
+            ],
+            total: 2,
+            pages: 1,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="opportunities" />);
+
+    expect(
+      await screen.findByRole("option", { name: "Active Account" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: "Archived Account" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      label: "mismatched",
+      exactRecord: {
+        id: "company-other",
+        name: "Wrong Account",
+        archivedAt: null,
+      },
+    },
+    {
+      label: "archived",
+      exactRecord: {
+        id: "company-target",
+        name: "Archived Account",
+        archivedAt: "2026-11-21T00:00:00Z",
+      },
+    },
+  ])(
+    "fails closed when an exact relationship response is $label",
+    async ({ exactRecord }) => {
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/api/v1/companies/company-target")) {
+          return Promise.resolve(jsonResponse(exactRecord));
+        }
+        if (url.includes("/api/v1/companies?pageSize=100")) {
+          return Promise.resolve(
+            jsonResponse({
+              ...emptyPage,
+              items: [
+                {
+                  id: "company-first",
+                  name: "First Account",
+                  archivedAt: null,
+                },
+              ],
+              total: 2,
+              pages: 2,
+            }),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <BusinessEntityForm
+          entity="opportunities"
+          initialCompanyId="company-target"
+        />,
+      );
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "A linked record could not be verified",
+      );
+      expect(
+        screen.queryByRole("option", { name: exactRecord.name }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Create opportunity" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("loads active members and assigns a task in the create payload", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -388,6 +624,7 @@ describe("BusinessEntityForm", () => {
             status: "open",
             priority: "medium",
             dueAt: null,
+            archivedAt: null,
           }),
         );
       }
@@ -516,6 +753,7 @@ describe("BusinessEntityForm", () => {
             ownerUserId: "user-former-owner",
             status: "active",
             updatedAt: "2026-10-31T03:00:00Z",
+            archivedAt: null,
           }),
         );
       }
@@ -591,7 +829,13 @@ describe("BusinessEntityForm", () => {
       if (url.includes("/api/v1/companies?pageSize=100"))
         return Promise.resolve(
           jsonResponse({
-            items: [{ id: "company-1", name: "Acme Australia" }],
+            items: [
+              {
+                id: "company-1",
+                name: "Acme Australia",
+                archivedAt: null,
+              },
+            ],
             page: 1,
             pageSize: 100,
             total: 1,
@@ -615,6 +859,7 @@ describe("BusinessEntityForm", () => {
           jobTitle: "Technology Director",
           linkedinUrl: null,
           status: "active",
+          archivedAt: null,
         }),
       );
     });
@@ -649,7 +894,13 @@ describe("BusinessEntityForm", () => {
       if (url.includes("/api/v1/companies?pageSize=100"))
         return Promise.resolve(
           jsonResponse({
-            items: [{ id: "company-1", name: "Northstar Facilities" }],
+            items: [
+              {
+                id: "company-1",
+                name: "Northstar Facilities",
+                archivedAt: null,
+              },
+            ],
             page: 1,
             pageSize: 100,
             total: 1,
@@ -668,6 +919,7 @@ describe("BusinessEntityForm", () => {
           lastName: "Smith",
           email: "jane.smith@northstar-facilities.example",
           status: "active",
+          archivedAt: null,
         }),
       );
     });
@@ -686,7 +938,13 @@ describe("BusinessEntityForm", () => {
       if (url.includes("/api/v1/companies?pageSize=100"))
         return Promise.resolve(
           jsonResponse({
-            items: [{ id: "company-1", name: "Acme Australia" }],
+            items: [
+              {
+                id: "company-1",
+                name: "Acme Australia",
+                archivedAt: null,
+              },
+            ],
             page: 1,
             pageSize: 100,
             total: 1,
@@ -710,6 +968,7 @@ describe("BusinessEntityForm", () => {
           email: "jordan@example.test",
           status: "active",
           updatedAt: "2026-08-29T10:00:00Z",
+          archivedAt: null,
         }),
       );
     });
@@ -759,6 +1018,7 @@ describe("BusinessEntityForm", () => {
             status: "open",
             priority: "high",
             dueAt: null,
+            archivedAt: null,
           }),
         );
       }
@@ -828,6 +1088,7 @@ describe("BusinessEntityForm", () => {
           status: "in_progress",
           priority: "medium",
           dueAt: null,
+          archivedAt: null,
         }),
       );
       await taskBLoad.promise;
@@ -879,6 +1140,7 @@ describe("BusinessEntityForm", () => {
             ownerUserId: null,
             status: "active",
             updatedAt: "2026-10-01T00:00:00Z",
+            archivedAt: null,
           }),
         );
       }
@@ -923,6 +1185,7 @@ describe("BusinessEntityForm", () => {
           ownerUserId: null,
           status: "active",
           updatedAt: "2026-11-21T00:00:00Z",
+          archivedAt: null,
         }),
       );
       await companyBLoad.promise;
@@ -951,4 +1214,51 @@ describe("BusinessEntityForm", () => {
     });
     expect(String(companyBPatch?.[1]?.body)).not.toContain("Account A");
   });
+
+  it.each([
+    {
+      label: "mismatched",
+      record: {
+        id: "company-a",
+        name: "Account A private name",
+        archivedAt: null,
+      },
+    },
+    {
+      label: "archived",
+      record: {
+        id: "company-b",
+        name: "Archived Account B private name",
+        archivedAt: "2026-11-21T00:00:00Z",
+      },
+    },
+  ])(
+    "fails closed when the edited record response is $label",
+    async ({ record }) => {
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (url.endsWith("/api/v1/companies/company-b")) {
+          return Promise.resolve(jsonResponse(record));
+        }
+        if (url.endsWith("/api/v1/crm/records/account/company-b")) {
+          return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<BusinessEntityForm entity="companies" entityId="company-b" />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The requested record could not be verified",
+      );
+      expect(screen.queryByDisplayValue(record.name)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Save account" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });

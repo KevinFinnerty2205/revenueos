@@ -239,7 +239,7 @@ export function BusinessEntityForm({
 }: BusinessEntityFormProps) {
   return (
     <BusinessEntityFormSession
-      key={`${entity}:${entityId ?? "new"}`}
+      key={`${entity}:${entityId ?? "new"}:${initialCompanyId ?? ""}`}
       entity={entity}
       entityId={entityId}
       initialCompanyId={initialCompanyId}
@@ -339,7 +339,9 @@ function BusinessEntityFormSession({
           >(`/api/v1/${reference}?pageSize=100`, { signal });
           return [
             reference,
-            page.items.map((item) => optionFor(reference, item)),
+            page.items
+              .filter(isAvailableReferenceRecord)
+              .map((item) => optionFor(reference, item)),
           ] as const;
         }),
       );
@@ -360,6 +362,11 @@ function BusinessEntityFormSession({
                 { signal },
               ),
         ]);
+        if (!isExpectedAvailableRecord(record, entityId)) {
+          throw new Error(
+            "The requested record could not be verified. Try loading it again.",
+          );
+        }
         loadedValues = valuesForForm(record, formFields);
         if (entity !== "tasks" && typeof record.updatedAt === "string") {
           loadedUpdatedAt = record.updatedAt;
@@ -391,6 +398,11 @@ function BusinessEntityFormSession({
             `/api/v1/${reference}/${encodeURIComponent(selectedId)}`,
             { signal },
           );
+          if (!isExpectedAvailableRecord(record, selectedId)) {
+            throw new Error(
+              "A linked record could not be verified. Try loading the form again.",
+            );
+          }
           return [reference, optionFor(reference, record)] as const;
         }),
       );
@@ -729,6 +741,19 @@ function optionFor(
   }
   const opportunity = record as Opportunity;
   return { value: opportunity.id, label: opportunity.name };
+}
+
+function isAvailableReferenceRecord(
+  record: Company | Contact | Opportunity,
+): boolean {
+  return record.archivedAt === null;
+}
+
+function isExpectedAvailableRecord(
+  record: { id?: unknown; archivedAt?: unknown },
+  expectedId: string,
+): boolean {
+  return record.id === expectedId && record.archivedAt === null;
 }
 
 function valuesForForm(
