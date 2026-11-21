@@ -15,6 +15,7 @@ import {
   type DragEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -22,6 +23,19 @@ import { apiBlob, apiRequest, apiUpload } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
 type ReviewDecision = { decision: "accept" | "reject"; statement: string };
+
+type VisualUploadIdentity = Pick<
+  VisualEvidence,
+  | "id"
+  | "interactionId"
+  | "captureSessionId"
+  | "mimeType"
+  | "visualType"
+  | "sourceOwnership"
+>;
+
+const VISUAL_UPLOAD_IDENTITY_ERROR =
+  "The image upload could not be verified. Your selected image has been kept so you can try again.";
 
 const VISUAL_TYPES: VisualType[] = [
   "whiteboard",
@@ -81,15 +95,76 @@ function quickType(interactionType: InteractionType): VisualType {
   return "whiteboard";
 }
 
-export function VisualEvidenceCapture({
-  interactionId,
-  interactionType,
-  lifecycleStatus,
-}: {
+function requireCreatedVisualIdentity(
+  created: VisualUploadCreateResponse,
+  requested: {
+    interactionId: string;
+    mimeType: string;
+    byteSize: number;
+    checksumSha256: string;
+    visualType: VisualType;
+    sourceOwnership: VisualSourceOwnership;
+  },
+): VisualUploadIdentity {
+  if (
+    created.interactionId !== requested.interactionId ||
+    !created.id ||
+    created.captureSessionId !== created.id ||
+    created.mimeType !== requested.mimeType ||
+    created.byteSize !== requested.byteSize ||
+    created.checksumSha256 !== requested.checksumSha256 ||
+    created.visualType !== requested.visualType ||
+    created.sourceOwnership !== requested.sourceOwnership
+  ) {
+    throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
+  }
+  return {
+    id: created.id,
+    interactionId: created.interactionId,
+    captureSessionId: created.captureSessionId,
+    mimeType: created.mimeType,
+    visualType: created.visualType,
+    sourceOwnership: created.sourceOwnership,
+  };
+}
+
+function requireVisualIdentity(
+  response: VisualEvidence,
+  expected: VisualUploadIdentity,
+): void {
+  if (
+    response.id !== expected.id ||
+    response.interactionId !== expected.interactionId ||
+    response.captureSessionId !== expected.captureSessionId ||
+    response.mimeType !== expected.mimeType ||
+    response.visualType !== expected.visualType ||
+    response.sourceOwnership !== expected.sourceOwnership ||
+    response.candidates.some(
+      (candidate) =>
+        candidate.sourceVisualId !== expected.id ||
+        candidate.sourceOwnership !== expected.sourceOwnership,
+    )
+  ) {
+    throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
+  }
+}
+
+type VisualEvidenceCaptureProps = {
   interactionId: string;
   interactionType: InteractionType;
   lifecycleStatus: InteractionLifecycleStatus;
-}) {
+};
+
+export function VisualEvidenceCapture(props: VisualEvidenceCaptureProps) {
+  return <VisualEvidenceCaptureSession key={props.interactionId} {...props} />;
+}
+
+function VisualEvidenceCaptureSession({
+  interactionId,
+  interactionType,
+  lifecycleStatus,
+}: VisualEvidenceCaptureProps) {
+  const sessionActive = useRef(true);
   const [visuals, setVisuals] = useState<VisualEvidence[] | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -110,6 +185,13 @@ export function VisualEvidenceCapture({
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     const loaded = await apiRequest<VisualEvidence[]>(
@@ -215,6 +297,7 @@ export function VisualEvidenceCapture({
     try {
       setProgress(10);
       const checksum = await sha256(file);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(25);
       const created = await apiRequest<VisualUploadCreateResponse>(
         `/api/v1/interactions/${interactionId}/visual-evidence/uploads`,
@@ -234,10 +317,20 @@ export function VisualEvidenceCapture({
           }),
         },
       );
+      const uploadIdentity = requireCreatedVisualIdentity(created, {
+        interactionId,
+        mimeType: file.type,
+        byteSize: file.size,
+        checksumSha256: checksum,
+        visualType,
+        sourceOwnership,
+      });
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(45);
       await apiUpload(created.uploadUrl, file, file.type);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(70);
-      await apiRequest<VisualEvidence>(
+      const completed = await apiRequest<VisualEvidence>(
         `/api/v1/interactions/${interactionId}/visual-evidence/${created.id}/complete`,
         {
           method: "POST",
@@ -247,6 +340,8 @@ export function VisualEvidenceCapture({
           }),
         },
       );
+      requireVisualIdentity(completed, uploadIdentity);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(85);
       const processed = await apiRequest<VisualEvidence>(
         `/api/v1/interactions/${interactionId}/visual-evidence/${created.id}/process`,
@@ -257,6 +352,8 @@ export function VisualEvidenceCapture({
           }),
         },
       );
+      requireVisualIdentity(processed, uploadIdentity);
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       setProgress(100);
       selectFile(null);
       setConsentConfirmed(false);
@@ -274,15 +371,17 @@ export function VisualEvidenceCapture({
             : "Image saved. No reviewable evidence was suggested.",
         );
       }
+      if (!sessionActive.current) throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
       await load();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The image could not be uploaded and analysed.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
