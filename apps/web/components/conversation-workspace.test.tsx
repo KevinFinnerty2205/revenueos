@@ -1,13 +1,19 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Interaction } from "@revenueos/shared";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationWorkspace } from "@/components/conversation-workspace";
+
+type ReviewSeedLoad = {
+  interactionId: string;
+  id: string | null;
+  lifecycleStatus: string | null;
+};
 
 const state = vi.hoisted(() => ({
   aiCompanionEnabled: true,
   stopped: vi.fn(),
-  reviewLoaded: vi.fn(),
+  reviewLoaded: vi.fn<(value: ReviewSeedLoad) => void>(),
 }));
 
 vi.mock("@/components/beta-feature-gate", () => ({
@@ -34,11 +40,28 @@ vi.mock("@/components/conversation-memory", () => ({
   ConversationMemory: () => <p>Previous conversations</p>,
 }));
 vi.mock("@/components/interaction-detail", () => ({
-  InteractionDetail: () => {
+  InteractionDetail: ({
+    initialInteraction,
+    interactionId,
+  }: {
+    initialInteraction?: Interaction;
+    interactionId: string;
+  }) => {
+    const [mountedSeed] = useState(() => ({
+      id: initialInteraction?.id ?? null,
+      lifecycleStatus: initialInteraction?.lifecycleStatus ?? null,
+    }));
     useEffect(() => {
-      state.reviewLoaded();
-    }, []);
-    return <p>Conversation review</p>;
+      state.reviewLoaded({ interactionId, ...mountedSeed });
+    }, [interactionId, mountedSeed]);
+    return (
+      <div>
+        <p>Conversation review</p>
+        <p>
+          Review seed {mountedSeed.id} · {mountedSeed.lifecycleStatus}
+        </p>
+      </div>
+    );
   },
 }));
 vi.mock("@/components/face-to-face-companion", () => ({
@@ -75,10 +98,10 @@ vi.mock("@/components/face-to-face-companion", () => ({
   },
 }));
 
-function response(lifecycleStatus = "planned") {
+function response(lifecycleStatus = "planned", id = "call-1") {
   return new Response(
     JSON.stringify({
-      id: "call-1",
+      id,
       title: "Discovery",
       companyId: "company-1",
       interactionType: "online_meeting",
@@ -117,6 +140,7 @@ describe("ConversationWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review & follow-up" }));
     expect(window.location.search).toBe("?view=review");
     expect(screen.getByText("Conversation review")).toBeVisible();
+    expect(screen.getByText("Review seed call-1 · planned")).toBeVisible();
     expect(screen.getByLabelText("Private rough notes")).not.toBeVisible();
     expect(state.stopped).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Notes & capture" }));
@@ -131,6 +155,8 @@ describe("ConversationWorkspace", () => {
     expect(screen.getByText("Brief refresh 1")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "End call" }));
     await waitFor(() => expect(state.reviewLoaded).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "Review & follow-up" }));
+    expect(screen.getByText("Review seed call-1 · completed")).toBeVisible();
     expect(state.stopped).not.toHaveBeenCalled();
   });
 
@@ -200,5 +226,47 @@ describe("ConversationWorkspace", () => {
       screen.getByRole("button", { name: "Review & follow-up" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Prepared questions")).not.toBeInTheDocument();
+  });
+
+  it("remounts seeded review state when the interaction id changes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const id = String(input).endsWith("/call-2") ? "call-2" : "call-1";
+        return Promise.resolve(response("completed", id));
+      }),
+    );
+
+    const rendered = render(
+      <ConversationWorkspace interactionId="call-1" initialView="review" />,
+    );
+    expect(
+      await screen.findByText("Review seed call-1 · completed"),
+    ).toBeVisible();
+
+    rendered.rerender(
+      <ConversationWorkspace interactionId="call-2" initialView="review" />,
+    );
+    expect(
+      screen.queryByText("Review seed call-1 · completed"),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Review seed call-2 · completed"),
+    ).toBeVisible();
+    expect(state.reviewLoaded).toHaveBeenCalledWith({
+      interactionId: "call-1",
+      id: "call-1",
+      lifecycleStatus: "completed",
+    });
+    expect(state.reviewLoaded).toHaveBeenLastCalledWith({
+      interactionId: "call-2",
+      id: "call-2",
+      lifecycleStatus: "completed",
+    });
+    expect(
+      state.reviewLoaded.mock.calls.every(
+        ([loaded]) => loaded.interactionId === loaded.id,
+      ),
+    ).toBe(true);
   });
 });

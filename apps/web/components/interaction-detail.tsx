@@ -20,15 +20,21 @@ import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 export function InteractionDetail({
   interactionId,
+  initialInteraction,
   reviewOnly = false,
   onOpenCapture,
 }: {
   interactionId: string;
+  initialInteraction?: Interaction;
   reviewOnly?: boolean;
   onOpenCapture?: () => void;
 }) {
-  const [interaction, setInteraction] = useState<Interaction | null>(null);
-  const [loading, setLoading] = useState(true);
+  const seededInteraction =
+    initialInteraction?.id === interactionId ? initialInteraction : null;
+  const [loadedInteraction, setInteraction] = useState<Interaction | null>(
+    seededInteraction,
+  );
+  const [loading, setLoading] = useState(seededInteraction === null);
   const [error, setError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -50,10 +56,15 @@ export function InteractionDetail({
               : "Private to you until you deliberately include something in review.";
 
   useEffect(() => {
+    if (initialInteraction?.id === interactionId) {
+      return;
+    }
+
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError(null);
+      setInteraction(null);
       void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`, {
         signal: controller.signal,
       })
@@ -79,7 +90,12 @@ export function InteractionDetail({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [interactionId, retryKey]);
+  }, [initialInteraction, interactionId, retryKey]);
+
+  const interaction =
+    loadedInteraction?.id === interactionId
+      ? loadedInteraction
+      : seededInteraction;
 
   async function start() {
     setStarting(true);
@@ -132,7 +148,7 @@ export function InteractionDetail({
     }
   }
 
-  if (loading) {
+  if (interaction === null && (loading || error === null)) {
     return <p role="status">Loading conversation…</p>;
   }
   if (!interaction) {
