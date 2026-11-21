@@ -18,7 +18,9 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
@@ -52,8 +54,18 @@ const initialValues: MeetingValues = {
 };
 
 export function MeetingForm({ meetingId }: { meetingId?: string }) {
+  return (
+    <MeetingFormSession
+      key={meetingId === undefined ? "new-meeting" : meetingId}
+      meetingId={meetingId}
+    />
+  );
+}
+
+function MeetingFormSession({ meetingId }: { meetingId?: string }) {
   const router = useRouter();
   const editing = Boolean(meetingId);
+  const sessionActive = useRef(true);
   const [values, setValues] = useState<MeetingValues>(initialValues);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -76,6 +88,13 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
 
   const loadForm = useCallback(
     async (signal: AbortSignal) => {
@@ -217,6 +236,7 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
           language,
           transcriptSource,
         );
+        if (!sessionActive.current) return;
         router.push(`/meetings/${meetingId}`);
       } else {
         const created = await apiRequest<Meeting>("/api/v1/meetings", {
@@ -233,16 +253,18 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
               : null,
           }),
         });
+        if (!sessionActive.current) return;
         router.push(`/meetings/${created.id}`);
       }
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setSubmitError(
         requestError instanceof Error
           ? requestError.message
           : "The meeting could not be saved.",
       );
     } finally {
-      setSubmitting(false);
+      if (sessionActive.current) setSubmitting(false);
     }
   }
 
@@ -290,15 +312,17 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
     setSubmitError(null);
     try {
       await apiRequest(`/api/v1/meetings/${meetingId}`, { method: "DELETE" });
+      if (!sessionActive.current) return;
       router.push("/meetings");
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setSubmitError(
         requestError instanceof Error
           ? requestError.message
           : "The meeting could not be deleted.",
       );
     } finally {
-      setDeleting(false);
+      if (sessionActive.current) setDeleting(false);
     }
   }
 
