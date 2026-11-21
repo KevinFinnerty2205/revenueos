@@ -2,6 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 const interactionId = "interaction-daily";
 
+function meResponse() {
+  return { organisation: { id: "organisation-1" } };
+}
+
 function dailyResponse(overrides: Record<string, unknown> = {}) {
   const next = {
     id: interactionId,
@@ -110,6 +114,7 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
 
 function recentPage() {
   return {
+    organisationId: "organisation-1",
     items: [
       {
         id: "interaction-recent",
@@ -155,6 +160,7 @@ function recentPage() {
 
 function accountPage() {
   return {
+    organisationId: "organisation-1",
     items: [
       {
         id: "company-daily",
@@ -179,6 +185,9 @@ function accountPage() {
 }
 
 async function routeHome(page: Page, day = dailyResponse()) {
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({ json: meResponse() });
+  });
   await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
     await route.fulfill({ json: day });
   });
@@ -346,6 +355,10 @@ test("reviewing a private follow-up removes only its metadata from Home", async 
     const request = route.request();
     const path = new URL(request.url()).pathname;
 
+    if (path === "/api/v1/me") {
+      await route.fulfill({ json: meResponse() });
+      return;
+    }
     if (path === "/api/v1/daily") {
       const privateFollowUps = workspace.followUpReviewed
         ? { attentionCount: 0, items: [], truncated: false }
@@ -359,7 +372,14 @@ test("reviewing a private follow-up removes only its metadata from Home", async 
     }
     if (path === "/api/v1/companies") {
       await route.fulfill({
-        json: { items: [], total: 0, page: 1, pageSize: 6, pages: 0 },
+        json: {
+          organisationId: "organisation-1",
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 6,
+          pages: 0,
+        },
       });
       return;
     }
@@ -518,6 +538,9 @@ test("Home starts with knowledge or a conversation without CRM setup", async ({
 test("Home keeps available relationship memory when Daily is unavailable", async ({
   page,
 }) => {
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({ json: meResponse() });
+  });
   await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
     await route.fulfill({
       status: 503,
