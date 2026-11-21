@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InteractionList } from "@/components/interaction-list";
 
@@ -7,6 +13,14 @@ function jsonResponse(body: object, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 const interactionPage = {
@@ -199,12 +213,23 @@ describe("InteractionList", () => {
       }
       if (path.includes("/companies/company-101")) {
         return Promise.resolve(
-          jsonResponse({ id: "company-101", name: "Outside Page One" }),
+          jsonResponse({
+            id: "company-101",
+            name: "Outside Page One",
+            archivedAt: null,
+          }),
         );
       }
       if (path.includes("/companies/company-102")) {
         return Promise.resolve(
-          jsonResponse({ id: "company-102", name: "Outside Page Two" }),
+          jsonResponse(
+            {
+              code: "persistence_unavailable",
+              message: "Companies are temporarily unavailable.",
+              requestId: "request-page-two",
+            },
+            503,
+          ),
         );
       }
       return Promise.resolve(jsonResponse(emptyPage));
@@ -232,11 +257,15 @@ describe("InteractionList", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Outside Page Two" }),
+      await screen.findByRole("link", { name: "Second paged call" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Linked account" }),
     ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Outside Page One" }),
     ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([input]) => {
         const path = String(input);
@@ -247,6 +276,717 @@ describe("InteractionList", () => {
         );
       }),
     ).toBe(true);
+  });
+
+  it("preserves fast page-two context when page-one enrichment finishes later", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const firstPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "slow-context-conversation",
+          companyId: "company-slow",
+          title: "Slow context conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const secondPage = {
+      ...firstPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "fast-context-conversation",
+          companyId: "company-fast",
+          title: "Fast context conversation",
+        },
+      ],
+      page: 2,
+    };
+    const slowCompany = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(
+            jsonResponse(path.includes("page=2") ? secondPage : firstPage),
+          );
+        }
+        if (path.includes("?pageSize=100")) {
+          return Promise.resolve(jsonResponse(emptyPage));
+        }
+        if (path.includes("/companies/company-slow")) {
+          return slowCompany.promise;
+        }
+        if (path.includes("/companies/company-fast")) {
+          return Promise.resolve(
+            jsonResponse({
+              id: "company-fast",
+              name: "Fast Account",
+              archivedAt: null,
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("link", { name: "Slow context conversation" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Fast Account" }),
+    ).toBeVisible();
+
+    slowCompany.resolve(
+      jsonResponse({
+        id: "company-slow",
+        name: "Slow Account",
+        archivedAt: null,
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Slow Account" }),
+    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Fast Account" })).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reloads when the current search is explicitly submitted again", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    let interactionReads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          interactionReads += 1;
+          return Promise.resolve(
+            jsonResponse({
+              ...interactionPage,
+              items: [
+                {
+                  ...interactionPage.items[0],
+                  id: "same-query-" + interactionReads,
+                  companyId: null,
+                  title:
+                    interactionReads === 1
+                      ? "Original conversation"
+                      : "Reloaded conversation",
+                },
+              ],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "Original conversation" }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Reloaded conversation" }),
+    ).toBeVisible();
+    expect(interactionReads).toBe(2);
+    expect(
+      screen.queryByRole("heading", { name: "Original conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale pagination success after the active filter changes", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const firstPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "original-filter-conversation",
+          companyId: null,
+          title: "Original filter conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const filteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "active-filter-conversation",
+          companyId: null,
+          interactionType: "phone_call",
+          title: "Active filter conversation",
+        },
+      ],
+    };
+    const stalePage = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("page=2")) return stalePage.promise;
+          if (path.includes("interactionType=phone_call")) {
+            return Promise.resolve(jsonResponse(filteredPage));
+          }
+          return Promise.resolve(jsonResponse(firstPage));
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Original filter conversation",
+      }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Active filter conversation",
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      stalePage.resolve(
+        jsonResponse({
+          ...firstPage,
+          page: 2,
+          items: [
+            {
+              ...interactionPage.items[0],
+              id: "stale-page-conversation",
+              companyId: null,
+              title: "Stale page conversation",
+            },
+          ],
+        }),
+      );
+      await stalePage.promise;
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Active filter conversation" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Stale page conversation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Load more conversations" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale pagination failure after the active filter changes", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const firstPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "failure-filter-conversation",
+          companyId: null,
+          title: "Failure filter conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const filteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "failure-active-conversation",
+          companyId: null,
+          interactionType: "phone_call",
+          title: "Failure active conversation",
+        },
+      ],
+    };
+    const stalePage = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("page=2")) return stalePage.promise;
+          if (path.includes("interactionType=phone_call")) {
+            return Promise.resolve(jsonResponse(filteredPage));
+          }
+          return Promise.resolve(jsonResponse(firstPage));
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Failure filter conversation",
+      }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Failure active conversation",
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      stalePage.resolve(
+        jsonResponse(
+          {
+            code: "persistence_unavailable",
+            message: "The stale page failed.",
+            requestId: "request-stale-page",
+          },
+          503,
+        ),
+      );
+      await stalePage.promise;
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Failure active conversation",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale initial failure after the active filter changes", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const filteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "current-filter-conversation",
+          companyId: null,
+          interactionType: "phone_call",
+          title: "Current filter conversation",
+        },
+      ],
+    };
+    const staleInitial = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("interactionType=phone_call")) {
+            return Promise.resolve(jsonResponse(filteredPage));
+          }
+          return staleInitial.promise;
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Current filter conversation",
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      staleInitial.resolve(
+        jsonResponse(
+          {
+            code: "persistence_unavailable",
+            message: "The stale initial request failed.",
+            requestId: "request-stale-initial",
+          },
+          503,
+        ),
+      );
+      await staleInitial.promise;
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Current filter conversation",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not let optional page context block later conversation pages", async () => {
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const firstPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "first-page-conversation",
+          companyId: null,
+          title: "First page conversation",
+        },
+      ],
+      total: 3,
+      pages: 3,
+    };
+    const secondPage = {
+      ...firstPage,
+      page: 2,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "second-page-conversation",
+          companyId: "company-slow-page",
+          title: "Second page conversation",
+        },
+      ],
+    };
+    const thirdPage = {
+      ...firstPage,
+      page: 3,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "third-page-conversation",
+          companyId: null,
+          title: "Third page conversation",
+        },
+      ],
+    };
+    const slowCompany = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("page=3")) {
+            return Promise.resolve(jsonResponse(thirdPage));
+          }
+          if (path.includes("page=2")) {
+            return Promise.resolve(jsonResponse(secondPage));
+          }
+          return Promise.resolve(jsonResponse(firstPage));
+        }
+        if (path.includes("?pageSize=100")) {
+          return Promise.resolve(jsonResponse(emptyPage));
+        }
+        if (path.includes("/companies/company-slow-page")) {
+          return slowCompany.promise;
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "First page conversation" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("link", { name: "Second page conversation" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Linked account" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Third page conversation" }),
+    ).toBeVisible();
+
+    slowCompany.resolve(
+      jsonResponse({
+        id: "company-slow-page",
+        name: "Eventually loaded account",
+        archivedAt: null,
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Eventually loaded account",
+      }),
+    ).toBeVisible();
+  });
+
+  it("keeps conversations usable when context collections and exact lookups fail", async () => {
+    const resilientPage = {
+      ...interactionPage,
+      items: [
+        interactionPage.items[0],
+        {
+          ...interactionPage.items[0],
+          id: "general-1",
+          companyId: null,
+          contactId: "contact-missing",
+          meetingId: null,
+          interactionType: "phone_call",
+          title: "Unassigned call",
+        },
+      ],
+      total: 2,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/interactions")) {
+        return Promise.resolve(jsonResponse(resilientPage));
+      }
+      if (
+        path.includes("/companies?pageSize=100") ||
+        path.includes("/contacts?pageSize=100")
+      ) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "persistence_unavailable",
+              message: "Context is temporarily unavailable.",
+              requestId: "request-context",
+            },
+            503,
+          ),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse(
+          {
+            code: "not_found",
+            message: "The linked record was not found.",
+            requestId: "request-missing",
+          },
+          404,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionList />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Linked account" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Acme discovery" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Unassigned call" }),
+    ).toBeVisible();
+    expect(screen.getByText("Linked contact")).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hydrates valid context independently and rejects archived labels", async () => {
+    const mixedPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "good-company-conversation",
+          companyId: "company-good",
+          title: "Known account conversation",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "missing-company-conversation",
+          companyId: "company-missing",
+          title: "Missing account conversation",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "archived-company-conversation",
+          companyId: "company-archived",
+          title: "Archived account conversation",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "good-contact-conversation",
+          companyId: null,
+          contactId: "contact-good",
+          interactionType: "phone_call",
+          title: "Known contact call",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "missing-contact-conversation",
+          companyId: null,
+          contactId: "contact-missing",
+          interactionType: "phone_call",
+          title: "Missing contact call",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "archived-contact-conversation",
+          companyId: null,
+          contactId: "contact-archived",
+          interactionType: "phone_call",
+          title: "Archived contact call",
+        },
+      ],
+      total: 6,
+    };
+    const emptyPage = {
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const mixedFetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/interactions")) {
+        return Promise.resolve(jsonResponse(mixedPage));
+      }
+      if (path.includes("?pageSize=100")) {
+        return Promise.resolve(jsonResponse(emptyPage));
+      }
+      if (path.includes("/companies/company-good")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "company-good",
+            name: "Good Account",
+            archivedAt: null,
+          }),
+        );
+      }
+      if (path.includes("/companies/company-archived")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "company-archived",
+            name: "Archived Account Name",
+            archivedAt: "2026-07-26T00:00:00Z",
+          }),
+        );
+      }
+      if (path.includes("/contacts/contact-good")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "contact-good",
+            companyId: null,
+            firstName: "Good",
+            lastName: "Contact",
+            archivedAt: null,
+          }),
+        );
+      }
+      if (path.includes("/contacts/contact-archived")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "contact-archived",
+            companyId: null,
+            firstName: "Archived",
+            lastName: "Contact Name",
+            archivedAt: "2026-07-26T00:00:00Z",
+          }),
+        );
+      }
+      if (path.includes("/contacts/contact-missing")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "contact-from-another-request",
+            companyId: null,
+            firstName: "Wrong",
+            lastName: "Contact Name",
+            archivedAt: null,
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse(
+          {
+            code: "not_found",
+            message: "The linked record was not found.",
+            requestId: "request-mixed",
+          },
+          404,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", mixedFetchMock);
+
+    render(<InteractionList />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Good Account" }),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        mixedFetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/contacts/contact-good"),
+        ),
+      ).toBe(true),
+    );
+    expect(await screen.findByText("Good Contact")).toBeVisible();
+    expect(
+      screen.getAllByRole("heading", { name: "Linked account" }),
+    ).toHaveLength(2);
+    expect(screen.getAllByText("Linked contact")).toHaveLength(2);
+    expect(screen.queryByText("Archived Account Name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Archived Contact Name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Wrong Contact Name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows a safe error and supports retry", async () => {
