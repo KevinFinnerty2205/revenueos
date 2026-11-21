@@ -14,7 +14,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { apiRequest } from "@/lib/api";
+import { ApiClientError, apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
   type ConversationWorkspaceController,
@@ -176,30 +176,78 @@ function StatefulPostInteractionCapture({
       return;
     }
     const controller = new AbortController();
-    apiRequest<DebriefSession | null>(
-      saved
-        ? `/api/v1/interactions/${interactionId}/debrief/${saved}`
-        : `/api/v1/interactions/${interactionId}/debrief/latest`,
-      { signal: controller.signal },
-    )
-      .then((restored) => {
-        if (!restored) return;
-        remember(restored, saved ?? undefined);
+    const loadSession = async (
+      path: string,
+      expectedSessionId?: string,
+    ): Promise<DebriefSession | null> => {
+      const restored = await apiRequest<DebriefSession | null>(path, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || !restored) return restored;
+      return validateDebriefSession(
+        restored,
+        interactionId,
+        expectedSessionId,
+      );
+    };
+    const missingSession = (reason: unknown) =>
+      reason instanceof ApiClientError && reason.code === "debrief_not_found";
+
+    async function restore() {
+      let restored: DebriefSession | null = null;
+      try {
+        if (saved) {
+          try {
+            restored = await loadSession(
+              `/api/v1/interactions/${interactionId}/debrief/${saved}`,
+              saved,
+            );
+            if (!restored) {
+              throw new Error("The saved capture returned no session.");
+            }
+          } catch (reason: unknown) {
+            if (!missingSession(reason)) throw reason;
+            window.localStorage.removeItem(storageKey(interactionId));
+            if (!restoreLatest) return;
+            try {
+              restored = await loadSession(
+                `/api/v1/interactions/${interactionId}/debrief/latest`,
+              );
+            } catch (latestReason: unknown) {
+              if (!missingSession(latestReason)) throw latestReason;
+              return;
+            }
+          }
+        } else {
+          try {
+            restored = await loadSession(
+              `/api/v1/interactions/${interactionId}/debrief/latest`,
+            );
+          } catch (reason: unknown) {
+            if (!missingSession(reason)) throw reason;
+            return;
+          }
+        }
+
+        if (controller.signal.aborted || !restored) return;
+        remember(restored);
         setVoiceAcknowledged(restored.captureType === "voice_journal");
         if (restored.lifecycleStatus !== "completed") {
           setMessage("Your in-progress capture was restored.");
         }
-      })
-      .catch((requestError: unknown) => {
-        if (requestError instanceof DebriefSessionIdentityError) {
-          setRestoreError(requestError.message);
-          return;
-        }
-        window.localStorage.removeItem(storageKey(interactionId));
-      })
-      .finally(() => {
+      } catch (reason: unknown) {
+        if (controller.signal.aborted) return;
+        setRestoreError(
+          reason instanceof DebriefSessionIdentityError
+            ? reason.message
+            : "Your capture could not be restored. Any saved capture remains preserved. Check your connection and try again.",
+        );
+      } finally {
         if (!controller.signal.aborted) setRestoring(false);
-      });
+      }
+    }
+
+    void restore();
     return () => controller.abort();
   }, [interactionId, remember, restoreLatest, restoreRetryKey]);
 
