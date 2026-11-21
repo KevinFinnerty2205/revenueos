@@ -47,6 +47,14 @@ export function AccountRelationshipHeader({
     })
       .then((company) => {
         if (controller.signal.aborted) return;
+        if (company.id !== companyId || company.archivedAt !== null) {
+          setCompanyState({
+            companyId,
+            status: "failed",
+            message: "This account could not be loaded.",
+          });
+          return;
+        }
         setCompanyState({ companyId, status: "available", company });
       })
       .catch((reason: unknown) => {
@@ -72,6 +80,16 @@ export function AccountRelationshipHeader({
     )
       .then((participants) => {
         if (controller.signal.aborted) return;
+        if (
+          participants.items.some(
+            (participant) =>
+              participant.companyId !== companyId ||
+              participant.archivedAt !== null,
+          )
+        ) {
+          setParticipantState({ companyId, status: "unavailable" });
+          return;
+        }
         setParticipantState({
           companyId,
           status: "available",

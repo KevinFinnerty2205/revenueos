@@ -154,7 +154,7 @@ describe("AccountRelationshipHeader", () => {
       ),
     );
 
-    render(<AccountRelationshipHeader companyId="company-1" />);
+    render(<AccountRelationshipHeader companyId={company.id} />);
 
     expect(
       await screen.findByText(
@@ -250,6 +250,99 @@ describe("AccountRelationshipHeader", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Jordan Lee")).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["mismatched", secondCompany],
+    [
+      "archived",
+      {
+        ...company,
+        archivedAt: "2026-11-02T00:00:00Z",
+      },
+    ],
+  ])(
+    "fails closed when the required account response is %s",
+    async (_case, invalidCompany) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL) =>
+          Promise.resolve(
+            jsonResponse(
+              String(input).includes("/contacts")
+                ? contactPage([])
+                : invalidCompany,
+            ),
+          ),
+        ),
+      );
+
+      render(<AccountRelationshipHeader companyId={company.id} />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Oryntela couldn’t load this account.",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "This account could not be loaded.",
+      );
+      expect(
+        screen.queryByRole("heading", { name: invalidCompany.name }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("0 people")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["another account", secondParticipants],
+    [
+      "an archived record",
+      [
+        {
+          ...participants[0],
+          archivedAt: "2026-11-02T00:00:00Z",
+        },
+      ],
+    ],
+  ])(
+    "treats participant results containing %s as unavailable",
+    async (_case, invalidParticipants) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL) =>
+          Promise.resolve(
+            jsonResponse(
+              String(input).includes("/contacts")
+                ? contactPage(invalidParticipants)
+                : company,
+            ),
+          ),
+        ),
+      );
+
+      render(<AccountRelationshipHeader companyId={company.id} />);
+
+      expect(
+        await screen.findByRole("heading", { name: "Northstar Facilities" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          "People linked to this account are temporarily unavailable.",
+        ),
+      ).toBeVisible();
+      for (const participant of invalidParticipants) {
+        expect(
+          screen.queryByText(
+            `${participant.firstName} ${participant.lastName}`,
+          ),
+        ).not.toBeInTheDocument();
+      }
+      expect(screen.queryByText("0 people")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "Participants linked to future conversations will appear here.",
+        ),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("hides the previous account immediately and shows the new failure", async () => {
     const secondCompanyRequest = deferred<Response>();
@@ -348,7 +441,7 @@ describe("AccountRelationshipHeader", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<AccountRelationshipHeader companyId="company-1" />);
+    render(<AccountRelationshipHeader companyId={company.id} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Oryntela couldn’t load this account.",
@@ -362,7 +455,7 @@ describe("AccountRelationshipHeader", () => {
     );
     expect(
       fetchMock.mock.calls.some(([input]) =>
-        String(input).includes("/api/v1/companies/company-1"),
+        String(input).includes("/api/v1/companies/company%2Fone"),
       ),
     ).toBe(true);
   });
