@@ -572,8 +572,120 @@ describe("conversation-first Home", () => {
     expect(alert).not.toHaveTextContent("internal account provider detail");
   });
 
+  it("retries unavailable secondary sources from the fatal Home state", async () => {
+    let dailyRequests = 0;
+    let accountRequests = 0;
+    let historyRequests = 0;
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        dailyRequests += 1;
+        return Promise.reject(new Error("Daily remains unavailable"));
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        accountRequests += 1;
+        return accountRequests === 1
+          ? Promise.reject(new Error("initial account failure"))
+          : Promise.resolve({ items: [account] } as EntityPage<Company>);
+      }
+      historyRequests += 1;
+      return Promise.reject(new Error("history remains unavailable"));
+    });
+    render(<DashboardPage />);
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+    expect(dailyRequests).toBe(2);
+    expect(accountRequests).toBe(2);
+    expect(historyRequests).toBe(2);
+  });
+
+  it("retries only Daily and preserves confirmed relationship memory when retry fails", async () => {
+    let dailyAttempt = 0;
+    let accountRequests = 0;
+    let historyRequests = 0;
+    let rejectRetriedDaily: (reason: unknown) => void = () => undefined;
+    const retriedDaily = new Promise<DailyResponse>((_resolve, reject) => {
+      rejectRetriedDaily = reject;
+    });
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        dailyAttempt += 1;
+        return dailyAttempt === 1
+          ? Promise.reject(new Error("initial Daily failure"))
+          : retriedDaily;
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        accountRequests += 1;
+        return accountRequests === 1
+          ? Promise.resolve({ items: [account] } as EntityPage<Company>)
+          : Promise.reject(new Error("accounts must not be retried"));
+      }
+      historyRequests += 1;
+      return historyRequests === 1
+        ? Promise.resolve({ items: [recent] } as EntityPage<Interaction>)
+        : Promise.reject(new Error("history must not be retried"));
+    });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try Daily again" }));
+    expect(
+      screen.getByRole("button", { name: "Trying again…" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      rejectRetriedDaily(new Error("retried Daily failure"));
+      await retriedDaily.catch(() => undefined);
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Try Daily again" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+    expect(dailyAttempt).toBe(2);
+    expect(accountRequests).toBe(1);
+    expect(historyRequests).toBe(1);
+  });
+
   it("keeps the reduced Home visible while retrying and restores Daily on success", async () => {
     let dailyAttempt = 0;
+    let accountRequests = 0;
+    let historyRequests = 0;
     let resolveRecoveredDaily: (value: DailyResponse) => void = () => undefined;
     const recoveredDaily = new Promise<DailyResponse>((resolve) => {
       resolveRecoveredDaily = resolve;
@@ -586,9 +698,15 @@ describe("conversation-first Home", () => {
           : recoveredDaily;
       }
       if (String(path).startsWith("/api/v1/companies")) {
-        return Promise.resolve({ items: [account] } as EntityPage<Company>);
+        accountRequests += 1;
+        return accountRequests === 1
+          ? Promise.resolve({ items: [account] } as EntityPage<Company>)
+          : Promise.reject(new Error("accounts must not be retried"));
       }
-      return Promise.resolve({ items: [recent] } as EntityPage<Interaction>);
+      historyRequests += 1;
+      return historyRequests === 1
+        ? Promise.resolve({ items: [recent] } as EntityPage<Interaction>)
+        : Promise.reject(new Error("history must not be retried"));
     });
     render(<DashboardPage />);
 
@@ -616,6 +734,9 @@ describe("conversation-first Home", () => {
         /Today's schedule and follow-ups are temporarily unavailable/u,
       ),
     ).not.toBeInTheDocument();
+    expect(dailyAttempt).toBe(2);
+    expect(accountRequests).toBe(1);
+    expect(historyRequests).toBe(1);
   });
 
   it("keeps full Daily useful without a false recent-history empty state", async () => {
