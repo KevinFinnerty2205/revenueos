@@ -40,7 +40,7 @@ Upload validation failures exclude the source and attempt object deletion. Provi
 
 ## Validation
 
-Backend coverage includes tenant isolation, idempotency, MIME spoofing, polyglot rejection, EXIF/metadata stripping, review gates, source rules, stale-source suppression, migration guards, export and storage reconciliation. Web coverage includes preview-before-upload, explicit authority confirmation, progress, review/edit/reject controls, conservative labels and mobile layout. The flagship Playwright path covers presentation upload through accepted reviewed evidence.
+Backend coverage includes tenant isolation, idempotency, MIME spoofing, polyglot rejection, EXIF/metadata stripping, review gates, source rules, stale-source suppression, migration guards, export and storage reconciliation. Web coverage includes preview-before-upload, private-preview ownership across grant changes and out-of-order requests, explicit authority confirmation, progress, review/edit/reject controls, conservative labels and mobile layout. The flagship Playwright path covers presentation upload through accepted reviewed evidence.
 
 ## Related documents
 

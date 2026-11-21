@@ -24,7 +24,7 @@
 
 ## Access, preview and transfer
 
-- Local previews use a revocable in-memory object URL before upload. Private API downloads return `Cache-Control: private, no-store`, `nosniff`, a sandbox content policy and a sanitised filename.
+- Local previews use a revocable in-memory object URL before upload. An authenticated private preview is owned by its exact current download grant: changing or removing that grant hides and revokes the old object URL, and an obsolete request cannot replace or clear the newer preview. Private API downloads return `Cache-Control: private, no-store`, `nosniff`, a sandbox content policy and a sanitised filename.
 - Local signed capabilities expire and are bound to one organisation, user, visual and upload/download purpose. S3-compatible capabilities are short-lived and name one random tenant-scoped object key. Objects are not enumerable through the product API.
 - Stale or wrong-purpose grants fail closed. Authenticated metadata queries still apply tenant predicates and forced RLS; direct object capability leakage remains an incident requiring credential/key review.
 - External visual-provider transfer occurs only when the server-authoritative OpenAI and visual-provider settings are both enabled and the user has confirmed authority. Requests use an allowlisted model, strict structured output, `store=false`, a timeout and no SDK retries; tests remain zero-network.
