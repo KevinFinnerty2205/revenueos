@@ -481,9 +481,11 @@ describe("PreInteractionBrief", () => {
             state,
             generationAvailable: state !== "unavailable",
             safeMessage:
-              state === "failed" || state === "cancelled"
-                ? "The brief is not ready. You can try again."
-                : null,
+              state === "unavailable"
+                ? "A linked company or opportunity is required before preparation."
+                : state === "failed" || state === "cancelled"
+                  ? "The brief is not ready. You can try again."
+                  : null,
           }),
         ),
       ),
