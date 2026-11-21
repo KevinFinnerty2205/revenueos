@@ -10,7 +10,15 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
 import {
   type BusinessEntityName,
@@ -228,12 +236,30 @@ export function BusinessEntityForm({
   entity,
   entityId,
   initialCompanyId,
-}: {
+}: BusinessEntityFormProps) {
+  return (
+    <BusinessEntityFormSession
+      key={`${entity}:${entityId ?? "new"}:${initialCompanyId ?? ""}`}
+      entity={entity}
+      entityId={entityId}
+      initialCompanyId={initialCompanyId}
+    />
+  );
+}
+
+interface BusinessEntityFormProps {
   entity: BusinessEntityName;
   entityId?: string;
   initialCompanyId?: string;
-}) {
+}
+
+function BusinessEntityFormSession({
+  entity,
+  entityId,
+  initialCompanyId,
+}: BusinessEntityFormProps) {
   const router = useRouter();
+  const sessionActive = useRef(true);
   const labels = entityLabels[entity];
   const isEditing = Boolean(entityId);
   const formFields = useMemo(() => fields[entity], [entity]);
@@ -264,6 +290,13 @@ export function BusinessEntityForm({
   const [readOnlyFields, setReadOnlyFields] = useState<ReadonlySet<string>>(
     new Set(),
   );
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
 
   const loadForm = useCallback(
     async (signal: AbortSignal) => {
@@ -306,7 +339,9 @@ export function BusinessEntityForm({
           >(`/api/v1/${reference}?pageSize=100`, { signal });
           return [
             reference,
-            page.items.map((item) => optionFor(reference, item)),
+            page.items
+              .filter(isAvailableReferenceRecord)
+              .map((item) => optionFor(reference, item)),
           ] as const;
         }),
       );
@@ -327,6 +362,11 @@ export function BusinessEntityForm({
                 { signal },
               ),
         ]);
+        if (!isExpectedAvailableRecord(record, entityId)) {
+          throw new Error(
+            "The requested record could not be verified. Try loading it again.",
+          );
+        }
         loadedValues = valuesForForm(record, formFields);
         if (entity !== "tasks" && typeof record.updatedAt === "string") {
           loadedUpdatedAt = record.updatedAt;
@@ -358,6 +398,11 @@ export function BusinessEntityForm({
             `/api/v1/${reference}/${encodeURIComponent(selectedId)}`,
             { signal },
           );
+          if (!isExpectedAvailableRecord(record, selectedId)) {
+            throw new Error(
+              "A linked record could not be verified. Try loading the form again.",
+            );
+          }
           return [reference, optionFor(reference, record)] as const;
         }),
       );
@@ -444,12 +489,14 @@ export function BusinessEntityForm({
           body: JSON.stringify(payload),
         },
       );
+      if (!sessionActive.current) return;
       router.push(
         entity === "opportunities" && (entityId || saved.id)
           ? `/opportunities/${entityId ?? saved.id}`
           : `/${entity}`,
       );
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       if (
         requestError instanceof ApiClientError &&
         requestError.details?.entityId
@@ -467,7 +514,7 @@ export function BusinessEntityForm({
           : "The record could not be saved.",
       );
     } finally {
-      setSubmitting(false);
+      if (sessionActive.current) setSubmitting(false);
     }
   }
 
@@ -694,6 +741,19 @@ function optionFor(
   }
   const opportunity = record as Opportunity;
   return { value: opportunity.id, label: opportunity.name };
+}
+
+function isAvailableReferenceRecord(
+  record: Company | Contact | Opportunity,
+): boolean {
+  return record.archivedAt === null;
+}
+
+function isExpectedAvailableRecord(
+  record: { id?: unknown; archivedAt?: unknown },
+  expectedId: string,
+): boolean {
+  return record.id === expectedId && record.archivedAt === null;
 }
 
 function valuesForForm(
