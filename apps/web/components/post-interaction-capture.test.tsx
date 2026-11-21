@@ -403,6 +403,151 @@ describe("PostInteractionCapture", () => {
     );
   });
 
+  it("preserves a saved session and withholds a fresh start while restore is unavailable", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    window.localStorage.setItem(key, "session-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "debrief_unavailable",
+            message: "Debrief restore is temporarily unavailable.",
+            requestId: "request-restore-1",
+          },
+          503,
+        ),
+      )
+      .mockResolvedValueOnce(response(session()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="executive_lunch"
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your capture could not be restored. Any saved capture remains preserved.",
+    );
+    expect(window.localStorage.getItem(key)).toBe("session-1");
+    expect(
+      screen.queryByRole("button", { name: "Start personal notes" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try restore again" }));
+
+    expect(
+      await screen.findByText("Your in-progress capture was restored."),
+    ).toBeVisible();
+    expect(window.localStorage.getItem(key)).toBe("session-1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to the latest debrief after an explicitly stale saved session", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    window.localStorage.setItem(key, "stale-session");
+    const latest = session({ id: "latest-session" });
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).endsWith("/debrief/stale-session")
+        ? Promise.resolve(
+            response(
+              {
+                code: "debrief_not_found",
+                message: "The requested debrief session was not found.",
+                requestId: "request-restore-2",
+              },
+              404,
+            ),
+          )
+        : Promise.resolve(response(latest)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="executive_lunch"
+        restoreLatest
+      />,
+    );
+
+    expect(
+      await screen.findByText("Your in-progress capture was restored."),
+    ).toBeVisible();
+    expect(window.localStorage.getItem(key)).toBe("latest-session");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("/debrief/stale-session"),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("/debrief/latest"),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("ignores an old interaction restore failure after navigation", async () => {
+    const keyA = "revenueos:post-interaction-capture:interaction-a";
+    const keyB = "revenueos:post-interaction-capture:interaction-b";
+    window.localStorage.setItem(keyA, "session-a");
+    window.localStorage.setItem(keyB, "session-b");
+    const interactionARestore = deferred<Response>();
+    const restoredB = session({
+      id: "session-b",
+      interactionId: "interaction-b",
+      currentQuestion: {
+        status: "ask",
+        question: "What changed for interaction B?",
+        reason: "Keep B private and current.",
+        target: "other",
+        priority: "high",
+      },
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("interaction-a")
+        ? interactionARestore.promise
+        : Promise.resolve(response(restoredB)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <PostInteractionCapture
+        interactionId="interaction-a"
+        interactionType="executive_lunch"
+      />,
+    );
+    rerender(
+      <PostInteractionCapture
+        interactionId="interaction-b"
+        interactionType="executive_lunch"
+      />,
+    );
+
+    expect(
+      await screen.findByText("What changed for interaction B?"),
+    ).toBeVisible();
+    await act(async () =>
+      interactionARestore.resolve(
+        response(
+          {
+            code: "debrief_unavailable",
+            message: "Old restore failed.",
+            requestId: "request-restore-a",
+          },
+          503,
+        ),
+      ),
+    );
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("What changed for interaction B?")).toBeVisible();
+    expect(window.localStorage.getItem(keyA)).toBe("session-a");
+    expect(window.localStorage.getItem(keyB)).toBe("session-b");
+  });
+
   it("removes completed debrief seeds before restoring another interaction", async () => {
     const completedSession = (
       interactionId: string,
