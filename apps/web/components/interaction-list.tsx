@@ -9,7 +9,7 @@ import type {
   InteractionType,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import { InteractionCard } from "@/components/interaction-card";
 import { ProviderCalendarContext } from "@/components/microsoft-calendar-context";
@@ -44,8 +44,10 @@ export function InteractionList() {
   const [interactionStatus, setInteractionStatus] = useState<
     InteractionLifecycleStatus | ""
   >("");
+  const queryRevision = useRef(0);
 
   useEffect(() => {
+    const revision = queryRevision.current;
     const controller = new AbortController();
     const parameters = interactionParameters(
       search,
@@ -71,8 +73,10 @@ export function InteractionList() {
         interactions = await interactionRequest;
       } catch (requestError: unknown) {
         if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
+          controller.signal.aborted ||
+          revision !== queryRevision.current ||
+          (requestError instanceof DOMException &&
+            requestError.name === "AbortError")
         ) {
           return;
         }
@@ -85,7 +89,8 @@ export function InteractionList() {
         return;
       }
 
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || revision !== queryRevision.current)
+        return;
       setResult(interactions);
       setCompanies([]);
       setContacts([]);
@@ -97,7 +102,8 @@ export function InteractionList() {
       try {
         const [companyPageResult, contactPageResult] =
           await contextPageRequests;
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || revision !== queryRevision.current)
+          return;
         const initialCompanies =
           companyPageResult.status === "fulfilled"
             ? companyPageResult.value.items
@@ -112,14 +118,18 @@ export function InteractionList() {
           initialContacts,
           controller.signal,
         );
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || revision !== queryRevision.current)
+          return;
         setCompanies((current) => mergeById(current, context.companies));
         setContacts((current) => mergeById(current, context.contacts));
       } catch {
         // Context labels are optional; the generic labels remain usable.
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (queryRevision.current === revision) queryRevision.current += 1;
+    };
   }, [interactionStatus, interactionType, retryKey, search]);
 
   const companiesById = useMemo(
@@ -166,16 +176,20 @@ export function InteractionList() {
     event.preventDefault();
     beginReload();
     setSearch(searchDraft.trim());
+    setRetryKey((value) => value + 1);
   }
 
   function beginReload() {
+    queryRevision.current += 1;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
     setLoadMoreError(null);
   }
 
   async function loadMore() {
     if (!result || result.page >= result.pages || loadingMore) return;
+    const revision = queryRevision.current;
     setLoadingMore(true);
     setLoadMoreError(null);
     let nextPage: EntityPage<Interaction>;
@@ -189,6 +203,7 @@ export function InteractionList() {
       nextPage = await apiRequest<EntityPage<Interaction>>(
         "/api/v1/interactions?" + parameters.toString(),
       );
+      if (revision !== queryRevision.current) return;
       setLoadedAt(Date.now());
       setResult((current) =>
         current
@@ -198,7 +213,9 @@ export function InteractionList() {
             }
           : nextPage,
       );
+      setLoadingMore(false);
     } catch (requestError: unknown) {
+      if (revision !== queryRevision.current) return;
       setLoadMoreError(
         requestError instanceof Error
           ? requestError.message
@@ -208,19 +225,15 @@ export function InteractionList() {
       return;
     }
 
-    try {
-      const context = await hydrateLinkedContext(
-        nextPage.items,
-        companies,
-        contacts,
-      );
-      setCompanies((current) => mergeById(current, context.companies));
-      setContacts((current) => mergeById(current, context.contacts));
-    } catch {
-      // Context labels are optional; the appended conversations remain usable.
-    } finally {
-      setLoadingMore(false);
-    }
+    void hydrateLinkedContext(nextPage.items, companies, contacts)
+      .then((context) => {
+        if (revision !== queryRevision.current) return;
+        setCompanies((current) => mergeById(current, context.companies));
+        setContacts((current) => mergeById(current, context.contacts));
+      })
+      .catch(() => {
+        // Context labels are optional; the appended conversations remain usable.
+      });
   }
 
   return (
