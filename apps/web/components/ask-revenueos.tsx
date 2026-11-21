@@ -11,6 +11,7 @@ import {
   forwardRef,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -38,6 +39,51 @@ const suggestedQuestions: Record<AskScopeType, string[]> = {
   ],
 };
 
+interface AskSessionState {
+  sessionKey: string;
+  capabilities: AskCapabilities | null;
+  question: string;
+  answer: AskAnswer | null;
+  loading: boolean;
+  checking: boolean;
+  error: string | null;
+  errorCode: string | null;
+  retryQuestion: string | null;
+}
+
+interface AnswerRequest {
+  sessionKey: string;
+  requestId: number;
+  controller: AbortController;
+}
+
+const scopeMismatchMessage = "Ask Oryntela is unavailable right now.";
+
+function createSessionState(
+  sessionKey: string,
+  initialQuestion: string,
+): AskSessionState {
+  return {
+    sessionKey,
+    capabilities: null,
+    question: initialQuestion,
+    answer: null,
+    loading: false,
+    checking: true,
+    error: null,
+    errorCode: null,
+    retryQuestion: null,
+  };
+}
+
+function matchesScope(
+  scope: AskCapabilities["scope"] | AskAnswer["scope"],
+  scopeType: AskScopeType,
+  scopeId: string | null,
+): boolean {
+  return scope.type === scopeType && scope.id === scopeId;
+}
+
 export function AskRevenueOS({
   scopeType = "workspace",
   scopeId = null,
@@ -47,21 +93,57 @@ export function AskRevenueOS({
   scopeId?: string | null;
   initialQuestion?: string;
 }) {
-  const [capabilities, setCapabilities] = useState<AskCapabilities | null>(
-    null,
+  const sessionKey = `${scopeType}:${scopeId ?? ""}`;
+  const expectedScopeId = scopeId ?? null;
+  const [session, setSession] = useState<AskSessionState>(() =>
+    createSessionState(sessionKey, initialQuestion),
   );
-  const [question, setQuestion] = useState(initialQuestion);
-  const [answer, setAnswer] = useState<AskAnswer | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
+  const activeSessionKey = useRef(sessionKey);
+  const answerRequest = useRef<AnswerRequest | null>(null);
+  const answerRequestSequence = useRef(0);
   const answerRef = useRef<HTMLElement>(null);
   const answerTitleId = useId();
 
+  const visibleSession =
+    session.sessionKey === sessionKey
+      ? session
+      : createSessionState(sessionKey, initialQuestion);
+  const {
+    capabilities,
+    question,
+    answer,
+    loading,
+    checking,
+    error,
+    errorCode,
+    retryQuestion,
+  } = visibleSession;
+
+  useLayoutEffect(() => {
+    activeSessionKey.current = sessionKey;
+    const pending = answerRequest.current;
+    if (pending && pending.sessionKey !== sessionKey) {
+      pending.controller.abort();
+      answerRequest.current = null;
+    }
+    setSession((current) =>
+      current.sessionKey === sessionKey
+        ? current
+        : createSessionState(sessionKey, initialQuestion),
+    );
+  }, [initialQuestion, sessionKey]);
+
+  useEffect(
+    () => () => {
+      answerRequest.current?.controller.abort();
+      answerRequest.current = null;
+    },
+    [],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
+    const requestSessionKey = sessionKey;
     const parameters = new URLSearchParams({ scopeType });
     if (scopeId) parameters.set("scopeId", scopeId);
     apiRequest<AskCapabilities>(
@@ -69,36 +151,107 @@ export function AskRevenueOS({
       { signal: controller.signal },
     )
       .then((loaded) => {
-        setCapabilities(loaded);
-        setError(null);
-        setErrorCode(null);
+        if (
+          controller.signal.aborted ||
+          activeSessionKey.current !== requestSessionKey
+        )
+          return;
+        const validScope = matchesScope(
+          loaded.scope,
+          scopeType,
+          expectedScopeId,
+        );
+        setSession((current) =>
+          current.sessionKey === requestSessionKey
+            ? {
+                ...current,
+                capabilities: validScope ? loaded : null,
+                error: validScope ? null : scopeMismatchMessage,
+                errorCode: null,
+              }
+            : current,
+        );
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
+        if (
+          controller.signal.aborted ||
+          activeSessionKey.current !== requestSessionKey ||
+          (reason instanceof DOMException && reason.name === "AbortError")
+        )
           return;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Ask Oryntela is unavailable right now.",
+        setSession((current) =>
+          current.sessionKey === requestSessionKey
+            ? {
+                ...current,
+                error:
+                  reason instanceof Error
+                    ? reason.message
+                    : scopeMismatchMessage,
+                errorCode:
+                  reason instanceof ApiClientError ? reason.code : null,
+              }
+            : current,
         );
-        setErrorCode(reason instanceof ApiClientError ? reason.code : null);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setChecking(false);
+        if (
+          controller.signal.aborted ||
+          activeSessionKey.current !== requestSessionKey
+        )
+          return;
+        setSession((current) =>
+          current.sessionKey === requestSessionKey
+            ? { ...current, checking: false }
+            : current,
+        );
       });
     return () => controller.abort();
-  }, [scopeId, scopeType]);
+  }, [expectedScopeId, scopeId, scopeType, sessionKey]);
 
   async function submitQuestion(value: string) {
     const trimmed = value.trim();
     if (trimmed.length < 2) {
-      setError("Enter a question with at least two characters.");
+      const pending = answerRequest.current;
+      if (pending?.sessionKey === sessionKey) {
+        pending.controller.abort();
+        answerRequest.current = null;
+      }
+      answerRequestSequence.current += 1;
+      setSession((current) =>
+        current.sessionKey === sessionKey
+          ? {
+              ...current,
+              loading: false,
+              error: "Enter a question with at least two characters.",
+              errorCode: null,
+              retryQuestion: null,
+            }
+          : current,
+      );
       return;
     }
-    setLoading(true);
-    setError(null);
-    setErrorCode(null);
-    setRetryQuestion(trimmed);
+
+    answerRequest.current?.controller.abort();
+    const controller = new AbortController();
+    const requestId = answerRequestSequence.current + 1;
+    answerRequestSequence.current = requestId;
+    const requestSessionKey = sessionKey;
+    answerRequest.current = {
+      sessionKey: requestSessionKey,
+      requestId,
+      controller,
+    };
+    setSession((current) =>
+      current.sessionKey === requestSessionKey
+        ? {
+            ...current,
+            loading: true,
+            error: null,
+            errorCode: null,
+            retryQuestion: trimmed,
+          }
+        : current,
+    );
     try {
       const loaded = await apiRequest<AskAnswer>("/api/v1/ask", {
         method: "POST",
@@ -108,19 +261,73 @@ export function AskRevenueOS({
           scopeId,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
+        signal: controller.signal,
       });
-      setAnswer(loaded);
-      setErrorCode(null);
-      window.requestAnimationFrame(() => answerRef.current?.focus());
-    } catch (reason: unknown) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Oryntela couldn’t answer that right now.",
+      const activeRequest = answerRequest.current;
+      if (
+        controller.signal.aborted ||
+        activeSessionKey.current !== requestSessionKey ||
+        activeRequest?.sessionKey !== requestSessionKey ||
+        activeRequest.requestId !== requestId
+      )
+        return;
+      const validScope = matchesScope(loaded.scope, scopeType, expectedScopeId);
+      setSession((current) =>
+        current.sessionKey === requestSessionKey
+          ? {
+              ...current,
+              answer: validScope ? loaded : null,
+              error: validScope ? null : scopeMismatchMessage,
+              errorCode: null,
+            }
+          : current,
       );
-      setErrorCode(reason instanceof ApiClientError ? reason.code : null);
+      if (validScope) {
+        window.requestAnimationFrame(() => {
+          if (
+            activeSessionKey.current === requestSessionKey &&
+            answerRequestSequence.current === requestId
+          ) {
+            answerRef.current?.focus();
+          }
+        });
+      }
+    } catch (reason: unknown) {
+      const activeRequest = answerRequest.current;
+      if (
+        controller.signal.aborted ||
+        activeSessionKey.current !== requestSessionKey ||
+        activeRequest?.sessionKey !== requestSessionKey ||
+        activeRequest.requestId !== requestId
+      )
+        return;
+      setSession((current) =>
+        current.sessionKey === requestSessionKey
+          ? {
+              ...current,
+              error:
+                reason instanceof Error
+                  ? reason.message
+                  : "Oryntela couldn’t answer that right now.",
+              errorCode: reason instanceof ApiClientError ? reason.code : null,
+            }
+          : current,
+      );
     } finally {
-      setLoading(false);
+      const activeRequest = answerRequest.current;
+      if (
+        controller.signal.aborted ||
+        activeSessionKey.current !== requestSessionKey ||
+        activeRequest?.sessionKey !== requestSessionKey ||
+        activeRequest.requestId !== requestId
+      )
+        return;
+      answerRequest.current = null;
+      setSession((current) =>
+        current.sessionKey === requestSessionKey
+          ? { ...current, loading: false }
+          : current,
+      );
     }
   }
 
@@ -187,7 +394,13 @@ export function AskRevenueOS({
             <textarea
               id="ask-revenueos-question"
               value={question}
-              onChange={(event) => setQuestion(event.target.value)}
+              onChange={(event) =>
+                setSession((current) =>
+                  current.sessionKey === sessionKey
+                    ? { ...current, question: event.target.value }
+                    : current,
+                )
+              }
               className="form-input min-h-28 resize-y"
               placeholder="What changed since the last conversation?"
               maxLength={capabilities.maxQuestionCharacters}
@@ -252,7 +465,11 @@ export function AskRevenueOS({
                 type="button"
                 disabled={loading}
                 onClick={() => {
-                  setQuestion(suggestion);
+                  setSession((current) =>
+                    current.sessionKey === sessionKey
+                      ? { ...current, question: suggestion }
+                      : current,
+                  );
                   void submitQuestion(suggestion);
                 }}
                 className="min-h-11 rounded-full border border-slate-300 bg-white px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:border-brand-secondary/65 hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus"
@@ -269,7 +486,11 @@ export function AskRevenueOS({
           answer={answer}
           busy={loading}
           onFollowUp={(followUp) => {
-            setQuestion(followUp);
+            setSession((current) =>
+              current.sessionKey === sessionKey
+                ? { ...current, question: followUp }
+                : current,
+            );
             void submitQuestion(followUp);
             void recordTelemetry(answer.askRequestId, "follow_up_selected");
           }}
