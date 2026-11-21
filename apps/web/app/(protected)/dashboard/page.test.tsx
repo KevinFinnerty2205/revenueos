@@ -4,7 +4,7 @@ import type {
   EntityPage,
   Interaction,
 } from "@revenueos/shared";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "@/app/(protected)/dashboard/page";
 import { apiRequest } from "@/lib/api";
@@ -156,14 +156,40 @@ const account: Company = {
   updatedAt: "2026-08-15T00:00:00Z",
 };
 
-function mockHome(day: DailyResponse = dailyFixture()) {
+function mockHomeSources({
+  accountItems = [account],
+  accountUnavailable = false,
+  day = dailyFixture(),
+  dayUnavailable = false,
+  historyItems = [recent],
+  historyUnavailable = false,
+}: {
+  accountItems?: Company[];
+  accountUnavailable?: boolean;
+  day?: DailyResponse;
+  dayUnavailable?: boolean;
+  historyItems?: Interaction[];
+  historyUnavailable?: boolean;
+} = {}) {
   mockedApiRequest.mockImplementation((path) => {
-    if (String(path).startsWith("/api/v1/daily")) return Promise.resolve(day);
-    if (String(path).startsWith("/api/v1/companies")) {
-      return Promise.resolve({ items: [account] } as EntityPage<Company>);
+    if (String(path).startsWith("/api/v1/daily")) {
+      return dayUnavailable
+        ? Promise.reject(new Error("internal daily provider detail"))
+        : Promise.resolve(day);
     }
-    return Promise.resolve({ items: [recent] } as EntityPage<Interaction>);
+    if (String(path).startsWith("/api/v1/companies")) {
+      return accountUnavailable
+        ? Promise.reject(new Error("internal account provider detail"))
+        : Promise.resolve({ items: accountItems } as EntityPage<Company>);
+    }
+    return historyUnavailable
+      ? Promise.reject(new Error("internal history provider detail"))
+      : Promise.resolve({ items: historyItems } as EntityPage<Interaction>);
   });
+}
+
+function mockHome(day: DailyResponse = dailyFixture()) {
+  mockHomeSources({ day });
 }
 
 describe("conversation-first Home", () => {
@@ -307,5 +333,432 @@ describe("conversation-first Home", () => {
     expect(
       screen.getByText("No follow-ups need attention right now."),
     ).toBeVisible();
+  });
+
+  it("keeps conversation history and accounts usable when Daily is unavailable", async () => {
+    mockHomeSources({ dayUnavailable: true });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /Today's schedule and follow-ups are temporarily unavailable/u,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toHaveAttribute("href", "/conversations/interaction-2");
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/conversations/accounts/company-1#conversations",
+    );
+    expect(
+      screen.getByRole("link", { name: "Add conversation" }),
+    ).toHaveAttribute("href", "/conversations/new");
+    expect(
+      screen.getAllByRole("link", { name: "Search or ask" })[0],
+    ).toHaveAttribute("href", "/assistant");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Upcoming conversations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Follow-ups needing attention",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No other conversations are scheduled today."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No follow-ups need attention right now."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("internal daily provider detail"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps recent conversations when account links and Daily are unavailable", async () => {
+    mockHomeSources({ accountUnavailable: true, dayUnavailable: true });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Account conversation links are temporarily unavailable.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Recent conversation history is temporarily unavailable.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps account memory when recent history and Daily are unavailable", async () => {
+    mockHomeSources({ dayUnavailable: true, historyUnavailable: true });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Recent conversation history is temporarily unavailable.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Recent conversations" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows truthful empty secondary sources instead of a fatal Daily error", async () => {
+    mockHomeSources({
+      accountItems: [],
+      dayUnavailable: true,
+      historyItems: [],
+    });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Accounts" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Accounts will appear here when a conversation is linked to one.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Recent conversations" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Completed conversations will become your searchable relationship history.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows usable history without waiting for a pending account source", async () => {
+    let resolveAccounts: (value: EntityPage<Company>) => void = () => undefined;
+    const pendingAccounts = new Promise<EntityPage<Company>>((resolve) => {
+      resolveAccounts = resolve;
+    });
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        return Promise.reject(new Error("internal daily provider detail"));
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        return pendingAccounts;
+      }
+      return Promise.resolve({ items: [recent] } as EntityPage<Interaction>);
+    });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "Conversation workspace" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByText("Account conversation links are still loading."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Account conversation links are temporarily unavailable.",
+      ),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try Daily again" }));
+    expect(
+      screen.getByRole("button", { name: "Trying again…" }),
+    ).toBeDisabled();
+    expect(
+      await screen.findByRole("button", { name: "Try Daily again" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByText("Account conversation links are still loading."),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveAccounts({ items: [account] } as EntityPage<Company>);
+    });
+    expect(
+      await screen.findByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+  });
+
+  it("shows a successful Daily view without waiting for optional sources", async () => {
+    let resolveAccounts: (value: EntityPage<Company>) => void = () => undefined;
+    let resolveHistory: (value: EntityPage<Interaction>) => void = () =>
+      undefined;
+    const pendingAccounts = new Promise<EntityPage<Company>>((resolve) => {
+      resolveAccounts = resolve;
+    });
+    const pendingHistory = new Promise<EntityPage<Interaction>>((resolve) => {
+      resolveHistory = resolve;
+    });
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        return Promise.resolve(dailyFixture());
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        return pendingAccounts;
+      }
+      return pendingHistory;
+    });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: /good .*alex/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Northstar discovery" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Recent conversations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Recent conversation history is still loading."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Account conversation links are still loading."),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveAccounts({ items: [account] } as EntityPage<Company>);
+      resolveHistory({ items: [recent] } as EntityPage<Interaction>);
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Recent conversations" }),
+    ).toBeVisible();
+  });
+
+  it("uses the fatal retry state only when every Home source is unavailable", async () => {
+    mockHomeSources({
+      accountUnavailable: true,
+      dayUnavailable: true,
+      historyUnavailable: true,
+    });
+    render(<DashboardPage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Oryntela couldn’t load your conversations.",
+    );
+    expect(alert).toHaveTextContent(
+      "Your conversation workspace is temporarily unavailable. Please try again.",
+    );
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(alert).not.toHaveTextContent("internal daily provider detail");
+    expect(alert).not.toHaveTextContent("internal history provider detail");
+    expect(alert).not.toHaveTextContent("internal account provider detail");
+  });
+
+  it("retries unavailable secondary sources from the fatal Home state", async () => {
+    let dailyRequests = 0;
+    let accountRequests = 0;
+    let historyRequests = 0;
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        dailyRequests += 1;
+        return Promise.reject(new Error("Daily remains unavailable"));
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        accountRequests += 1;
+        return accountRequests === 1
+          ? Promise.reject(new Error("initial account failure"))
+          : Promise.resolve({ items: [account] } as EntityPage<Company>);
+      }
+      historyRequests += 1;
+      return Promise.reject(new Error("history remains unavailable"));
+    });
+    render(<DashboardPage />);
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+    expect(dailyRequests).toBe(2);
+    expect(accountRequests).toBe(2);
+    expect(historyRequests).toBe(2);
+  });
+
+  it("retries only Daily and preserves confirmed relationship memory when retry fails", async () => {
+    let dailyAttempt = 0;
+    let accountRequests = 0;
+    let historyRequests = 0;
+    let rejectRetriedDaily: (reason: unknown) => void = () => undefined;
+    const retriedDaily = new Promise<DailyResponse>((_resolve, reject) => {
+      rejectRetriedDaily = reject;
+    });
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        dailyAttempt += 1;
+        return dailyAttempt === 1
+          ? Promise.reject(new Error("initial Daily failure"))
+          : retriedDaily;
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        accountRequests += 1;
+        return accountRequests === 1
+          ? Promise.resolve({ items: [account] } as EntityPage<Company>)
+          : Promise.reject(new Error("accounts must not be retried"));
+      }
+      historyRequests += 1;
+      return historyRequests === 1
+        ? Promise.resolve({ items: [recent] } as EntityPage<Interaction>)
+        : Promise.reject(new Error("history must not be retried"));
+    });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try Daily again" }));
+    expect(
+      screen.getByRole("button", { name: "Trying again…" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      rejectRetriedDaily(new Error("retried Daily failure"));
+      await retriedDaily.catch(() => undefined);
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Try Daily again" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Northstar Labs.*conversation memory/u,
+      }),
+    ).toBeVisible();
+    expect(dailyAttempt).toBe(2);
+    expect(accountRequests).toBe(1);
+    expect(historyRequests).toBe(1);
+  });
+
+  it("keeps the reduced Home visible while retrying and restores Daily on success", async () => {
+    let dailyAttempt = 0;
+    let accountRequests = 0;
+    let historyRequests = 0;
+    let resolveRecoveredDaily: (value: DailyResponse) => void = () => undefined;
+    const recoveredDaily = new Promise<DailyResponse>((resolve) => {
+      resolveRecoveredDaily = resolve;
+    });
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        dailyAttempt += 1;
+        return dailyAttempt === 1
+          ? Promise.reject(new Error("internal daily provider detail"))
+          : recoveredDaily;
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        accountRequests += 1;
+        return accountRequests === 1
+          ? Promise.resolve({ items: [account] } as EntityPage<Company>)
+          : Promise.reject(new Error("accounts must not be retried"));
+      }
+      historyRequests += 1;
+      return historyRequests === 1
+        ? Promise.resolve({ items: [recent] } as EntityPage<Interaction>)
+        : Promise.reject(new Error("history must not be retried"));
+    });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Try Daily again" }));
+    expect(
+      screen.getByRole("heading", { name: "Conversation workspace" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Trying again…" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("link", { name: /Founder coffee notes/u }),
+    ).toBeVisible();
+    await act(async () => {
+      resolveRecoveredDaily(dailyFixture());
+    });
+    expect(
+      await screen.findByRole("heading", { name: /good .*alex/i }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(
+        /Today's schedule and follow-ups are temporarily unavailable/u,
+      ),
+    ).not.toBeInTheDocument();
+    expect(dailyAttempt).toBe(2);
+    expect(accountRequests).toBe(1);
+    expect(historyRequests).toBe(1);
+  });
+
+  it("keeps full Daily useful without a false recent-history empty state", async () => {
+    mockHomeSources({ historyUnavailable: true });
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: /good .*alex/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Northstar discovery" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Recent conversation history is temporarily unavailable. Your next conversation is still shown.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Recent conversations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("internal history provider detail"),
+    ).not.toBeInTheDocument();
   });
 });
