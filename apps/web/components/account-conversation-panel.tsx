@@ -50,6 +50,16 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
       }
 
       if (controller.signal.aborted) return;
+      if (!interactionsBelongToAccount(interactionPage.items, companyId)) {
+        setLoadedCompanyId(companyId);
+        setResult(null);
+        setContacts([]);
+        setLoadMoreError(null);
+        setError(
+          "Account conversations could not be loaded. Please try again.",
+        );
+        return;
+      }
       setLoadedCompanyId(companyId);
       setContacts([]);
       setResult(interactionPage);
@@ -150,6 +160,13 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
       controller.signal.aborted ||
       activeCompanyId.current !== requestedCompanyId
     ) {
+      finish();
+      return;
+    }
+    if (!interactionsBelongToAccount(nextPage.items, requestedCompanyId)) {
+      setLoadMoreError(
+        "More account conversations could not be loaded. Please try again.",
+      );
       finish();
       return;
     }
@@ -353,6 +370,15 @@ function isAvailableAccountContact(
   companyId: string,
 ): boolean {
   return contact.companyId === companyId && contact.archivedAt === null;
+}
+
+function interactionsBelongToAccount(
+  interactions: Interaction[],
+  companyId: string,
+): boolean {
+  return interactions.every(
+    (interaction) => interaction.companyId === companyId,
+  );
 }
 
 function mergeById<T extends { id: string }>(
