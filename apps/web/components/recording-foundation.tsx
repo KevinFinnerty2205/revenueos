@@ -32,6 +32,7 @@ import {
   type ProgressiveTranscriptionCapture,
   startProgressiveTranscriptionCapture,
 } from "@/lib/progressive-transcription-capture";
+import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
 
 const MIME_PREFERENCES = [
   "audio/webm;codecs=opus",
@@ -667,6 +668,12 @@ export function RecordingFoundation({
         }),
       },
     );
+    assertRecordingChunkUploadIdentity(chunk, {
+      recordingSessionId: current.id,
+      sequenceNumber: item.sequenceNumber,
+      byteSize: item.blob.size,
+      checksumSha256: checksum,
+    });
     await apiUpload(
       chunk.uploadUrl,
       item.blob,

@@ -112,14 +112,19 @@ describe("ImportedCallRecording", () => {
         );
       }
       if (path.endsWith("/chunks") && init?.method === "POST") {
+        const request = JSON.parse(String(init.body)) as {
+          sequenceNumber: number;
+          byteSize: number;
+          checksumSha256: string;
+        };
         return Promise.resolve(
           jsonResponse(
             {
               id: "chunk-1",
               recordingSessionId: "recording-1",
-              sequenceNumber: 0,
-              byteSize: 8,
-              checksumSha256: "0".repeat(64),
+              sequenceNumber: request.sequenceNumber,
+              byteSize: request.byteSize,
+              checksumSha256: request.checksumSha256,
               uploadState: "pending",
               uploadedAt: null,
               createdAt: "2026-08-15T00:00:00Z",
@@ -185,4 +190,118 @@ describe("ImportedCallRecording", () => {
       screen.queryByRole("button", { name: /play/i }),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    {
+      mismatch: "foreign recording session",
+      responseOverride: { recordingSessionId: "recording-foreign" },
+    },
+    {
+      mismatch: "wrong sequence",
+      responseOverride: { sequenceNumber: 1 },
+    },
+    {
+      mismatch: "wrong checksum",
+      responseOverride: { checksumSha256: "f".repeat(64) },
+    },
+  ])(
+    "rejects a $mismatch chunk ticket before importing bytes",
+    async ({ responseOverride }) => {
+      vi.stubGlobal("crypto", {
+        randomUUID: vi.fn(() => "request-id"),
+        subtle: {
+          digest: vi.fn(() => Promise.resolve(new Uint8Array(32).buffer)),
+        },
+      });
+      const foreignUploadUrl =
+        "https://foreign-upload.example/imported-recording-chunk";
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          const method = init?.method ?? "GET";
+          if (path.endsWith("/recordings") && method === "GET") {
+            return Promise.resolve(jsonResponse([]));
+          }
+          if (path.endsWith("/recordings") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse({ ...recording, lifecycleStatus: "created" }, 201),
+            );
+          }
+          if (path.endsWith("/start") && method === "POST") {
+            return Promise.resolve(
+              jsonResponse({ ...recording, lifecycleStatus: "uploading" }),
+            );
+          }
+          if (path.endsWith("/chunks") && method === "POST") {
+            const request = JSON.parse(String(init?.body)) as {
+              sequenceNumber: number;
+              byteSize: number;
+              checksumSha256: string;
+            };
+            return Promise.resolve(
+              jsonResponse(
+                {
+                  id: "chunk-foreign",
+                  recordingSessionId: recording.id,
+                  sequenceNumber: request.sequenceNumber,
+                  byteSize: request.byteSize,
+                  checksumSha256: request.checksumSha256,
+                  uploadState: "pending",
+                  uploadedAt: null,
+                  createdAt: "2026-08-15T00:00:00Z",
+                  uploadUrl: foreignUploadUrl,
+                  uploadExpiresAt: "2026-08-15T00:05:00Z",
+                  ...responseOverride,
+                },
+                201,
+              ),
+            );
+          }
+          return Promise.resolve(
+            jsonResponse({ code: "unexpected", message: path }, 500),
+          );
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<ImportedCallRecording interactionId="interaction-1" />);
+      const file = new File(
+        [new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])],
+        "call.webm",
+        { type: "audio/webm" },
+      );
+      fireEvent.change(screen.getByLabelText("Audio file"), {
+        target: { files: [file] },
+      });
+      fireEvent.change(screen.getByLabelText("Call duration in seconds"), {
+        target: { value: "45" },
+      });
+      fireEvent.click(
+        screen.getByRole("checkbox", {
+          name: /authorised business interaction/i,
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Import recording" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The recording upload could not be verified. Try again.",
+      );
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => String(input) === foreignUploadUrl,
+        ),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          /\/(complete|finalize)$/u.test(String(input)),
+        ),
+      ).toBe(false);
+      expect(
+        screen.getByRole("button", { name: "Import recording" }),
+      ).toBeEnabled();
+    },
+  );
 });
