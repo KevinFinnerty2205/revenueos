@@ -7,18 +7,18 @@ from revenueos.business_contracts import (
     CompanyCreate,
     CompanyResponse,
     CompanyUpdate,
-    Page,
+    TenantPage,
 )
 from revenueos.business_dependencies import get_business_service
 from revenueos.business_services import BusinessService
 from revenueos.domain import CompanyStatus
-from revenueos.routes.business import page_response
+from revenueos.routes.business import tenant_page_response
 
 router = APIRouter(prefix="/api/v1/companies", tags=["companies"])
 Service = Annotated[BusinessService, Depends(get_business_service)]
 
 
-@router.get("", response_model=Page[CompanyResponse])
+@router.get("", response_model=TenantPage[CompanyResponse])
 async def list_companies(
     service: Service,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -32,7 +32,7 @@ async def list_companies(
     ] = "name",
     sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "asc",
     include_archived: Annotated[bool, Query(alias="includeArchived")] = False,
-) -> Page[CompanyResponse]:
+) -> TenantPage[CompanyResponse]:
     result = await service.list_companies(
         page=page,
         page_size=page_size,
@@ -43,7 +43,13 @@ async def list_companies(
         sort_order=sort_order,
         include_archived=include_archived,
     )
-    return page_response(result, CompanyResponse, page=page, page_size=page_size)
+    return tenant_page_response(
+        result,
+        CompanyResponse,
+        organisation_id=service.tenant.organisation_id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)

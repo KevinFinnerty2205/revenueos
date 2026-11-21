@@ -2,13 +2,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 const opportunityId = "opportunity-qantas";
 const accountId = "account-qantas";
+const organisationId = "organisation-qantas";
 
 function scope(type: "opportunity" | "account" | "workspace") {
   return type === "opportunity"
-    ? { type, id: opportunityId, label: "Qantas network modernisation" }
+    ? {
+        organisationId,
+        type,
+        id: opportunityId,
+        label: "Qantas network modernisation",
+      }
     : type === "account"
-      ? { type, id: accountId, label: "Qantas" }
-      : { type, id: null, label: "Your accessible sales work" };
+      ? { organisationId, type, id: accountId, label: "Qantas" }
+      : {
+          organisationId,
+          type,
+          id: null,
+          label: "Your accessible sales work",
+        };
 }
 
 function source(
@@ -39,9 +50,11 @@ function source(
 function askAnswer(
   question: string,
   scopeType: "opportunity" | "account" | "workspace",
+  clientRequestId: string,
 ) {
   const common = {
     schemaVersion: 1,
+    clientRequestId,
     askRequestId: `request-${question.length}`,
     suggestedAction: null,
     followUpQuestions: ["Who is the economic buyer?", "What should I do next?"],
@@ -182,6 +195,14 @@ function askAnswer(
 
 async function routeAsk(page: Page) {
   let telemetryCount = 0;
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        user: { id: "user-qantas" },
+        organisation: { id: organisationId },
+      },
+    });
+  });
   await page.route(
     "http://localhost:8000/api/v1/ask/capabilities**",
     async (route) => {
@@ -212,11 +233,16 @@ async function routeAsk(page: Page) {
   );
   await page.route("http://localhost:8000/api/v1/ask", async (route) => {
     const request = route.request().postDataJSON() as {
+      clientRequestId: string;
       question: string;
       scopeType: "opportunity" | "account" | "workspace";
     };
     await route.fulfill({
-      json: askAnswer(request.question, request.scopeType),
+      json: askAnswer(
+        request.question,
+        request.scopeType,
+        request.clientRequestId,
+      ),
     });
   });
   return () => telemetryCount;

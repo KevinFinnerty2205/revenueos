@@ -368,7 +368,12 @@ def test_ask_uses_only_approved_safe_profile_context(client: TestClient) -> None
     draft = create_draft(client, "profile-ask-0001", unsafe)
     before = client.post(
         "/api/v1/ask",
-        json={"question": "What do we sell?", "scopeType": "workspace", "scopeId": None},
+        json={
+            "clientRequestId": str(uuid4()),
+            "question": "What do we sell?",
+            "scopeType": "workspace",
+            "scopeId": None,
+        },
     )
     assert before.status_code == 200, before.text
     assert before.json()["answerStatus"] == "unknown"
@@ -376,7 +381,12 @@ def test_ask_uses_only_approved_safe_profile_context(client: TestClient) -> None
     approve(client, draft)
     answer = client.post(
         "/api/v1/ask",
-        json={"question": "What do we sell?", "scopeType": "workspace", "scopeId": None},
+        json={
+            "clientRequestId": str(uuid4()),
+            "question": "What do we sell?",
+            "scopeType": "workspace",
+            "scopeId": None,
+        },
     )
     assert answer.status_code == 200, answer.text
     body = answer.json()
@@ -394,7 +404,12 @@ def test_ask_uses_only_approved_safe_profile_context(client: TestClient) -> None
     )
     replacement_answer = client.post(
         "/api/v1/ask",
-        json={"question": "What do we sell?", "scopeType": "workspace", "scopeId": None},
+        json={
+            "clientRequestId": str(uuid4()),
+            "question": "What do we sell?",
+            "scopeType": "workspace",
+            "scopeId": None,
+        },
     )
     assert replacement_answer.status_code == 200, replacement_answer.text
     replacement_body = replacement_answer.json()
@@ -406,7 +421,12 @@ def test_ask_uses_only_approved_safe_profile_context(client: TestClient) -> None
     assert retired.status_code == 200, retired.text
     after_retirement = client.post(
         "/api/v1/ask",
-        json={"question": "What do we sell?", "scopeType": "workspace", "scopeId": None},
+        json={
+            "clientRequestId": str(uuid4()),
+            "question": "What do we sell?",
+            "scopeType": "workspace",
+            "scopeId": None,
+        },
     )
     assert after_retirement.status_code == 200, after_retirement.text
     assert after_retirement.json()["answerStatus"] == "unknown"

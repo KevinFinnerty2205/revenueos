@@ -4,11 +4,11 @@
 
 Scope is an explicit server contract, never inferred from a name in question text.
 
-| Scope | Required identifier | Authorised retrieval |
-| --- | --- | --- |
-| Opportunity | Opportunity UUID | that organisation-scoped Opportunity and its current authorised related intelligence |
-| Account | Company UUID | that organisation-scoped Company, its bounded Opportunities and company-level accepted Evidence |
-| Workspace | none | open Opportunities owned by the active user, then related bounded intelligence |
+| Scope       | Required identifier | Authorised retrieval                                                                            |
+| ----------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| Opportunity | Opportunity UUID    | that organisation-scoped Opportunity and its current authorised related intelligence            |
+| Account     | Company UUID        | that organisation-scoped Company, its bounded Opportunities and company-level accepted Evidence |
+| Workspace   | none                | open Opportunities owned by the active user, then related bounded intelligence                  |
 
 Workspace requests carrying a scope ID and record scopes without a scope ID fail
 contract validation. Cross-organisation IDs return the same safe not-found response
@@ -25,6 +25,24 @@ organisation, owner or membership.
 The current workspace definition is deliberately seller-owned rather than a broad
 member-wide portfolio. Administrators do not gain an implicit cross-user Ask mode.
 Adding manager/team scope would need a separate permission and product decision.
+
+Both capability and answer responses carry the internal organisation UUID resolved
+from verified authentication context. The browser obtains that authoritative value
+from `/api/v1/me`; it never uses a freely supplied organisation identifier or treats
+an external session/organisation key as the tenant contract.
+
+The browser treats organisation, scope type, scope identifier and initial question as
+the rendered Ask session identity. A scope or route-question change immediately hides
+the previous question, answer, citations and errors; aborts or ignores obsolete
+capability and answer requests; and accepts a response only when its returned
+organisation and scope exactly match the request. Every question also carries a new
+`clientRequestId`, which the API echoes in the answer. A response is rendered only
+when that echo belongs to the active submission. The displayed answer retains the
+exact submitted question, so a failed later question can preserve the last verified
+answer without presenting it as the later result. Malformed successful responses fail
+safely. These checks prevent stale or malformed responses from being presented under
+another organisation, account, opportunity or question. They are defence in depth
+only and never replace the server authorisation checks above.
 
 ## Enumeration resistance
 

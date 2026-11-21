@@ -18,6 +18,7 @@ export function InteractionCard({
   const liveWorkspaceAvailable =
     interaction.lifecycleStatus === "planned" ||
     interaction.lifecycleStatus === "in_progress";
+  const encodedInteractionId = encodeURIComponent(interaction.id);
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -52,7 +53,7 @@ export function InteractionCard({
       <Heading className="mt-4 text-xl font-semibold text-slate-950">
         <Link
           className="rounded focus:outline-none focus:ring-2 focus:ring-brand-focus"
-          href={`/conversations/${interaction.id}`}
+          href={`/conversations/${encodedInteractionId}`}
         >
           {interaction.title}
         </Link>
@@ -96,7 +97,7 @@ export function InteractionCard({
         {interaction.lifecycleStatus === "completed" ? (
           <Link
             className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-            href={`/conversations/${interaction.id}#debrief`}
+            href={`/conversations/${encodedInteractionId}#debrief`}
           >
             Open notes and follow-up
           </Link>
@@ -104,7 +105,7 @@ export function InteractionCard({
         {liveWorkspaceAvailable ? (
           <Link
             className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-            href={`/conversations/${interaction.id}?view=capture`}
+            href={`/conversations/${encodedInteractionId}?view=capture`}
           >
             Open live workspace
           </Link>
@@ -112,7 +113,7 @@ export function InteractionCard({
         {interaction.briefState !== "unavailable" ? (
           <Link
             className="text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-            href={`/conversations/${interaction.id}#preparation`}
+            href={`/conversations/${encodedInteractionId}#preparation`}
           >
             {interaction.briefState === "completed"
               ? "Open brief"

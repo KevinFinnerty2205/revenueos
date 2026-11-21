@@ -439,6 +439,26 @@ function peopleDiscovery(withPeople: boolean) {
 }
 
 async function routeShell(page: Page, enabled = true) {
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        user: {
+          id: "user-dev",
+          externalAuthId: "user_dev_001",
+          displayName: "Alex Morgan",
+          email: "alex@example.test",
+        },
+        organisation: {
+          id: "org-dev",
+          name: "Example Revenue Team",
+          slug: "example-revenue-team",
+        },
+        role: "admin",
+        authMode: "mock",
+        requestId: "request-prospect-identity",
+      },
+    });
+  });
   await page.route(
     "http://localhost:8000/api/v1/beta/capabilities",
     async (route) => {
@@ -580,6 +600,7 @@ test("legacy account research remains directly reachable, sourced and refreshabl
     async (route) => {
       await route.fulfill({
         json: {
+          organisationId: "org-dev",
           targetId: target.id,
           companyId: "company-northstar",
           updatedAt: "2026-08-25T00:02:00Z",
@@ -796,6 +817,7 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
   await page.route("http://localhost:8000/api/v1/companies**", async (route) =>
     route.fulfill({
       json: {
+        organisationId: "org-dev",
         items: [
           {
             id: "company-northstar",
@@ -803,9 +825,11 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
             name: "Northstar Facilities Group",
             website: "https://northstar-facilities.example/",
             industry: "Facilities services",
+            location: null,
             employeeCount: null,
             status: "prospect",
             ownerUserId: "user-dev",
+            archivedAt: null,
             createdAt: "2026-08-25T00:00:00Z",
             updatedAt: "2026-08-25T00:00:00Z",
           },
@@ -842,6 +866,7 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
     async (route) =>
       route.fulfill({
         json: {
+          organisationId: "org-dev",
           contactId: "contact-jane",
           prospectPersonId: prospectPerson.id,
           companyTargetId: target.id,

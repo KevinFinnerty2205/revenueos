@@ -253,6 +253,7 @@ def test_interaction_search_matches_only_the_current_users_private_notes(
     for token in owner_tokens.values():
         match = client.get("/api/v1/interactions", params={"search": token})
         assert match.status_code == 200, match.text
+        assert match.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
         assert match.json()["total"] == 1
         assert [item["id"] for item in match.json()["items"]] == [interaction_id]
         assert all(private_token not in match.text for private_token in owner_tokens.values())
@@ -469,6 +470,11 @@ def test_phone_non_connection_outcomes_remain_events_without_intelligence(
 
 
 def test_interaction_crud_filters_completion_and_terminal_lifecycle(client: TestClient) -> None:
+    empty = client.get("/api/v1/interactions")
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["items"] == []
+    assert empty.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+
     company_id = str(create_company(client)["id"])
     opportunity_id = str(create_opportunity(client, company_id)["id"])
     interaction = create_interaction(
@@ -495,6 +501,7 @@ def test_interaction_crud_filters_completion_and_terminal_lifecycle(client: Test
         },
     )
     assert listed.status_code == 200, listed.text
+    assert listed.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["id"] == interaction_id
 
@@ -503,6 +510,7 @@ def test_interaction_crud_filters_completion_and_terminal_lifecycle(client: Test
         params={"search": "Acme Australia"},
     )
     assert relationship_search.status_code == 200, relationship_search.text
+    assert relationship_search.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert interaction_id in {item["id"] for item in relationship_search.json()["items"]}
 
     started = client.patch(

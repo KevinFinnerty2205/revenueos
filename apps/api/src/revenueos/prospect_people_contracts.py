@@ -148,6 +148,7 @@ class PersonPromotionResponse(APIModel):
 
 
 class ContactProspectResearchLinkResponse(APIModel):
+    organisation_id: UUID
     contact_id: UUID
     prospect_person_id: UUID
     company_target_id: UUID

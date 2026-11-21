@@ -16,6 +16,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
 import { ProspectCreditAction } from "@/components/prospect-credit-action";
 import { ProspectTrustLabel } from "@/components/prospect-research-brief";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
+import { isRecord } from "@/lib/private-response-identity";
 
 function humanise(value: string): string {
   return value
@@ -1239,52 +1241,102 @@ export function ContactPublicProfessionalResearch({
 }: {
   contactId: string;
 }) {
-  const [link, setLink] = useState<ContactProspectResearchLink | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const verifiedOrganisation = useVerifiedOrganisation();
+  const organisationId = verifiedOrganisation.organisationId;
+  const requestKey = `${organisationId ?? "unverified"}:${contactId}`;
+  const [state, setState] = useState<ContactResearchLinkState>({
+    requestKey,
+    status: "loading",
+  });
 
   useEffect(() => {
+    if (!organisationId) return;
     const controller = new AbortController();
-    apiRequest<ContactProspectResearchLink>(
-      `/api/v1/prospect/contacts/${contactId}/research-link`,
+    apiRequest<unknown>(
+      `/api/v1/prospect/contacts/${encodeURIComponent(contactId)}/research-link`,
       { signal: controller.signal },
     )
-      .then(setLink)
+      .then((payload) => {
+        if (controller.signal.aborted) return;
+        if (
+          !isContactResearchLink(payload, organisationId) ||
+          payload.contactId !== contactId
+        ) {
+          setState({ requestKey, status: "unavailable" });
+          return;
+        }
+        setState({ requestKey, status: "available", link: payload });
+      })
       .catch((reason: unknown) => {
-        if (reason instanceof ApiClientError && reason.status === 404) return;
+        if (controller.signal.aborted) return;
+        if (reason instanceof ApiClientError && reason.status === 404) {
+          setState({ requestKey, status: "unavailable" });
+          return;
+        }
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
-          setError(
-            "The public professional research link could not be loaded.",
-          );
+          setState({ requestKey, status: "failed" });
         }
       });
     return () => controller.abort();
-  }, [contactId]);
+  }, [contactId, organisationId, requestKey]);
 
-  if (!link && !error) return null;
-  if (error)
+  const visibleState: ContactResearchLinkState =
+    state.requestKey === requestKey ? state : { requestKey, status: "loading" };
+
+  if (visibleState.status !== "available") {
+    if (visibleState.status !== "failed") return null;
     return (
       <p role="alert" className="mt-5 text-sm text-rose-700">
-        {error}
+        The public professional research link could not be loaded.
       </p>
     );
+  }
+  const { link } = visibleState;
   return (
     <aside className="mt-6 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-secondary">
         Separate research context
       </p>
       <h2 className="mt-2 text-lg font-semibold text-brand-primary">
-        {link?.label}
+        {link.label}
       </h2>
       <p className="mt-2 text-sm leading-6 text-brand-primary">
         Public professional research remains separate from customer evidence,
         Stakeholder Intelligence and Revenue Brain facts.
       </p>
       <Link
-        href={`/find/${link?.companyTargetId}/people/${link?.prospectPersonId}`}
+        href={`/find/${encodeURIComponent(link.companyTargetId)}/people/${encodeURIComponent(link.prospectPersonId)}`}
         className="secondary-button mt-4"
       >
         View public research
       </Link>
     </aside>
+  );
+}
+
+type ContactResearchLinkState =
+  | { requestKey: string; status: "loading" | "unavailable" | "failed" }
+  | {
+      requestKey: string;
+      status: "available";
+      link: ContactProspectResearchLink;
+    };
+
+function isContactResearchLink(
+  value: unknown,
+  organisationId: string,
+): value is ContactProspectResearchLink {
+  return (
+    isRecord(value) &&
+    value.organisationId === organisationId &&
+    typeof value.contactId === "string" &&
+    value.contactId.length > 0 &&
+    typeof value.prospectPersonId === "string" &&
+    value.prospectPersonId.length > 0 &&
+    typeof value.companyTargetId === "string" &&
+    value.companyTargetId.length > 0 &&
+    typeof value.updatedAt === "string" &&
+    !Number.isNaN(Date.parse(value.updatedAt)) &&
+    value.label === "Public professional research"
   );
 }

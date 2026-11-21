@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from revenueos.auth import AuthenticatedUser, get_current_user
 
 from .conftest import (
+    PRIMARY_ORGANISATION_ID,
     SECONDARY_ORGANISATION_ID,
     SECONDARY_USER_ID,
 )
@@ -238,6 +239,7 @@ def test_pagination_filters_search_and_sorting(client: TestClient) -> None:
     assert response.json()["total"] == 2
     assert response.json()["pages"] == 2
     assert response.json()["pageSize"] == 1
+    assert response.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert [item["name"] for item in response.json()["items"]] == ["Alpine Systems"]
 
 
@@ -278,6 +280,7 @@ def test_relationship_and_enum_filters(client: TestClient) -> None:
         },
     )
     assert [item["firstName"] for item in contacts.json()["items"]] == ["Filtered"]
+    assert contacts.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert [item["name"] for item in opportunities.json()["items"]] == ["Filtered Deal"]
     assert [item["id"] for item in tasks.json()["items"]] == [task_id]
 
@@ -368,6 +371,11 @@ def test_cross_tenant_records_are_not_visible_or_mutable(
     response = client.get("/api/v1/companies")
     assert response.status_code == 200
     assert response.json()["items"] == []
+    assert response.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    contacts = client.get("/api/v1/contacts")
+    assert contacts.status_code == 200
+    assert contacts.json()["items"] == []
+    assert contacts.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert client.get(f"/api/v1/companies/{other_company_id}").status_code == 404
     assert (
         client.patch(

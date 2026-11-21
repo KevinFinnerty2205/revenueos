@@ -198,6 +198,7 @@ class PromotionResponse(APIModel):
 
 
 class AccountResearchLinkResponse(APIModel):
+    organisation_id: UUID
     target_id: UUID
     company_id: UUID
     updated_at: datetime

@@ -2,8 +2,10 @@
 
 import type { ProspectAccountResearchLink } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { ApiClientError, apiRequest } from "@/lib/api";
+import { isRecord } from "@/lib/private-response-identity";
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(
@@ -12,34 +14,72 @@ function formatDate(value: string): string {
 }
 
 export function AccountPublicResearch({ companyId }: { companyId: string }) {
-  const [research, setResearch] = useState<ProspectAccountResearchLink | null>(
-    null,
-  );
-  const [unavailable, setUnavailable] = useState(false);
+  const verifiedOrganisation = useVerifiedOrganisation();
+  const organisationId = verifiedOrganisation.organisationId;
+  const requestKey = `${organisationId ?? "unverified"}:${companyId}`;
+  const [state, setState] = useState<ResearchState>({
+    requestKey,
+    status: "loading",
+  });
+  const requestSequence = useRef(0);
 
   useEffect(() => {
+    if (!organisationId) return;
     const controller = new AbortController();
-    apiRequest<ProspectAccountResearchLink>(
-      `/api/v1/prospect/accounts/${companyId}/research-link`,
+    const requestId = requestSequence.current + 1;
+    requestSequence.current = requestId;
+
+    apiRequest<unknown>(
+      `/api/v1/prospect/accounts/${encodeURIComponent(companyId)}/research-link`,
       { signal: controller.signal },
     )
-      .then(setResearch)
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
+      .then((payload) => {
+        if (
+          controller.signal.aborted ||
+          requestSequence.current !== requestId
+        ) {
           return;
+        }
+        if (
+          !isResearchLink(payload, organisationId) ||
+          payload.companyId !== companyId
+        ) {
+          setState({ requestKey, status: "unavailable" });
+          return;
+        }
+        setState({ requestKey, status: "available", research: payload });
+      })
+      .catch((reason: unknown) => {
+        if (
+          controller.signal.aborted ||
+          requestSequence.current !== requestId ||
+          (reason instanceof DOMException && reason.name === "AbortError")
+        ) {
+          return;
+        }
         if (
           reason instanceof ApiClientError &&
           (reason.status === 403 || reason.status === 404)
         ) {
-          setUnavailable(true);
+          setState({ requestKey, status: "unavailable" });
           return;
         }
-        setUnavailable(true);
+        setState({ requestKey, status: "unavailable" });
       });
-    return () => controller.abort();
-  }, [companyId]);
+    return () => {
+      controller.abort();
+      if (requestSequence.current === requestId) {
+        requestSequence.current += 1;
+      }
+    };
+  }, [companyId, organisationId, requestKey]);
 
-  if (unavailable || !research) return null;
+  const visibleState: ResearchState =
+    state.requestKey === requestKey ? state : { requestKey, status: "loading" };
+
+  if (visibleState.status !== "available") return null;
+
+  const { research } = visibleState;
 
   return (
     <section
@@ -64,11 +104,35 @@ export function AccountPublicResearch({ companyId }: { companyId: string }) {
         </p>
       </div>
       <Link
-        href={`/find/${research.targetId}`}
+        href={`/find/${encodeURIComponent(research.targetId)}`}
         className="secondary-button shrink-0"
       >
         View research
       </Link>
     </section>
+  );
+}
+
+type ResearchState =
+  | { requestKey: string; status: "loading" | "unavailable" }
+  | {
+      requestKey: string;
+      status: "available";
+      research: ProspectAccountResearchLink;
+    };
+
+function isResearchLink(
+  value: unknown,
+  organisationId: string,
+): value is ProspectAccountResearchLink {
+  return (
+    isRecord(value) &&
+    value.organisationId === organisationId &&
+    typeof value.targetId === "string" &&
+    value.targetId.length > 0 &&
+    typeof value.companyId === "string" &&
+    typeof value.updatedAt === "string" &&
+    !Number.isNaN(Date.parse(value.updatedAt)) &&
+    (value.status === "ready" || value.status === "partial")
   );
 }

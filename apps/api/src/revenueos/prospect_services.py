@@ -630,6 +630,7 @@ class ProspectService:
         if current is None or current.completed_at is None:
             raise PublicAPIError("prospect_research_not_found", "No public research is attached to this account.", 404)
         return AccountResearchLinkResponse(
+            organisation_id=self.tenant.organisation_id,
             target_id=target.id,
             company_id=company.id,
             updated_at=current.completed_at,

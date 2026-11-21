@@ -1,56 +1,97 @@
 "use client";
 
-import type { Contact, EntityPage, Interaction } from "@revenueos/shared";
+import type { Contact, Interaction, TenantEntityPage } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InteractionCard } from "@/components/interaction-card";
-import { apiRequest } from "@/lib/api";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
+import { apiRequest, ApiClientError } from "@/lib/api";
+import {
+  decodeTenantPage,
+  isContactResponse,
+  isInteractionResponse,
+} from "@/lib/private-response-identity";
 
 export function AccountConversationPanel({ companyId }: { companyId: string }) {
-  const [loadedCompanyId, setLoadedCompanyId] = useState(companyId);
-  const [result, setResult] = useState<EntityPage<Interaction> | null>(null);
+  const verifiedOrganisation = useVerifiedOrganisation();
+  const organisationId = verifiedOrganisation.organisationId;
+  const requestKey = `${organisationId ?? "unverified"}:${companyId}`;
+  const [loadedRequestKey, setLoadedRequestKey] = useState(requestKey);
+  const [result, setResult] = useState<TenantEntityPage<Interaction> | null>(
+    null,
+  );
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loadingMoreCompanyId, setLoadingMoreCompanyId] = useState<
+  const [loadingMoreRequestKey, setLoadingMoreRequestKey] = useState<
     string | null
   >(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const activeCompanyId = useRef(companyId);
+  const activeRequestKey = useRef(requestKey);
   const loadMoreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    activeCompanyId.current = companyId;
+    if (!organisationId) return;
+    const requestOrganisationId = organisationId;
+    activeRequestKey.current = requestKey;
     loadMoreController.current?.abort();
     const controller = new AbortController();
     const encodedCompanyId = encodeURIComponent(companyId);
     async function loadAccountConversations() {
-      let interactionPage: EntityPage<Interaction>;
+      let interactionPage: TenantEntityPage<Interaction>;
       try {
-        interactionPage = await apiRequest<EntityPage<Interaction>>(
+        const payload = await apiRequest<unknown>(
           accountInteractionPath(companyId),
           { signal: controller.signal },
         );
+        const decoded = decodeTenantPage(
+          payload,
+          requestOrganisationId,
+          isInteractionResponse,
+          { expectedPage: 1 },
+        );
+        if (!decoded) {
+          throw new Error(
+            "Account conversations could not be loaded. Please try again.",
+          );
+        }
+        interactionPage = decoded;
       } catch (reason: unknown) {
         if (
           controller.signal.aborted ||
           (reason instanceof DOMException && reason.name === "AbortError")
         )
           return;
-        setLoadedCompanyId(companyId);
+        setLoadedRequestKey(requestKey);
         setResult(null);
         setContacts([]);
         setLoadMoreError(null);
         setError(
-          reason instanceof Error
+          reason instanceof ApiClientError
             ? reason.message
-            : "Account conversations could not be loaded.",
+            : "Account conversations could not be loaded. Please try again.",
         );
         return;
       }
 
       if (controller.signal.aborted) return;
-      setLoadedCompanyId(companyId);
+      if (
+        !interactionsBelongToAccount(
+          interactionPage.items,
+          companyId,
+          requestOrganisationId,
+        )
+      ) {
+        setLoadedRequestKey(requestKey);
+        setResult(null);
+        setContacts([]);
+        setLoadMoreError(null);
+        setError(
+          "Account conversations could not be loaded. Please try again.",
+        );
+        return;
+      }
+      setLoadedRequestKey(requestKey);
       setContacts([]);
       setResult(interactionPage);
       setError(null);
@@ -58,10 +99,29 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
 
       let listedContacts: Contact[] = [];
       try {
-        const contactPage = await apiRequest<EntityPage<Contact>>(
+        const payload = await apiRequest<unknown>(
           "/api/v1/contacts?pageSize=100&companyId=" + encodedCompanyId,
           { signal: controller.signal },
         );
+        const contactPage = decodeTenantPage(
+          payload,
+          requestOrganisationId,
+          isContactResponse,
+          { expectedPage: 1 },
+        );
+        if (!contactPage) throw new Error("invalid_account_contact_page");
+        if (
+          contactPage.items.some(
+            (contact) =>
+              !isAvailableAccountContact(
+                contact,
+                companyId,
+                requestOrganisationId,
+              ),
+          )
+        ) {
+          throw new Error("invalid_account_contact_page");
+        }
         listedContacts = contactPage.items;
       } catch {
         if (controller.signal.aborted) return;
@@ -71,11 +131,17 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
         interactionPage.items,
         listedContacts,
         companyId,
+        requestOrganisationId,
         controller.signal,
       );
       if (controller.signal.aborted) return;
       setContacts((current) =>
-        mergeAccountContacts(current, hydratedContacts, companyId),
+        mergeAccountContacts(
+          current,
+          hydratedContacts,
+          companyId,
+          requestOrganisationId,
+        ),
       );
     }
 
@@ -84,14 +150,14 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
       controller.abort();
       loadMoreController.current?.abort();
     };
-  }, [companyId, retryKey]);
+  }, [companyId, organisationId, requestKey, retryKey]);
 
-  const accountIsCurrent = loadedCompanyId === companyId;
+  const accountIsCurrent = loadedRequestKey === requestKey;
   const currentResult = accountIsCurrent ? result : null;
   const currentContacts = accountIsCurrent ? contacts : [];
   const currentError = accountIsCurrent ? error : null;
   const currentLoadMoreError = accountIsCurrent ? loadMoreError : null;
-  const loadingMore = loadingMoreCompanyId === companyId;
+  const loadingMore = loadingMoreRequestKey === requestKey;
   const interactions = currentResult?.items ?? null;
 
   const contactNames = useMemo(
@@ -112,34 +178,49 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
       loadingMore
     )
       return;
+    if (!organisationId) return;
+    const requestOrganisationId = organisationId;
     const requestedCompanyId = companyId;
+    const requestedKey = requestKey;
     const controller = new AbortController();
     loadMoreController.current?.abort();
     loadMoreController.current = controller;
-    setLoadingMoreCompanyId(requestedCompanyId);
+    setLoadingMoreRequestKey(requestedKey);
     setLoadMoreError(null);
     const finish = () => {
       if (loadMoreController.current !== controller) return;
       loadMoreController.current = null;
-      setLoadingMoreCompanyId((current) =>
-        current === requestedCompanyId ? null : current,
+      setLoadingMoreRequestKey((current) =>
+        current === requestedKey ? null : current,
       );
     };
-    let nextPage: EntityPage<Interaction>;
+    let nextPage: TenantEntityPage<Interaction>;
     try {
-      nextPage = await apiRequest<EntityPage<Interaction>>(
+      const payload = await apiRequest<unknown>(
         accountInteractionPath(companyId, currentResult.page + 1),
         { signal: controller.signal },
       );
+      const decoded = decodeTenantPage(
+        payload,
+        requestOrganisationId,
+        isInteractionResponse,
+        { expectedPage: currentResult.page + 1 },
+      );
+      if (!decoded) {
+        throw new Error(
+          "More account conversations could not be loaded. Please try again.",
+        );
+      }
+      nextPage = decoded;
     } catch (reason: unknown) {
       if (
         !controller.signal.aborted &&
-        activeCompanyId.current === requestedCompanyId
+        activeRequestKey.current === requestedKey
       ) {
         setLoadMoreError(
-          reason instanceof Error
+          reason instanceof ApiClientError
             ? reason.message
-            : "More account conversations could not be loaded.",
+            : "More account conversations could not be loaded. Please try again.",
         );
       }
       finish();
@@ -148,8 +229,21 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
 
     if (
       controller.signal.aborted ||
-      activeCompanyId.current !== requestedCompanyId
+      activeRequestKey.current !== requestedKey
     ) {
+      finish();
+      return;
+    }
+    if (
+      !interactionsBelongToAccount(
+        nextPage.items,
+        requestedCompanyId,
+        requestOrganisationId,
+      )
+    ) {
+      setLoadMoreError(
+        "More account conversations could not be loaded. Please try again.",
+      );
       finish();
       return;
     }
@@ -167,21 +261,36 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
         nextPage.items,
         currentContacts,
         companyId,
+        requestOrganisationId,
         controller.signal,
       );
       if (
         controller.signal.aborted ||
-        activeCompanyId.current !== requestedCompanyId
+        activeRequestKey.current !== requestedKey
       )
         return;
       setContacts((current) =>
-        mergeAccountContacts(current, hydratedContacts, companyId),
+        mergeAccountContacts(
+          current,
+          hydratedContacts,
+          companyId,
+          requestOrganisationId,
+        ),
       );
     } catch {
       // Contact names are optional enrichment; the conversation page is kept.
     } finally {
       finish();
     }
+  }
+
+  if (verifiedOrganisation.status === "unavailable") {
+    return (
+      <section className="form-card" role="alert">
+        Account conversations are unavailable until the active organisation is
+        verified. Reload the page to try again.
+      </section>
+    );
   }
 
   return (
@@ -232,7 +341,7 @@ export function AccountConversationPanel({ companyId }: { companyId: string }) {
               setResult(null);
               setError(null);
               setLoadMoreError(null);
-              setLoadingMoreCompanyId(null);
+              setLoadingMoreRequestKey(null);
               setRetryKey((value) => value + 1);
             }}
           >
@@ -305,10 +414,11 @@ async function hydrateLinkedContacts(
   interactions: Interaction[],
   contacts: Contact[],
   companyId: string,
+  organisationId: string,
   signal?: AbortSignal,
 ): Promise<Contact[]> {
   const accountContacts = contacts.filter((contact) =>
-    isAvailableAccountContact(contact, companyId),
+    isAvailableAccountContact(contact, companyId, organisationId),
   );
   const knownIds = new Set(accountContacts.map((contact) => contact.id));
   const missingIds = [
@@ -320,16 +430,30 @@ async function hydrateLinkedContacts(
   ].filter((contactId) => !knownIds.has(contactId));
   const linkedContactResults = await Promise.allSettled(
     missingIds.map((contactId) =>
-      apiRequest<Contact>(
+      apiRequest<unknown>(
         "/api/v1/contacts/" + encodeURIComponent(contactId),
         signal ? { signal } : undefined,
-      ),
+      ).then((value) => ({ contactId, value })),
     ),
   );
+  const mismatched = linkedContactResults.some(
+    (result) =>
+      result.status === "fulfilled" &&
+      (!isContactResponse(result.value.value, organisationId) ||
+        result.value.value.id !== result.value.contactId ||
+        !isAvailableAccountContact(
+          result.value.value,
+          companyId,
+          organisationId,
+        )),
+  );
+  if (mismatched) return accountContacts;
   const linkedContacts = linkedContactResults.flatMap((result) =>
     result.status === "fulfilled" &&
-    isAvailableAccountContact(result.value, companyId)
-      ? [result.value]
+    isContactResponse(result.value.value, organisationId) &&
+    result.value.value.id === result.value.contactId &&
+    isAvailableAccountContact(result.value.value, companyId, organisationId)
+      ? [result.value.value]
       : [],
   );
   return mergeById(accountContacts, linkedContacts);
@@ -339,11 +463,14 @@ function mergeAccountContacts(
   current: Contact[],
   additions: Contact[],
   companyId: string,
+  organisationId: string,
 ): Contact[] {
   return mergeById(
-    current.filter((contact) => isAvailableAccountContact(contact, companyId)),
+    current.filter((contact) =>
+      isAvailableAccountContact(contact, companyId, organisationId),
+    ),
     additions.filter((contact) =>
-      isAvailableAccountContact(contact, companyId),
+      isAvailableAccountContact(contact, companyId, organisationId),
     ),
   );
 }
@@ -351,8 +478,25 @@ function mergeAccountContacts(
 function isAvailableAccountContact(
   contact: Contact,
   companyId: string,
+  organisationId: string,
 ): boolean {
-  return contact.companyId === companyId && contact.archivedAt === null;
+  return (
+    contact.organisationId === organisationId &&
+    contact.companyId === companyId &&
+    contact.archivedAt === null
+  );
+}
+
+function interactionsBelongToAccount(
+  interactions: Interaction[],
+  companyId: string,
+  organisationId: string,
+): boolean {
+  return interactions.every(
+    (interaction) =>
+      interaction.organisationId === organisationId &&
+      interaction.companyId === companyId,
+  );
 }
 
 function mergeById<T extends { id: string }>(

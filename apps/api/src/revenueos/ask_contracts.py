@@ -79,6 +79,7 @@ class StrictAskModel(APIModel):
 
 
 class AskRequest(StrictAskModel):
+    client_request_id: UUID
     question: BoundedQuestion
     scope_type: AskScopeType
     scope_id: UUID | None = None
@@ -97,6 +98,7 @@ class AskRequest(StrictAskModel):
 
 
 class AskScope(StrictAskModel):
+    organisation_id: UUID
     type: AskScopeType
     id: UUID | None
     label: BoundedText
@@ -125,6 +127,7 @@ class AskSuggestedAction(StrictAskModel):
 
 class AskAnswer(StrictAskModel):
     schema_version: Literal[1] = 1
+    client_request_id: UUID
     ask_request_id: UUID
     answer: BoundedAnswer
     answer_status: AskAnswerStatus

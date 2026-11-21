@@ -212,6 +212,7 @@ class AskRevenueOSService:
         if INSTRUCTION_PATTERN.search(request.question):
             answer = self._unknown_answer(
                 request_id,
+                request.client_request_id,
                 generated_at,
                 scope,
                 question_class,
@@ -220,18 +221,32 @@ class AskRevenueOSService:
         elif question_class == "unsupported_public_web":
             answer = self._unknown_answer(
                 request_id,
+                request.client_request_id,
                 generated_at,
                 scope,
                 question_class,
                 "I don’t have that information in Oryntela. Ask Oryntela does not research the public web yet.",
             )
         elif question_class == "selling_context":
-            answer = await self._selling_context_answer(request_id, generated_at, scope, request.question)
+            answer = await self._selling_context_answer(
+                request_id,
+                request.client_request_id,
+                generated_at,
+                scope,
+                request.question,
+            )
         elif question_class == "daily_focus":
-            answer = await self._daily_answer(request_id, generated_at, scope, request.timezone)
+            answer = await self._daily_answer(
+                request_id,
+                request.client_request_id,
+                generated_at,
+                scope,
+                request.timezone,
+            )
         elif request.scope_type == "workspace":
             answer = await self._portfolio_answer(
                 request_id,
+                request.client_request_id,
                 generated_at,
                 scope,
                 opportunities,
@@ -241,6 +256,7 @@ class AskRevenueOSService:
         else:
             answer = await self._scoped_answer(
                 request_id,
+                request.client_request_id,
                 generated_at,
                 scope,
                 opportunities,
@@ -268,6 +284,7 @@ class AskRevenueOSService:
     async def _selling_context_answer(
         self,
         request_id: UUID,
+        client_request_id: UUID,
         generated_at: datetime,
         scope: AskScope,
         question: str,
@@ -279,6 +296,7 @@ class AskRevenueOSService:
                 raise
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 "selling_context",
@@ -292,6 +310,7 @@ class AskRevenueOSService:
         ):
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 "selling_context",
@@ -322,6 +341,7 @@ class AskRevenueOSService:
         if not safe_values:
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 "selling_context",
@@ -338,6 +358,7 @@ class AskRevenueOSService:
         )
         points = tuple(AskSummaryPoint(text=value, source_ids=(source.id,)) for value in safe_values[:6])
         return AskAnswer(
+            client_request_id=client_request_id,
             ask_request_id=request_id,
             answer=safe_values[0],
             answer_status="supported",
@@ -405,7 +426,12 @@ class AskRevenueOSService:
             opportunity = await self.repository.opportunity(self.tenant.organisation_id, scope_id)
             if opportunity is None:
                 raise PublicAPIError("opportunity_not_found", "The opportunity was not found.", 404)
-            return AskScope(type="opportunity", id=opportunity.id, label=opportunity.name), [opportunity]
+            return AskScope(
+                organisation_id=self.tenant.organisation_id,
+                type="opportunity",
+                id=opportunity.id,
+                label=opportunity.name,
+            ), [opportunity]
         if scope_type == "account":
             if scope_id is None:
                 raise PublicAPIError("invalid_ask_scope", "Account scope requires an account ID.", 422)
@@ -416,18 +442,29 @@ class AskRevenueOSService:
                 self.tenant.organisation_id,
                 company.id,
             )
-            return AskScope(type="account", id=company.id, label=company.name), opportunities
+            return AskScope(
+                organisation_id=self.tenant.organisation_id,
+                type="account",
+                id=company.id,
+                label=company.name,
+            ), opportunities
         if scope_id is not None:
             raise PublicAPIError("invalid_ask_scope", "Workspace scope cannot include an entity ID.", 422)
         opportunities = await self.repository.owned_open_opportunities(
             self.tenant.organisation_id,
             self.tenant.user_id,
         )
-        return AskScope(type="workspace", id=None, label="Your accessible sales work"), opportunities
+        return AskScope(
+            organisation_id=self.tenant.organisation_id,
+            type="workspace",
+            id=None,
+            label="Your accessible sales work",
+        ), opportunities
 
     async def _scoped_answer(
         self,
         request_id: UUID,
+        client_request_id: UUID,
         generated_at: datetime,
         scope: AskScope,
         opportunities: list[Opportunity],
@@ -471,11 +508,19 @@ class AskRevenueOSService:
         candidates.extend(self._artifact_candidates(bundles, names, question, question_class))
         candidates.extend(self._action_candidates(actions, names, question_class))
         candidates = self._bound_candidates(candidates)
-        return self._compose(request_id, generated_at, scope, question_class, candidates)
+        return self._compose(
+            request_id,
+            client_request_id,
+            generated_at,
+            scope,
+            question_class,
+            candidates,
+        )
 
     async def _portfolio_answer(
         self,
         request_id: UUID,
+        client_request_id: UUID,
         generated_at: datetime,
         scope: AskScope,
         opportunities: list[Opportunity],
@@ -485,6 +530,7 @@ class AskRevenueOSService:
         if not opportunities:
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 question_class,
@@ -492,7 +538,13 @@ class AskRevenueOSService:
             )
         lowered = question.casefold()
         if "need" in lowered and "attention" in lowered:
-            return await self._daily_answer(request_id, generated_at, scope, None)
+            return await self._daily_answer(
+                request_id,
+                client_request_id,
+                generated_at,
+                scope,
+                None,
+            )
         opportunity_ids = tuple(item.id for item in opportunities)
         names = {item.id: item.name for item in opportunities}
         candidates: list[AskCandidate] = []
@@ -534,17 +586,26 @@ class AskRevenueOSService:
         else:
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 question_class,
                 "I can answer bounded portfolio questions about methodology gaps, risks, security, competitors, commitments and today’s priorities. I can’t run arbitrary business-intelligence queries.",
             )
         candidates = self._bound_candidates(candidates, self.settings.private_beta_ask_max_portfolio_results)
-        return self._compose(request_id, generated_at, scope, "opportunity_filter", candidates)
+        return self._compose(
+            request_id,
+            client_request_id,
+            generated_at,
+            scope,
+            "opportunity_filter",
+            candidates,
+        )
 
     async def _daily_answer(
         self,
         request_id: UUID,
+        client_request_id: UUID,
         generated_at: datetime,
         scope: AskScope,
         timezone: str | None,
@@ -568,6 +629,7 @@ class AskRevenueOSService:
                 )
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 "daily_focus",
@@ -588,6 +650,7 @@ class AskRevenueOSService:
             source_ids=(source.id,),
         )
         return AskAnswer(
+            client_request_id=client_request_id,
             ask_request_id=request_id,
             answer=f"Start with {priority.title}. {priority.reason}",
             answer_status="supported",
@@ -1153,6 +1216,7 @@ class AskRevenueOSService:
     def _compose(
         self,
         request_id: UUID,
+        client_request_id: UUID,
         generated_at: datetime,
         scope: AskScope,
         question_class: AskQuestionClass,
@@ -1161,6 +1225,7 @@ class AskRevenueOSService:
         if not candidates:
             return self._unknown_answer(
                 request_id,
+                client_request_id,
                 generated_at,
                 scope,
                 question_class,
@@ -1192,6 +1257,7 @@ class AskRevenueOSService:
         if not follow_ups:
             follow_ups = self._default_follow_ups(question_class)
         return AskAnswer(
+            client_request_id=client_request_id,
             ask_request_id=request_id,
             answer=answer,
             answer_status=status,
@@ -1208,12 +1274,14 @@ class AskRevenueOSService:
     def _unknown_answer(
         self,
         request_id: UUID,
+        client_request_id: UUID,
         generated_at: datetime,
         scope: AskScope,
         question_class: AskQuestionClass,
         message: str,
     ) -> AskAnswer:
         return AskAnswer(
+            client_request_id=client_request_id,
             ask_request_id=request_id,
             answer=message,
             answer_status="unknown",

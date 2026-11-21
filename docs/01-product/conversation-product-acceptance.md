@@ -31,6 +31,9 @@ The default web experience must satisfy these behaviours:
 
 - Home, account-directory and Search account links open the account's conversation
   history rather than CRM detail, pipeline or opportunity administration.
+- Account history fails closed when any returned conversation is not explicitly
+  linked to the requested account. A rejected later page keeps only the already
+  confirmed history visible and remains retryable.
 - One conversation route presents Preparation, Notes & capture, Review & follow-up
   and Relationship history. Visited sections stay mounted so switching sections
   does not stop capture or discard local text.

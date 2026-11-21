@@ -801,6 +801,10 @@ export interface EntityPage<T> {
   pages: number;
 }
 
+export interface TenantEntityPage<T> extends EntityPage<T> {
+  organisationId: string;
+}
+
 export interface TenantEntity {
   id: string;
   organisationId: string;
@@ -3840,6 +3844,7 @@ export type AskAnswerStatus =
   "supported" | "partially_supported" | "conflicting" | "unknown";
 
 export interface AskScope {
+  organisationId: string;
   type: AskScopeType;
   id: string | null;
   label: string;
@@ -3883,6 +3888,7 @@ export interface AskSuggestedAction {
 
 export interface AskAnswer {
   schemaVersion: 1;
+  clientRequestId: string;
   askRequestId: string;
   answer: string;
   answerStatus: AskAnswerStatus;
@@ -4385,6 +4391,7 @@ export interface ProspectPromotion {
 }
 
 export interface ProspectAccountResearchLink {
+  organisationId: string;
   targetId: string;
   companyId: string;
   updatedAt: string;
@@ -4659,6 +4666,7 @@ export interface ProspectPersonPromotion {
 }
 
 export interface ContactProspectResearchLink {
+  organisationId: string;
   contactId: string;
   prospectPersonId: string;
   companyTargetId: string;

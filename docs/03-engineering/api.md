@@ -90,6 +90,19 @@ ReDoc. JSON fields use camel case; database and Python fields use snake case.
 - Transcript writes and every intelligence POST require acknowledgement of the
   current server-owned private-beta notice version.
 
+`GET /api/v1/me` is the browser's authoritative internal organisation identity.
+Protected browser reads do not infer tenant identity from an external session key or
+from a requested entity. Company, Contact and Interaction collection responses carry
+that exact internal UUID as `organisationId`, including empty pages, and every item
+must carry the same value. Consumers decode response bodies from `unknown`, reject a
+page atomically if the envelope, requested page or any item fails identity/schema
+validation, and retain only the last already-verified state. The reusable web surface
+is `VerifiedOrganisationProvider`/`useVerifiedOrganisation` plus the generic
+`decodeTenantPage` and exported Company, Contact and Interaction item decoders. A new
+tenant-owned collection should extend that item-decoder pattern and use the same
+envelope before it is consumed in protected UI; adding other product collections is
+not part of this contract change.
+
 ## Engage Campaigns
 
 | Method | Path | Purpose |
@@ -184,6 +197,9 @@ active. The route does not globally lock a Clerk identity.
 
 List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`, `updated_at`) and `sortOrder`.
 
+Company list responses use the tenant page envelope: `organisationId`, `items`,
+`page`, `pageSize`, `total` and `pages`. The envelope is present for empty pages.
+
 ## Revenue Brain
 
 | Method | Path                                                       | Purpose                                                          |
@@ -234,6 +250,16 @@ contains raw image bytes or signed object URLs.
 | `DELETE` | `/api/v1/contacts/{contactId}` | Delete an unused contact |
 
 List parameters: `search` across name/email, `companyId`, `sortBy` (`last_name`, `first_name`, `created_at`, `updated_at`) and `sortOrder`.
+
+Contact list responses use the same tenant page envelope, including
+`organisationId` on empty pages.
+
+Company, Contact and Interaction list responses deliberately do not echo raw search
+text. Interaction search can match the current user's private notes, so reflecting a
+query would weaken response content minimisation. Current browser search uses aborts
+and monotonic generation fencing to ignore stale settlements. A future end-to-end
+query-correlation contract must use a non-content opaque identifier and cover all
+affected search endpoints together.
 
 Manual Contact creation requires a company in the same organisation and a
 syntactically valid email address. A Prospect Person promotion may create a Contact
@@ -885,11 +911,13 @@ other persistent consumer is connected in WO-046.
 | `POST` | `/api/v1/ask` | Classify, retrieve and compose one bounded cited answer; reserve quota and metadata audit |
 | `POST` | `/api/v1/ask/telemetry` | Record source-open/follow-up metadata for a request owned by the active organisation/user |
 
-The strict request accepts `question`, `scopeType`, conditional `scopeId` and optional
-timezone only. The response contains opaque request ID, answer, status, question class,
-cited summary points, validated sources, uncertainties, optional existing-work link,
-bounded follow-ups, scope and generation time. It cannot accept organisation IDs,
-SQL, retrieval plans, provider/tool choices or Action payloads. See the
+The strict request accepts `clientRequestId`, `question`, `scopeType`, conditional
+`scopeId` and optional timezone only. `clientRequestId` is a client-generated UUID
+used for response correlation, not authorisation or idempotency. The response echoes
+it and contains an opaque server request ID, answer, status, question class, cited
+summary points, validated sources, uncertainties, optional existing-work link,
+bounded follow-ups, organisation-bearing scope and generation time. It cannot accept
+organisation IDs, SQL, retrieval plans, provider/tool choices or Action payloads. See the
 [retrieval architecture](ask-retrieval-architecture.md) and
 [citation contract](ask-source-citation-model.md).
 
@@ -920,7 +948,7 @@ available only for live `unknown_external_state` and performs no write. See the
 | `POST` | `/api/v1/prospect/research/{targetId}/refresh` | Enqueue one controlled refresh. |
 | `POST` | `/api/v1/prospect/research/{targetId}/promote` | Confirm exact-domain Company link/create. |
 | `DELETE` | `/api/v1/prospect/research/{targetId}` | Delete research without deleting a promoted Company. |
-| `GET` | `/api/v1/prospect/accounts/{companyId}/research-link` | Read separately labelled public-research link for a Company. |
+| `GET` | `/api/v1/prospect/accounts/{companyId}/research-link` | Read an organisation-bearing, separately labelled public-research link for a Company. |
 
 ### Prospect Person Intelligence
 
@@ -934,7 +962,7 @@ available only for live `unknown_external_state` and performs no write. See the
 | `PATCH` | `/api/v1/prospect/people/{personId}/buying-roles/{hypothesisId}` | Record seller relevance without confirming stakeholder truth. |
 | `POST` | `/api/v1/prospect/people/{personId}/promote` | Explicitly create/link one duplicate-reviewed Contact. |
 | `DELETE` | `/api/v1/prospect/people/{personId}` | Delete Prospect research while preserving any promoted Contact. |
-| `GET` | `/api/v1/prospect/contacts/{contactId}/research-link` | Read the separately labelled professional-research link. |
+| `GET` | `/api/v1/prospect/contacts/{contactId}/research-link` | Read the organisation-bearing, separately labelled professional-research link. |
 
 The client never supplies provider syntax or organisation IDs. Contact points include
 field trust, verification method, observation/expiry and permission-not-assessed

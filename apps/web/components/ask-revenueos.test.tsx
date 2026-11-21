@@ -1,13 +1,24 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AskAnswer, AskCapabilities } from "@revenueos/shared";
 import { AskRevenueOS } from "@/components/ask-revenueos";
+
+const organisationId = "organisation-1";
+const clientRequestId = "11111111-1111-4111-8111-111111111111";
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId,
+  }),
+}));
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -16,9 +27,18 @@ function jsonResponse(body: object, status = 200): Response {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 const capabilities: AskCapabilities = {
   enabled: true,
   scope: {
+    organisationId,
     type: "opportunity",
     id: "opportunity-1",
     label: "Qantas expansion",
@@ -33,10 +53,18 @@ const capabilities: AskCapabilities = {
     "Ask answers from authorised Oryntela evidence. It does not search the public web or perform actions.",
 };
 
+function accountCapabilities(id: string, label: string): AskCapabilities {
+  return {
+    ...capabilities,
+    scope: { organisationId, type: "account", id, label },
+  };
+}
+
 function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
   return {
     schemaVersion: 1,
     askRequestId: "request-1",
+    clientRequestId,
     answer:
       "Security review is the clearest current blocker, and the approval path is still incomplete.",
     answerStatus: "partially_supported",
@@ -66,6 +94,7 @@ function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
     },
     followUpQuestions: ["Who is the economic buyer?"],
     scope: {
+      organisationId,
       type: "opportunity",
       id: "opportunity-1",
       label: "Qantas expansion",
@@ -75,7 +104,36 @@ function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
   };
 }
 
+function accountAnswer(
+  id: string,
+  label: string,
+  answerText: string,
+): AskAnswer {
+  return answer({
+    answer: answerText,
+    scope: { organisationId, type: "account", id, label },
+    sources: [
+      {
+        ...answer().sources[0],
+        id: `evidence-${id}`,
+        label: `${label} verified note`,
+        href: `/conversations/accounts/${id}`,
+      },
+    ],
+    summaryPoints: [],
+    suggestedAction: {
+      label: `Review ${label}`,
+      href: `/conversations/accounts/${id}`,
+      sourceId: `evidence-${id}`,
+    },
+  });
+}
+
 describe("AskRevenueOS", () => {
+  beforeEach(() => {
+    vi.stubGlobal("crypto", { randomUUID: () => clientRequestId });
+  });
+
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows representative bounded workspace question phrasings", async () => {
@@ -84,7 +142,12 @@ describe("AskRevenueOS", () => {
       vi.fn().mockResolvedValue(
         jsonResponse({
           ...capabilities,
-          scope: { type: "workspace", id: null, label: "Your sales work" },
+          scope: {
+            organisationId,
+            type: "workspace",
+            id: null,
+            label: "Your sales work",
+          },
         }),
       ),
     );
@@ -159,6 +222,9 @@ describe("AskRevenueOS", () => {
       await screen.findByRole("heading", { name: "Partially supported" }),
     ).toBeVisible();
     expect(screen.getByText(/Security review is the clearest/)).toBeVisible();
+    expect(
+      screen.getByText("Answer to “What is holding this deal back?”"),
+    ).toBeVisible();
     expect(screen.getByText("Why Oryntela believes it")).toBeVisible();
     expect(screen.getByText("Needs clarification")).toBeVisible();
     expect(
@@ -188,6 +254,7 @@ describe("AskRevenueOS", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     const followUpBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body));
     expect(followUpBody).toMatchObject({
+      clientRequestId,
       question: "Who is the economic buyer?",
       scopeType: "opportunity",
       scopeId: "opportunity-1",
@@ -199,6 +266,100 @@ describe("AskRevenueOS", () => {
       eventType: "follow_up_selected",
       askRequestId: "request-1",
     });
+  });
+
+  it("keeps a verified answer bound to its question when a later 2xx body is invalid", async () => {
+    const first = accountAnswer(
+      "account-2",
+      "Bayside Health",
+      "Bayside confirmed the next workshop.",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      )
+      .mockResolvedValueOnce(jsonResponse(first))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "This unbound answer must not be shown.",
+          ),
+          clientRequestId: "22222222-2222-4222-8222-222222222222",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    fireEvent.change(question, { target: { value: "What changed first?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(
+      await screen.findByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(screen.getByText("Answer to “What changed first?”")).toBeVisible();
+
+    fireEvent.change(question, { target: { value: "What changed second?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ask Oryntela is unavailable right now.",
+    );
+    expect(
+      screen.getByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(screen.getByText("Answer to “What changed first?”")).toBeVisible();
+    expect(
+      screen.queryByText("This unbound answer must not be shown."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("contains malformed 2xx JSON without replacing the last verified answer", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "Bayside confirmed the next workshop.",
+          ),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response("{", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    fireEvent.change(question, { target: { value: "What changed first?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+
+    fireEvent.change(question, { target: { value: "What changed second?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Oryntela couldn’t answer that right now.",
+    );
+    expect(
+      screen.getByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(screen.getByText("Answer to “What changed first?”")).toBeVisible();
   });
 
   it("labels Selling Profile answers as organisation context rather than customer Evidence", async () => {
@@ -330,5 +491,337 @@ describe("AskRevenueOS", () => {
     expect(
       await screen.findByText(/Security review is the clearest/),
     ).toBeVisible();
+  });
+
+  it("hides the previous answer synchronously while a new scope loads", async () => {
+    const accountCapability = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        return Promise.resolve(jsonResponse(answer()));
+      }
+      if (url.includes("scopeType=account")) {
+        return accountCapability.promise;
+      }
+      return Promise.resolve(jsonResponse(capabilities));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />,
+    );
+    await screen.findByText("About: Qantas expansion");
+    fireEvent.click(
+      screen.getByRole("button", { name: "What is holding this deal back?" }),
+    );
+    expect(
+      await screen.findByText(/Security review is the clearest/),
+    ).toBeVisible();
+
+    rerender(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Checking Ask Oryntela availability",
+    );
+    expect(
+      screen.queryByText(/Security review is the clearest/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Review opportunity" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ask Oryntela")).not.toBeInTheDocument();
+
+    await act(async () => {
+      accountCapability.resolve(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      );
+      await accountCapability.promise;
+    });
+    expect(await screen.findByText("About: Bayside Health")).toBeVisible();
+  });
+
+  it("ignores a late answer from the previous scope", async () => {
+    const opportunityAnswer = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as {
+          scopeId: string | null;
+        };
+        return body.scopeId === "opportunity-1"
+          ? opportunityAnswer.promise
+          : Promise.resolve(
+              jsonResponse(
+                accountAnswer(
+                  "account-2",
+                  "Bayside Health",
+                  "Bayside confirmed the next workshop.",
+                ),
+              ),
+            );
+      }
+      return Promise.resolve(
+        jsonResponse(
+          url.includes("scopeType=account")
+            ? accountCapabilities("account-2", "Bayside Health")
+            : capabilities,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />,
+    );
+    await screen.findByText("About: Qantas expansion");
+    fireEvent.click(
+      screen.getByRole("button", { name: "What is holding this deal back?" }),
+    );
+
+    rerender(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    fireEvent.change(screen.getByLabelText("Ask Oryntela"), {
+      target: { value: "What changed for Bayside?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+
+    await act(async () => {
+      opportunityAnswer.resolve(jsonResponse(answer()));
+      await opportunityAnswer.promise;
+    });
+    expect(
+      screen.getByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Security review is the clearest/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+  });
+
+  it("fails closed when capability or answer scope does not match", async () => {
+    const mismatchedCapabilityFetch = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(capabilities));
+    vi.stubGlobal("fetch", mismatchedCapabilityFetch);
+    const capabilityView = render(
+      <AskRevenueOS scopeType="account" scopeId="account-2" />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ask Oryntela is unavailable right now.",
+    );
+    expect(
+      screen.queryByText("About: Qantas expansion"),
+    ).not.toBeInTheDocument();
+    capabilityView.unmount();
+
+    const answerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      )
+      .mockResolvedValueOnce(jsonResponse(answer()));
+    vi.stubGlobal("fetch", answerFetch);
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    fireEvent.change(screen.getByLabelText("Ask Oryntela"), {
+      target: { value: "What changed for Bayside?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ask Oryntela is unavailable right now.",
+    );
+    expect(
+      screen.queryByText(/Security review is the clearest/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Review opportunity" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+  });
+
+  it("keeps the newest overlapping answer when an older request settles late", async () => {
+    const firstAnswer = deferred<Response>();
+    let postCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          postCount += 1;
+          return postCount === 1
+            ? firstAnswer.promise
+            : Promise.resolve(
+                jsonResponse(
+                  accountAnswer(
+                    "account-2",
+                    "Bayside Health",
+                    "The newest scoped answer.",
+                  ),
+                ),
+              );
+        }
+        return Promise.resolve(
+          jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+        );
+      }),
+    );
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    const form = question.closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.change(question, { target: { value: "First question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    fireEvent.change(question, { target: { value: "Second question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await screen.findByText("The newest scoped answer.")).toBeVisible();
+    await act(async () => {
+      firstAnswer.resolve(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "The stale scoped answer.",
+          ),
+        ),
+      );
+      await firstAnswer.promise;
+    });
+    expect(screen.getByText("The newest scoped answer.")).toBeVisible();
+    expect(
+      screen.queryByText("The stale scoped answer."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+  });
+
+  it("does not let an obsolete answer steal focus from a newer same-scope request", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      }),
+    );
+    const secondAnswer = deferred<Response>();
+    let postCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          postCount += 1;
+          return postCount === 1
+            ? Promise.resolve(
+                jsonResponse(
+                  accountAnswer(
+                    "account-2",
+                    "Bayside Health",
+                    "The first scoped answer.",
+                  ),
+                ),
+              )
+            : secondAnswer.promise;
+        }
+        return Promise.resolve(
+          jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+        );
+      }),
+    );
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    const form = question.closest("form");
+    expect(form).not.toBeNull();
+
+    fireEvent.change(question, { target: { value: "First question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    const firstAnswerRegion = await screen.findByRole("region", {
+      name: "Partially supported",
+    });
+    expect(frames).toHaveLength(1);
+
+    fireEvent.change(question, { target: { value: "Second question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    question.focus();
+    expect(question).toHaveFocus();
+
+    act(() => {
+      frames.shift()?.(0);
+    });
+    expect(question).toHaveFocus();
+    expect(firstAnswerRegion).not.toHaveFocus();
+
+    await act(async () => {
+      secondAnswer.resolve(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "The second scoped answer.",
+          ),
+        ),
+      );
+      await secondAnswer.promise;
+    });
+    expect(await screen.findByText("The second scoped answer.")).toBeVisible();
+    const secondAnswerRegion = await screen.findByRole("region", {
+      name: "Partially supported",
+    });
+    expect(frames).toHaveLength(1);
+    act(() => {
+      frames.shift()?.(0);
+    });
+    expect(secondAnswerRegion).toHaveFocus();
+  });
+
+  it("invalidates an in-flight answer when a new submission is invalid", async () => {
+    const pendingAnswer = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        init?.method === "POST"
+          ? pendingAnswer.promise
+          : Promise.resolve(
+              jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+            ),
+      ),
+    );
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    const form = question.closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.change(question, { target: { value: "A valid question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    fireEvent.change(question, { target: { value: "x" } });
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter a question with at least two characters.",
+    );
+    expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+
+    await act(async () => {
+      pendingAnswer.resolve(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "This invalidated answer must stay hidden.",
+          ),
+        ),
+      );
+      await pendingAnswer.promise;
+    });
+    expect(
+      screen.queryByText("This invalidated answer must stay hidden."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a question with at least two characters.",
+    );
   });
 });

@@ -19,13 +19,16 @@ test("account history opens one CRM-independent conversation workspace and prese
     actualStartAt: null as string | null,
     actualEndAt: null as string | null,
     timezone: "Australia/Sydney",
+    creationOrigin: "manual",
     captureMethods: [],
     intelligenceState: "not_ready",
     recordingAvailable: false,
+    createdByUserId: "owner-proof",
     callOutcome: null,
     callDirection: null,
     durationSeconds: null,
     briefState: "not_generated",
+    briefGeneratedAt: null,
     createdAt: "2026-11-01T00:00:00Z",
     updatedAt: "2026-11-01T00:00:00Z",
   };
@@ -69,6 +72,12 @@ test("account history opens one CRM-independent conversation workspace and prese
     const path = new URL(request.url()).pathname;
     requests.push(`${request.method()} ${path}`);
 
+    if (path === "/api/v1/me") {
+      await route.fulfill({
+        json: { organisation: { id: "organisation-proof" } },
+      });
+      return;
+    }
     if (path === "/api/v1/beta/capabilities") {
       await route.fulfill({
         json: {
@@ -87,17 +96,31 @@ test("account history opens one CRM-independent conversation workspace and prese
       await route.fulfill({
         json: {
           id: "northstar-proof",
+          organisationId: "organisation-proof",
           name: "Northstar",
           website: null,
           industry: "Facilities",
           location: "Sydney",
+          employeeCount: null,
+          status: "prospect",
+          ownerUserId: "owner-proof",
+          archivedAt: null,
+          createdAt: "2026-11-01T00:00:00Z",
+          updatedAt: "2026-11-01T00:00:00Z",
         },
       });
       return;
     }
     if (path === "/api/v1/contacts") {
       await route.fulfill({
-        json: { items: [], total: 0, page: 1, pageSize: 100, pages: 0 },
+        json: {
+          organisationId: "organisation-proof",
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 100,
+          pages: 0,
+        },
       });
       return;
     }
@@ -147,6 +170,7 @@ test("account history opens one CRM-independent conversation workspace and prese
     if (path === "/api/v1/interactions") {
       await route.fulfill({
         json: {
+          organisationId: "organisation-proof",
           items: [interaction],
           total: 1,
           page: 1,
@@ -351,6 +375,12 @@ test("account history survives unavailable contact enrichment", async ({
     const url = new URL(route.request().url());
     const { pathname } = url;
 
+    if (pathname === "/api/v1/me") {
+      await route.fulfill({
+        json: { organisation: { id: "organisation-proof" } },
+      });
+      return;
+    }
     if (pathname === "/api/v1/companies/resilient-account") {
       await route.fulfill({
         json: {
@@ -373,6 +403,7 @@ test("account history survives unavailable contact enrichment", async ({
     if (pathname === "/api/v1/interactions") {
       await route.fulfill({
         json: {
+          organisationId: "organisation-proof",
           items: [
             {
               id: "resilient-conversation",
@@ -393,10 +424,12 @@ test("account history survives unavailable contact enrichment", async ({
               captureMethods: [],
               intelligenceState: "not_ready",
               recordingAvailable: false,
+              createdByUserId: "owner-proof",
               callOutcome: null,
               callDirection: "outbound",
               durationSeconds: null,
               briefState: "not_generated",
+              briefGeneratedAt: null,
               createdAt: "2026-11-01T00:00:00Z",
               updatedAt: "2026-11-01T00:00:00Z",
             },
@@ -411,7 +444,14 @@ test("account history survives unavailable contact enrichment", async ({
     }
     if (pathname === "/api/v1/contacts" && url.searchParams.has("page")) {
       await route.fulfill({
-        json: { items: [], total: 0, page: 1, pageSize: 100, pages: 0 },
+        json: {
+          organisationId: "organisation-proof",
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 100,
+          pages: 0,
+        },
       });
       return;
     }
@@ -476,13 +516,16 @@ test("a CRM-free private note saves and reloads when AI Companion is disabled", 
     actualStartAt: null,
     actualEndAt: null,
     timezone: "Australia/Sydney",
+    creationOrigin: "manual",
     captureMethods: [],
     intelligenceState: "not_ready",
     recordingAvailable: false,
+    createdByUserId: "owner-proof",
     callOutcome: null,
     callDirection: null,
     durationSeconds: null,
     briefState: "not_generated",
+    briefGeneratedAt: null,
     createdAt: "2026-11-01T00:00:00Z",
     updatedAt: "2026-11-01T00:00:00Z",
   };
