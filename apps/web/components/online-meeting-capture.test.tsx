@@ -463,6 +463,50 @@ describe("OnlineMeetingCapture", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("rejects the whole history list when one transcript belongs to another interaction", async () => {
+    const foreignImport = transcriptImport(
+      "foreign-history",
+      secondInteraction.id,
+      2,
+    );
+    foreignImport.text = "Private renewal negotiation from another customer";
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/online-meeting/capabilities")) {
+        return jsonResponse(capabilities);
+      }
+      if (url.endsWith("/online-meeting/transcripts")) {
+        return jsonResponse([
+          transcriptImport("matching-history", interaction.id, 1),
+          foreignImport,
+        ]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<OnlineMeetingCapture interaction={interaction} />);
+
+    expect(
+      await screen.findByText(
+        /previous transcript import history is temporarily unavailable/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/authorised transcript versions? imported/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Private renewal negotiation from another customer"),
+    ).not.toBeInTheDocument();
+
+    const transcript = screen.getByLabelText("Paste transcript text");
+    fireEvent.change(transcript, {
+      target: { value: "Authorised current-customer transcript" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Import transcript" }),
+    ).toBeEnabled();
+  });
+
   it("does not invent a count when successful history is empty", async () => {
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);

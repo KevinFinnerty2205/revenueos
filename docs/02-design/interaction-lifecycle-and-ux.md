@@ -201,8 +201,9 @@ fails. Retry is bounded and explicit.
   immediately. The top-level conversation workspace owns loading, failure, view
   and preparation-refresh state by the requested interaction, while detail loads,
   child updates, transcript imports and lifecycle mutations stay bound to that
-  same session. A response with another interaction identity fails closed without
-  changing the visible lifecycle.
+  same session. Transcript-history lists are accepted atomically only when every
+  item matches the requested interaction; any response with another interaction
+  identity fails closed without changing the visible lifecycle.
 - use semantic headings, form labels, live regions and native controls;
 - make start/stop and recording state screen-reader clear;
 - provide captions/transcripts when available and a text debrief alternative;

@@ -155,8 +155,14 @@ function OnlineMeetingCaptureForInteraction({
     ).then(
       (nextImports) => {
         if (!isCurrent()) return;
+        const hasForeignInteraction = nextImports.some(
+          (item) => item.interactionId !== requestedInteractionId,
+        );
         setHistoryState((current) => {
           if (current.interactionId !== requestedInteractionId) return current;
+          if (hasForeignInteraction) {
+            return { ...current, status: "unavailable" };
+          }
           return {
             interactionId: requestedInteractionId,
             status: "available",
