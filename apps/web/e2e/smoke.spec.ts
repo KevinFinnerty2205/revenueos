@@ -3098,6 +3098,7 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
   });
   const markers: Array<Record<string, unknown>> = [];
   const visuals: Array<Record<string, unknown>> = [];
+  let passiveVisual: Record<string, unknown> | null = null;
   let passiveDebrief = debriefSession("collecting", {
     interactionId: "interaction-passive",
   });
@@ -3149,13 +3150,26 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
         return;
       }
       if (path.endsWith("/visual-evidence/uploads")) {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        passiveVisual = visualEvidence("uploading", {
+          interactionId: "interaction-passive",
+          visualType: body.visualType,
+          sourceOwnership: body.sourceOwnership,
+          contextLabel: body.contextLabel,
+          filename: body.filename,
+          mimeType: body.mimeType,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          capturedAt: body.capturedAt,
+          candidates: [],
+        });
         await route.fulfill({
           status: 201,
-          json: visualEvidence("uploading", {
-            interactionId: "interaction-passive",
+          json: {
+            ...passiveVisual,
             uploadUrl: `${path}/visual-1/content?token=passive-test`,
             uploadExpiresAt: "2026-08-14T02:20:00Z",
-          }),
+          },
         });
         return;
       }
@@ -3164,17 +3178,29 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/complete")) {
+        passiveVisual = {
+          ...(passiveVisual ??
+            visualEvidence("uploading", {
+              interactionId: "interaction-passive",
+            })),
+          processingStatus: "uploaded",
+          processingAttempts: 1,
+        };
         await route.fulfill({
-          json: visualEvidence("uploaded", {
-            interactionId: "interaction-passive",
-          }),
+          json: passiveVisual,
         });
         return;
       }
       if (path.endsWith("/visual-evidence/visual-1/process")) {
-        const completedVisual = visualEvidence("completed", {
-          interactionId: "interaction-passive",
-        });
+        const completedVisual = {
+          ...(passiveVisual ??
+            visualEvidence("uploaded", {
+              interactionId: "interaction-passive",
+            })),
+          processingStatus: "completed",
+          processingAttempts: 1,
+        };
+        passiveVisual = completedVisual;
         visuals.splice(0, visuals.length, completedVisual);
         await route.fulfill({ json: completedVisual });
         return;
