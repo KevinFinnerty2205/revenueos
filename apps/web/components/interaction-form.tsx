@@ -45,6 +45,23 @@ interface OptionRetryRequest {
   contextIdentity: string;
 }
 
+interface RelationshipContextInput {
+  companyId: string;
+  opportunityId: string;
+  contactId: string;
+  interactionType: InteractionType;
+  companies: Company[];
+  opportunities: Opportunity[];
+  contacts: Contact[];
+}
+
+const linkedCompanyWarning =
+  "The linked company could not be verified as active. Choose another company or continue without one.";
+const linkedOpportunityWarning =
+  "The linked opportunity could not be verified as active for this account. Continue without it or choose another opportunity when available.";
+const linkedContactWarning =
+  "The linked person could not be verified as active for this account. Choose another person or continue without one.";
+
 function isAbortError(reason: unknown): boolean {
   return reason instanceof DOMException && reason.name === "AbortError";
 }
@@ -58,6 +75,72 @@ function appendUnique<T extends { id: string }>(
     : items;
 }
 
+function isActiveRecord(record: { archivedAt: string | null }): boolean {
+  return record.archivedAt === null;
+}
+
+function exactActiveRecord<T extends { id: string; archivedAt: string | null }>(
+  record: T,
+  requestedId: string,
+): T | null {
+  return record.id === requestedId && isActiveRecord(record) ? record : null;
+}
+
+function activeRecordById<T extends { id: string; archivedAt: string | null }>(
+  items: T[],
+  id: string,
+): T | null {
+  const record = items.find((item) => item.id === id);
+  return record && isActiveRecord(record) ? record : null;
+}
+
+function reconcileRelationshipContext({
+  companyId,
+  opportunityId,
+  contactId,
+  interactionType,
+  companies,
+  opportunities,
+  contacts,
+}: RelationshipContextInput): LinkedInteractionContext {
+  const requestedCompany = activeRecordById(companies, companyId);
+  const requestedOpportunity = activeRecordById(opportunities, opportunityId);
+  const requestedContact =
+    interactionType === "phone_call"
+      ? activeRecordById(contacts, contactId)
+      : null;
+  const relationshipCompanyId =
+    requestedCompany?.id ??
+    requestedContact?.companyId ??
+    requestedOpportunity?.companyId ??
+    "";
+  const relationshipCompany = activeRecordById(
+    companies,
+    relationshipCompanyId,
+  );
+  const verifiedCompanyId = relationshipCompany?.id ?? "";
+  const verifiedOpportunityId =
+    requestedOpportunity &&
+    (requestedOpportunity.companyId === null ||
+      (verifiedCompanyId !== "" &&
+        requestedOpportunity.companyId === verifiedCompanyId))
+      ? requestedOpportunity.id
+      : "";
+  const verifiedContactId =
+    requestedContact &&
+    verifiedCompanyId !== "" &&
+    requestedContact.companyId === verifiedCompanyId
+      ? requestedContact.id
+      : "";
+
+  return {
+    companyId: verifiedCompanyId,
+    opportunityId: verifiedOpportunityId,
+    contactId: verifiedContactId,
+    interactionType,
+  };
+}
+
 async function loadCompanyOptions(
   linkedId: string,
   signal: AbortSignal,
@@ -67,16 +150,18 @@ async function loadCompanyOptions(
     { signal },
   );
   let exactWarning = false;
-  let items = page.items;
+  let items = page.items.filter(isActiveRecord);
   if (linkedId && !items.some((company) => company.id === linkedId)) {
     try {
-      items = appendUnique(
-        items,
+      const exact = exactActiveRecord(
         await apiRequest<Company>(
           `/api/v1/companies/${encodeURIComponent(linkedId)}`,
           { signal },
         ),
+        linkedId,
       );
+      items = appendUnique(items, exact);
+      exactWarning = exact === null;
     } catch (reason: unknown) {
       if (signal.aborted || isAbortError(reason)) throw reason;
       exactWarning = true;
@@ -94,16 +179,18 @@ async function loadContactOptions(
     { signal },
   );
   let exactWarning = false;
-  let items = page.items;
+  let items = page.items.filter(isActiveRecord);
   if (linkedId && !items.some((contact) => contact.id === linkedId)) {
     try {
-      items = appendUnique(
-        items,
+      const exact = exactActiveRecord(
         await apiRequest<Contact>(
           `/api/v1/contacts/${encodeURIComponent(linkedId)}`,
           { signal },
         ),
+        linkedId,
       );
+      items = appendUnique(items, exact);
+      exactWarning = exact === null;
     } catch (reason: unknown) {
       if (signal.aborted || isAbortError(reason)) throw reason;
       exactWarning = true;
@@ -121,22 +208,47 @@ async function loadOpportunityOptions(
     { signal },
   );
   let exactWarning = false;
-  let items = page.items;
+  let items = page.items.filter(isActiveRecord);
   if (linkedId && !items.some((opportunity) => opportunity.id === linkedId)) {
     try {
-      items = appendUnique(
-        items,
+      const exact = exactActiveRecord(
         await apiRequest<Opportunity>(
           `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
           { signal },
         ),
+        linkedId,
       );
+      items = appendUnique(items, exact);
+      exactWarning = exact === null;
     } catch (reason: unknown) {
       if (signal.aborted || isAbortError(reason)) throw reason;
       exactWarning = true;
     }
   }
   return { items, exactWarning };
+}
+
+async function loadLinkedOpportunity(
+  linkedId: string,
+  signal: AbortSignal,
+): Promise<LoadedOptions<Opportunity>> {
+  if (!linkedId) return { items: [], exactWarning: false };
+  try {
+    const exact = exactActiveRecord(
+      await apiRequest<Opportunity>(
+        `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
+        { signal },
+      ),
+      linkedId,
+    );
+    return {
+      items: exact ? [exact] : [],
+      exactWarning: exact === null,
+    };
+  } catch (reason: unknown) {
+    if (signal.aborted || isAbortError(reason)) throw reason;
+    return { items: [], exactWarning: true };
+  }
 }
 
 export function InteractionForm({
@@ -160,7 +272,9 @@ export function InteractionForm({
   const [companyOptionsState, setCompanyOptionsState] =
     useState<OptionLoadState>("loading");
   const [opportunityOptionsState, setOpportunityOptionsState] =
-    useState<OptionLoadState>(conversationOnly ? "ready" : "loading");
+    useState<OptionLoadState>(
+      conversationOnly && !initialOpportunityId ? "ready" : "loading",
+    );
   const [contactOptionsState, setContactOptionsState] =
     useState<OptionLoadState>("loading");
   const [companyOptionsWarning, setCompanyOptionsWarning] = useState<
@@ -220,7 +334,9 @@ export function InteractionForm({
       setLoading(true);
       setCompanyOptionsState("loading");
       setContactOptionsState("loading");
-      setOpportunityOptionsState(conversationOnly ? "ready" : "loading");
+      setOpportunityOptionsState(
+        conversationOnly && !initialOpportunityId ? "ready" : "loading",
+      );
       setCompanyOptionsWarning(null);
       setContactOptionsWarning(null);
       setOpportunityOptionsWarning(null);
@@ -236,7 +352,7 @@ export function InteractionForm({
     );
     const opportunityOptionsRequest: Promise<LoadedOptions<Opportunity>> =
       conversationOnly
-        ? Promise.resolve({ items: [], exactWarning: false })
+        ? loadLinkedOpportunity(initialOpportunityId, controller.signal)
         : loadOpportunityOptions(initialOpportunityId, controller.signal);
 
     const requestIsActive = (): boolean =>
@@ -249,9 +365,7 @@ export function InteractionForm({
         setCompanies(loaded.items);
         setCompanyOptionsState("ready");
         setCompanyOptionsWarning(
-          loaded.exactWarning
-            ? "The linked company could not be loaded. Choose another company or continue without one."
-            : null,
+          loaded.exactWarning ? linkedCompanyWarning : null,
         );
       },
       (reason: unknown) => {
@@ -269,9 +383,7 @@ export function InteractionForm({
         setOpportunities(loaded.items);
         setOpportunityOptionsState("ready");
         setOpportunityOptionsWarning(
-          loaded.exactWarning
-            ? "The linked opportunity could not be loaded. Choose another opportunity or continue without one."
-            : null,
+          loaded.exactWarning ? linkedOpportunityWarning : null,
         );
       },
       (reason: unknown) => {
@@ -289,9 +401,7 @@ export function InteractionForm({
         setContacts(loaded.items);
         setContactOptionsState("ready");
         setContactOptionsWarning(
-          loaded.exactWarning
-            ? "The linked person could not be loaded. Choose another person or continue without one."
-            : null,
+          loaded.exactWarning ? linkedContactWarning : null,
         );
       },
       (reason: unknown) => {
@@ -324,15 +434,17 @@ export function InteractionForm({
           : [];
       const nextContacts =
         contactResult.status === "fulfilled" ? contactResult.value.items : [];
-      const selectedContact = nextContacts.find(
-        (contact) => contact.id === initialContactId,
+      const selectedContact = activeRecordById(nextContacts, initialContactId);
+      const selectedOpportunity = activeRecordById(
+        nextOpportunities,
+        initialOpportunityId,
       );
-      const selectedOpportunity = nextOpportunities.find(
-        (opportunity) => opportunity.id === initialOpportunityId,
-      );
+      const selectedCompany = activeRecordById(nextCompanies, initialCompanyId);
       const linkedCompanyCandidate =
-        initialCompanyId ||
-        selectedContact?.companyId ||
+        selectedCompany?.id ||
+        (initialInteractionType === "phone_call"
+          ? selectedContact?.companyId
+          : "") ||
         selectedOpportunity?.companyId ||
         "";
       let companyExactWarning =
@@ -344,13 +456,15 @@ export function InteractionForm({
         !nextCompanies.some((company) => company.id === linkedCompanyCandidate)
       ) {
         try {
-          nextCompanies = appendUnique(
-            nextCompanies,
+          const exact = exactActiveRecord(
             await apiRequest<Company>(
               `/api/v1/companies/${encodeURIComponent(linkedCompanyCandidate)}`,
               { signal: controller.signal },
             ),
+            linkedCompanyCandidate,
           );
+          nextCompanies = appendUnique(nextCompanies, exact);
+          companyExactWarning ||= exact === null;
         } catch (reason: unknown) {
           if (
             controller.signal.aborted ||
@@ -372,35 +486,33 @@ export function InteractionForm({
       if (companyResult.status === "fulfilled") {
         setCompanies(nextCompanies);
         setCompanyOptionsWarning(
-          companyExactWarning
-            ? "The linked company could not be loaded. Choose another company or continue without one."
-            : null,
+          companyExactWarning ? linkedCompanyWarning : null,
         );
       }
 
-      const linkedCompanyId = nextCompanies.some(
-        (company) => company.id === linkedCompanyCandidate,
-      )
-        ? linkedCompanyCandidate
-        : "";
-      const linkedOpportunityId = conversationOnly
-        ? initialOpportunityId
-        : nextOpportunities.some(
-              (opportunity) => opportunity.id === initialOpportunityId,
-            )
-          ? initialOpportunityId
-          : "";
-      const linkedContactId = nextContacts.some(
-        (contact) => contact.id === initialContactId,
-      )
-        ? initialContactId
-        : "";
-      const linkedContext: LinkedInteractionContext = {
-        companyId: linkedCompanyId,
-        opportunityId: linkedOpportunityId,
-        contactId: linkedContactId,
+      const linkedContext = reconcileRelationshipContext({
+        companyId: linkedCompanyCandidate,
+        opportunityId: initialOpportunityId,
+        contactId: initialContactId,
         interactionType: initialInteractionType,
-      };
+        companies: nextCompanies,
+        opportunities: nextOpportunities,
+        contacts: nextContacts,
+      });
+      if (
+        opportunityResult.status === "fulfilled" &&
+        initialOpportunityId &&
+        !linkedContext.opportunityId
+      ) {
+        setOpportunityOptionsWarning(linkedOpportunityWarning);
+      }
+      if (
+        contactResult.status === "fulfilled" &&
+        initialContactId &&
+        !linkedContext.contactId
+      ) {
+        setContactOptionsWarning(linkedContactWarning);
+      }
       if (!linkedContextLoadedRef.current || !contextDirtyRef.current) {
         setCompanyId(linkedContext.companyId);
         setOpportunityId(linkedContext.opportunityId);
@@ -446,6 +558,29 @@ export function InteractionForm({
     });
 
     void (async () => {
+      const adoptVerifiedContext = (
+        nextCompanies: Company[],
+        nextOpportunities: Opportunity[],
+        nextContacts: Contact[],
+      ): LinkedInteractionContext => {
+        const linkedContext = reconcileRelationshipContext({
+          companyId: initialCompanyId,
+          opportunityId: initialOpportunityId,
+          contactId: initialContactId,
+          interactionType: initialInteractionType,
+          companies: nextCompanies,
+          opportunities: nextOpportunities,
+          contacts: nextContacts,
+        });
+        if (!contextDirtyRef.current) {
+          setCompanyId(linkedContext.companyId);
+          setOpportunityId(linkedContext.opportunityId);
+          setContactId(linkedContext.contactId);
+          setInteractionType(linkedContext.interactionType);
+        }
+        return linkedContext;
+      };
+
       try {
         if (request.source === "company") {
           const loaded = await loadCompanyOptions(
@@ -460,24 +595,24 @@ export function InteractionForm({
           }
           setCompanies(loaded.items);
           setCompanyOptionsState("ready");
+          const linkedContext = adoptVerifiedContext(
+            loaded.items,
+            opportunities,
+            contacts,
+          );
           setCompanyOptionsWarning(
-            loaded.exactWarning
-              ? "The linked company could not be loaded. Choose another company or continue without one."
+            loaded.exactWarning ||
+              (initialCompanyId !== "" && !linkedContext.companyId)
+              ? linkedCompanyWarning
               : null,
           );
-          if (
-            !contextDirtyRef.current &&
-            loaded.items.some((company) => company.id === request.linkedId)
-          ) {
-            setCompanyId(request.linkedId);
-          }
+          setOptionRetryRequest(null);
           return;
         }
         if (request.source === "opportunity") {
-          const loaded = await loadOpportunityOptions(
-            request.linkedId,
-            controller.signal,
-          );
+          const loaded = conversationOnly
+            ? await loadLinkedOpportunity(request.linkedId, controller.signal)
+            : await loadOpportunityOptions(request.linkedId, controller.signal);
           if (
             controller.signal.aborted ||
             activeLinkedContextIdentityRef.current !== request.contextIdentity
@@ -486,19 +621,18 @@ export function InteractionForm({
           }
           setOpportunities(loaded.items);
           setOpportunityOptionsState("ready");
+          const linkedContext = adoptVerifiedContext(
+            companies,
+            loaded.items,
+            contacts,
+          );
           setOpportunityOptionsWarning(
-            loaded.exactWarning
-              ? "The linked opportunity could not be loaded. Choose another opportunity or continue without one."
+            loaded.exactWarning ||
+              (initialOpportunityId !== "" && !linkedContext.opportunityId)
+              ? linkedOpportunityWarning
               : null,
           );
-          if (
-            !contextDirtyRef.current &&
-            loaded.items.some(
-              (opportunity) => opportunity.id === request.linkedId,
-            )
-          ) {
-            setOpportunityId(request.linkedId);
-          }
+          setOptionRetryRequest(null);
           return;
         }
 
@@ -514,17 +648,18 @@ export function InteractionForm({
         }
         setContacts(loaded.items);
         setContactOptionsState("ready");
+        const linkedContext = adoptVerifiedContext(
+          companies,
+          opportunities,
+          loaded.items,
+        );
         setContactOptionsWarning(
-          loaded.exactWarning
-            ? "The linked person could not be loaded. Choose another person or continue without one."
+          loaded.exactWarning ||
+            (initialContactId !== "" && !linkedContext.contactId)
+            ? linkedContactWarning
             : null,
         );
-        if (
-          !contextDirtyRef.current &&
-          loaded.items.some((contact) => contact.id === request.linkedId)
-        ) {
-          setContactId(request.linkedId);
-        }
+        setOptionRetryRequest(null);
       } catch (reason: unknown) {
         if (
           controller.signal.aborted ||
@@ -552,10 +687,22 @@ export function InteractionForm({
             "People options are temporarily unavailable. You can still add this conversation without a person.",
           );
         }
+        setOptionRetryRequest(null);
       }
     })();
     return () => controller.abort();
-  }, [linkedContextIdentity, optionRetryRequest]);
+  }, [
+    companies,
+    contacts,
+    conversationOnly,
+    initialCompanyId,
+    initialContactId,
+    initialInteractionType,
+    initialOpportunityId,
+    linkedContextIdentity,
+    opportunities,
+    optionRetryRequest,
+  ]);
 
   function requestOptionRetry(source: OptionRetryRequest["source"]): void {
     const linkedCompanyId =
@@ -595,22 +742,15 @@ export function InteractionForm({
     event.preventDefault();
     setSubmitError(null);
     setSubmitting(true);
-    const submittedCompanyId =
-      companyOptionsState === "ready" &&
-      companies.some((company) => company.id === companyId)
-        ? companyId
-        : null;
-    const submittedOpportunityId = conversationOnly
-      ? opportunityId || null
-      : opportunityOptionsState === "ready" &&
-          opportunities.some((opportunity) => opportunity.id === opportunityId)
-        ? opportunityId
-        : null;
-    const submittedContactId =
-      contactOptionsState === "ready" &&
-      contacts.some((contact) => contact.id === contactId)
-        ? contactId
-        : null;
+    const submittedContext = reconcileRelationshipContext({
+      companyId,
+      opportunityId,
+      contactId,
+      interactionType,
+      companies: companyOptionsState === "ready" ? companies : [],
+      opportunities: opportunityOptionsState === "ready" ? opportunities : [],
+      contacts: contactOptionsState === "ready" ? contacts : [],
+    });
     try {
       const interaction = await apiRequest<Interaction>(
         "/api/v1/interactions",
@@ -620,10 +760,12 @@ export function InteractionForm({
             title: title.trim(),
             interactionType,
             lifecycleStatus: "planned",
-            companyId: submittedCompanyId,
-            opportunityId: submittedOpportunityId,
+            companyId: submittedContext.companyId || null,
+            opportunityId: submittedContext.opportunityId || null,
             contactId:
-              interactionType === "phone_call" ? submittedContactId : null,
+              interactionType === "phone_call"
+                ? submittedContext.contactId || null
+                : null,
             callDirection:
               interactionType === "phone_call" ? callDirection : null,
             meetingPlatform:
@@ -758,7 +900,16 @@ export function InteractionForm({
                     markContextDirty();
                     const nextCompanyId = event.target.value;
                     setCompanyId(nextCompanyId);
-                    if (conversationOnly && opportunityId) {
+                    const selectedOpportunity = activeRecordById(
+                      opportunities,
+                      opportunityId,
+                    );
+                    if (
+                      opportunityId &&
+                      (conversationOnly ||
+                        (selectedOpportunity?.companyId !== null &&
+                          selectedOpportunity?.companyId !== nextCompanyId))
+                    ) {
                       setOpportunityId("");
                     }
                     if (
@@ -803,7 +954,15 @@ export function InteractionForm({
                     }
                     onChange={(event) => {
                       markContextDirty();
-                      setOpportunityId(event.target.value);
+                      const nextOpportunityId = event.target.value;
+                      setOpportunityId(nextOpportunityId);
+                      const nextOpportunity = activeRecordById(
+                        opportunities,
+                        nextOpportunityId,
+                      );
+                      if (!companyId && nextOpportunity?.companyId) {
+                        setCompanyId(nextOpportunity.companyId);
+                      }
                     }}
                   >
                     <option value="">
@@ -813,11 +972,18 @@ export function InteractionForm({
                           ? "Opportunity options unavailable"
                           : "No opportunity"}
                     </option>
-                    {opportunities.map((opportunity) => (
-                      <option key={opportunity.id} value={opportunity.id}>
-                        {opportunity.name}
-                      </option>
-                    ))}
+                    {opportunities
+                      .filter(
+                        (opportunity) =>
+                          !companyId ||
+                          opportunity.companyId === null ||
+                          opportunity.companyId === companyId,
+                      )
+                      .map((opportunity) => (
+                        <option key={opportunity.id} value={opportunity.id}>
+                          {opportunity.name}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 <OptionAvailability
@@ -829,6 +995,14 @@ export function InteractionForm({
               </div>
             ) : null}
           </div>
+          {conversationOnly && opportunityOptionsWarning ? (
+            <OptionAvailability
+              message={opportunityOptionsWarning}
+              retryLabel="Retry linked opportunity"
+              loading={opportunityOptionsState === "loading"}
+              onRetry={() => requestOptionRetry("opportunity")}
+            />
+          ) : null}
           {interactionType === "phone_call" ? (
             <fieldset className="grid gap-5 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:grid-cols-2">
               <legend className="px-2 text-sm font-bold text-brand-primary">
@@ -862,7 +1036,15 @@ export function InteractionForm({
                     value={contactOptionsState === "ready" ? contactId : ""}
                     onChange={(event) => {
                       markContextDirty();
-                      setContactId(event.target.value);
+                      const nextContactId = event.target.value;
+                      setContactId(nextContactId);
+                      const nextContact = activeRecordById(
+                        contacts,
+                        nextContactId,
+                      );
+                      if (!companyId && nextContact) {
+                        setCompanyId(nextContact.companyId);
+                      }
                     }}
                   >
                     <option value="">

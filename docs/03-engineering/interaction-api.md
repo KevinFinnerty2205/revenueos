@@ -122,6 +122,16 @@ other Interaction types. Association changes are rejected after final Interactio
 Intelligence exists. No phone number or provider call identifier is copied onto the
 Interaction.
 
+The Add conversation web surface treats relationship context as optional. It adopts
+a supplied Company, Contact or Opportunity only when the list or exact tenant-scoped
+response identifies that exact record with `archivedAt: null`, and only when the
+records resolve to one compatible company. The conversation-only path verifies a
+supplied Opportunity with its exact read without loading the Opportunity list. A
+missing, archived, mismatched or unavailable relationship source leaves that link
+out of the create request while the unlinked conversation remains creatable. This is
+a web-entry contract, not a universal API archive policy: exact record reads and
+historical Interaction relationships may still represent archived records.
+
 The server owns `id`, `organisationId`, `creationOrigin`, `createdByUserId`,
 timestamps and the optional compatibility `meetingId`. Patch accepts only mutable
 domain fields. Complete accepts optional timezone-aware `actualEndAt`; when omitted,

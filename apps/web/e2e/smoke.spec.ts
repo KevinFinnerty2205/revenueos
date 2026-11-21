@@ -721,7 +721,22 @@ test("interaction timeline supports deliberate creation and completion without i
       }
       await route.fulfill({
         json: {
-          items: [{ id: "company-1", name: "Acme Australia" }],
+          items: [
+            {
+              id: "company-1",
+              organisationId: "organisation-1",
+              name: "Acme Australia",
+              website: null,
+              industry: "Technology",
+              location: null,
+              employeeCount: 120,
+              status: "active",
+              ownerUserId: "user-1",
+              archivedAt: null,
+              createdAt: "2026-07-01T00:00:00Z",
+              updatedAt: "2026-07-01T00:00:00Z",
+            },
+          ],
           page: 1,
           pageSize: 100,
           total: 1,

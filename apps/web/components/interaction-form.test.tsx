@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { Company, Contact, Opportunity } from "@revenueos/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InteractionForm } from "@/components/interaction-form";
 
@@ -27,6 +28,73 @@ const emptyPage = {
   pages: 0,
 };
 
+const exactRelationshipCases = (
+  ["company", "contact", "opportunity"] as const
+).flatMap((entity) =>
+  (["valid", "wrong_id", "archived", "missing"] as const).map((outcome) => ({
+    entity,
+    outcome,
+  })),
+);
+
+function companyFixture(overrides: Partial<Company> = {}): Company {
+  return {
+    id: "company-1",
+    organisationId: "organisation-1",
+    name: "Acme Australia",
+    website: null,
+    industry: null,
+    location: null,
+    employeeCount: null,
+    status: "active",
+    ownerUserId: "user-1",
+    archivedAt: null,
+    createdAt: "2026-11-20T00:00:00Z",
+    updatedAt: "2026-11-20T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function contactFixture(overrides: Partial<Contact> = {}): Contact {
+  return {
+    id: "contact-1",
+    organisationId: "organisation-1",
+    companyId: "company-1",
+    firstName: "Jordan",
+    lastName: "Lee",
+    email: null,
+    phone: null,
+    jobTitle: null,
+    linkedinUrl: null,
+    status: "active",
+    ownerUserId: "user-1",
+    archivedAt: null,
+    createdAt: "2026-11-20T00:00:00Z",
+    updatedAt: "2026-11-20T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function opportunityFixture(overrides: Partial<Opportunity> = {}): Opportunity {
+  return {
+    id: "opportunity-1",
+    organisationId: "organisation-1",
+    companyId: "company-1",
+    name: "Expansion",
+    stage: "discovery",
+    status: "open",
+    estimatedValue: null,
+    currency: null,
+    expectedCloseDate: null,
+    ownerUserId: "user-1",
+    description: null,
+    archivedAt: null,
+    createdAt: "2026-11-20T00:00:00Z",
+    updatedAt: "2026-11-20T00:00:00Z",
+    ...overrides,
+  };
+}
+
 describe("InteractionForm", () => {
   afterEach(() => {
     router.push.mockReset();
@@ -42,14 +110,14 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "company-1", name: "Acme Australia" }],
+            items: [companyFixture()],
           }),
         );
       }
       return Promise.resolve(
         jsonResponse({
           ...emptyPage,
-          items: [{ id: "opportunity-1", name: "Expansion" }],
+          items: [opportunityFixture()],
         }),
       );
     });
@@ -93,8 +161,24 @@ describe("InteractionForm", () => {
 
   it("preserves an explicitly linked opportunity without loading CRM opportunity administration", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes("opportunities")) {
-        throw new Error("CRM must not be queried");
+      const path = String(input);
+      if (path.endsWith("/api/v1/opportunities/old-opportunity")) {
+        return Promise.resolve(
+          jsonResponse(
+            opportunityFixture({
+              id: "old-opportunity",
+              companyId: "old-company",
+              name: "Existing opportunity",
+            }),
+          ),
+        );
+      }
+      if (path.endsWith("/api/v1/companies/old-company")) {
+        return Promise.resolve(
+          jsonResponse(
+            companyFixture({ id: "old-company", name: "Existing account" }),
+          ),
+        );
       }
       return Promise.resolve(
         jsonResponse(
@@ -112,6 +196,11 @@ describe("InteractionForm", () => {
     );
 
     await screen.findByRole("heading", { name: "Add conversation" });
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/loading optional relationship context/i),
+      ).not.toBeInTheDocument(),
+    );
     expect(screen.queryByLabelText("Opportunity")).not.toBeInTheDocument();
     expect(screen.getByText("Add a scheduled time (optional)")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Title"), {
@@ -127,7 +216,319 @@ describe("InteractionForm", () => {
     );
     expect(JSON.parse(String(posted?.[1]?.body))).toMatchObject({
       title: "Discovery",
+      companyId: "old-company",
       opportunityId: "old-opportunity",
+    });
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/v1/opportunities?pageSize="),
+      ),
+    ).toBe(false);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/opportunities/old-opportunity"),
+      expect.any(Object),
+    );
+  });
+
+  it.each(exactRelationshipCases)(
+    "adopts only a valid exact $entity record when it is $outcome",
+    async ({ entity, outcome }) => {
+      const requestedId = `linked-${entity}`;
+      const plural =
+        entity === "company"
+          ? "companies"
+          : entity === "opportunity"
+            ? "opportunities"
+            : "contacts";
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          if (init?.method === "POST") {
+            return Promise.resolve(
+              jsonResponse({ id: `created-${entity}-${outcome}` }, 201),
+            );
+          }
+          if (path.endsWith(`/api/v1/${plural}/${requestedId}`)) {
+            if (outcome === "missing") {
+              return Promise.resolve(jsonResponse({ code: "not_found" }, 404));
+            }
+            const id = outcome === "wrong_id" ? `wrong-${entity}` : requestedId;
+            const archivedAt =
+              outcome === "archived" ? "2026-11-21T00:00:00Z" : null;
+            if (entity === "company") {
+              return Promise.resolve(
+                jsonResponse(companyFixture({ id, archivedAt })),
+              );
+            }
+            if (entity === "contact") {
+              return Promise.resolve(
+                jsonResponse(
+                  contactFixture({
+                    id,
+                    companyId: "contact-company",
+                    archivedAt,
+                  }),
+                ),
+              );
+            }
+            return Promise.resolve(
+              jsonResponse(
+                opportunityFixture({
+                  id,
+                  companyId: null,
+                  archivedAt,
+                }),
+              ),
+            );
+          }
+          if (
+            entity === "contact" &&
+            outcome === "valid" &&
+            path.endsWith("/api/v1/companies/contact-company")
+          ) {
+            return Promise.resolve(
+              jsonResponse(
+                companyFixture({
+                  id: "contact-company",
+                  name: "Contact account",
+                }),
+              ),
+            );
+          }
+          return Promise.resolve(jsonResponse(emptyPage));
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <InteractionForm
+          conversationOnly={entity === "opportunity"}
+          initialCompanyId={entity === "company" ? requestedId : ""}
+          initialContactId={entity === "contact" ? requestedId : ""}
+          initialOpportunityId={entity === "opportunity" ? requestedId : ""}
+          initialInteractionType={
+            entity === "contact" ? "phone_call" : "manual_interaction"
+          }
+        />,
+      );
+
+      if (outcome === "valid") {
+        if (entity === "company") {
+          await waitFor(() =>
+            expect(screen.getByLabelText("Company")).toHaveValue(requestedId),
+          );
+        } else if (entity === "contact") {
+          await waitFor(() =>
+            expect(screen.getByLabelText("Person")).toHaveValue(requestedId),
+          );
+          expect(screen.getByLabelText("Company")).toHaveValue(
+            "contact-company",
+          );
+        } else {
+          await waitFor(() =>
+            expect(
+              screen.queryByText(/loading optional relationship context/i),
+            ).not.toBeInTheDocument(),
+          );
+          expect(
+            fetchMock.mock.calls.some(([input]) =>
+              String(input).endsWith(
+                "/api/v1/opportunities/linked-opportunity",
+              ),
+            ),
+          ).toBe(true);
+        }
+      } else {
+        expect(
+          await screen.findByText(/could not be verified as active/i),
+        ).toBeVisible();
+      }
+
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: `Exact ${entity} ${outcome}` },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+      await waitFor(() =>
+        expect(router.push).toHaveBeenCalledWith(
+          `/conversations/created-${entity}-${outcome}`,
+        ),
+      );
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/interactions") &&
+          init?.method === "POST",
+      );
+      const payload = JSON.parse(String(createCall?.[1]?.body)) as Record<
+        string,
+        unknown
+      >;
+      expect(payload[`${entity}Id`]).toBe(
+        outcome === "valid" ? requestedId : null,
+      );
+      if (entity === "contact") {
+        expect(payload.companyId).toBe(
+          outcome === "valid" ? "contact-company" : null,
+        );
+      }
+    },
+  );
+
+  it.each(["wrong_id", "archived", "missing"] as const)(
+    "rejects a %s derived company for an exact linked person",
+    async (outcome) => {
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          if (init?.method === "POST") {
+            return Promise.resolve(
+              jsonResponse({ id: `derived-company-${outcome}` }, 201),
+            );
+          }
+          if (path.endsWith("/api/v1/contacts/linked-contact")) {
+            return Promise.resolve(
+              jsonResponse(
+                contactFixture({
+                  id: "linked-contact",
+                  companyId: "derived-company",
+                }),
+              ),
+            );
+          }
+          if (path.endsWith("/api/v1/companies/derived-company")) {
+            if (outcome === "missing") {
+              return Promise.resolve(jsonResponse({ code: "not_found" }, 404));
+            }
+            return Promise.resolve(
+              jsonResponse(
+                companyFixture({
+                  id:
+                    outcome === "wrong_id"
+                      ? "wrong-company"
+                      : "derived-company",
+                  archivedAt:
+                    outcome === "archived" ? "2026-11-21T00:00:00Z" : null,
+                }),
+              ),
+            );
+          }
+          return Promise.resolve(jsonResponse(emptyPage));
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <InteractionForm
+          initialContactId="linked-contact"
+          initialInteractionType="phone_call"
+        />,
+      );
+
+      expect(
+        await screen.findByText(
+          /linked company could not be verified as active/i,
+        ),
+      ).toBeVisible();
+      expect(screen.getByLabelText("Company")).toHaveValue("");
+      expect(screen.getByLabelText("Person")).toHaveValue("");
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: `Derived company ${outcome}` },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+      await waitFor(() =>
+        expect(router.push).toHaveBeenCalledWith(
+          `/conversations/derived-company-${outcome}`,
+        ),
+      );
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/interactions") &&
+          init?.method === "POST",
+      );
+      expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+        companyId: null,
+        contactId: null,
+      });
+    },
+  );
+
+  it("drops linked people and opportunities that do not belong to the verified company", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ id: "compatible-context" }, 201));
+      }
+      if (path.includes("/companies")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              companyFixture({ id: "company-a", name: "Company A" }),
+              companyFixture({ id: "company-b", name: "Company B" }),
+            ],
+          }),
+        );
+      }
+      if (path.includes("/opportunities")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              opportunityFixture({
+                id: "opportunity-b",
+                companyId: "company-b",
+              }),
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          ...emptyPage,
+          items: [contactFixture({ id: "contact-b", companyId: "company-b" })],
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <InteractionForm
+        initialCompanyId="company-a"
+        initialContactId="contact-b"
+        initialOpportunityId="opportunity-b"
+        initialInteractionType="phone_call"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveValue("company-a"),
+    );
+    expect(screen.getByLabelText("Opportunity")).toHaveValue("");
+    expect(screen.getByLabelText("Person")).toHaveValue("");
+    expect(
+      screen.getByText(/linked opportunity could not be verified as active/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/linked person could not be verified as active/i),
+    ).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Compatible context only" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(
+        "/conversations/compatible-context",
+      ),
+    );
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/interactions") &&
+        init?.method === "POST",
+    );
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      companyId: "company-a",
+      opportunityId: null,
+      contactId: null,
     });
   });
 
@@ -225,14 +626,22 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "company-ready", name: "Ready company" }],
+            items: [
+              companyFixture({ id: "company-ready", name: "Ready company" }),
+            ],
           }),
         );
       }
       return Promise.resolve(
         jsonResponse({
           ...emptyPage,
-          items: [{ id: "opportunity-ready", name: "Ready opportunity" }],
+          items: [
+            opportunityFixture({
+              id: "opportunity-ready",
+              companyId: null,
+              name: "Ready opportunity",
+            }),
+          ],
         }),
       );
     });
@@ -273,7 +682,12 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "company-available", name: "Available company" }],
+            items: [
+              companyFixture({
+                id: "company-available",
+                name: "Available company",
+              }),
+            ],
           }),
         );
       }
@@ -284,7 +698,9 @@ describe("InteractionForm", () => {
     render(<InteractionForm initialCompanyId="missing-company" />);
 
     expect(
-      await screen.findByText(/linked company could not be loaded/i),
+      await screen.findByText(
+        /linked company could not be verified as active/i,
+      ),
     ).toBeVisible();
     expect(screen.getByLabelText("Company")).toBeEnabled();
     expect(screen.getByLabelText("Company")).toHaveValue("");
@@ -335,7 +751,12 @@ describe("InteractionForm", () => {
       resolveCompanyRetry?.(
         jsonResponse({
           ...emptyPage,
-          items: [{ id: "company-restored", name: "Restored company" }],
+          items: [
+            companyFixture({
+              id: "company-restored",
+              name: "Restored company",
+            }),
+          ],
         }),
       );
       await Promise.resolve();
@@ -361,7 +782,7 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "company-1", name: "Selected company" }],
+            items: [companyFixture({ name: "Selected company" })],
           }),
         );
       }
@@ -369,7 +790,7 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "opportunity-1", name: "Selected opportunity" }],
+            items: [opportunityFixture({ name: "Selected opportunity" })],
           }),
         );
       }
@@ -454,7 +875,7 @@ describe("InteractionForm", () => {
       resolveOldRetry?.(
         jsonResponse({
           ...emptyPage,
-          items: [{ id: "company-a", name: "Company A" }],
+          items: [companyFixture({ id: "company-a", name: "Company A" })],
         }),
       );
       await Promise.resolve();
@@ -467,7 +888,7 @@ describe("InteractionForm", () => {
       resolveNewLoad?.(
         jsonResponse({
           ...emptyPage,
-          items: [{ id: "company-b", name: "Company B" }],
+          items: [companyFixture({ id: "company-b", name: "Company B" })],
         }),
       );
       await Promise.resolve();
@@ -537,15 +958,7 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [
-              {
-                id: "contact-1",
-                companyId: "company-1",
-                firstName: "Jordan",
-                lastName: "Lee",
-                jobTitle: "Commercial Director",
-              },
-            ],
+            items: [contactFixture({ jobTitle: "Commercial Director" })],
           }),
         );
       }
@@ -553,7 +966,7 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "company-1", name: "Acme Australia" }],
+            items: [companyFixture()],
           }),
         );
       }
@@ -604,14 +1017,7 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [
-              {
-                id: "contact-1",
-                companyId: "company-1",
-                firstName: "Jordan",
-                lastName: "Lee",
-              },
-            ],
+            items: [contactFixture()],
           }),
         );
       }
@@ -619,7 +1025,7 @@ describe("InteractionForm", () => {
         return Promise.resolve(
           jsonResponse({
             ...emptyPage,
-            items: [{ id: "company-1", name: "Acme Australia" }],
+            items: [companyFixture()],
           }),
         );
       }
@@ -646,17 +1052,24 @@ describe("InteractionForm", () => {
       const path = String(input);
       if (path.endsWith("/api/v1/contacts/contact-101")) {
         return Promise.resolve(
-          jsonResponse({
-            id: "contact-101",
-            companyId: "company-101",
-            firstName: "Taylor",
-            lastName: "Ng",
-          }),
+          jsonResponse(
+            contactFixture({
+              id: "contact-101",
+              companyId: "company-101",
+              firstName: "Taylor",
+              lastName: "Ng",
+            }),
+          ),
         );
       }
       if (path.endsWith("/api/v1/companies/company-101")) {
         return Promise.resolve(
-          jsonResponse({ id: "company-101", name: "Beyond Page Account" }),
+          jsonResponse(
+            companyFixture({
+              id: "company-101",
+              name: "Beyond Page Account",
+            }),
+          ),
         );
       }
       return Promise.resolve(jsonResponse(emptyPage));
@@ -683,10 +1096,12 @@ describe("InteractionForm", () => {
   });
 
   it("syncs changed linked props until relationship context becomes dirty", async () => {
-    const companies = ["1", "2", "3"].map((suffix) => ({
-      id: `company-${suffix}`,
-      name: `Account ${suffix}`,
-    }));
+    const companies = ["1", "2", "3"].map((suffix) =>
+      companyFixture({
+        id: `company-${suffix}`,
+        name: `Account ${suffix}`,
+      }),
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
