@@ -26,7 +26,10 @@ from revenueos.models import (
     Meeting,
     PreInteractionBrief,
 )
-from revenueos.pre_interaction_contracts import PreInteractionBriefContent
+from revenueos.pre_interaction_contracts import (
+    PreInteractionBriefContent,
+    PreInteractionBriefResponse,
+)
 from revenueos.pre_interaction_repositories import PreInteractionBriefRepository
 from revenueos.revenue_brain_reasoning_repositories import RevenueBrainReasoningRepository
 
@@ -137,6 +140,24 @@ def test_brief_schema_is_strict_bounded_and_non_predictive() -> None:
             PreInteractionBriefContent.model_validate_json(json.dumps({**_valid_content(), **invalid}))
 
 
+def test_brief_response_rejects_content_from_another_interaction() -> None:
+    content = PreInteractionBriefContent.model_validate_json(json.dumps(_valid_content()))
+    with pytest.raises(ValidationError, match="must match the response interaction"):
+        PreInteractionBriefResponse(
+            interaction_id=UUID("00000000-0000-4000-8000-000000000098"),
+            state="completed",
+            generation_available=True,
+            unavailable_reason=None,
+            safe_message=None,
+            brief=content,
+            generated_at=datetime(2026, 8, 14, tzinfo=UTC),
+            reviewed=False,
+            reviewed_at=None,
+            prior_versions=[],
+            source_labels=[],
+        )
+
+
 def test_opportunity_context_does_not_fall_back_to_account_reasoning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -211,6 +232,7 @@ def test_deterministic_brief_supports_every_interaction_type(
     response = client.post(_brief_url(str(interaction["id"])))
     assert response.status_code == 200, response.text
     body = response.json()
+    assert body["interactionId"] == interaction["id"]
     assert body["state"] == "completed"
     assert body["created"] is True
     assert body["brief"]["interactionType"] == interaction_type
@@ -283,15 +305,18 @@ def test_generation_is_versioned_idempotent_reviewable_and_visible_in_list(
     interaction_id = str(interaction["id"])
     first = client.post(_brief_url(interaction_id))
     assert first.status_code == 200
+    assert first.json()["interactionId"] == interaction_id
     assert first.json()["brief"]["briefVersion"] == 1
 
     repeated = client.post(_brief_url(interaction_id))
     assert repeated.status_code == 200
+    assert repeated.json()["interactionId"] == interaction_id
     assert repeated.json()["created"] is False
     assert repeated.json()["brief"]["briefVersion"] == 1
 
     reviewed = client.post(f"{_brief_url(interaction_id)}/review")
     assert reviewed.status_code == 200
+    assert reviewed.json()["interactionId"] == interaction_id
     assert reviewed.json()["reviewed"] is True
     reviewed_at = reviewed.json()["reviewedAt"]
     repeated_review = client.post(f"{_brief_url(interaction_id)}/review")
@@ -337,6 +362,7 @@ def test_no_context_notice_feature_and_tenant_fail_closed(
     no_context = create_interaction(client, interaction_type="manual_interaction")
     available = client.get(_brief_url(str(no_context["id"])))
     assert available.status_code == 200
+    assert available.json()["interactionId"] == no_context["id"]
     assert available.json()["state"] == "not_generated"
     assert available.json()["generationAvailable"] is True
 
@@ -852,7 +878,11 @@ def test_company_only_partial_context_and_terminal_states_are_product_safe(clien
     cancelled = client.get(_brief_url(str(cancelled_interaction["id"])))
     assert failed.json()["state"] == "failed"
     assert cancelled.json()["state"] == "cancelled"
-    for response in (failed, cancelled):
+    for response, interaction in (
+        (failed, failed_interaction),
+        (cancelled, cancelled_interaction),
+    ):
+        assert response.json()["interactionId"] == interaction["id"]
         assert response.json()["brief"] is None
         assert "terminal fixture" not in response.text
 

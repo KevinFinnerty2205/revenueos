@@ -297,6 +297,7 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
 
 function completedBrief() {
   return {
+    interactionId,
     state: "completed",
     generationAvailable: true,
     unavailableReason: null,

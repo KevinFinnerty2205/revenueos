@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from revenueos.auth import get_current_user
+from revenueos.conversation_thread_contracts import ConversationMemoryResponse
 from revenueos.conversation_thread_services import ConversationThreadService
 from revenueos.models import (
     CaptureSession,
@@ -23,6 +26,58 @@ from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID
 from .test_business_api import create_company, create_contact, create_opportunity
 from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, secondary_user
+
+
+def _memory_contract_with_scope(
+    *,
+    assignment_organisation_id: UUID = PRIMARY_ORGANISATION_ID,
+    suggestion_organisation_id: UUID = PRIMARY_ORGANISATION_ID,
+    source_interaction_id: UUID,
+) -> ConversationMemoryResponse:
+    interaction_id = UUID("00000000-0000-4000-8000-000000000098")
+    return ConversationMemoryResponse.model_construct(
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        assignment=SimpleNamespace(
+            interaction_id=interaction_id,
+            thread=SimpleNamespace(organisation_id=assignment_organisation_id),
+        ),
+        suggestions=(
+            SimpleNamespace(
+                thread=SimpleNamespace(
+                    organisation_id=suggestion_organisation_id,
+                )
+            ),
+        ),
+        current_conversation=SimpleNamespace(
+            source_conversations=(SimpleNamespace(interaction_id=source_interaction_id),)
+        ),
+    )
+
+
+def test_conversation_memory_contract_rejects_mixed_private_scope() -> None:
+    interaction_id = UUID("00000000-0000-4000-8000-000000000098")
+    valid = _memory_contract_with_scope(source_interaction_id=interaction_id)
+    assert valid.response_scope_is_consistent() is valid
+
+    foreign_organisation_id = UUID("00000000-0000-4000-8000-000000000099")
+    for response in (
+        _memory_contract_with_scope(
+            assignment_organisation_id=foreign_organisation_id,
+            source_interaction_id=interaction_id,
+        ),
+        _memory_contract_with_scope(
+            suggestion_organisation_id=foreign_organisation_id,
+            source_interaction_id=interaction_id,
+        ),
+    ):
+        with pytest.raises(ValueError, match="must match the response organisation"):
+            response.response_scope_is_consistent()
+
+    wrong_source = _memory_contract_with_scope(
+        source_interaction_id=foreign_organisation_id,
+    )
+    with pytest.raises(ValueError, match="must match the response interaction"):
+        wrong_source.response_scope_is_consistent()
 
 
 def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
@@ -170,6 +225,7 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
 
     ungrouped = client.get(f"/api/v1/interactions/{april['id']}/conversation-memory")
     assert ungrouped.status_code == 200, ungrouped.text
+    assert ungrouped.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert ungrouped.json()["assignment"]["thread"] is None
     assert ungrouped.json()["confirmedThread"] is None
     assert ungrouped.json()["confirmedInitiativeHistory"] == {
@@ -232,6 +288,7 @@ def test_confirmed_threads_keep_same_company_initiatives_separate_across_months(
     memory = client.get(f"/api/v1/interactions/{april['id']}/conversation-memory")
     assert memory.status_code == 200, memory.text
     body = memory.json()
+    assert body["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert body["assignment"]["thread"]["name"] == "Expansion programme"
     current_titles = {item["interactionTitle"] for item in body["currentConversation"]["sourceConversations"]}
     cumulative_titles = {item["interactionTitle"] for item in body["confirmedThread"]["sourceConversations"]}
@@ -907,6 +964,7 @@ def test_conversation_threads_are_tenant_scoped_and_hide_cross_tenant_attachment
         assert secondary_assigned.status_code == 200, secondary_assigned.text
         secondary_memory = client.get(f"/api/v1/interactions/{secondary_target['id']}/conversation-memory")
         assert secondary_memory.status_code == 200, secondary_memory.text
+        assert secondary_memory.json()["organisationId"] == str(secondary_user().organisation_id)
         assert [item["title"] for item in secondary_memory.json()["confirmedInitiativeHistory"]["items"]] == [
             "Secondary tenant source"
         ]
@@ -925,6 +983,7 @@ def test_conversation_threads_are_tenant_scoped_and_hide_cross_tenant_attachment
     assert secondary_thread.json()["id"] not in listed_ids
     primary_memory = client.get(f"/api/v1/interactions/{primary_target['id']}/conversation-memory")
     assert primary_memory.status_code == 200, primary_memory.text
+    assert primary_memory.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert [item["title"] for item in primary_memory.json()["confirmedInitiativeHistory"]["items"]] == [
         "Primary tenant source"
     ]

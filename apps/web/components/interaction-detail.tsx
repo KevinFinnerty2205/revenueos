@@ -451,6 +451,7 @@ function InteractionDetailSession({
           <div className="mt-6" id="conversation-memory">
             <ConversationMemory
               interactionId={interaction.id}
+              organisationId={interaction.organisationId}
               companyId={interaction.companyId}
             />
           </div>

@@ -127,6 +127,7 @@ class PreInteractionBriefService:
                 },
             )
             return PreInteractionBriefResponse(
+                interaction_id=interaction_id,
                 state=cast(BriefState, latest.status),
                 generation_available=True,
                 unavailable_reason=None,
@@ -1454,6 +1455,7 @@ class PreInteractionBriefService:
                 },
             )
             return PreInteractionBriefResponse(
+                interaction_id=record.interaction_id,
                 state="failed",
                 generation_available=True,
                 unavailable_reason=None,
@@ -1481,6 +1483,7 @@ class PreInteractionBriefService:
             if item.id != record.id
         ][:5]
         return PreInteractionBriefResponse(
+            interaction_id=record.interaction_id,
             state="completed",
             generation_available=True,
             unavailable_reason=None,
@@ -1494,8 +1497,9 @@ class PreInteractionBriefService:
         )
 
     @staticmethod
-    def _empty_response(_records: PreInteractionSourceRecords) -> PreInteractionBriefResponse:
+    def _empty_response(records: PreInteractionSourceRecords) -> PreInteractionBriefResponse:
         return PreInteractionBriefResponse(
+            interaction_id=records.interaction.id,
             state="not_generated",
             generation_available=True,
             unavailable_reason=None,

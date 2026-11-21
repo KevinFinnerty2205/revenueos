@@ -46,6 +46,14 @@ Interactions; PostgreSQL RLS remains defence in depth. It never joins private
 workspaces, transcripts, Evidence or intelligence content and never falls back
 to all conversations at the same company.
 
+The memory response repeats the authoritative server-derived `organisationId`.
+Assignment and suggestion summaries must match it, while current-conversation
+coverage sources must match the requested Interaction. Browser consumers validate
+the complete summary shape and fail closed atomically: a mixed-organisation memory
+or directory payload is rejected in full rather than filtered. A failed later reload
+does not replace previously verified memory; a rejected directory exposes no
+initiative choices.
+
 ### Private user work
 
 Live notes, enhanced notes and follow-up drafts are stored in
@@ -81,7 +89,11 @@ or unfinished conversations and orders by private-workspace update time with a
 stable interaction-ID tie-break. Draft text and workspace identifiers never leave
 the private table. A failed private source degrades to an unavailable empty section
 without declaring the user caught up; Home treats that availability flag as a
-partial failure instead of presenting a false empty-queue message.
+partial failure instead of presenting a false empty-queue message. Editing a
+nonblank draft marks the current private workspace value unreviewed; a successful
+save persists that state. An ordinary unchanged save preserves the review flag,
+while a failed review save remains pending. Home continues to receive review
+metadata only and removes the item only after the reviewed save is persisted.
 
 Original debrief answers and accepted evidence remain in their existing records.
 A browser-local value can be explicitly imported only when its stored owner ID

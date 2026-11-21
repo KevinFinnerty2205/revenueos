@@ -130,6 +130,7 @@ class ConversationInitiativeHistory(APIModel):
 
 
 class ConversationMemoryResponse(APIModel):
+    organisation_id: UUID
     state: Literal["not_configured", "current"]
     safe_message: str
     definition: MethodologyDefinitionSummary | None
@@ -144,3 +145,18 @@ class ConversationMemoryResponse(APIModel):
     @classmethod
     def generated_at_is_utc(cls, value: datetime) -> datetime:
         return normalise_api_datetime(value)
+
+    @model_validator(mode="after")
+    def response_scope_is_consistent(self) -> ConversationMemoryResponse:
+        summaries = [
+            *(item.thread for item in self.suggestions),
+            *([self.assignment.thread] if self.assignment.thread is not None else []),
+        ]
+        if any(summary.organisation_id != self.organisation_id for summary in summaries):
+            raise ValueError("Conversation thread summaries must match the response organisation")
+        if self.current_conversation is not None and any(
+            source.interaction_id != self.assignment.interaction_id
+            for source in self.current_conversation.source_conversations
+        ):
+            raise ValueError("Current conversation sources must match the response interaction")
+        return self

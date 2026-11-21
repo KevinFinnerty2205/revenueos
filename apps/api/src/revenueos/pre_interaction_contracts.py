@@ -216,6 +216,7 @@ class BriefVersionSummary(APIModel):
 
 
 class PreInteractionBriefResponse(APIModel):
+    interaction_id: UUID
     state: BriefState
     generation_available: bool
     unavailable_reason: str | None
@@ -228,6 +229,12 @@ class PreInteractionBriefResponse(APIModel):
     source_labels: list[ShortText] = Field(max_length=5)
 
     _normalise_timestamps = field_validator("generated_at", "reviewed_at", mode="before")(_normalise_api_datetime)
+
+    @model_validator(mode="after")
+    def brief_matches_interaction(self) -> PreInteractionBriefResponse:
+        if self.brief is not None and self.brief.interaction_id != self.interaction_id:
+            raise ValueError("Brief content must match the response interaction")
+        return self
 
 
 class PreInteractionBriefRequestResponse(PreInteractionBriefResponse):

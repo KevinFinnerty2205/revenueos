@@ -265,6 +265,7 @@ function ConversationWorkspaceSession({
         <div hidden={view !== "history"}>
           <ConversationMemory
             interactionId={interaction.id}
+            organisationId={interaction.organisationId}
             companyId={interaction.companyId}
           />
         </div>

@@ -8,9 +8,10 @@ import type {
   PreInteractionBriefResponse,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { apiRequest, ApiClientError } from "@/lib/api";
 import { formatInteractionDate } from "@/lib/interactions";
+import { assertPreInteractionBriefIdentity } from "@/lib/pre-interaction-brief-identity";
 
 const priorityStyle: Record<BriefPriority, string> = {
   high: "bg-rose-50 text-rose-800",
@@ -332,11 +333,28 @@ export function PreInteractionBrief({
   interactionId,
   interactionType,
   onBriefChange,
-}: {
+}: PreInteractionBriefProps) {
+  return (
+    <PreInteractionBriefSession
+      key={interactionId}
+      interactionId={interactionId}
+      interactionType={interactionType}
+      onBriefChange={onBriefChange}
+    />
+  );
+}
+
+interface PreInteractionBriefProps {
   interactionId: string;
   interactionType: InteractionType;
   onBriefChange?: () => void;
-}) {
+}
+
+function PreInteractionBriefSession({
+  interactionId,
+  interactionType,
+  onBriefChange,
+}: PreInteractionBriefProps) {
   const [response, setResponse] = useState<PreInteractionBriefResponse | null>(
     null,
   );
@@ -344,6 +362,18 @@ export function PreInteractionBrief({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noticeRequired, setNoticeRequired] = useState(false);
+  const [errorSource, setErrorSource] = useState<"load" | "mutation" | null>(
+    null,
+  );
+  const [retryKey, setRetryKey] = useState(0);
+  const sessionActive = useRef(true);
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -351,12 +381,21 @@ export function PreInteractionBrief({
       `/api/v1/interactions/${interactionId}/companion/brief`,
       { signal: controller.signal },
     )
-      .then(setResponse)
+      .then((updated) => {
+        if (!controller.signal.aborted) {
+          assertPreInteractionBriefIdentity(updated, interactionId);
+          setResponse(updated);
+          setErrorSource(null);
+        }
+      })
       .catch((requestError: unknown) => {
-        if (!(
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
-        )) {
+        if (
+          !controller.signal.aborted &&
+          !(
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          )
+        ) {
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -366,26 +405,39 @@ export function PreInteractionBrief({
             requestError instanceof ApiClientError &&
               requestError.code === "data_notice_acknowledgement_required",
           );
+          setErrorSource("load");
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [interactionId]);
+  }, [interactionId, retryKey]);
+
+  function retryLoad() {
+    setLoading(true);
+    setError(null);
+    setNoticeRequired(false);
+    setErrorSource(null);
+    setRetryKey((value) => value + 1);
+  }
 
   async function generate() {
     setWorking(true);
     setError(null);
     setNoticeRequired(false);
+    setErrorSource(null);
     try {
       const updated = await apiRequest<PreInteractionBriefRequestResponse>(
         `/api/v1/interactions/${interactionId}/companion/brief`,
         { method: "POST", body: "{}" },
       );
+      assertPreInteractionBriefIdentity(updated, interactionId);
+      if (!sessionActive.current) return;
       setResponse(updated);
       onBriefChange?.();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -395,29 +447,36 @@ export function PreInteractionBrief({
         requestError instanceof ApiClientError &&
           requestError.code === "data_notice_acknowledgement_required",
       );
+      setErrorSource("mutation");
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
   async function markReviewed() {
     setWorking(true);
     setError(null);
+    setNoticeRequired(false);
+    setErrorSource(null);
     try {
       const updated = await apiRequest<PreInteractionBriefResponse>(
         `/api/v1/interactions/${interactionId}/companion/brief/review`,
         { method: "POST", body: "{}" },
       );
+      assertPreInteractionBriefIdentity(updated, interactionId);
+      if (!sessionActive.current) return;
       setResponse(updated);
       onBriefChange?.();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The review state could not be saved.",
       );
+      setErrorSource("mutation");
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
@@ -462,17 +521,25 @@ export function PreInteractionBrief({
               <Link href="/onboarding" className="secondary-button mt-4">
                 Review data notice
               </Link>
+            ) : errorSource === "load" ? (
+              <button
+                type="button"
+                className="secondary-button mt-4"
+                onClick={retryLoad}
+              >
+                Try again
+              </button>
             ) : null}
           </div>
         ) : null}
         {!loading && response?.state === "unavailable" ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
             <h3 className="font-semibold text-slate-900">
-              Link account or opportunity context
+              Preparation is not available yet
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {response.safeMessage ??
-                "A linked company or opportunity is required before a useful brief can be prepared."}
+              You can continue with notes, capture and review while this
+              preparation view is unavailable.
             </p>
           </div>
         ) : null}

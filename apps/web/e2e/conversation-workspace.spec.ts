@@ -106,6 +106,7 @@ test("account history opens one CRM-independent conversation workspace and prese
     ) {
       await route.fulfill({
         json: {
+          organisationId: "organisation-proof",
           state: "not_configured",
           safeMessage:
             "No framework is selected. Earlier conversations in the confirmed initiative remain available.",
@@ -170,6 +171,7 @@ test("account history opens one CRM-independent conversation workspace and prese
     if (path.endsWith("/companion/brief")) {
       await route.fulfill({
         json: {
+          interactionId: "conversation-proof",
           state: "not_generated",
           generationAvailable: true,
           brief: null,

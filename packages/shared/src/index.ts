@@ -1705,6 +1705,7 @@ export interface BriefVersionSummary {
 }
 
 export interface PreInteractionBriefResponse {
+  interactionId: string;
   state: PreInteractionBriefState;
   generationAvailable: boolean;
   unavailableReason: string | null;
@@ -3096,6 +3097,7 @@ export interface ConversationInitiativeHistory {
 }
 
 export interface ConversationMemoryResponse {
+  organisationId: string;
   state: "not_configured" | "current";
   safeMessage: string;
   definition: MethodologyDefinitionSummary | null;

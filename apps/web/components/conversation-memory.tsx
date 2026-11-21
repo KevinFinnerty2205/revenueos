@@ -10,7 +10,13 @@ import type {
   MethodologyProjectionItem,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
@@ -46,17 +52,33 @@ function isInteractionStatus(
 
 function isConversationThreadSummary(
   value: unknown,
+  expectedOrganisationId: string,
 ): value is ConversationThreadSummary {
   if (!isRecord(value)) return false;
   return (
     typeof value.id === "string" &&
+    value.organisationId === expectedOrganisationId &&
+    (value.companyId === null || typeof value.companyId === "string") &&
     typeof value.name === "string" &&
     (value.status === "active" || value.status === "archived") &&
-    typeof value.interactionCount === "number"
+    typeof value.interactionCount === "number" &&
+    Number.isInteger(value.interactionCount) &&
+    value.interactionCount >= 0 &&
+    (value.lastInteractionAt === null || isDateTime(value.lastInteractionAt)) &&
+    typeof value.lockVersion === "number" &&
+    Number.isInteger(value.lockVersion) &&
+    value.lockVersion >= 1 &&
+    typeof value.createdByUserId === "string" &&
+    typeof value.updatedByUserId === "string" &&
+    isDateTime(value.createdAt) &&
+    isDateTime(value.updatedAt)
   );
 }
 
-function isCoverage(value: unknown): value is ConversationFrameworkCoverage {
+function isCoverage(
+  value: unknown,
+  expectedCurrentInteractionId?: string,
+): value is ConversationFrameworkCoverage {
   if (!isRecord(value) || !isRecord(value.stateCounts)) return false;
   const counts = value.stateCounts;
   const validCounts = [
@@ -90,6 +112,8 @@ function isCoverage(value: unknown): value is ConversationFrameworkCoverage {
         isRecord(source) &&
         typeof source.sourceId === "string" &&
         typeof source.interactionId === "string" &&
+        (expectedCurrentInteractionId === undefined ||
+          source.interactionId === expectedCurrentInteractionId) &&
         typeof source.interactionTitle === "string" &&
         isDateTime(source.occurredAt),
     );
@@ -130,18 +154,26 @@ function isInitiativeHistory(
 
 function isConversationMemoryResponse(
   value: unknown,
+  expectedInteractionId: string,
+  expectedOrganisationId: string,
 ): value is ConversationMemoryResponse {
   if (!isRecord(value) || !isRecord(value.assignment)) return false;
   const assignment = value.assignment;
   const validThread =
     assignment.thread === null ||
-    isConversationThreadSummary(assignment.thread);
+    isConversationThreadSummary(assignment.thread, expectedOrganisationId);
   const validSuggestions =
     Array.isArray(value.suggestions) &&
     value.suggestions.every(
       (suggestion) =>
         isRecord(suggestion) &&
-        isConversationThreadSummary(suggestion.thread) &&
+        isConversationThreadSummary(
+          suggestion.thread,
+          expectedOrganisationId,
+        ) &&
+        typeof suggestion.score === "number" &&
+        Number.isInteger(suggestion.score) &&
+        suggestion.score >= 1 &&
         Array.isArray(suggestion.reasons) &&
         suggestion.reasons.every((reason) => typeof reason === "string"),
     );
@@ -149,7 +181,8 @@ function isConversationMemoryResponse(
     value.definition === null ||
     (isRecord(value.definition) && typeof value.definition.name === "string");
   const validCurrentCoverage =
-    value.currentConversation === null || isCoverage(value.currentConversation);
+    value.currentConversation === null ||
+    isCoverage(value.currentConversation, expectedInteractionId);
   const validThreadCoverage =
     value.confirmedThread === null || isCoverage(value.confirmedThread);
   const validInitiativeHistory = isInitiativeHistory(
@@ -157,24 +190,48 @@ function isConversationMemoryResponse(
   );
   return (
     (value.state === "not_configured" || value.state === "current") &&
+    value.organisationId === expectedOrganisationId &&
     typeof value.safeMessage === "string" &&
     validDefinition &&
-    typeof assignment.interactionId === "string" &&
+    assignment.interactionId === expectedInteractionId &&
     typeof assignment.lockVersion === "number" &&
+    Number.isInteger(assignment.lockVersion) &&
+    assignment.lockVersion >= 0 &&
     validThread &&
     validSuggestions &&
     validCurrentCoverage &&
     validThreadCoverage &&
     validInitiativeHistory &&
-    typeof value.generatedAt === "string"
+    isDateTime(value.generatedAt)
   );
 }
 
 export function ConversationMemory({
   interactionId,
+  organisationId,
   companyId,
 }: {
   interactionId: string;
+  organisationId: string;
+  companyId: string | null;
+}) {
+  return (
+    <ConversationMemorySession
+      key={`${organisationId}:${interactionId}:${companyId ?? ""}`}
+      interactionId={interactionId}
+      organisationId={organisationId}
+      companyId={companyId}
+    />
+  );
+}
+
+function ConversationMemorySession({
+  interactionId,
+  organisationId,
+  companyId,
+}: {
+  interactionId: string;
+  organisationId: string;
   companyId: string | null;
 }) {
   const [memory, setMemory] = useState<ConversationMemoryResponse | null>(null);
@@ -182,41 +239,118 @@ export function ConversationMemory({
   const [selectedThreadId, setSelectedThreadId] = useState("");
   const [newThreadName, setNewThreadName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [threadDirectoryState, setThreadDirectoryState] = useState<
+    "loading" | "available" | "unavailable"
+  >("loading");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sessionActiveRef = useRef(true);
+  const memoryRequestId = useRef(0);
+  const threadDirectoryRequestId = useRef(0);
+  const mutationRequestId = useRef(0);
+
+  useLayoutEffect(() => {
+    sessionActiveRef.current = true;
+    return () => {
+      sessionActiveRef.current = false;
+      memoryRequestId.current += 1;
+      threadDirectoryRequestId.current += 1;
+      mutationRequestId.current += 1;
+    };
+  }, []);
+
+  const loadThreadDirectory = useCallback(
+    async (signal?: AbortSignal) => {
+      const requestId = threadDirectoryRequestId.current + 1;
+      threadDirectoryRequestId.current = requestId;
+      if (!sessionActiveRef.current) return;
+      setThreadDirectoryState("loading");
+      try {
+        const payload = await apiRequest<unknown>(
+          "/api/v1/conversation-threads",
+          { signal },
+        );
+        if (
+          !Array.isArray(payload) ||
+          !payload.every((item) =>
+            isConversationThreadSummary(item, organisationId),
+          )
+        ) {
+          throw new Error("Unexpected initiative directory response.");
+        }
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          threadDirectoryRequestId.current !== requestId
+        )
+          return;
+        setThreads(payload);
+        setThreadDirectoryState("available");
+      } catch (requestError: unknown) {
+        if (
+          requestError instanceof DOMException &&
+          requestError.name === "AbortError"
+        ) {
+          return;
+        }
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          threadDirectoryRequestId.current !== requestId
+        )
+          return;
+        setThreads([]);
+        setThreadDirectoryState("unavailable");
+      }
+    },
+    [organisationId],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
+      const requestId = memoryRequestId.current + 1;
+      memoryRequestId.current = requestId;
+      if (!sessionActiveRef.current) return;
       setLoading(true);
       setError(null);
+      void loadThreadDirectory(signal);
       try {
-        const [memoryPayload, threadsPayload] = await Promise.all([
-          apiRequest<unknown>(
-            `/api/v1/interactions/${interactionId}/conversation-memory`,
-            { signal },
-          ),
-          apiRequest<unknown>("/api/v1/conversation-threads", { signal }),
-        ]);
+        const memoryPayload = await apiRequest<unknown>(
+          `/api/v1/interactions/${interactionId}/conversation-memory`,
+          { signal },
+        );
         if (
-          !isConversationMemoryResponse(memoryPayload) ||
-          !Array.isArray(threadsPayload) ||
-          !threadsPayload.every(isConversationThreadSummary)
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          memoryRequestId.current !== requestId
         ) {
-          setMemory(null);
-          setThreads([]);
+          return;
+        }
+        if (
+          !isConversationMemoryResponse(
+            memoryPayload,
+            interactionId,
+            organisationId,
+          )
+        ) {
           throw new Error(
             "Conversation memory returned an unexpected response. Reload this section to try again.",
           );
         }
         const nextMemory = memoryPayload;
-        const nextThreads = threadsPayload;
         setMemory(nextMemory);
-        setThreads(nextThreads);
         setSelectedThreadId(nextMemory.assignment.thread?.id ?? "");
       } catch (requestError: unknown) {
         if (
           requestError instanceof DOMException &&
           requestError.name === "AbortError"
+        ) {
+          return;
+        }
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          memoryRequestId.current !== requestId
         ) {
           return;
         }
@@ -226,10 +360,16 @@ export function ConversationMemory({
             : "Conversation memory could not be loaded.",
         );
       } finally {
-        if (!signal?.aborted) setLoading(false);
+        if (
+          !signal?.aborted &&
+          sessionActiveRef.current &&
+          memoryRequestId.current === requestId
+        ) {
+          setLoading(false);
+        }
       }
     },
-    [interactionId],
+    [interactionId, loadThreadDirectory, organisationId],
   );
 
   useEffect(() => {
@@ -243,6 +383,8 @@ export function ConversationMemory({
 
   async function assign(threadId: string | null) {
     if (!memory) return;
+    const requestId = mutationRequestId.current + 1;
+    mutationRequestId.current = requestId;
     setSaving(true);
     setError(null);
     try {
@@ -256,15 +398,29 @@ export function ConversationMemory({
           }),
         },
       );
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       await load();
     } catch (requestError: unknown) {
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The initiative assignment could not be saved.",
       );
     } finally {
-      setSaving(false);
+      if (sessionActiveRef.current && mutationRequestId.current === requestId) {
+        setSaving(false);
+      }
     }
   }
 
@@ -272,6 +428,8 @@ export function ConversationMemory({
     const name = newThreadName.trim();
     if (!name || !memory) return;
     const expectedAssignmentLockVersion = memory.assignment.lockVersion;
+    const requestId = mutationRequestId.current + 1;
+    mutationRequestId.current = requestId;
     setSaving(true);
     setError(null);
     try {
@@ -287,16 +445,30 @@ export function ConversationMemory({
           }),
         },
       );
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       setNewThreadName("");
       await load();
     } catch (requestError: unknown) {
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The initiative could not be created.",
       );
     } finally {
-      setSaving(false);
+      if (sessionActiveRef.current && mutationRequestId.current === requestId) {
+        setSaving(false);
+      }
     }
   }
 
@@ -363,38 +535,65 @@ export function ConversationMemory({
             <p className="mt-1 text-sm leading-6 text-slate-600">
               {memory.safeMessage}
             </p>
-            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <label className="text-sm font-semibold text-slate-800">
-                Choose an existing initiative
-                <select
-                  className="form-control mt-2"
-                  value={selectedThreadId}
-                  disabled={saving}
-                  onChange={(event) => setSelectedThreadId(event.target.value)}
-                >
-                  <option value="">Not grouped</option>
-                  {threads
-                    .filter((thread) => thread.status === "active")
-                    .map((thread) => (
-                      <option key={thread.id} value={thread.id}>
-                        {thread.name} · {thread.interactionCount} conversation
-                        {thread.interactionCount === 1 ? "" : "s"}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="secondary-button self-end"
-                disabled={
-                  saving ||
-                  selectedThreadId === (memory.assignment.thread?.id ?? "")
-                }
-                onClick={() => void assign(selectedThreadId || null)}
+            {threadDirectoryState === "loading" ? (
+              <p className="mt-4 text-sm text-slate-600" role="status">
+                Loading initiative choices…
+              </p>
+            ) : null}
+            {threadDirectoryState === "unavailable" ? (
+              <div
+                className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+                role="status"
               >
-                {saving ? "Saving…" : "Confirm grouping"}
-              </button>
-            </div>
+                <p>
+                  Initiative choices are temporarily unavailable. Conversation
+                  memory remains available.
+                </p>
+                <button
+                  type="button"
+                  className="secondary-button mt-3"
+                  onClick={() => void loadThreadDirectory()}
+                >
+                  Retry initiative choices
+                </button>
+              </div>
+            ) : null}
+            {threadDirectoryState === "available" ? (
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <label className="text-sm font-semibold text-slate-800">
+                  Choose an existing initiative
+                  <select
+                    className="form-control mt-2"
+                    value={selectedThreadId}
+                    disabled={saving}
+                    onChange={(event) =>
+                      setSelectedThreadId(event.target.value)
+                    }
+                  >
+                    <option value="">Not grouped</option>
+                    {threads
+                      .filter((thread) => thread.status === "active")
+                      .map((thread) => (
+                        <option key={thread.id} value={thread.id}>
+                          {thread.name} · {thread.interactionCount} conversation
+                          {thread.interactionCount === 1 ? "" : "s"}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button self-end"
+                  disabled={
+                    saving ||
+                    selectedThreadId === (memory.assignment.thread?.id ?? "")
+                  }
+                  onClick={() => void assign(selectedThreadId || null)}
+                >
+                  {saving ? "Saving…" : "Confirm grouping"}
+                </button>
+              </div>
+            ) : null}
             {memory.suggestions.length ? (
               <div className="mt-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
