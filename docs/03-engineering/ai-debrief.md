@@ -64,6 +64,12 @@ Session start, answer/voice upload, finish and review are idempotent at their du
 boundaries. Row locks and unique tenant-scoped keys prevent duplicate turns,
 candidates, accepted Evidence and intelligence composition.
 
+Client restoration treats only `debrief_not_found` as a stale saved session.
+Network and server failures retain the browser session ID and block a new capture
+until retry resolves. With `restoreLatest`, an explicitly missing saved session
+falls back to the latest session. Restore requests are interaction-bound, and
+obsolete completions cannot update a newly selected interaction.
+
 ## Configuration
 
 - `API_FEATURE_AI_DEBRIEF_ENABLED=true`
