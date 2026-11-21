@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BusinessEntityForm } from "@/components/business-entity-form";
 
@@ -14,6 +20,31 @@ function jsonResponse(body: object, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolve) throw new Error("Deferred promise was not initialised.");
+      resolve(value);
+    },
+  };
+}
+
+const emptyPage = {
+  items: [],
+  page: 1,
+  pageSize: 100,
+  total: 0,
+  pages: 0,
+};
 
 describe("BusinessEntityForm", () => {
   afterEach(() => {
@@ -702,5 +733,222 @@ describe("BusinessEntityForm", () => {
     expect(JSON.parse(String(patchCall?.[1]?.body))).not.toHaveProperty(
       "firstName",
     );
+  });
+
+  it("isolates task values and late saves when the edited task changes", async () => {
+    const taskBLoad = deferred<Response>();
+    const taskASave = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url.endsWith("/api/v1/tasks/task-a")) {
+        return taskASave.promise;
+      }
+      if (init?.method === "PATCH" && url.endsWith("/api/v1/tasks/task-b")) {
+        return Promise.resolve(jsonResponse({ id: "task-b" }));
+      }
+      if (url.endsWith("/api/v1/tasks/task-a")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "task-a",
+            title: "Task A private title",
+            description: "Task A private description",
+            companyId: null,
+            contactId: null,
+            opportunityId: null,
+            assignedUserId: null,
+            status: "open",
+            priority: "high",
+            dueAt: null,
+          }),
+        );
+      }
+      if (url.endsWith("/api/v1/tasks/task-b")) return taskBLoad.promise;
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("?pageSize=100")) {
+        return Promise.resolve(jsonResponse(emptyPage));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <BusinessEntityForm entity="tasks" entityId="task-a" />,
+    );
+    expect(
+      await screen.findByDisplayValue("Task A private title"),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText(/task title/i), {
+      target: { value: "Task A unsaved sentinel" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/api/v1/tasks/task-a") &&
+            init?.method === "PATCH",
+        ),
+      ).toBe(true),
+    );
+
+    await act(async () => {
+      rerender(<BusinessEntityForm entity="tasks" entityId="task-b" />);
+      taskASave.resolve(jsonResponse({ id: "task-a" }));
+      await taskASave.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading form");
+    expect(
+      screen.queryByDisplayValue("Task A private title"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Task A unsaved sentinel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Task A private description"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save task" }),
+    ).not.toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalled();
+
+    await act(async () => {
+      taskBLoad.resolve(
+        jsonResponse({
+          id: "task-b",
+          title: "Task B title",
+          description: "Task B description",
+          companyId: null,
+          contactId: null,
+          opportunityId: null,
+          assignedUserId: null,
+          status: "in_progress",
+          priority: "medium",
+          dueAt: null,
+        }),
+      );
+      await taskBLoad.promise;
+    });
+    expect(await screen.findByDisplayValue("Task B title")).toBeVisible();
+    fireEvent.change(screen.getByLabelText(/task title/i), {
+      target: { value: "Task B updated" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/tasks"));
+    const taskBPatch = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/api/v1/tasks/task-b") &&
+        init?.method === "PATCH",
+    );
+    expect(taskBPatch).toBeDefined();
+    expect(JSON.parse(String(taskBPatch?.[1]?.body))).toMatchObject({
+      title: "Task B updated",
+      description: "Task B description",
+      status: "in_progress",
+      priority: "medium",
+    });
+    expect(String(taskBPatch?.[1]?.body)).not.toContain("Task A");
+  });
+
+  it("uses only the current account values and lock after an edit transition", async () => {
+    const companyBLoad = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (
+        init?.method === "PATCH" &&
+        url.endsWith("/api/v1/companies/company-b")
+      ) {
+        return Promise.resolve(jsonResponse({ id: "company-b" }));
+      }
+      if (url.includes("/api/v1/crm/members")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith("/api/v1/companies/company-a")) {
+        return Promise.resolve(
+          jsonResponse({
+            id: "company-a",
+            name: "Account A private name",
+            website: null,
+            industry: "Account A private industry",
+            location: null,
+            employeeCount: null,
+            ownerUserId: null,
+            status: "active",
+            updatedAt: "2026-10-01T00:00:00Z",
+          }),
+        );
+      }
+      if (url.endsWith("/api/v1/companies/company-b")) {
+        return companyBLoad.promise;
+      }
+      if (url.includes("/api/v1/crm/records/account/")) {
+        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <BusinessEntityForm entity="companies" entityId="company-a" />,
+    );
+    expect(
+      await screen.findByDisplayValue("Account A private name"),
+    ).toBeVisible();
+
+    rerender(<BusinessEntityForm entity="companies" entityId="company-b" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading form");
+    expect(
+      screen.queryByDisplayValue("Account A private name"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Account A private industry"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save account" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      companyBLoad.resolve(
+        jsonResponse({
+          id: "company-b",
+          name: "Account B name",
+          website: "https://b.example",
+          industry: "Services",
+          location: "Sydney",
+          employeeCount: 25,
+          ownerUserId: null,
+          status: "active",
+          updatedAt: "2026-11-21T00:00:00Z",
+        }),
+      );
+      await companyBLoad.promise;
+    });
+    expect(await screen.findByDisplayValue("Account B name")).toBeVisible();
+    fireEvent.change(screen.getByLabelText(/account name/i), {
+      target: { value: "Account B updated" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save account" }));
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/companies"));
+    const companyBPatch = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/api/v1/companies/company-b") &&
+        init?.method === "PATCH",
+    );
+    expect(companyBPatch).toBeDefined();
+    expect(JSON.parse(String(companyBPatch?.[1]?.body))).toMatchObject({
+      name: "Account B updated",
+      website: "https://b.example",
+      industry: "Services",
+      location: "Sydney",
+      employeeCount: 25,
+      status: "active",
+      expectedUpdatedAt: "2026-11-21T00:00:00Z",
+    });
+    expect(String(companyBPatch?.[1]?.body)).not.toContain("Account A");
   });
 });
