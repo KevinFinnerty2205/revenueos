@@ -10,7 +10,13 @@ import type {
   MethodologyProjectionItem,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
@@ -130,6 +136,7 @@ function isInitiativeHistory(
 
 function isConversationMemoryResponse(
   value: unknown,
+  expectedInteractionId: string,
 ): value is ConversationMemoryResponse {
   if (!isRecord(value) || !isRecord(value.assignment)) return false;
   const assignment = value.assignment;
@@ -159,7 +166,7 @@ function isConversationMemoryResponse(
     (value.state === "not_configured" || value.state === "current") &&
     typeof value.safeMessage === "string" &&
     validDefinition &&
-    typeof assignment.interactionId === "string" &&
+    assignment.interactionId === expectedInteractionId &&
     typeof assignment.lockVersion === "number" &&
     validThread &&
     validSuggestions &&
@@ -177,6 +184,22 @@ export function ConversationMemory({
   interactionId: string;
   companyId: string | null;
 }) {
+  return (
+    <ConversationMemorySession
+      key={`${interactionId}:${companyId ?? ""}`}
+      interactionId={interactionId}
+      companyId={companyId}
+    />
+  );
+}
+
+function ConversationMemorySession({
+  interactionId,
+  companyId,
+}: {
+  interactionId: string;
+  companyId: string | null;
+}) {
   const [memory, setMemory] = useState<ConversationMemoryResponse | null>(null);
   const [threads, setThreads] = useState<ConversationThreadSummary[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState("");
@@ -187,11 +210,25 @@ export function ConversationMemory({
   >("loading");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sessionActiveRef = useRef(true);
+  const memoryRequestId = useRef(0);
   const threadDirectoryRequestId = useRef(0);
+  const mutationRequestId = useRef(0);
+
+  useLayoutEffect(() => {
+    sessionActiveRef.current = true;
+    return () => {
+      sessionActiveRef.current = false;
+      memoryRequestId.current += 1;
+      threadDirectoryRequestId.current += 1;
+      mutationRequestId.current += 1;
+    };
+  }, []);
 
   const loadThreadDirectory = useCallback(async (signal?: AbortSignal) => {
     const requestId = threadDirectoryRequestId.current + 1;
     threadDirectoryRequestId.current = requestId;
+    if (!sessionActiveRef.current) return;
     setThreadDirectoryState("loading");
     try {
       const payload = await apiRequest<unknown>(
@@ -204,7 +241,11 @@ export function ConversationMemory({
       ) {
         throw new Error("Unexpected initiative directory response.");
       }
-      if (signal?.aborted || threadDirectoryRequestId.current !== requestId)
+      if (
+        signal?.aborted ||
+        !sessionActiveRef.current ||
+        threadDirectoryRequestId.current !== requestId
+      )
         return;
       setThreads(payload);
       setThreadDirectoryState("available");
@@ -215,7 +256,11 @@ export function ConversationMemory({
       ) {
         return;
       }
-      if (signal?.aborted || threadDirectoryRequestId.current !== requestId)
+      if (
+        signal?.aborted ||
+        !sessionActiveRef.current ||
+        threadDirectoryRequestId.current !== requestId
+      )
         return;
       setThreads([]);
       setThreadDirectoryState("unavailable");
@@ -224,6 +269,9 @@ export function ConversationMemory({
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
+      const requestId = memoryRequestId.current + 1;
+      memoryRequestId.current = requestId;
+      if (!sessionActiveRef.current) return;
       setLoading(true);
       setError(null);
       void loadThreadDirectory(signal);
@@ -232,7 +280,14 @@ export function ConversationMemory({
           `/api/v1/interactions/${interactionId}/conversation-memory`,
           { signal },
         );
-        if (!isConversationMemoryResponse(memoryPayload)) {
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          memoryRequestId.current !== requestId
+        ) {
+          return;
+        }
+        if (!isConversationMemoryResponse(memoryPayload, interactionId)) {
           setMemory(null);
           throw new Error(
             "Conversation memory returned an unexpected response. Reload this section to try again.",
@@ -248,13 +303,26 @@ export function ConversationMemory({
         ) {
           return;
         }
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          memoryRequestId.current !== requestId
+        ) {
+          return;
+        }
         setError(
           requestError instanceof Error
             ? requestError.message
             : "Conversation memory could not be loaded.",
         );
       } finally {
-        if (!signal?.aborted) setLoading(false);
+        if (
+          !signal?.aborted &&
+          sessionActiveRef.current &&
+          memoryRequestId.current === requestId
+        ) {
+          setLoading(false);
+        }
       }
     },
     [interactionId, loadThreadDirectory],
@@ -271,6 +339,8 @@ export function ConversationMemory({
 
   async function assign(threadId: string | null) {
     if (!memory) return;
+    const requestId = mutationRequestId.current + 1;
+    mutationRequestId.current = requestId;
     setSaving(true);
     setError(null);
     try {
@@ -284,15 +354,29 @@ export function ConversationMemory({
           }),
         },
       );
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       await load();
     } catch (requestError: unknown) {
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The initiative assignment could not be saved.",
       );
     } finally {
-      setSaving(false);
+      if (sessionActiveRef.current && mutationRequestId.current === requestId) {
+        setSaving(false);
+      }
     }
   }
 
@@ -300,6 +384,8 @@ export function ConversationMemory({
     const name = newThreadName.trim();
     if (!name || !memory) return;
     const expectedAssignmentLockVersion = memory.assignment.lockVersion;
+    const requestId = mutationRequestId.current + 1;
+    mutationRequestId.current = requestId;
     setSaving(true);
     setError(null);
     try {
@@ -315,16 +401,30 @@ export function ConversationMemory({
           }),
         },
       );
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       setNewThreadName("");
       await load();
     } catch (requestError: unknown) {
+      if (
+        !sessionActiveRef.current ||
+        mutationRequestId.current !== requestId
+      ) {
+        return;
+      }
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The initiative could not be created.",
       );
     } finally {
-      setSaving(false);
+      if (sessionActiveRef.current && mutationRequestId.current === requestId) {
+        setSaving(false);
+      }
     }
   }
 
