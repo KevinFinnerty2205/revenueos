@@ -12,7 +12,14 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { interactionTypes } from "@/lib/interactions";
@@ -24,6 +31,24 @@ interface LinkedInteractionContext {
   interactionType: InteractionType;
 }
 
+type OptionLoadState = "loading" | "ready" | "unavailable";
+
+interface LoadedOptions<T> {
+  items: T[];
+  exactWarning: boolean;
+}
+
+interface OptionRetryRequest {
+  source: "company" | "opportunity" | "contact";
+  sequence: number;
+  linkedId: string;
+  contextIdentity: string;
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "AbortError";
+}
+
 function appendUnique<T extends { id: string }>(
   items: T[],
   item: T | null,
@@ -31,6 +56,87 @@ function appendUnique<T extends { id: string }>(
   return item && !items.some((candidate) => candidate.id === item.id)
     ? [...items, item]
     : items;
+}
+
+async function loadCompanyOptions(
+  linkedId: string,
+  signal: AbortSignal,
+): Promise<LoadedOptions<Company>> {
+  const page = await apiRequest<EntityPage<Company>>(
+    "/api/v1/companies?pageSize=100",
+    { signal },
+  );
+  let exactWarning = false;
+  let items = page.items;
+  if (linkedId && !items.some((company) => company.id === linkedId)) {
+    try {
+      items = appendUnique(
+        items,
+        await apiRequest<Company>(
+          `/api/v1/companies/${encodeURIComponent(linkedId)}`,
+          { signal },
+        ),
+      );
+    } catch (reason: unknown) {
+      if (signal.aborted || isAbortError(reason)) throw reason;
+      exactWarning = true;
+    }
+  }
+  return { items, exactWarning };
+}
+
+async function loadContactOptions(
+  linkedId: string,
+  signal: AbortSignal,
+): Promise<LoadedOptions<Contact>> {
+  const page = await apiRequest<EntityPage<Contact>>(
+    "/api/v1/contacts?pageSize=100",
+    { signal },
+  );
+  let exactWarning = false;
+  let items = page.items;
+  if (linkedId && !items.some((contact) => contact.id === linkedId)) {
+    try {
+      items = appendUnique(
+        items,
+        await apiRequest<Contact>(
+          `/api/v1/contacts/${encodeURIComponent(linkedId)}`,
+          { signal },
+        ),
+      );
+    } catch (reason: unknown) {
+      if (signal.aborted || isAbortError(reason)) throw reason;
+      exactWarning = true;
+    }
+  }
+  return { items, exactWarning };
+}
+
+async function loadOpportunityOptions(
+  linkedId: string,
+  signal: AbortSignal,
+): Promise<LoadedOptions<Opportunity>> {
+  const page = await apiRequest<EntityPage<Opportunity>>(
+    "/api/v1/opportunities?pageSize=100",
+    { signal },
+  );
+  let exactWarning = false;
+  let items = page.items;
+  if (linkedId && !items.some((opportunity) => opportunity.id === linkedId)) {
+    try {
+      items = appendUnique(
+        items,
+        await apiRequest<Opportunity>(
+          `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
+          { signal },
+        ),
+      );
+    } catch (reason: unknown) {
+      if (signal.aborted || isAbortError(reason)) throw reason;
+      exactWarning = true;
+    }
+  }
+  return { items, exactWarning };
 }
 
 export function InteractionForm({
@@ -51,7 +157,23 @@ export function InteractionForm({
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [companyOptionsState, setCompanyOptionsState] =
+    useState<OptionLoadState>("loading");
+  const [opportunityOptionsState, setOpportunityOptionsState] =
+    useState<OptionLoadState>(conversationOnly ? "ready" : "loading");
+  const [contactOptionsState, setContactOptionsState] =
+    useState<OptionLoadState>("loading");
+  const [companyOptionsWarning, setCompanyOptionsWarning] = useState<
+    string | null
+  >(null);
+  const [opportunityOptionsWarning, setOpportunityOptionsWarning] = useState<
+    string | null
+  >(null);
+  const [contactOptionsWarning, setContactOptionsWarning] = useState<
+    string | null
+  >(null);
+  const [optionRetryRequest, setOptionRetryRequest] =
+    useState<OptionRetryRequest | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
@@ -69,131 +191,229 @@ export function InteractionForm({
   const [scheduledEndAt, setScheduledEndAt] = useState("");
   const [pendingLinkedContext, setPendingLinkedContext] =
     useState<LinkedInteractionContext | null>(null);
+  const linkedContextIdentity = JSON.stringify([
+    conversationOnly,
+    initialCompanyId,
+    initialOpportunityId,
+    initialContactId,
+    initialInteractionType,
+  ]);
   const contextDirtyRef = useRef(false);
   const linkedContextLoadedRef = useRef(false);
+  const optionRetrySequenceRef = useRef(0);
+  const activeLinkedContextIdentityRef = useRef(linkedContextIdentity);
+
+  useLayoutEffect(() => {
+    activeLinkedContextIdentityRef.current = linkedContextIdentity;
+  }, [linkedContextIdentity]);
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      apiRequest<EntityPage<Company>>("/api/v1/companies?pageSize=100", {
-        signal: controller.signal,
-      }),
+    const requestContextIdentity = linkedContextIdentity;
+    window.queueMicrotask(() => {
+      if (
+        controller.signal.aborted ||
+        activeLinkedContextIdentityRef.current !== requestContextIdentity
+      ) {
+        return;
+      }
+      setLoading(true);
+      setCompanyOptionsState("loading");
+      setContactOptionsState("loading");
+      setOpportunityOptionsState(conversationOnly ? "ready" : "loading");
+      setCompanyOptionsWarning(null);
+      setContactOptionsWarning(null);
+      setOpportunityOptionsWarning(null);
+    });
+
+    const companyOptionsRequest = loadCompanyOptions(
+      initialCompanyId,
+      controller.signal,
+    );
+    const contactOptionsRequest = loadContactOptions(
+      initialContactId,
+      controller.signal,
+    );
+    const opportunityOptionsRequest: Promise<LoadedOptions<Opportunity>> =
       conversationOnly
-        ? Promise.resolve({
-            items: [],
-            page: 1,
-            pageSize: 100,
-            total: 0,
-            pages: 0,
-          } as EntityPage<Opportunity>)
-        : apiRequest<EntityPage<Opportunity>>(
-            "/api/v1/opportunities?pageSize=100",
-            { signal: controller.signal },
-          ),
-      apiRequest<EntityPage<Contact>>("/api/v1/contacts?pageSize=100", {
-        signal: controller.signal,
-      }),
-    ])
-      .then(async ([companyPage, opportunityPage, contactPage]) => {
-        const [exactCompany, exactOpportunity, exactContact] =
-          await Promise.all([
-            initialCompanyId &&
-            !companyPage.items.some(
-              (company) => company.id === initialCompanyId,
-            )
-              ? apiRequest<Company>(
-                  `/api/v1/companies/${encodeURIComponent(initialCompanyId)}`,
-                  { signal: controller.signal },
-                )
-              : Promise.resolve(null),
-            !conversationOnly &&
-            initialOpportunityId &&
-            !opportunityPage.items.some(
-              (opportunity) => opportunity.id === initialOpportunityId,
-            )
-              ? apiRequest<Opportunity>(
-                  `/api/v1/opportunities/${encodeURIComponent(initialOpportunityId)}`,
-                  { signal: controller.signal },
-                )
-              : Promise.resolve(null),
-            initialContactId &&
-            !contactPage.items.some(
-              (contact) => contact.id === initialContactId,
-            )
-              ? apiRequest<Contact>(
-                  `/api/v1/contacts/${encodeURIComponent(initialContactId)}`,
-                  { signal: controller.signal },
-                )
-              : Promise.resolve(null),
-          ]);
-        let nextCompanies = appendUnique(companyPage.items, exactCompany);
-        const nextOpportunities = appendUnique(
-          opportunityPage.items,
-          exactOpportunity,
+        ? Promise.resolve({ items: [], exactWarning: false })
+        : loadOpportunityOptions(initialOpportunityId, controller.signal);
+
+    const requestIsActive = (): boolean =>
+      !controller.signal.aborted &&
+      activeLinkedContextIdentityRef.current === requestContextIdentity;
+
+    void companyOptionsRequest.then(
+      (loaded) => {
+        if (!requestIsActive()) return;
+        setCompanies(loaded.items);
+        setCompanyOptionsState("ready");
+        setCompanyOptionsWarning(
+          loaded.exactWarning
+            ? "The linked company could not be loaded. Choose another company or continue without one."
+            : null,
         );
-        const nextContacts = appendUnique(contactPage.items, exactContact);
-        const selectedContact = nextContacts.find(
-          (contact) => contact.id === initialContactId,
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        setCompanies([]);
+        setCompanyOptionsState("unavailable");
+        setCompanyOptionsWarning(
+          "Company options are temporarily unavailable. You can still add this conversation without company context.",
         );
-        const selectedOpportunity = nextOpportunities.find(
-          (opportunity) => opportunity.id === initialOpportunityId,
+      },
+    );
+    void opportunityOptionsRequest.then(
+      (loaded) => {
+        if (!requestIsActive()) return;
+        setOpportunities(loaded.items);
+        setOpportunityOptionsState("ready");
+        setOpportunityOptionsWarning(
+          loaded.exactWarning
+            ? "The linked opportunity could not be loaded. Choose another opportunity or continue without one."
+            : null,
         );
-        const linkedCompanyId =
-          initialCompanyId ||
-          selectedContact?.companyId ||
-          selectedOpportunity?.companyId ||
-          "";
-        if (
-          linkedCompanyId &&
-          !nextCompanies.some((company) => company.id === linkedCompanyId)
-        ) {
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        setOpportunities([]);
+        setOpportunityOptionsState("unavailable");
+        setOpportunityOptionsWarning(
+          "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity.",
+        );
+      },
+    );
+    void contactOptionsRequest.then(
+      (loaded) => {
+        if (!requestIsActive()) return;
+        setContacts(loaded.items);
+        setContactOptionsState("ready");
+        setContactOptionsWarning(
+          loaded.exactWarning
+            ? "The linked person could not be loaded. Choose another person or continue without one."
+            : null,
+        );
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        setContacts([]);
+        setContactOptionsState("unavailable");
+        setContactOptionsWarning(
+          "People options are temporarily unavailable. You can still add this conversation without a person.",
+        );
+      },
+    );
+
+    void Promise.allSettled([
+      companyOptionsRequest,
+      opportunityOptionsRequest,
+      contactOptionsRequest,
+    ]).then(async ([companyResult, opportunityResult, contactResult]) => {
+      if (
+        controller.signal.aborted ||
+        activeLinkedContextIdentityRef.current !== requestContextIdentity
+      ) {
+        return;
+      }
+
+      let nextCompanies =
+        companyResult.status === "fulfilled" ? companyResult.value.items : [];
+      const nextOpportunities =
+        opportunityResult.status === "fulfilled"
+          ? opportunityResult.value.items
+          : [];
+      const nextContacts =
+        contactResult.status === "fulfilled" ? contactResult.value.items : [];
+      const selectedContact = nextContacts.find(
+        (contact) => contact.id === initialContactId,
+      );
+      const selectedOpportunity = nextOpportunities.find(
+        (opportunity) => opportunity.id === initialOpportunityId,
+      );
+      const linkedCompanyCandidate =
+        initialCompanyId ||
+        selectedContact?.companyId ||
+        selectedOpportunity?.companyId ||
+        "";
+      let companyExactWarning =
+        companyResult.status === "fulfilled" &&
+        companyResult.value.exactWarning;
+      if (
+        companyResult.status === "fulfilled" &&
+        linkedCompanyCandidate &&
+        !nextCompanies.some((company) => company.id === linkedCompanyCandidate)
+      ) {
+        try {
           nextCompanies = appendUnique(
             nextCompanies,
             await apiRequest<Company>(
-              `/api/v1/companies/${encodeURIComponent(linkedCompanyId)}`,
+              `/api/v1/companies/${encodeURIComponent(linkedCompanyCandidate)}`,
               { signal: controller.signal },
             ),
           );
+        } catch (reason: unknown) {
+          if (
+            controller.signal.aborted ||
+            activeLinkedContextIdentityRef.current !== requestContextIdentity ||
+            isAbortError(reason)
+          ) {
+            return;
+          }
+          companyExactWarning = true;
         }
-        if (controller.signal.aborted) return;
-        setLoadError(null);
+      }
+      if (
+        controller.signal.aborted ||
+        activeLinkedContextIdentityRef.current !== requestContextIdentity
+      ) {
+        return;
+      }
+
+      if (companyResult.status === "fulfilled") {
         setCompanies(nextCompanies);
-        setOpportunities(nextOpportunities);
-        setContacts(nextContacts);
-        const linkedContext: LinkedInteractionContext = {
-          companyId: linkedCompanyId,
-          opportunityId: initialOpportunityId,
-          contactId: initialContactId,
-          interactionType: initialInteractionType,
-        };
-        if (!linkedContextLoadedRef.current || !contextDirtyRef.current) {
-          setCompanyId(linkedContext.companyId);
-          setOpportunityId(linkedContext.opportunityId);
-          setContactId(linkedContext.contactId);
-          setInteractionType(linkedContext.interactionType);
-          contextDirtyRef.current = false;
-          setPendingLinkedContext(null);
-        } else {
-          setPendingLinkedContext(linkedContext);
-        }
-        linkedContextLoadedRef.current = true;
-      })
-      .catch((requestError: unknown) => {
-        if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
-        ) {
-          return;
-        }
-        setLoadError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Conversation options could not be loaded.",
+        setCompanyOptionsWarning(
+          companyExactWarning
+            ? "The linked company could not be loaded. Choose another company or continue without one."
+            : null,
         );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      }
+
+      const linkedCompanyId = nextCompanies.some(
+        (company) => company.id === linkedCompanyCandidate,
+      )
+        ? linkedCompanyCandidate
+        : "";
+      const linkedOpportunityId = conversationOnly
+        ? initialOpportunityId
+        : nextOpportunities.some(
+              (opportunity) => opportunity.id === initialOpportunityId,
+            )
+          ? initialOpportunityId
+          : "";
+      const linkedContactId = nextContacts.some(
+        (contact) => contact.id === initialContactId,
+      )
+        ? initialContactId
+        : "";
+      const linkedContext: LinkedInteractionContext = {
+        companyId: linkedCompanyId,
+        opportunityId: linkedOpportunityId,
+        contactId: linkedContactId,
+        interactionType: initialInteractionType,
+      };
+      if (!linkedContextLoadedRef.current || !contextDirtyRef.current) {
+        setCompanyId(linkedContext.companyId);
+        setOpportunityId(linkedContext.opportunityId);
+        setContactId(linkedContext.contactId);
+        setInteractionType(linkedContext.interactionType);
+        contextDirtyRef.current = false;
+        setPendingLinkedContext(null);
+      } else {
+        setPendingLinkedContext(linkedContext);
+      }
+      linkedContextLoadedRef.current = true;
+      setLoading(false);
+    });
     return () => controller.abort();
   }, [
     conversationOnly,
@@ -201,7 +421,162 @@ export function InteractionForm({
     initialContactId,
     initialInteractionType,
     initialOpportunityId,
+    linkedContextIdentity,
   ]);
+
+  useEffect(() => {
+    if (optionRetryRequest === null) return;
+    const request = optionRetryRequest;
+    if (request.contextIdentity !== linkedContextIdentity) return;
+    const controller = new AbortController();
+    window.queueMicrotask(() => {
+      if (
+        controller.signal.aborted ||
+        activeLinkedContextIdentityRef.current !== request.contextIdentity
+      ) {
+        return;
+      }
+      if (request.source === "company") {
+        setCompanyOptionsState("loading");
+      } else if (request.source === "opportunity") {
+        setOpportunityOptionsState("loading");
+      } else {
+        setContactOptionsState("loading");
+      }
+    });
+
+    void (async () => {
+      try {
+        if (request.source === "company") {
+          const loaded = await loadCompanyOptions(
+            request.linkedId,
+            controller.signal,
+          );
+          if (
+            controller.signal.aborted ||
+            activeLinkedContextIdentityRef.current !== request.contextIdentity
+          ) {
+            return;
+          }
+          setCompanies(loaded.items);
+          setCompanyOptionsState("ready");
+          setCompanyOptionsWarning(
+            loaded.exactWarning
+              ? "The linked company could not be loaded. Choose another company or continue without one."
+              : null,
+          );
+          if (
+            !contextDirtyRef.current &&
+            loaded.items.some((company) => company.id === request.linkedId)
+          ) {
+            setCompanyId(request.linkedId);
+          }
+          return;
+        }
+        if (request.source === "opportunity") {
+          const loaded = await loadOpportunityOptions(
+            request.linkedId,
+            controller.signal,
+          );
+          if (
+            controller.signal.aborted ||
+            activeLinkedContextIdentityRef.current !== request.contextIdentity
+          ) {
+            return;
+          }
+          setOpportunities(loaded.items);
+          setOpportunityOptionsState("ready");
+          setOpportunityOptionsWarning(
+            loaded.exactWarning
+              ? "The linked opportunity could not be loaded. Choose another opportunity or continue without one."
+              : null,
+          );
+          if (
+            !contextDirtyRef.current &&
+            loaded.items.some(
+              (opportunity) => opportunity.id === request.linkedId,
+            )
+          ) {
+            setOpportunityId(request.linkedId);
+          }
+          return;
+        }
+
+        const loaded = await loadContactOptions(
+          request.linkedId,
+          controller.signal,
+        );
+        if (
+          controller.signal.aborted ||
+          activeLinkedContextIdentityRef.current !== request.contextIdentity
+        ) {
+          return;
+        }
+        setContacts(loaded.items);
+        setContactOptionsState("ready");
+        setContactOptionsWarning(
+          loaded.exactWarning
+            ? "The linked person could not be loaded. Choose another person or continue without one."
+            : null,
+        );
+        if (
+          !contextDirtyRef.current &&
+          loaded.items.some((contact) => contact.id === request.linkedId)
+        ) {
+          setContactId(request.linkedId);
+        }
+      } catch (reason: unknown) {
+        if (
+          controller.signal.aborted ||
+          activeLinkedContextIdentityRef.current !== request.contextIdentity ||
+          isAbortError(reason)
+        ) {
+          return;
+        }
+        if (request.source === "company") {
+          setCompanies([]);
+          setCompanyOptionsState("unavailable");
+          setCompanyOptionsWarning(
+            "Company options are temporarily unavailable. You can still add this conversation without company context.",
+          );
+        } else if (request.source === "opportunity") {
+          setOpportunities([]);
+          setOpportunityOptionsState("unavailable");
+          setOpportunityOptionsWarning(
+            "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity.",
+          );
+        } else {
+          setContacts([]);
+          setContactOptionsState("unavailable");
+          setContactOptionsWarning(
+            "People options are temporarily unavailable. You can still add this conversation without a person.",
+          );
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [linkedContextIdentity, optionRetryRequest]);
+
+  function requestOptionRetry(source: OptionRetryRequest["source"]): void {
+    const linkedCompanyId =
+      initialCompanyId ||
+      contacts.find((contact) => contact.id === initialContactId)?.companyId ||
+      opportunities.find(
+        (opportunity) => opportunity.id === initialOpportunityId,
+      )?.companyId ||
+      "";
+    setOptionRetryRequest({
+      source,
+      sequence: ++optionRetrySequenceRef.current,
+      contextIdentity: linkedContextIdentity,
+      linkedId:
+        source === "company"
+          ? linkedCompanyId
+          : source === "opportunity"
+            ? initialOpportunityId
+            : initialContactId,
+    });
+  }
 
   function markContextDirty(): void {
     contextDirtyRef.current = true;
@@ -220,6 +595,22 @@ export function InteractionForm({
     event.preventDefault();
     setSubmitError(null);
     setSubmitting(true);
+    const submittedCompanyId =
+      companyOptionsState === "ready" &&
+      companies.some((company) => company.id === companyId)
+        ? companyId
+        : null;
+    const submittedOpportunityId = conversationOnly
+      ? opportunityId || null
+      : opportunityOptionsState === "ready" &&
+          opportunities.some((opportunity) => opportunity.id === opportunityId)
+        ? opportunityId
+        : null;
+    const submittedContactId =
+      contactOptionsState === "ready" &&
+      contacts.some((contact) => contact.id === contactId)
+        ? contactId
+        : null;
     try {
       const interaction = await apiRequest<Interaction>(
         "/api/v1/interactions",
@@ -229,10 +620,10 @@ export function InteractionForm({
             title: title.trim(),
             interactionType,
             lifecycleStatus: "planned",
-            companyId: companyId || null,
-            opportunityId: opportunityId || null,
+            companyId: submittedCompanyId,
+            opportunityId: submittedOpportunityId,
             contactId:
-              interactionType === "phone_call" ? contactId || null : null,
+              interactionType === "phone_call" ? submittedContactId : null,
             callDirection:
               interactionType === "phone_call" ? callDirection : null,
             meetingPlatform:
@@ -281,20 +672,12 @@ export function InteractionForm({
         </p>
       </div>
 
-      {loading ? (
-        <p role="status" className="mt-6 text-sm text-slate-600">
-          Loading conversation options…
-        </p>
-      ) : null}
-      {!loading && loadError ? (
-        <p
-          role="alert"
-          className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-900"
-        >
-          {loadError}
-        </p>
-      ) : null}
-      {!loading && !loadError ? (
+      <>
+        {loading ? (
+          <p role="status" className="mt-6 text-sm text-slate-600">
+            Loading optional relationship context…
+          </p>
+        ) : null}
         <form onSubmit={submit} className="mt-8 grid gap-5">
           {pendingLinkedContext ? (
             <aside
@@ -364,54 +747,86 @@ export function InteractionForm({
             </select>
           </label>
           <div className="grid gap-5 sm:grid-cols-2">
-            <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Company
-              <select
-                className="form-control"
-                value={companyId}
-                onChange={(event) => {
-                  markContextDirty();
-                  const nextCompanyId = event.target.value;
-                  setCompanyId(nextCompanyId);
-                  if (conversationOnly && opportunityId) {
-                    setOpportunityId("");
-                  }
-                  if (
-                    contactId &&
-                    contacts.find((contact) => contact.id === contactId)
-                      ?.companyId !== nextCompanyId
-                  ) {
-                    setContactId("");
-                  }
-                }}
-              >
-                <option value="">No company</option>
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {!conversationOnly ? (
+            <div>
               <label className="grid gap-2 text-sm font-bold text-slate-800">
-                Opportunity
+                Company
                 <select
                   className="form-control"
-                  value={opportunityId}
+                  disabled={companyOptionsState !== "ready"}
+                  value={companyOptionsState === "ready" ? companyId : ""}
                   onChange={(event) => {
                     markContextDirty();
-                    setOpportunityId(event.target.value);
+                    const nextCompanyId = event.target.value;
+                    setCompanyId(nextCompanyId);
+                    if (conversationOnly && opportunityId) {
+                      setOpportunityId("");
+                    }
+                    if (
+                      contactId &&
+                      contacts.find((contact) => contact.id === contactId)
+                        ?.companyId !== nextCompanyId
+                    ) {
+                      setContactId("");
+                    }
                   }}
                 >
-                  <option value="">No opportunity</option>
-                  {opportunities.map((opportunity) => (
-                    <option key={opportunity.id} value={opportunity.id}>
-                      {opportunity.name}
+                  <option value="">
+                    {companyOptionsState === "loading"
+                      ? "Loading companies…"
+                      : companyOptionsState === "unavailable"
+                        ? "Company options unavailable"
+                        : "No company"}
+                  </option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
                     </option>
                   ))}
                 </select>
               </label>
+              <OptionAvailability
+                message={companyOptionsWarning}
+                retryLabel="Retry companies"
+                loading={companyOptionsState === "loading"}
+                onRetry={() => requestOptionRetry("company")}
+              />
+            </div>
+            {!conversationOnly ? (
+              <div>
+                <label className="grid gap-2 text-sm font-bold text-slate-800">
+                  Opportunity
+                  <select
+                    className="form-control"
+                    disabled={opportunityOptionsState !== "ready"}
+                    value={
+                      opportunityOptionsState === "ready" ? opportunityId : ""
+                    }
+                    onChange={(event) => {
+                      markContextDirty();
+                      setOpportunityId(event.target.value);
+                    }}
+                  >
+                    <option value="">
+                      {opportunityOptionsState === "loading"
+                        ? "Loading opportunities…"
+                        : opportunityOptionsState === "unavailable"
+                          ? "Opportunity options unavailable"
+                          : "No opportunity"}
+                    </option>
+                    {opportunities.map((opportunity) => (
+                      <option key={opportunity.id} value={opportunity.id}>
+                        {opportunity.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <OptionAvailability
+                  message={opportunityOptionsWarning}
+                  retryLabel="Retry opportunities"
+                  loading={opportunityOptionsState === "loading"}
+                  onRetry={() => requestOptionRetry("opportunity")}
+                />
+              </div>
             ) : null}
           </div>
           {interactionType === "phone_call" ? (
@@ -438,30 +853,45 @@ export function InteractionForm({
                   <option value="inbound">Inbound</option>
                 </select>
               </label>
-              <label className="grid gap-2 text-sm font-bold text-slate-800">
-                Person
-                <select
-                  className="form-control"
-                  value={contactId}
-                  onChange={(event) => {
-                    markContextDirty();
-                    setContactId(event.target.value);
-                  }}
-                >
-                  <option value="">No contact</option>
-                  {contacts
-                    .filter(
-                      (contact) =>
-                        !companyId || contact.companyId === companyId,
-                    )
-                    .map((contact) => (
-                      <option key={contact.id} value={contact.id}>
-                        {contact.firstName} {contact.lastName}
-                        {contact.jobTitle ? ` · ${contact.jobTitle}` : ""}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              <div>
+                <label className="grid gap-2 text-sm font-bold text-slate-800">
+                  Person
+                  <select
+                    className="form-control"
+                    disabled={contactOptionsState !== "ready"}
+                    value={contactOptionsState === "ready" ? contactId : ""}
+                    onChange={(event) => {
+                      markContextDirty();
+                      setContactId(event.target.value);
+                    }}
+                  >
+                    <option value="">
+                      {contactOptionsState === "loading"
+                        ? "Loading people…"
+                        : contactOptionsState === "unavailable"
+                          ? "People options unavailable"
+                          : "No contact"}
+                    </option>
+                    {contacts
+                      .filter(
+                        (contact) =>
+                          !companyId || contact.companyId === companyId,
+                      )
+                      .map((contact) => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.firstName} {contact.lastName}
+                          {contact.jobTitle ? ` · ${contact.jobTitle}` : ""}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <OptionAvailability
+                  message={contactOptionsWarning}
+                  retryLabel="Retry people"
+                  loading={contactOptionsState === "loading"}
+                  onRetry={() => requestOptionRetry("contact")}
+                />
+              </div>
             </fieldset>
           ) : null}
           {interactionType === "online_meeting" ? (
@@ -555,9 +985,38 @@ export function InteractionForm({
             </Link>
           </div>
         </form>
-      ) : null}
+      </>
     </section>
   );
+}
+
+function OptionAvailability({
+  message,
+  retryLabel,
+  loading,
+  onRetry,
+}: {
+  message: string | null;
+  retryLabel: string;
+  loading: boolean;
+  onRetry: () => void;
+}) {
+  return message ? (
+    <div
+      role="status"
+      className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-normal leading-6 text-amber-950"
+    >
+      <p>{message}</p>
+      <button
+        type="button"
+        className="secondary-button mt-3"
+        disabled={loading}
+        onClick={onRetry}
+      >
+        {loading ? "Retrying…" : retryLabel}
+      </button>
+    </div>
+  ) : null;
 }
 
 function OptionalSchedule({
