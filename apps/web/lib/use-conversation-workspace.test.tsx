@@ -9,6 +9,21 @@ function response(body: object, status = 200): Response {
   });
 }
 
+function deferred<T>() {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolvePromise)
+        throw new Error("Deferred promise was not initialised.");
+      resolvePromise(value);
+    },
+  };
+}
+
 const savedWorkspace = {
   exists: true,
   ownerUserId: "user-1",
@@ -1170,5 +1185,685 @@ describe("useConversationWorkspace", () => {
         liveNotes: "Latest note saved in another session",
       },
     });
+  });
+
+  it("redacts the previous interaction synchronously and blocks a pre-load save", async () => {
+    const interactionB = deferred<Response>();
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 9,
+      liveNotes: null,
+      enhancedNotes: null,
+      followUpDraft: null,
+    };
+    const savedB = {
+      ...workspaceB,
+      lockVersion: 10,
+      liveNotes: "New B note",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockImplementationOnce(() => interactionB.promise)
+      .mockResolvedValueOnce(response(savedB));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({
+        interactionId,
+        initialLiveNotes,
+        initialEnhancedNotes,
+        initialFollowUpDraft,
+      }) =>
+        useConversationWorkspace({
+          interactionId,
+          initialLiveNotes,
+          initialEnhancedNotes,
+          initialFollowUpDraft,
+        }),
+      {
+        initialProps: {
+          interactionId: "interaction-a",
+          initialLiveNotes: "Stale A rough notes",
+          initialEnhancedNotes: "Stale A enhanced notes",
+          initialFollowUpDraft: "Stale A follow-up",
+        },
+      },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(savedWorkspace.liveNotes);
+
+    rerender({
+      interactionId: "interaction-b",
+      initialLiveNotes: "Stale A rough notes",
+      initialEnhancedNotes: "Stale A enhanced notes",
+      initialFollowUpDraft: "Stale A follow-up",
+    });
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.values).toEqual({
+      liveNotes: "",
+      enhancedNotes: "",
+      followUpDraft: "",
+      followUpReviewed: false,
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await act(async () => interactionB.resolve(response(workspaceB)));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values).toEqual({
+      liveNotes: "",
+      enhancedNotes: "",
+      followUpDraft: "",
+      followUpReviewed: false,
+    });
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: savedB.liveNotes,
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(true);
+    });
+    const bBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body));
+    expect(bBody).toMatchObject({
+      liveNotes: savedB.liveNotes,
+      enhancedNotes: "",
+      followUpDraft: "",
+    });
+    expect(JSON.stringify(bBody)).not.toContain("Stale A");
+  });
+
+  it("does not promote a new interaction before its blank state is committed", async () => {
+    const interactionBReads: Array<ReturnType<typeof deferred<Response>>> = [];
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 8,
+      liveNotes: "Interaction B notes",
+      enhancedNotes: "Interaction B enhanced notes",
+      followUpDraft: "Interaction B follow-up",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(response(workspaceB));
+      }
+      if (String(input).includes("interaction-a")) {
+        return Promise.resolve(response(savedWorkspace));
+      }
+      const read = deferred<Response>();
+      interactionBReads.push(read);
+      return read.promise;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    rerender({ interactionId: "interaction-b" });
+
+    let reloadPromise: Promise<void> | undefined;
+    let savePromise: Promise<boolean> | undefined;
+    act(() => {
+      reloadPromise = result.current.reload();
+      savePromise = result.current.save();
+    });
+
+    await expect(savePromise).resolves.toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+
+    await waitFor(() => expect(interactionBReads.length).toBeGreaterThan(0));
+    await act(async () => {
+      for (const read of interactionBReads) read.resolve(response(workspaceB));
+      await reloadPromise;
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+  });
+
+  it("ignores a delayed load from the previous interaction", async () => {
+    const interactionA = deferred<Response>();
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 8,
+      liveNotes: "Interaction B remains authoritative",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => interactionA.promise)
+      .mockResolvedValueOnce(response(workspaceB));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+
+    await act(async () => interactionA.resolve(response(savedWorkspace)));
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+    expect(result.current.workspace?.lockVersion).toBe(8);
+  });
+
+  it("starts a fresh session when navigating away and back to the same interaction", async () => {
+    const interactionB = deferred<Response>();
+    const secondInteractionA = deferred<Response>();
+    const refreshedA = {
+      ...savedWorkspace,
+      lockVersion: 10,
+      liveNotes: "Fresh A notes after returning",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockImplementationOnce(() => interactionB.promise)
+      .mockImplementationOnce(() => secondInteractionA.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Unsaved A text that must not be restored",
+      }));
+    });
+
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    rerender({ interactionId: "interaction-a" });
+
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.values.liveNotes).toBe("");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await act(async () => secondInteractionA.resolve(response(refreshedA)));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(refreshedA.liveNotes);
+
+    await act(async () =>
+      interactionB.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 99,
+          liveNotes: "Late B text",
+        }),
+      ),
+    );
+    expect(result.current.values.liveNotes).toBe(refreshedA.liveNotes);
+  });
+
+  it("ignores an old save completion and keeps later saves bound to the new interaction", async () => {
+    const saveA = deferred<Response>();
+    const saveB = deferred<Response>();
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 11,
+      liveNotes: "Interaction B notes",
+      enhancedNotes: "Interaction B enhanced notes",
+      followUpDraft: "Interaction B follow-up",
+    };
+    const savedB = {
+      ...workspaceB,
+      lockVersion: 12,
+      liveNotes: "Interaction B edited notes",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockImplementationOnce(() => saveA.promise)
+      .mockResolvedValueOnce(response(workspaceB))
+      .mockImplementationOnce(() => saveB.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Unsaved A notes",
+      }));
+    });
+    let oldSave: Promise<boolean> | undefined;
+    act(() => {
+      oldSave = result.current.save();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: savedB.liveNotes,
+      }));
+    });
+    let newSave: Promise<boolean> | undefined;
+    act(() => {
+      newSave = result.current.save();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+
+    await act(async () =>
+      saveA.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 5,
+          liveNotes: "Saved A notes",
+        }),
+      ),
+    );
+    await expect(oldSave).resolves.toBe(false);
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    await act(async () => saveB.resolve(response(savedB)));
+    await expect(newSave).resolves.toBe(true);
+    expect(result.current.values.liveNotes).toBe(savedB.liveNotes);
+    const bSaveBody = JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body));
+    expect(fetchMock.mock.calls[3]?.[0]).toContain("interaction-b");
+    expect(bSaveBody).toMatchObject({
+      expectedLockVersion: 11,
+      liveNotes: savedB.liveNotes,
+      enhancedNotes: workspaceB.enhancedNotes,
+      followUpDraft: workspaceB.followUpDraft,
+    });
+    expect(JSON.stringify(bSaveBody)).not.toContain("Unsaved A notes");
+  });
+
+  it("ignores a delayed conflict snapshot from the previous interaction", async () => {
+    const conflictA = deferred<Response>();
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 15,
+      liveNotes: "Private B notes",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockImplementationOnce(() => conflictA.promise)
+      .mockResolvedValueOnce(response(workspaceB));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let oldSave: Promise<boolean> | undefined;
+    act(() => {
+      oldSave = result.current.save({ liveNotes: "Conflicting A text" });
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () =>
+      conflictA.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 6,
+          liveNotes: "Latest A conflict text",
+        }),
+      ),
+    );
+    await expect(oldSave).resolves.toBe(false);
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+    expect(result.current.saveState).toBe("idle");
+    expect(result.current.conflictRecovery.state).toBe("idle");
+  });
+
+  it("keeps retained conflict actions bound to their original interaction", async () => {
+    const latestA = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Latest private A conflict text",
+    };
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 15,
+      liveNotes: "Private B notes",
+      enhancedNotes: "Private B enhanced notes",
+      followUpDraft: "Private B follow-up",
+    };
+    const savedB = {
+      ...workspaceB,
+      lockVersion: 16,
+      liveNotes: "Edited private B notes",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestA))
+      .mockResolvedValueOnce(response(workspaceB))
+      .mockResolvedValueOnce(response(savedB));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      expect(
+        await result.current.save({ liveNotes: "Submitted private A text" }),
+      ).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("ready");
+    const useOldLatest = result.current.useLatestConflict;
+    const reloadOldLatest = result.current.loadLatestConflict;
+
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+
+    act(() => {
+      expect(useOldLatest()).toBe(false);
+    });
+    await act(async () => {
+      expect(await reloadOldLatest()).toBe(false);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+    expect(result.current.workspace?.lockVersion).toBe(workspaceB.lockVersion);
+
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: savedB.liveNotes,
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(true);
+    });
+    const bBody = JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body));
+    expect(fetchMock.mock.calls[4]?.[0]).toContain("interaction-b");
+    expect(bBody).toMatchObject({
+      expectedLockVersion: workspaceB.lockVersion,
+      liveNotes: savedB.liveNotes,
+      enhancedNotes: workspaceB.enhancedNotes,
+      followUpDraft: workspaceB.followUpDraft,
+    });
+    expect(JSON.stringify(bBody)).not.toContain("private A");
+  });
+
+  it("ignores a delayed generation retry from the previous interaction", async () => {
+    const retryA = deferred<Response>();
+    const retryableA = {
+      ...savedWorkspace,
+      generationState: "failed" as const,
+      generationRetryAvailable: true,
+    };
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 20,
+      liveNotes: "B remains visible after A retry",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(retryableA))
+      .mockImplementationOnce(() => retryA.promise)
+      .mockResolvedValueOnce(response(workspaceB));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let oldRetry: Promise<boolean> | undefined;
+    act(() => {
+      oldRetry = result.current.retryGeneration();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () =>
+      retryA.resolve(
+        response({
+          ...retryableA,
+          generationState: "pending",
+          generationRetryAvailable: false,
+        }),
+      ),
+    );
+    await expect(oldRetry).resolves.toBe(false);
+    expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
+    expect(result.current.workspace?.lockVersion).toBe(20);
+  });
+
+  it("ignores a delayed generated-version apply from the previous interaction", async () => {
+    const applyA = deferred<Response>();
+    const applicableA = {
+      ...savedWorkspace,
+      generationId: "generation-2",
+      generationUpdateAvailable: true,
+    };
+    const workspaceB = {
+      ...savedWorkspace,
+      lockVersion: 21,
+      enhancedNotes: "B enhanced notes stay visible",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(applicableA))
+      .mockImplementationOnce(() => applyA.promise)
+      .mockResolvedValueOnce(response(workspaceB));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ interactionId }) => useConversationWorkspace({ interactionId }),
+      { initialProps: { interactionId: "interaction-a" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let oldApply: Promise<boolean> | undefined;
+    act(() => {
+      oldApply = result.current.applyGeneratedVersion();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    rerender({ interactionId: "interaction-b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () =>
+      applyA.resolve(
+        response({
+          ...applicableA,
+          lockVersion: 5,
+          enhancedNotes: "Applied A enhanced notes",
+          generationUpdateAvailable: false,
+        }),
+      ),
+    );
+    await expect(oldApply).resolves.toBe(false);
+    expect(result.current.values.enhancedNotes).toBe(workspaceB.enhancedNotes);
+    expect(result.current.workspace?.lockVersion).toBe(21);
+  });
+
+  it("keeps the newest same-interaction refresh authoritative", async () => {
+    const firstRefresh = deferred<Response>();
+    const secondRefresh = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockImplementationOnce(() => firstRefresh.promise)
+      .mockImplementationOnce(() => secondRefresh.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      void result.current.refresh();
+      void result.current.refresh();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    await act(async () =>
+      secondRefresh.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 6,
+          liveNotes: "Newest refresh",
+        }),
+      ),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe("Newest refresh");
+
+    await act(async () =>
+      firstRefresh.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 5,
+          liveNotes: "Older refresh",
+        }),
+      ),
+    );
+    expect(result.current.values.liveNotes).toBe("Newest refresh");
+    expect(result.current.workspace?.lockVersion).toBe(6);
+  });
+
+  it("does not let an older refresh overwrite a later save", async () => {
+    const staleRefresh = deferred<Response>();
+    const savedAfterRefresh = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Saved after refresh started",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockImplementationOnce(() => staleRefresh.promise)
+      .mockResolvedValueOnce(response(savedAfterRefresh));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      void result.current.refresh();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: savedAfterRefresh.liveNotes,
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(true);
+    });
+    expect(result.current.workspace?.lockVersion).toBe(5);
+
+    await act(async () =>
+      staleRefresh.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 99,
+          liveNotes: "Stale refresh text",
+        }),
+      ),
+    );
+    expect(result.current.values.liveNotes).toBe(savedAfterRefresh.liveNotes);
+    expect(result.current.workspace?.lockVersion).toBe(5);
+  });
+
+  it("ignores a refresh snapshot that started while a save was in flight", async () => {
+    const pendingSave = deferred<Response>();
+    const overlappingRefresh = deferred<Response>();
+    const saved = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Authoritative saved text",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockImplementationOnce(() => pendingSave.promise)
+      .mockImplementationOnce(() => overlappingRefresh.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: saved.liveNotes,
+      }));
+    });
+    let savePromise: Promise<boolean> | undefined;
+    let refreshPromise: Promise<void> | undefined;
+    act(() => {
+      savePromise = result.current.save();
+      refreshPromise = result.current.refresh();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    await act(async () => pendingSave.resolve(response(saved)));
+    await expect(savePromise).resolves.toBe(true);
+    expect(result.current.workspace?.lockVersion).toBe(5);
+
+    await act(async () =>
+      overlappingRefresh.resolve(
+        response({
+          ...savedWorkspace,
+          lockVersion: 4,
+          liveNotes: "Stale pre-save snapshot",
+        }),
+      ),
+    );
+    await refreshPromise;
+    expect(result.current.values.liveNotes).toBe(saved.liveNotes);
+    expect(result.current.workspace?.lockVersion).toBe(5);
   });
 });

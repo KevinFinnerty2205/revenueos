@@ -29,6 +29,21 @@ function jsonResponse(body: object, status = 200): Response {
   });
 }
 
+function deferred<T>() {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolvePromise)
+        throw new Error("Deferred promise was not initialised.");
+      resolvePromise(value);
+    },
+  };
+}
+
 function capability<T>(
   state: MeetingIntelligenceCapability<T>["state"],
   content: T | null = null,
@@ -1256,6 +1271,166 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect((draft as HTMLTextAreaElement).value).toContain(
       "Regenerated next steps",
     );
+  });
+
+  it("removes regenerated private text before loading another meeting", async () => {
+    const meetingBIntelligence = deferred<Response>();
+    let meetingAIntelligence = {
+      ...completedWorkspace(),
+      followUpEmail: {
+        ...completedWorkspace().followUpEmail,
+        content: { ...emailContent, subject: "Initial A next steps" },
+      },
+    };
+    const meetingBIntelligenceResponse = {
+      ...completedWorkspace(),
+      followUpEmail: {
+        ...completedWorkspace().followUpEmail,
+        content: { ...emailContent, subject: "Meeting B next steps" },
+      },
+    };
+    const privateA = {
+      exists: true,
+      ownerUserId: "user-1",
+      lockVersion: 2,
+      liveNotes: "Private A rough notes",
+      enhancedNotes: "Private A enhanced notes",
+      followUpDraft: "Private A saved follow-up",
+      followUpReviewed: true,
+      generationFingerprint: null,
+      generationState: "not_started" as const,
+      generationId: null,
+      generationTranscriptVersion: null,
+      generationPersonalNotesState: "not_included" as const,
+      generationFailureCode: null,
+      generationRetryAvailable: false,
+      generationUpdateAvailable: false,
+      generationCompletedAt: null,
+      importedFromBrowserAt: null,
+      updatedAt: "2026-10-31T00:00:00Z",
+    };
+    const privateB = {
+      ...privateA,
+      lockVersion: 7,
+      liveNotes: "Private B rough notes",
+      enhancedNotes: "Private B enhanced notes",
+      followUpDraft: "Private B saved follow-up",
+      followUpReviewed: false,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/meetings/meeting-a/intelligence")) {
+        if (init?.method === "POST" && url.endsWith("/follow-up-email")) {
+          meetingAIntelligence = {
+            ...meetingAIntelligence,
+            followUpEmail: {
+              ...meetingAIntelligence.followUpEmail,
+              content: {
+                ...emailContent,
+                subject: "Regenerated private A next steps",
+              },
+            },
+          };
+          return Promise.resolve(jsonResponse({ accepted: true }, 202));
+        }
+        return Promise.resolve(jsonResponse(meetingAIntelligence));
+      }
+      if (url.includes("/meetings/meeting-b/intelligence")) {
+        return meetingBIntelligence.promise;
+      }
+      if (url.includes("/interactions/interaction-a/personal-workspace")) {
+        return Promise.resolve(jsonResponse(privateA));
+      }
+      if (url.includes("/interactions/interaction-b/personal-workspace")) {
+        if (init?.method === "PUT") {
+          const body = JSON.parse(String(init.body)) as {
+            followUpDraft: string;
+          };
+          return Promise.resolve(
+            jsonResponse({
+              ...privateB,
+              lockVersion: 8,
+              followUpDraft: body.followUpDraft,
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(privateB));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-a"
+        interactionId="interaction-a"
+      />,
+    );
+
+    const draftA = await screen.findByLabelText("Editable follow-up draft");
+    await waitFor(() => expect(draftA).toHaveValue(privateA.followUpDraft));
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    expect(
+      await screen.findByRole("button", { name: "Use regenerated draft" }),
+    ).toBeVisible();
+
+    rerender(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-b"
+        interactionId="interaction-b"
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading Meeting Intelligence",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Use regenerated draft" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue(privateA.followUpDraft),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("interaction-b/personal-workspace"),
+      ),
+    ).toBe(false);
+
+    await act(async () =>
+      meetingBIntelligence.resolve(jsonResponse(meetingBIntelligenceResponse)),
+    );
+    const draftB = await screen.findByLabelText("Editable follow-up draft");
+    await waitFor(() => expect(draftB).toHaveValue(privateB.followUpDraft));
+    expect(draftB).not.toHaveValue(privateA.followUpDraft);
+    expect(
+      screen.queryByRole("button", { name: "Use regenerated draft" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(draftB, {
+      target: { value: "Edited private B follow-up" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).includes(
+              "/interactions/interaction-b/personal-workspace",
+            ) && init?.method === "PUT",
+        ),
+      ).toBe(true),
+    );
+    const bPut = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).includes(
+          "/interactions/interaction-b/personal-workspace",
+        ) && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(bPut?.[1]?.body))).toMatchObject({
+      expectedLockVersion: privateB.lockVersion,
+      followUpDraft: "Edited private B follow-up",
+    });
+    expect(String(bPut?.[1]?.body)).not.toContain("private A");
   });
 
   it("reviews a stale browser import without losing provenance or newer private fields", async () => {

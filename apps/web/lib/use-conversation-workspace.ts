@@ -5,6 +5,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -210,6 +211,38 @@ function mergeGenerationMetadata(
   return merged;
 }
 
+interface WorkspaceSession {
+  interactionId: string;
+  epoch: symbol;
+}
+
+interface WorkspaceOperationToken extends WorkspaceSession {
+  token: number;
+}
+
+interface WorkspaceReadRequest extends WorkspaceSession {
+  sequence: number;
+  controller: AbortController;
+}
+
+interface CommittedWorkspaceState {
+  owner: WorkspaceSession | null;
+  workspace: ConversationWorkspaceResponse | null;
+  values: WorkspaceValues;
+  baseline: WorkspaceValues;
+  saveState: WorkspaceSaveState;
+  conflictRecovery: WorkspaceConflictRecovery;
+}
+
+function sameWorkspaceSession(
+  left: WorkspaceSession,
+  right: WorkspaceSession,
+): boolean {
+  return (
+    left.interactionId === right.interactionId && left.epoch === right.epoch
+  );
+}
+
 export function useConversationWorkspace({
   interactionId,
   initialLiveNotes = "",
@@ -223,13 +256,45 @@ export function useConversationWorkspace({
   initialFollowUpDraft?: string;
   refreshKey?: number;
 }) {
+  const renderSession = useMemo<WorkspaceSession>(
+    () => ({ interactionId, epoch: Symbol(interactionId) }),
+    [interactionId],
+  );
+  const activeSession = useRef<WorkspaceSession>(renderSession);
+  const [firstSession] = useState(() => ({
+    session: renderSession,
+    defaults: {
+      liveNotes: initialLiveNotes,
+      enhancedNotes: initialEnhancedNotes,
+      followUpDraft: initialFollowUpDraft,
+    },
+  }));
+  const sessionDefaults = sameWorkspaceSession(
+    firstSession.session,
+    renderSession,
+  )
+    ? firstSession.defaults
+    : AUTHORITATIVE_EMPTY_VALUES;
+  const defaults = useRef({
+    ...firstSession.defaults,
+  });
+  useLayoutEffect(() => {
+    activeSession.current = renderSession;
+    defaults.current = {
+      liveNotes: sessionDefaults.liveNotes,
+      enhancedNotes: sessionDefaults.enhancedNotes,
+      followUpDraft: sessionDefaults.followUpDraft,
+    };
+  }, [
+    renderSession,
+    sessionDefaults.enhancedNotes,
+    sessionDefaults.followUpDraft,
+    sessionDefaults.liveNotes,
+  ]);
   const [workspace, setWorkspace] =
     useState<ConversationWorkspaceResponse | null>(null);
-  const defaults = useRef({
-    liveNotes: initialLiveNotes,
-    enhancedNotes: initialEnhancedNotes,
-    followUpDraft: initialFollowUpDraft,
-  });
+  const [stateOwnerSession, setStateOwnerSession] =
+    useState<WorkspaceSession | null>(null);
   const [values, setValuesState] = useState<WorkspaceValues>({
     liveNotes: initialLiveNotes,
     enhancedNotes: initialEnhancedNotes,
@@ -251,65 +316,237 @@ export function useConversationWorkspace({
   const [conflictRecovery, setConflictRecovery] =
     useState<WorkspaceConflictRecovery>(EMPTY_CONFLICT_RECOVERY);
   const valuesRevision = useRef(0);
-  const saveRequestInFlight = useRef(false);
-  const loadedInteractionId = useRef<string | null>(null);
+  const activeRead = useRef<WorkspaceReadRequest | null>(null);
+  const activeConflictRead = useRef<WorkspaceReadRequest | null>(null);
+  const readSequence = useRef(0);
+  const conflictReadSequence = useRef(0);
+  const operationSequence = useRef(0);
+  const activeSaveToken = useRef<WorkspaceOperationToken | null>(null);
+  const activeGenerationToken = useRef<WorkspaceOperationToken | null>(null);
+  const loadedSession = useRef<WorkspaceSession | null>(null);
   const appliedRefreshKey = useRef(refreshKey);
-  const setValues = useCallback((update: SetStateAction<WorkspaceValues>) => {
-    valuesRevision.current += 1;
-    setValuesState(update);
+  const committedState = useRef<CommittedWorkspaceState>({
+    owner: null,
+    workspace,
+    values,
+    baseline,
+    saveState,
+    conflictRecovery,
+  });
+
+  useLayoutEffect(() => {
+    // Publish one keyed snapshot only after all state from this commit exists.
+    // Mutations never combine a new owner with values from an older commit.
+    committedState.current = {
+      owner: stateOwnerSession,
+      workspace,
+      values,
+      baseline,
+      saveState,
+      conflictRecovery,
+    };
+  }, [
+    baseline,
+    conflictRecovery,
+    saveState,
+    stateOwnerSession,
+    values,
+    workspace,
+  ]);
+
+  const sessionIsCurrent = useCallback((candidate: WorkspaceSession) => {
+    return sameWorkspaceSession(activeSession.current, candidate);
   }, []);
 
-  const fieldsDirty = useMemo(
-    () => dirtyFields(values, baseline),
-    [baseline, values],
+  const ownerIsCurrent = useCallback((candidate: WorkspaceSession) => {
+    const owner = committedState.current.owner;
+    return (
+      sameWorkspaceSession(activeSession.current, candidate) &&
+      owner !== null &&
+      sameWorkspaceSession(owner, candidate)
+    );
+  }, []);
+
+  const setValues = useCallback(
+    (update: SetStateAction<WorkspaceValues>) => {
+      const target = renderSession;
+      if (!ownerIsCurrent(target)) return;
+      valuesRevision.current += 1;
+      setValuesState((current) => {
+        if (!ownerIsCurrent(target)) return current;
+        return typeof update === "function" ? update(current) : update;
+      });
+    },
+    [ownerIsCurrent, renderSession],
   );
-  const isDirty = Object.values(fieldsDirty).some(Boolean);
 
-  const hydrate = useCallback((response: ConversationWorkspaceResponse) => {
-    const next = responseValues(response, defaults.current);
-    setBaseline(next);
-    setWorkspace(response);
-    setValuesState(next);
-    setSaveState("idle");
-    setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
-    setGenerationActionState("idle");
-    setGenerationError(null);
+  const nextOperationToken = useCallback(
+    (target: WorkspaceSession): WorkspaceOperationToken => ({
+      ...target,
+      token: ++operationSequence.current,
+    }),
+    [],
+  );
+
+  const operationIsCurrent = useCallback(
+    (token: WorkspaceOperationToken) => sessionIsCurrent(token),
+    [sessionIsCurrent],
+  );
+
+  const beginRead = useCallback((target: WorkspaceSession) => {
+    activeRead.current?.controller.abort();
+    const request: WorkspaceReadRequest = {
+      ...target,
+      sequence: ++readSequence.current,
+      controller: new AbortController(),
+    };
+    activeRead.current = request;
+    return request;
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await apiRequest<ConversationWorkspaceResponse>(
-        `/api/v1/interactions/${interactionId}/personal-workspace`,
-      );
-      hydrate(response);
-    } catch (reason: unknown) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Your private conversation workspace could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [hydrate, interactionId]);
+  const readIsCurrent = useCallback(
+    (request: WorkspaceReadRequest) =>
+      activeRead.current === request &&
+      !request.controller.signal.aborted &&
+      sessionIsCurrent(request),
+    [sessionIsCurrent],
+  );
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await apiRequest<ConversationWorkspaceResponse>(
-        `/api/v1/interactions/${interactionId}/personal-workspace`,
-      );
-      const preserveLocalValues =
-        isDirty ||
-        saveState === "saving" ||
-        saveState === "conflict" ||
-        conflictRecovery.state !== "idle";
-      if (workspace === null || !preserveLocalValues) {
-        hydrate(response);
-      } else {
+  const finishRead = useCallback(
+    (request: WorkspaceReadRequest) => {
+      if (!readIsCurrent(request)) return;
+      activeRead.current = null;
+      setLoading(false);
+    },
+    [readIsCurrent],
+  );
+
+  const invalidateActiveRead = useCallback(
+    (target: WorkspaceSession) => {
+      if (!sessionIsCurrent(target)) return;
+      activeRead.current?.controller.abort();
+      activeRead.current = null;
+      readSequence.current += 1;
+      setLoading(false);
+    },
+    [sessionIsCurrent],
+  );
+
+  const hydrate = useCallback(
+    (
+      target: WorkspaceSession,
+      response: ConversationWorkspaceResponse,
+      fallback: Pick<
+        WorkspaceValues,
+        "liveNotes" | "enhancedNotes" | "followUpDraft"
+      >,
+    ) => {
+      if (!sessionIsCurrent(target)) return false;
+      const next = responseValues(response, fallback);
+      setStateOwnerSession(target);
+      setBaseline(next);
+      setWorkspace(response);
+      setValuesState(next);
+      setSaveState("idle");
+      setError(null);
+      setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
+      setGenerationActionState("idle");
+      setGenerationError(null);
+      return true;
+    },
+    [sessionIsCurrent],
+  );
+
+  const loadForSession = useCallback(
+    async (target: WorkspaceSession) => {
+      if (!sessionIsCurrent(target)) return false;
+      const fallback = {
+        liveNotes: defaults.current.liveNotes,
+        enhancedNotes: defaults.current.enhancedNotes,
+        followUpDraft: defaults.current.followUpDraft,
+      };
+      activeConflictRead.current?.controller.abort();
+      activeConflictRead.current = null;
+      conflictReadSequence.current += 1;
+      setStateOwnerSession(target);
+      valuesRevision.current = 0;
+      setWorkspace(null);
+      setValuesState({ ...fallback, followUpReviewed: false });
+      setBaseline({ ...fallback, followUpReviewed: false });
+      setSaveState("idle");
+      setError(null);
+      setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
+      setGenerationActionState("idle");
+      setGenerationError(null);
+      setLoading(true);
+      const request = beginRead(target);
+      try {
+        const response = await apiRequest<ConversationWorkspaceResponse>(
+          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
+          { signal: request.controller.signal },
+        );
+        if (!readIsCurrent(request)) return false;
+        return hydrate(target, response, fallback);
+      } catch (reason: unknown) {
+        if (!readIsCurrent(request)) return false;
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Your private conversation workspace could not be loaded.",
+        );
+        return false;
+      } finally {
+        finishRead(request);
+      }
+    },
+    [beginRead, finishRead, hydrate, readIsCurrent, sessionIsCurrent],
+  );
+
+  const refreshForSession = useCallback(
+    async (target: WorkspaceSession) => {
+      const requestStartState = committedState.current;
+      if (!ownerIsCurrent(target) || requestStartState.workspace === null) {
+        return loadForSession(target);
+      }
+      const saveAtStart = activeSaveToken.current;
+      const generationAtStart = activeGenerationToken.current;
+      const overlapsMutation =
+        (saveAtStart !== null && sameWorkspaceSession(saveAtStart, target)) ||
+        (generationAtStart !== null &&
+          sameWorkspaceSession(generationAtStart, target));
+      const requestStartRevision = valuesRevision.current;
+      setLoading(true);
+      setError(null);
+      const request = beginRead(target);
+      try {
+        const response = await apiRequest<ConversationWorkspaceResponse>(
+          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
+          { signal: request.controller.signal },
+        );
+        if (!readIsCurrent(request) || !ownerIsCurrent(target)) return false;
+        if (overlapsMutation) return false;
+        const latestState = committedState.current;
+        if (
+          latestState.owner === null ||
+          !sameWorkspaceSession(latestState.owner, target)
+        ) {
+          return false;
+        }
+        const preserveLocalValues =
+          Object.values(
+            dirtyFields(latestState.values, latestState.baseline),
+          ).some(Boolean) ||
+          valuesRevision.current !== requestStartRevision ||
+          latestState.saveState === "saving" ||
+          latestState.saveState === "conflict" ||
+          latestState.conflictRecovery.state !== "idle";
+        if (!preserveLocalValues) {
+          return hydrate(target, response, {
+            liveNotes: defaults.current.liveNotes,
+            enhancedNotes: defaults.current.enhancedNotes,
+            followUpDraft: defaults.current.followUpDraft,
+          });
+        }
         setWorkspace((current) =>
           current === null
             ? response
@@ -317,27 +554,52 @@ export function useConversationWorkspace({
         );
         setGenerationActionState("idle");
         setGenerationError(null);
+        return true;
+      } catch (reason: unknown) {
+        if (!readIsCurrent(request)) return false;
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Your private conversation workspace could not be refreshed.",
+        );
+        return false;
+      } finally {
+        finishRead(request);
       }
-    } catch (reason: unknown) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Your private conversation workspace could not be refreshed.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    conflictRecovery.state,
-    hydrate,
-    interactionId,
-    isDirty,
-    saveState,
-    workspace,
-  ]);
+    },
+    [
+      beginRead,
+      finishRead,
+      hydrate,
+      loadForSession,
+      ownerIsCurrent,
+      readIsCurrent,
+    ],
+  );
+
+  const load = useCallback(async () => {
+    if (!sessionIsCurrent(renderSession)) return;
+    await loadForSession(renderSession);
+  }, [loadForSession, renderSession, sessionIsCurrent]);
+
+  const refresh = useCallback(async () => {
+    if (!sessionIsCurrent(renderSession)) return;
+    await refreshForSession(renderSession);
+  }, [refreshForSession, renderSession, sessionIsCurrent]);
 
   const fetchLatestConflict = useCallback(
-    async (submission: WorkspaceConflictSubmission) => {
+    async (
+      submission: WorkspaceConflictSubmission,
+      target: WorkspaceSession,
+    ) => {
+      if (!ownerIsCurrent(target)) return false;
+      activeConflictRead.current?.controller.abort();
+      const request: WorkspaceReadRequest = {
+        ...target,
+        sequence: ++conflictReadSequence.current,
+        controller: new AbortController(),
+      };
+      activeConflictRead.current = request;
       setConflictRecovery({
         state: "loading",
         latestWorkspace: null,
@@ -350,8 +612,16 @@ export function useConversationWorkspace({
       });
       try {
         const latestWorkspace = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${interactionId}/personal-workspace`,
+          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
+          { signal: request.controller.signal },
         );
+        if (
+          activeConflictRead.current !== request ||
+          request.controller.signal.aborted ||
+          !ownerIsCurrent(target)
+        ) {
+          return false;
+        }
         const latestValues = responseValues(
           latestWorkspace,
           AUTHORITATIVE_EMPTY_VALUES,
@@ -368,6 +638,13 @@ export function useConversationWorkspace({
         });
         return true;
       } catch (reason: unknown) {
+        if (
+          activeConflictRead.current !== request ||
+          request.controller.signal.aborted ||
+          !ownerIsCurrent(target)
+        ) {
+          return false;
+        }
         setConflictRecovery({
           state: "failed",
           latestWorkspace: null,
@@ -382,84 +659,140 @@ export function useConversationWorkspace({
               : "The latest saved workspace could not be loaded. Your local text is still visible.",
         });
         return false;
+      } finally {
+        if (activeConflictRead.current === request) {
+          activeConflictRead.current = null;
+        }
       }
     },
-    [interactionId],
+    [ownerIsCurrent],
   );
 
   const loadLatestConflict = useCallback(async () => {
-    if (saveState !== "conflict" || conflictRecovery.submittedValues === null) {
+    const target = renderSession;
+    const snapshot = committedState.current;
+    const recovery = snapshot.conflictRecovery;
+    if (
+      !ownerIsCurrent(target) ||
+      snapshot.owner === null ||
+      !sameWorkspaceSession(snapshot.owner, target) ||
+      snapshot.saveState !== "conflict" ||
+      recovery.submittedValues === null
+    ) {
       return false;
     }
-    return fetchLatestConflict({
-      values: conflictRecovery.submittedValues,
-      localValues:
-        conflictRecovery.localValuesAtSubmission ??
-        conflictRecovery.submittedValues,
-      fields: conflictRecovery.submittedFields,
-      importFromBrowser: conflictRecovery.importFromBrowser,
-    });
-  }, [conflictRecovery, fetchLatestConflict, saveState]);
+    return fetchLatestConflict(
+      {
+        values: recovery.submittedValues,
+        localValues:
+          recovery.localValuesAtSubmission ?? recovery.submittedValues,
+        fields: recovery.submittedFields,
+        importFromBrowser: recovery.importFromBrowser,
+      },
+      target,
+    );
+  }, [fetchLatestConflict, ownerIsCurrent, renderSession]);
 
   useEffect(() => {
-    const interactionChanged = loadedInteractionId.current !== interactionId;
+    const interactionChanged =
+      loadedSession.current === null ||
+      !sameWorkspaceSession(loadedSession.current, renderSession);
     const refreshRequested = appliedRefreshKey.current !== refreshKey;
     if (!interactionChanged && !refreshRequested) return;
 
+    const target = renderSession;
     let active = true;
     window.queueMicrotask(() => {
-      if (!active) return;
-      loadedInteractionId.current = interactionId;
+      if (!active || !sessionIsCurrent(target)) return;
+      loadedSession.current = target;
       appliedRefreshKey.current = refreshKey;
-      void (interactionChanged ? load() : refresh());
+      void (interactionChanged
+        ? loadForSession(target)
+        : refreshForSession(target));
     });
     return () => {
       active = false;
+      if (
+        activeRead.current &&
+        sameWorkspaceSession(activeRead.current, target)
+      ) {
+        activeRead.current.controller.abort();
+        activeRead.current = null;
+      }
+      if (
+        activeConflictRead.current &&
+        sameWorkspaceSession(activeConflictRead.current, target)
+      ) {
+        activeConflictRead.current.controller.abort();
+        activeConflictRead.current = null;
+      }
     };
-  }, [interactionId, load, refresh, refreshKey]);
+  }, [
+    interactionId,
+    loadForSession,
+    refreshForSession,
+    refreshKey,
+    renderSession,
+    sessionIsCurrent,
+  ]);
 
   const save = useCallback(
     async (
       next: Partial<WorkspaceValues> = {},
       options: { importFromBrowser?: boolean } = {},
     ) => {
+      const target = renderSession;
+      const snapshot = committedState.current;
       if (
-        workspace === null ||
-        saveRequestInFlight.current ||
-        saveState === "saving" ||
-        saveState === "conflict" ||
-        conflictRecovery.state !== "idle"
+        !ownerIsCurrent(target) ||
+        snapshot.owner === null ||
+        !sameWorkspaceSession(snapshot.owner, target) ||
+        snapshot.workspace === null ||
+        (activeSaveToken.current !== null &&
+          sameWorkspaceSession(activeSaveToken.current, target)) ||
+        snapshot.saveState === "saving" ||
+        snapshot.saveState === "conflict" ||
+        snapshot.conflictRecovery.state !== "idle"
       ) {
         return false;
       }
-      const requestStartValues = values;
+      const requestStartValues = snapshot.values;
       const requestStartRevision = valuesRevision.current;
       const merged = { ...requestStartValues, ...next };
       const conflictSubmission: WorkspaceConflictSubmission = {
         values: merged,
         localValues: requestStartValues,
-        fields: submittedFields(merged, baseline, next),
+        fields: submittedFields(merged, snapshot.baseline, next),
         importFromBrowser: options.importFromBrowser === true,
       };
-      saveRequestInFlight.current = true;
+      const token = nextOperationToken(target);
+      activeSaveToken.current = token;
+      invalidateActiveRead(target);
       setSaveState("saving");
       setError(null);
       try {
         const response = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${interactionId}/personal-workspace`,
+          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
           {
             method: "PUT",
             body: JSON.stringify({
-              expectedLockVersion: workspace.lockVersion,
+              expectedLockVersion: snapshot.workspace.lockVersion,
               liveNotes: merged.liveNotes,
               enhancedNotes: merged.enhancedNotes,
               followUpDraft: merged.followUpDraft,
               followUpReviewed: merged.followUpReviewed,
-              generationFingerprint: workspace.generationFingerprint,
+              generationFingerprint: snapshot.workspace.generationFingerprint,
               importFromBrowser: options.importFromBrowser === true,
             }),
           },
         );
+        if (
+          activeSaveToken.current !== token ||
+          !operationIsCurrent(token) ||
+          !ownerIsCurrent(target)
+        ) {
+          return false;
+        }
         const savedValues: WorkspaceValues = {
           liveNotes: response.liveNotes ?? merged.liveNotes,
           enhancedNotes: response.enhancedNotes ?? merged.enhancedNotes,
@@ -477,6 +810,13 @@ export function useConversationWorkspace({
         setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
         return true;
       } catch (reason: unknown) {
+        if (
+          activeSaveToken.current !== token ||
+          !operationIsCurrent(token) ||
+          !ownerIsCurrent(target)
+        ) {
+          return false;
+        }
         const conflict =
           reason instanceof ApiClientError &&
           reason.code === "conversation_workspace_conflict";
@@ -487,54 +827,68 @@ export function useConversationWorkspace({
             : "Your private conversation workspace could not be saved.",
         );
         if (conflict) {
-          await fetchLatestConflict(conflictSubmission);
+          await fetchLatestConflict(conflictSubmission, target);
         }
         return false;
       } finally {
-        saveRequestInFlight.current = false;
+        if (activeSaveToken.current === token) {
+          activeSaveToken.current = null;
+        }
       }
     },
     [
-      baseline,
-      conflictRecovery.state,
       fetchLatestConflict,
-      interactionId,
-      saveState,
-      values,
-      workspace,
+      invalidateActiveRead,
+      nextOperationToken,
+      operationIsCurrent,
+      ownerIsCurrent,
+      renderSession,
     ],
   );
 
   const useLatestConflict = useCallback(() => {
+    const target = renderSession;
+    const snapshot = committedState.current;
+    const recovery = snapshot.conflictRecovery;
     if (
-      conflictRecovery.state !== "ready" ||
-      conflictRecovery.latestWorkspace === null ||
-      conflictRecovery.latestValues === null
+      !ownerIsCurrent(target) ||
+      snapshot.owner === null ||
+      !sameWorkspaceSession(snapshot.owner, target) ||
+      recovery.state !== "ready" ||
+      recovery.latestWorkspace === null ||
+      recovery.latestValues === null
     ) {
       return false;
     }
     valuesRevision.current += 1;
-    setWorkspace(conflictRecovery.latestWorkspace);
-    setBaseline(conflictRecovery.latestValues);
-    setValuesState({ ...conflictRecovery.latestValues });
+    setWorkspace(recovery.latestWorkspace);
+    setBaseline(recovery.latestValues);
+    setValuesState({ ...recovery.latestValues });
     setSaveState("idle");
     setError(null);
     setGenerationActionState("idle");
     setGenerationError(null);
     setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
     return true;
-  }, [conflictRecovery]);
+  }, [ownerIsCurrent, renderSession]);
 
   const saveReviewedConflict = useCallback(
     async (reviewed: Partial<WorkspaceValues> = {}) => {
-      const latestWorkspace = conflictRecovery.latestWorkspace;
-      const latestValues = conflictRecovery.latestValues;
-      const submittedValues = conflictRecovery.submittedValues;
-      const localValuesAtSubmission = conflictRecovery.localValuesAtSubmission;
+      const target = renderSession;
+      const snapshot = committedState.current;
+      const recovery = snapshot.conflictRecovery;
+      const latestWorkspace = recovery.latestWorkspace;
+      const latestValues = recovery.latestValues;
+      const submittedValues = recovery.submittedValues;
+      const localValuesAtSubmission = recovery.localValuesAtSubmission;
       if (
-        saveRequestInFlight.current ||
-        saveState !== "conflict" ||
-        conflictRecovery.state !== "ready" ||
+        !ownerIsCurrent(target) ||
+        snapshot.owner === null ||
+        !sameWorkspaceSession(snapshot.owner, target) ||
+        (activeSaveToken.current !== null &&
+          sameWorkspaceSession(activeSaveToken.current, target)) ||
+        snapshot.saveState !== "conflict" ||
+        recovery.state !== "ready" ||
         latestWorkspace === null ||
         latestValues === null ||
         submittedValues === null ||
@@ -542,13 +896,13 @@ export function useConversationWorkspace({
       ) {
         return false;
       }
-      const requestStartValues = values;
+      const requestStartValues = snapshot.values;
       const reviewedValues = {
         ...submittedValuesPatch({
           values: submittedValues,
           localValues: localValuesAtSubmission,
-          fields: conflictRecovery.submittedFields,
-          importFromBrowser: conflictRecovery.importFromBrowser,
+          fields: recovery.submittedFields,
+          importFromBrowser: recovery.importFromBrowser,
         }),
         ...reviewed,
       };
@@ -557,9 +911,11 @@ export function useConversationWorkspace({
         values: resolved,
         localValues: requestStartValues,
         fields: submittedFields(resolved, latestValues, reviewedValues),
-        importFromBrowser: conflictRecovery.importFromBrowser,
+        importFromBrowser: recovery.importFromBrowser,
       };
-      saveRequestInFlight.current = true;
+      const token = nextOperationToken(target);
+      activeSaveToken.current = token;
+      invalidateActiveRead(target);
       setSaveState("saving");
       setError(null);
       setConflictRecovery({
@@ -574,7 +930,7 @@ export function useConversationWorkspace({
       });
       try {
         const response = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${interactionId}/personal-workspace`,
+          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
           {
             method: "PUT",
             body: JSON.stringify({
@@ -584,10 +940,17 @@ export function useConversationWorkspace({
               followUpDraft: resolved.followUpDraft,
               followUpReviewed: resolved.followUpReviewed,
               generationFingerprint: latestWorkspace.generationFingerprint,
-              importFromBrowser: conflictRecovery.importFromBrowser,
+              importFromBrowser: recovery.importFromBrowser,
             }),
           },
         );
+        if (
+          activeSaveToken.current !== token ||
+          !operationIsCurrent(token) ||
+          !ownerIsCurrent(target)
+        ) {
+          return false;
+        }
         const savedValues: WorkspaceValues = {
           liveNotes: response.liveNotes ?? resolved.liveNotes,
           enhancedNotes: response.enhancedNotes ?? resolved.enhancedNotes,
@@ -608,6 +971,13 @@ export function useConversationWorkspace({
         setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
         return true;
       } catch (reason: unknown) {
+        if (
+          activeSaveToken.current !== token ||
+          !operationIsCurrent(token) ||
+          !ownerIsCurrent(target)
+        ) {
+          return false;
+        }
         const conflict =
           reason instanceof ApiClientError &&
           reason.code === "conversation_workspace_conflict";
@@ -618,7 +988,7 @@ export function useConversationWorkspace({
             : "Your reviewed conflict resolution could not be saved.",
         );
         if (conflict) {
-          await fetchLatestConflict(conflictSubmission);
+          await fetchLatestConflict(conflictSubmission, target);
         } else {
           setConflictRecovery({
             state: "failed",
@@ -636,21 +1006,51 @@ export function useConversationWorkspace({
         }
         return false;
       } finally {
-        saveRequestInFlight.current = false;
+        if (activeSaveToken.current === token) {
+          activeSaveToken.current = null;
+        }
       }
     },
-    [conflictRecovery, fetchLatestConflict, interactionId, saveState, values],
+    [
+      fetchLatestConflict,
+      invalidateActiveRead,
+      nextOperationToken,
+      operationIsCurrent,
+      ownerIsCurrent,
+      renderSession,
+    ],
   );
 
   const retryGeneration = useCallback(async () => {
-    if (workspace === null || !workspace.generationRetryAvailable) return false;
+    const target = renderSession;
+    const snapshot = committedState.current;
+    if (
+      !ownerIsCurrent(target) ||
+      snapshot.owner === null ||
+      !sameWorkspaceSession(snapshot.owner, target) ||
+      snapshot.workspace === null ||
+      !snapshot.workspace.generationRetryAvailable ||
+      (activeGenerationToken.current !== null &&
+        sameWorkspaceSession(activeGenerationToken.current, target))
+    )
+      return false;
+    const token = nextOperationToken(target);
+    activeGenerationToken.current = token;
+    invalidateActiveRead(target);
     setGenerationActionState("retrying");
     setGenerationError(null);
     try {
       const response = await apiRequest<ConversationWorkspaceResponse>(
-        `/api/v1/interactions/${interactionId}/personal-workspace/generation/retry`,
+        `/api/v1/interactions/${target.interactionId}/personal-workspace/generation/retry`,
         { method: "POST" },
       );
+      if (
+        activeGenerationToken.current !== token ||
+        !operationIsCurrent(token) ||
+        !ownerIsCurrent(target)
+      ) {
+        return false;
+      }
       setWorkspace((current) =>
         current === null
           ? response
@@ -659,6 +1059,13 @@ export function useConversationWorkspace({
       setGenerationActionState("idle");
       return true;
     } catch (reason: unknown) {
+      if (
+        activeGenerationToken.current !== token ||
+        !operationIsCurrent(token) ||
+        !ownerIsCurrent(target)
+      ) {
+        return false;
+      }
       setGenerationActionState("failed");
       setGenerationError(
         reason instanceof Error
@@ -666,31 +1073,59 @@ export function useConversationWorkspace({
           : "Your private post-conversation draft could not be retried.",
       );
       return false;
+    } finally {
+      if (activeGenerationToken.current === token) {
+        activeGenerationToken.current = null;
+      }
     }
-  }, [interactionId, workspace]);
+  }, [
+    invalidateActiveRead,
+    nextOperationToken,
+    operationIsCurrent,
+    ownerIsCurrent,
+    renderSession,
+  ]);
 
   const applyGeneratedVersion = useCallback(async () => {
+    const target = renderSession;
+    const snapshot = committedState.current;
+    const workspaceAtStart = snapshot.workspace;
     if (
-      workspace === null ||
-      workspace.generationId === null ||
-      !workspace.generationUpdateAvailable
+      !ownerIsCurrent(target) ||
+      snapshot.owner === null ||
+      !sameWorkspaceSession(snapshot.owner, target) ||
+      workspaceAtStart === null ||
+      workspaceAtStart.generationId === null ||
+      !workspaceAtStart.generationUpdateAvailable ||
+      (activeGenerationToken.current !== null &&
+        sameWorkspaceSession(activeGenerationToken.current, target))
     ) {
       return false;
     }
+    const token = nextOperationToken(target);
+    activeGenerationToken.current = token;
+    invalidateActiveRead(target);
     setGenerationActionState("applying");
     setGenerationError(null);
-    const requestStartValues = values;
+    const requestStartValues = snapshot.values;
     try {
       const response = await apiRequest<ConversationWorkspaceResponse>(
-        `/api/v1/interactions/${interactionId}/personal-workspace/generation/apply`,
+        `/api/v1/interactions/${target.interactionId}/personal-workspace/generation/apply`,
         {
           method: "POST",
           body: JSON.stringify({
-            generationId: workspace.generationId,
-            expectedLockVersion: workspace.lockVersion,
+            generationId: workspaceAtStart.generationId,
+            expectedLockVersion: workspaceAtStart.lockVersion,
           }),
         },
       );
+      if (
+        activeGenerationToken.current !== token ||
+        !operationIsCurrent(token) ||
+        !ownerIsCurrent(target)
+      ) {
+        return false;
+      }
       setWorkspace(response);
       const appliedValues: WorkspaceValues = {
         liveNotes: response.liveNotes ?? requestStartValues.liveNotes,
@@ -721,6 +1156,13 @@ export function useConversationWorkspace({
       setGenerationActionState("idle");
       return true;
     } catch (reason: unknown) {
+      if (
+        activeGenerationToken.current !== token ||
+        !operationIsCurrent(token) ||
+        !ownerIsCurrent(target)
+      ) {
+        return false;
+      }
       const conflict =
         reason instanceof ApiClientError &&
         reason.code === "conversation_workspace_conflict";
@@ -733,21 +1175,50 @@ export function useConversationWorkspace({
             : "The generated private draft version could not be applied.",
       );
       return false;
+    } finally {
+      if (activeGenerationToken.current === token) {
+        activeGenerationToken.current = null;
+      }
     }
-  }, [interactionId, values, workspace]);
+  }, [
+    invalidateActiveRead,
+    nextOperationToken,
+    operationIsCurrent,
+    ownerIsCurrent,
+    renderSession,
+  ]);
+
+  const stateBelongsToCurrentInteraction =
+    stateOwnerSession !== null &&
+    sameWorkspaceSession(stateOwnerSession, renderSession);
+  const safeValues: WorkspaceValues = {
+    liveNotes: sessionDefaults.liveNotes,
+    enhancedNotes: sessionDefaults.enhancedNotes,
+    followUpDraft: sessionDefaults.followUpDraft,
+    followUpReviewed: false,
+  };
+  const visibleValues = stateBelongsToCurrentInteraction ? values : safeValues;
+  const visibleBaseline = stateBelongsToCurrentInteraction
+    ? baseline
+    : safeValues;
+  const visibleDirtyFields = dirtyFields(visibleValues, visibleBaseline);
 
   return {
-    workspace,
-    values,
+    workspace: stateBelongsToCurrentInteraction ? workspace : null,
+    values: visibleValues,
     setValues,
-    loading,
-    saveState,
-    error,
-    generationActionState,
-    generationError,
-    conflictRecovery,
-    dirtyFields: fieldsDirty,
-    isDirty,
+    loading: stateBelongsToCurrentInteraction ? loading : true,
+    saveState: stateBelongsToCurrentInteraction ? saveState : "idle",
+    error: stateBelongsToCurrentInteraction ? error : null,
+    generationActionState: stateBelongsToCurrentInteraction
+      ? generationActionState
+      : "idle",
+    generationError: stateBelongsToCurrentInteraction ? generationError : null,
+    conflictRecovery: stateBelongsToCurrentInteraction
+      ? conflictRecovery
+      : EMPTY_CONFLICT_RECOVERY,
+    dirtyFields: visibleDirtyFields,
+    isDirty: Object.values(visibleDirtyFields).some(Boolean),
     save,
     loadLatestConflict,
     useLatestConflict,

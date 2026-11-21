@@ -74,19 +74,27 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-export function PostInteractionCapture({
-  interactionId,
-  interactionType,
-  restoreLatest = false,
-  workspaceController,
-  workspaceRefreshKey = 0,
-}: {
+interface PostInteractionCaptureProps {
   interactionId: string;
   interactionType: InteractionType;
   restoreLatest?: boolean;
   workspaceController?: ConversationWorkspaceController;
   workspaceRefreshKey?: number;
-}) {
+}
+
+export function PostInteractionCapture(props: PostInteractionCaptureProps) {
+  return (
+    <StatefulPostInteractionCapture key={props.interactionId} {...props} />
+  );
+}
+
+function StatefulPostInteractionCapture({
+  interactionId,
+  interactionType,
+  restoreLatest = false,
+  workspaceController,
+  workspaceRefreshKey = 0,
+}: PostInteractionCaptureProps) {
   const [session, setSession] = useState<DebriefSession | null>(null);
   const [preference, setPreference] = useState<InputPreference>("guided");
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
