@@ -101,6 +101,19 @@ vi.mock("@/components/face-to-face-companion", () => ({
         >
           End call
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            onInteractionChange({
+              id: "foreign-interaction",
+              title: "Foreign conversation",
+              companyId: "company-foreign",
+              lifecycleStatus: "completed",
+            } as Interaction)
+          }
+        >
+          Emit mismatched interaction
+        </button>
       </div>
     );
   },
@@ -349,6 +362,38 @@ describe("ConversationWorkspace", () => {
     );
     expect(
       await screen.findByRole("heading", { name: "Conversation B" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed on a mismatched child update and retries the requested conversation", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(response("planned", "call-1", "Conversation A")),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ConversationWorkspace interactionId="call-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open notes & capture" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Emit mismatched interaction" }),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This conversation could not be loaded.",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Foreign conversation" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading conversation",
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Conversation A" }),
     ).toBeVisible();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
