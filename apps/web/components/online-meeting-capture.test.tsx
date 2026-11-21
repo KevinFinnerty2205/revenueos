@@ -212,6 +212,52 @@ describe("OnlineMeetingCapture", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 
+  it("rejects an imported transcript returned for another interaction", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/online-meeting/capabilities")) {
+        return jsonResponse(capabilities);
+      }
+      if (url.endsWith("/online-meeting/transcripts") && !init?.method) {
+        return jsonResponse([]);
+      }
+      if (
+        url.endsWith("/online-meeting/transcript") &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse(
+          transcriptImport("foreign-import", secondInteraction.id),
+          201,
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const onTranscriptImported = vi.fn();
+
+    render(
+      <OnlineMeetingCapture
+        interaction={interaction}
+        onTranscriptImported={onTranscriptImported}
+      />,
+    );
+
+    const transcript = await screen.findByLabelText("Paste transcript text");
+    fireEvent.change(transcript, {
+      target: { value: "Private conversation A text" },
+    });
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      fireEvent.click(checkbox);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Import transcript" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The transcript could not be imported. Try again.",
+    );
+    expect(transcript).toHaveValue("Private conversation A text");
+    expect(onTranscriptImported).not.toHaveBeenCalled();
+    expect(screen.queryByText("Transcript ready")).not.toBeInTheDocument();
+  });
+
   it("does not present unavailable native or recording capture as working", async () => {
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);
