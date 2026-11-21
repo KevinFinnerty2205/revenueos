@@ -16,6 +16,13 @@ import {
   useState,
 } from "react";
 import { apiRequest, ApiClientError } from "@/lib/api";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
+import { isRecord } from "@/lib/private-response-identity";
+
+interface VerifiedAnswer {
+  question: string;
+  value: AskAnswer;
+}
 
 const suggestedQuestions: Record<AskScopeType, string[]> = {
   opportunity: [
@@ -43,7 +50,7 @@ interface AskSessionState {
   sessionKey: string;
   capabilities: AskCapabilities | null;
   question: string;
-  answer: AskAnswer | null;
+  answer: VerifiedAnswer | null;
   loading: boolean;
   checking: boolean;
   error: string | null;
@@ -54,10 +61,71 @@ interface AskSessionState {
 interface AnswerRequest {
   sessionKey: string;
   requestId: number;
+  clientRequestId: string;
   controller: AbortController;
 }
 
 const scopeMismatchMessage = "Ask Oryntela is unavailable right now.";
+const askQuestionClasses = new Set([
+  "deal_summary",
+  "blocker_risk",
+  "stakeholder",
+  "methodology",
+  "timeline",
+  "commitment",
+  "action",
+  "buying_signal",
+  "objection",
+  "competitor",
+  "decision",
+  "customer_request",
+  "security_legal",
+  "procurement",
+  "pricing_commercial",
+  "recent_change",
+  "evidence_lookup",
+  "opportunity_filter",
+  "daily_focus",
+  "selling_context",
+  "unsupported_public_web",
+  "general_sales_question",
+]);
+const askSourceTypes = new Set([
+  "interaction",
+  "accepted_evidence",
+  "methodology",
+  "revenue_brain",
+  "action",
+  "daily",
+  "opportunity",
+  "selling_profile",
+]);
+const askProvenanceValues = new Set([
+  "customer_direct",
+  "salesperson_reported",
+  "seller_prepared",
+  "imported_external",
+  "validated_intelligence",
+  "system_metadata",
+  "organisation_approved",
+]);
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isDateString(value: unknown): value is string {
+  return isNonEmptyString(value) && !Number.isNaN(Date.parse(value));
+}
+
+function isInternalPath(value: unknown): value is string {
+  return (
+    isNonEmptyString(value) &&
+    value.startsWith("/") &&
+    !value.startsWith("//") &&
+    !value.includes("\\")
+  );
+}
 
 function createSessionState(
   sessionKey: string,
@@ -78,10 +146,15 @@ function createSessionState(
 
 function matchesScope(
   scope: AskCapabilities["scope"] | AskAnswer["scope"],
+  organisationId: string,
   scopeType: AskScopeType,
   scopeId: string | null,
 ): boolean {
-  return scope.type === scopeType && scope.id === scopeId;
+  return (
+    scope.organisationId === organisationId &&
+    scope.type === scopeType &&
+    scope.id === scopeId
+  );
 }
 
 export function AskRevenueOS({
@@ -93,7 +166,14 @@ export function AskRevenueOS({
   scopeId?: string | null;
   initialQuestion?: string;
 }) {
-  const sessionKey = `${scopeType}:${scopeId ?? ""}`;
+  const verifiedOrganisation = useVerifiedOrganisation();
+  const organisationId = verifiedOrganisation.organisationId;
+  const sessionKey = JSON.stringify([
+    organisationId ?? "unverified",
+    scopeType,
+    scopeId ?? "",
+    initialQuestion,
+  ]);
   const expectedScopeId = scopeId ?? null;
   const [session, setSession] = useState<AskSessionState>(() =>
     createSessionState(sessionKey, initialQuestion),
@@ -142,30 +222,32 @@ export function AskRevenueOS({
   );
 
   useEffect(() => {
+    if (!organisationId) return;
     const controller = new AbortController();
     const requestSessionKey = sessionKey;
     const parameters = new URLSearchParams({ scopeType });
     if (scopeId) parameters.set("scopeId", scopeId);
-    apiRequest<AskCapabilities>(
-      `/api/v1/ask/capabilities?${parameters.toString()}`,
-      { signal: controller.signal },
-    )
-      .then((loaded) => {
+    apiRequest<unknown>(`/api/v1/ask/capabilities?${parameters.toString()}`, {
+      signal: controller.signal,
+    })
+      .then((payload) => {
         if (
           controller.signal.aborted ||
           activeSessionKey.current !== requestSessionKey
         )
           return;
-        const validScope = matchesScope(
-          loaded.scope,
+        const loaded = decodeAskCapabilities(
+          payload,
+          organisationId,
           scopeType,
           expectedScopeId,
         );
+        const validScope = loaded !== null;
         setSession((current) =>
           current.sessionKey === requestSessionKey
             ? {
                 ...current,
-                capabilities: validScope ? loaded : null,
+                capabilities: loaded,
                 error: validScope ? null : scopeMismatchMessage,
                 errorCode: null,
               }
@@ -184,7 +266,7 @@ export function AskRevenueOS({
             ? {
                 ...current,
                 error:
-                  reason instanceof Error
+                  reason instanceof ApiClientError
                     ? reason.message
                     : scopeMismatchMessage,
                 errorCode:
@@ -206,7 +288,7 @@ export function AskRevenueOS({
         );
       });
     return () => controller.abort();
-  }, [expectedScopeId, scopeId, scopeType, sessionKey]);
+  }, [expectedScopeId, organisationId, scopeId, scopeType, sessionKey]);
 
   async function submitQuestion(value: string) {
     const trimmed = value.trim();
@@ -234,11 +316,13 @@ export function AskRevenueOS({
     answerRequest.current?.controller.abort();
     const controller = new AbortController();
     const requestId = answerRequestSequence.current + 1;
+    const clientRequestId = globalThis.crypto.randomUUID();
     answerRequestSequence.current = requestId;
     const requestSessionKey = sessionKey;
     answerRequest.current = {
       sessionKey: requestSessionKey,
       requestId,
+      clientRequestId,
       controller,
     };
     setSession((current) =>
@@ -253,9 +337,10 @@ export function AskRevenueOS({
         : current,
     );
     try {
-      const loaded = await apiRequest<AskAnswer>("/api/v1/ask", {
+      const payload = await apiRequest<unknown>("/api/v1/ask", {
         method: "POST",
         body: JSON.stringify({
+          clientRequestId,
           question: trimmed,
           scopeType,
           scopeId,
@@ -268,15 +353,27 @@ export function AskRevenueOS({
         controller.signal.aborted ||
         activeSessionKey.current !== requestSessionKey ||
         activeRequest?.sessionKey !== requestSessionKey ||
-        activeRequest.requestId !== requestId
+        activeRequest.requestId !== requestId ||
+        activeRequest.clientRequestId !== clientRequestId
       )
         return;
-      const validScope = matchesScope(loaded.scope, scopeType, expectedScopeId);
+      const loaded = organisationId
+        ? decodeAskAnswer(
+            payload,
+            organisationId,
+            scopeType,
+            expectedScopeId,
+            clientRequestId,
+          )
+        : null;
+      const validScope = loaded !== null;
       setSession((current) =>
         current.sessionKey === requestSessionKey
           ? {
               ...current,
-              answer: validScope ? loaded : null,
+              answer: loaded
+                ? { question: trimmed, value: loaded }
+                : current.answer,
               error: validScope ? null : scopeMismatchMessage,
               errorCode: null,
             }
@@ -298,7 +395,8 @@ export function AskRevenueOS({
         controller.signal.aborted ||
         activeSessionKey.current !== requestSessionKey ||
         activeRequest?.sessionKey !== requestSessionKey ||
-        activeRequest.requestId !== requestId
+        activeRequest.requestId !== requestId ||
+        activeRequest.clientRequestId !== clientRequestId
       )
         return;
       setSession((current) =>
@@ -306,7 +404,7 @@ export function AskRevenueOS({
           ? {
               ...current,
               error:
-                reason instanceof Error
+                reason instanceof ApiClientError
                   ? reason.message
                   : "Oryntela couldn’t answer that right now.",
               errorCode: reason instanceof ApiClientError ? reason.code : null,
@@ -319,7 +417,8 @@ export function AskRevenueOS({
         controller.signal.aborted ||
         activeSessionKey.current !== requestSessionKey ||
         activeRequest?.sessionKey !== requestSessionKey ||
-        activeRequest.requestId !== requestId
+        activeRequest.requestId !== requestId ||
+        activeRequest.clientRequestId !== clientRequestId
       )
         return;
       answerRequest.current = null;
@@ -334,6 +433,18 @@ export function AskRevenueOS({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void submitQuestion(question);
+  }
+
+  if (!organisationId) {
+    return verifiedOrganisation.status === "loading" ? (
+      <p role="status" className="form-card text-sm text-slate-600">
+        Verifying your secure workspace…
+      </p>
+    ) : (
+      <div role="alert" className="form-card border-rose-200 bg-rose-50">
+        Ask Oryntela is unavailable until the active organisation is verified.
+      </div>
+    );
   }
 
   if (checking) {
@@ -483,7 +594,8 @@ export function AskRevenueOS({
         <AskAnswerView
           ref={answerRef}
           titleId={answerTitleId}
-          answer={answer}
+          answer={answer.value}
+          submittedQuestion={answer.question}
           busy={loading}
           onFollowUp={(followUp) => {
             setSession((current) =>
@@ -492,7 +604,10 @@ export function AskRevenueOS({
                 : current,
             );
             void submitQuestion(followUp);
-            void recordTelemetry(answer.askRequestId, "follow_up_selected");
+            void recordTelemetry(
+              answer.value.askRequestId,
+              "follow_up_selected",
+            );
           }}
         />
       )}
@@ -505,10 +620,14 @@ const AskAnswerView = forwardRef<
   {
     titleId: string;
     answer: AskAnswer;
+    submittedQuestion: string;
     busy: boolean;
     onFollowUp: (question: string) => void;
   }
->(function AskAnswerView({ titleId, answer, busy, onFollowUp }, ref) {
+>(function AskAnswerView(
+  { titleId, answer, submittedQuestion, busy, onFollowUp },
+  ref,
+) {
   const sourceById = new Map(
     answer.sources.map((source) => [source.id, source]),
   );
@@ -537,6 +656,9 @@ const AskAnswerView = forwardRef<
       </div>
       <p className="mt-5 max-w-3xl text-base leading-7 text-slate-800">
         {answer.answer}
+      </p>
+      <p className="mt-3 text-sm font-semibold text-slate-500">
+        Answer to “{submittedQuestion}”
       </p>
 
       {answer.summaryPoints.length ? (
@@ -666,6 +788,147 @@ const AskAnswerView = forwardRef<
     </section>
   );
 });
+
+function decodeAskScope(
+  value: unknown,
+  organisationId: string,
+  scopeType: AskScopeType,
+  scopeId: string | null,
+): AskCapabilities["scope"] | null {
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.organisationId) ||
+    typeof value.type !== "string" ||
+    !(typeof value.id === "string" || value.id === null) ||
+    !isNonEmptyString(value.label)
+  ) {
+    return null;
+  }
+  const scope = value as unknown as AskCapabilities["scope"];
+  return matchesScope(scope, organisationId, scopeType, scopeId) ? scope : null;
+}
+
+function decodeAskCapabilities(
+  value: unknown,
+  organisationId: string,
+  scopeType: AskScopeType,
+  scopeId: string | null,
+): AskCapabilities | null {
+  if (!isRecord(value)) return null;
+  const scope = decodeAskScope(value.scope, organisationId, scopeType, scopeId);
+  if (
+    !scope ||
+    typeof value.enabled !== "boolean" ||
+    !Array.isArray(value.supportedScopes) ||
+    !value.supportedScopes.every(
+      (item) =>
+        item === "opportunity" || item === "account" || item === "workspace",
+    ) ||
+    value.retainedHistory !== false ||
+    value.publicWebResearch !== false ||
+    value.actionExecution !== false ||
+    !Number.isInteger(value.maxQuestionCharacters) ||
+    !Number.isInteger(value.maxSources) ||
+    (value.maxQuestionCharacters as number) < 2 ||
+    (value.maxSources as number) < 1 ||
+    !isNonEmptyString(value.safeMessage)
+  ) {
+    return null;
+  }
+  return { ...(value as unknown as AskCapabilities), scope };
+}
+
+function decodeAskAnswer(
+  value: unknown,
+  organisationId: string,
+  scopeType: AskScopeType,
+  scopeId: string | null,
+  clientRequestId: string,
+): AskAnswer | null {
+  if (!isRecord(value)) return null;
+  const scope = decodeAskScope(value.scope, organisationId, scopeType, scopeId);
+  const summaryPoints = value.summaryPoints;
+  const sources = value.sources;
+  const uncertainties = value.uncertainties;
+  const followUpQuestions = value.followUpQuestions;
+  const suggestedAction = value.suggestedAction;
+  if (
+    !scope ||
+    value.schemaVersion !== 1 ||
+    value.clientRequestId !== clientRequestId ||
+    !isNonEmptyString(value.askRequestId) ||
+    !isNonEmptyString(value.answer) ||
+    !["supported", "partially_supported", "conflicting", "unknown"].includes(
+      String(value.answerStatus),
+    ) ||
+    !askQuestionClasses.has(String(value.questionClass)) ||
+    !Array.isArray(summaryPoints) ||
+    summaryPoints.length > 8 ||
+    !summaryPoints.every(
+      (point) =>
+        isRecord(point) &&
+        isNonEmptyString(point.text) &&
+        Array.isArray(point.sourceIds) &&
+        point.sourceIds.length > 0 &&
+        point.sourceIds.length <= 8 &&
+        point.sourceIds.every((sourceId) => typeof sourceId === "string"),
+    ) ||
+    !Array.isArray(sources) ||
+    sources.length > 12 ||
+    !sources.every(
+      (source) =>
+        isRecord(source) &&
+        isNonEmptyString(source.id) &&
+        askSourceTypes.has(String(source.sourceType)) &&
+        isNonEmptyString(source.label) &&
+        (source.occurredAt === null || isDateString(source.occurredAt)) &&
+        (source.excerpt === null || typeof source.excerpt === "string") &&
+        askProvenanceValues.has(String(source.provenance)) &&
+        isInternalPath(source.href),
+    ) ||
+    !Array.isArray(uncertainties) ||
+    uncertainties.length > 6 ||
+    !uncertainties.every(isNonEmptyString) ||
+    !Array.isArray(followUpQuestions) ||
+    followUpQuestions.length > 4 ||
+    !followUpQuestions.every(isNonEmptyString) ||
+    !(
+      suggestedAction === null ||
+      (isRecord(suggestedAction) &&
+        isNonEmptyString(suggestedAction.label) &&
+        isInternalPath(suggestedAction.href) &&
+        (suggestedAction.sourceId === null ||
+          typeof suggestedAction.sourceId === "string"))
+    ) ||
+    !isDateString(value.generatedAt)
+  ) {
+    return null;
+  }
+  const sourceIds = new Set(
+    sources.map((source) => (source as Record<string, unknown>).id),
+  );
+  if (
+    sourceIds.size !== sources.length ||
+    (["supported", "partially_supported", "conflicting"].includes(
+      String(value.answerStatus),
+    ) &&
+      sources.length === 0) ||
+    (value.answerStatus === "supported" && summaryPoints.length === 0) ||
+    (isRecord(suggestedAction) &&
+      suggestedAction.sourceId !== null &&
+      !sourceIds.has(suggestedAction.sourceId)) ||
+    summaryPoints.some((point) =>
+      (point as Record<string, unknown>).sourceIds instanceof Array
+        ? ((point as Record<string, unknown>).sourceIds as unknown[]).some(
+            (sourceId) => !sourceIds.has(sourceId),
+          )
+        : true,
+    )
+  ) {
+    return null;
+  }
+  return { ...(value as unknown as AskAnswer), scope };
+}
 
 function statusLabel(answer: AskAnswer) {
   if (

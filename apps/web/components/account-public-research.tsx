@@ -3,7 +3,9 @@
 import type { ProspectAccountResearchLink } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { ApiClientError, apiRequest } from "@/lib/api";
+import { isRecord } from "@/lib/private-response-identity";
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(
@@ -12,33 +14,40 @@ function formatDate(value: string): string {
 }
 
 export function AccountPublicResearch({ companyId }: { companyId: string }) {
+  const verifiedOrganisation = useVerifiedOrganisation();
+  const organisationId = verifiedOrganisation.organisationId;
+  const requestKey = `${organisationId ?? "unverified"}:${companyId}`;
   const [state, setState] = useState<ResearchState>({
-    companyId,
+    requestKey,
     status: "loading",
   });
   const requestSequence = useRef(0);
 
   useEffect(() => {
+    if (!organisationId) return;
     const controller = new AbortController();
     const requestId = requestSequence.current + 1;
     requestSequence.current = requestId;
 
-    apiRequest<ProspectAccountResearchLink>(
+    apiRequest<unknown>(
       `/api/v1/prospect/accounts/${encodeURIComponent(companyId)}/research-link`,
       { signal: controller.signal },
     )
-      .then((research) => {
+      .then((payload) => {
         if (
           controller.signal.aborted ||
           requestSequence.current !== requestId
         ) {
           return;
         }
-        if (research.companyId !== companyId) {
-          setState({ companyId, status: "unavailable" });
+        if (
+          !isResearchLink(payload, organisationId) ||
+          payload.companyId !== companyId
+        ) {
+          setState({ requestKey, status: "unavailable" });
           return;
         }
-        setState({ companyId, status: "available", research });
+        setState({ requestKey, status: "available", research: payload });
       })
       .catch((reason: unknown) => {
         if (
@@ -52,10 +61,10 @@ export function AccountPublicResearch({ companyId }: { companyId: string }) {
           reason instanceof ApiClientError &&
           (reason.status === 403 || reason.status === 404)
         ) {
-          setState({ companyId, status: "unavailable" });
+          setState({ requestKey, status: "unavailable" });
           return;
         }
-        setState({ companyId, status: "unavailable" });
+        setState({ requestKey, status: "unavailable" });
       });
     return () => {
       controller.abort();
@@ -63,10 +72,10 @@ export function AccountPublicResearch({ companyId }: { companyId: string }) {
         requestSequence.current += 1;
       }
     };
-  }, [companyId]);
+  }, [companyId, organisationId, requestKey]);
 
   const visibleState: ResearchState =
-    state.companyId === companyId ? state : { companyId, status: "loading" };
+    state.requestKey === requestKey ? state : { requestKey, status: "loading" };
 
   if (visibleState.status !== "available") return null;
 
@@ -105,9 +114,25 @@ export function AccountPublicResearch({ companyId }: { companyId: string }) {
 }
 
 type ResearchState =
-  | { companyId: string; status: "loading" | "unavailable" }
+  | { requestKey: string; status: "loading" | "unavailable" }
   | {
-      companyId: string;
+      requestKey: string;
       status: "available";
       research: ProspectAccountResearchLink;
     };
+
+function isResearchLink(
+  value: unknown,
+  organisationId: string,
+): value is ProspectAccountResearchLink {
+  return (
+    isRecord(value) &&
+    value.organisationId === organisationId &&
+    typeof value.targetId === "string" &&
+    value.targetId.length > 0 &&
+    typeof value.companyId === "string" &&
+    typeof value.updatedAt === "string" &&
+    !Number.isNaN(Date.parse(value.updatedAt)) &&
+    (value.status === "ready" || value.status === "partial")
+  );
+}

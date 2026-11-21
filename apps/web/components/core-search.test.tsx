@@ -2,15 +2,66 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoreSearch } from "@/components/core-search";
 
-function response(items: object[]) {
+const organisationId = "organisation-1";
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId,
+  }),
+}));
+
+function response(items: object[], envelope: Record<string, unknown> = {}) {
+  const completeItems = items.map((item) =>
+    "name" in item
+      ? {
+          organisationId,
+          website: null,
+          location: null,
+          employeeCount: null,
+          status: "prospect",
+          ownerUserId: "user-1",
+          archivedAt: null,
+          createdAt: "2026-11-01T00:00:00Z",
+          updatedAt: "2026-11-01T00:00:00Z",
+          ...item,
+        }
+      : {
+          organisationId,
+          companyId: null,
+          opportunityId: null,
+          contactId: null,
+          meetingId: null,
+          scheduledStartAt: null,
+          scheduledEndAt: null,
+          actualStartAt: null,
+          actualEndAt: null,
+          timezone: null,
+          creationOrigin: "manual",
+          callDirection: null,
+          callOutcome: null,
+          durationSeconds: null,
+          captureMethods: [],
+          intelligenceState: "not_ready",
+          recordingAvailable: false,
+          createdByUserId: "user-1",
+          briefState: "not_generated",
+          briefGeneratedAt: null,
+          createdAt: "2026-11-01T00:00:00Z",
+          updatedAt: "2026-11-01T00:00:00Z",
+          ...item,
+        },
+  );
   return Promise.resolve(
     new Response(
       JSON.stringify({
-        items,
+        organisationId,
+        items: completeItems,
         page: 1,
         pageSize: 6,
-        total: items.length,
-        pages: 1,
+        total: completeItems.length,
+        pages: completeItems.length ? 1 : 0,
+        ...envelope,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ),
@@ -77,10 +128,10 @@ describe("CoreSearch", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(
-      screen.getByRole("link", { name: /Acme Technology/i }),
+      await screen.findByRole("link", { name: /Acme Technology/i }),
     ).toHaveAttribute("href", "/conversations/accounts/company-1");
     expect(
-      screen.getByRole("link", { name: /Acme workshop/i }),
+      await screen.findByRole("link", { name: /Acme workshop/i }),
     ).toHaveAttribute("href", "/conversations/interaction-1");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("search=Acme");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
@@ -96,6 +147,40 @@ describe("CoreSearch", () => {
       "placeholder",
       "Try a conversation, private note or account",
     );
+  });
+
+  it("encodes response IDs before constructing result routes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        response([
+          { id: "../settings", name: "Encoded account", industry: null },
+        ]),
+      )
+      .mockImplementationOnce(() =>
+        response([
+          {
+            id: "../admin",
+            title: "Encoded conversation",
+            interactionType: "workshop",
+            lifecycleStatus: "planned",
+          },
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "encoded" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByRole("link", { name: /Encoded account/i }),
+    ).toHaveAttribute("href", "/conversations/accounts/..%2Fsettings");
+    expect(
+      await screen.findByRole("link", { name: /Encoded conversation/i }),
+    ).toHaveAttribute("href", "/conversations/..%2Fadmin");
   });
 
   it("keeps private-note search guidance in the empty state", async () => {
@@ -129,7 +214,7 @@ describe("CoreSearch", () => {
           {
             id: "interaction-private-note",
             title: "Remembered customer detail",
-            interactionType: "meeting",
+            interactionType: "online_meeting",
             lifecycleStatus: "completed",
           },
         ]),
@@ -375,6 +460,91 @@ describe("CoreSearch", () => {
     expect(screen.queryByText(/Do not expose/)).not.toBeInTheDocument();
   });
 
+  it("rejects an entire private source batch when one item has another organisation", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        response([
+          { id: "company-safe", name: "Safe account", industry: null },
+          {
+            id: "company-foreign",
+            organisationId: "organisation-2",
+            name: "Foreign private account",
+            industry: null,
+          },
+        ]),
+      )
+      .mockImplementationOnce(() => response([]));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "private" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Account results are temporarily unavailable",
+    );
+    expect(screen.queryByText("Safe account")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Foreign private account"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects a malformed 2xx search page identity", async () => {
+    const envelope = { page: 2 };
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response([], envelope))
+      .mockImplementationOnce(() => response([], envelope));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Acme" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Search could not be completed. Please try again.",
+    );
+    expect(
+      screen.queryByText("No matching work found"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects interaction batches with unsafe presentation fields", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => response([]))
+      .mockImplementationOnce(() =>
+        response([
+          {
+            id: "interaction-invalid-date",
+            title: "Unverified private result",
+            interactionType: "workshop",
+            lifecycleStatus: "planned",
+            scheduledStartAt: "not-a-date",
+          },
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoreSearch />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "private" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Conversation results are temporarily unavailable",
+    );
+    expect(
+      screen.queryByText("Unverified private result"),
+    ).not.toBeInTheDocument();
+  });
+
   it("clears a partial-results warning after the next complete search", async () => {
     const fetchMock = vi
       .fn()
@@ -420,20 +590,27 @@ describe("CoreSearch", () => {
   });
 
   it("keeps deterministic Search separate while opening Ask in explicit scope", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          enabled: true,
-          scope: { type: "account", id: "company-1", label: "Acme" },
-          supportedScopes: ["opportunity", "account", "workspace"],
-          retainedHistory: false,
-          publicWebResearch: false,
-          actionExecution: false,
-          maxQuestionCharacters: 1000,
-          maxSources: 12,
-          safeMessage: "Authorised Oryntela evidence only.",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            scope: {
+              organisationId,
+              type: "account",
+              id: "company-1",
+              label: "Acme",
+            },
+            supportedScopes: ["opportunity", "account", "workspace"],
+            retainedHistory: false,
+            publicWebResearch: false,
+            actionExecution: false,
+            maxQuestionCharacters: 1000,
+            maxSources: 12,
+            safeMessage: "Authorised Oryntela evidence only.",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -465,6 +642,49 @@ describe("CoreSearch", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a fresh same-route Ask session when the requested question changes", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            scope: {
+              organisationId,
+              type: "workspace",
+              id: null,
+              label: "Your accessible sales work",
+            },
+            supportedScopes: ["opportunity", "account", "workspace"],
+            retainedHistory: false,
+            publicWebResearch: false,
+            actionExecution: false,
+            maxQuestionCharacters: 1000,
+            maxSources: 12,
+            safeMessage: "Authorised Oryntela evidence only.",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(
+      <CoreSearch initialMode="ask" initialQuestion="First question?" />,
+    );
+
+    expect(
+      await screen.findByRole("textbox", { name: "Ask Oryntela" }),
+    ).toHaveValue("First question?");
+
+    view.rerender(
+      <CoreSearch initialMode="ask" initialQuestion="Second question?" />,
+    );
+
+    expect(
+      await screen.findByRole("textbox", { name: "Ask Oryntela" }),
+    ).toHaveValue("Second question?");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("supports arrow-key navigation between Search and Ask tabs", async () => {
     vi.stubGlobal(
       "fetch",
@@ -473,6 +693,7 @@ describe("CoreSearch", () => {
           JSON.stringify({
             enabled: true,
             scope: {
+              organisationId,
               type: "workspace",
               id: null,
               label: "Your accessible sales work",

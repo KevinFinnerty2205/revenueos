@@ -526,7 +526,7 @@ function interaction() {
     ingestionState: null,
     durationSeconds: state.interactionReviewed ? 1800 : null,
     captureMethods: state.evidenceAccepted ? ["debrief"] : [],
-    intelligenceState: state.evidenceAccepted ? "ready" : "not_started",
+    intelligenceState: state.evidenceAccepted ? "ready" : "not_ready",
     recordingAvailable: false,
     createdByUserId: "user-flagship",
     briefState: "completed",

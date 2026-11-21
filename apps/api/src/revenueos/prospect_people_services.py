@@ -589,6 +589,7 @@ class ProspectPeopleService:
                 404,
             )
         return ContactProspectResearchLinkResponse(
+            organisation_id=self.tenant.organisation_id,
             contact_id=contact.id,
             prospect_person_id=person.id,
             company_target_id=person.target_id,

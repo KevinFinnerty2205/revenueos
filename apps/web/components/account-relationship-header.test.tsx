@@ -1,4 +1,4 @@
-import type { Company, Contact, EntityPage } from "@revenueos/shared";
+import type { Company, Contact, TenantEntityPage } from "@revenueos/shared";
 import {
   act,
   fireEvent,
@@ -8,6 +8,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountRelationshipHeader } from "@/components/account-relationship-header";
+
+const organisationId = "organisation-1";
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId,
+  }),
+}));
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -86,8 +95,9 @@ const secondParticipants: Contact[] = [
   },
 ];
 
-function contactPage(items: Contact[]): EntityPage<Contact> {
+function contactPage(items: Contact[]): TenantEntityPage<Contact> {
   return {
+    organisationId,
     items,
     page: 1,
     pageSize: 100,
@@ -254,6 +264,13 @@ describe("AccountRelationshipHeader", () => {
   it.each([
     ["mismatched", secondCompany],
     [
+      "from another organisation",
+      {
+        ...company,
+        organisationId: "organisation-2",
+      },
+    ],
+    [
       "archived",
       {
         ...company,
@@ -293,6 +310,15 @@ describe("AccountRelationshipHeader", () => {
 
   it.each([
     ["another account", secondParticipants],
+    [
+      "another organisation",
+      [
+        {
+          ...participants[0],
+          organisationId: "organisation-2",
+        },
+      ],
+    ],
     [
       "an archived record",
       [

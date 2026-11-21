@@ -219,6 +219,7 @@ def test_explicit_person_promotion_preserves_field_trust_and_mutates_only_contac
     assert contact["linkedinUrl"] is None
     link = client.get(f"/api/v1/prospect/contacts/{contact_id}/research-link")
     assert link.status_code == 200
+    assert link.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert link.json()["label"] == "Public professional research"
 
     async def assert_sources(session_factory: async_sessionmaker[AsyncSession]) -> None:

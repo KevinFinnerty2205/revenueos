@@ -2,6 +2,26 @@ import { expect, test } from "@playwright/test";
 import type { DealRoomWorkspace, HandoverWorkspace } from "@revenueos/shared";
 
 test.beforeEach(async ({ page }) => {
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        user: {
+          id: "user-1",
+          externalAuthId: "user_dev_001",
+          displayName: "Alex Morgan",
+          email: "alex@example.test",
+        },
+        organisation: {
+          id: "organisation-1",
+          name: "Example Revenue Team",
+          slug: "example-revenue-team",
+        },
+        role: "admin",
+        authMode: "mock",
+        requestId: "request-smoke-identity",
+      },
+    });
+  });
   await page.route(
     "http://localhost:8000/api/v1/beta/capabilities",
     async (route) => {
@@ -30,9 +50,31 @@ test.beforeEach(async ({ page }) => {
   );
   await page.route("http://localhost:8000/api/v1/contacts**", async (route) => {
     await route.fulfill({
-      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+      json: {
+        organisationId: "organisation-1",
+        items: [],
+        page: 1,
+        pageSize: 100,
+        total: 0,
+        pages: 0,
+      },
     });
   });
+  await page.route(
+    /^http:\/\/localhost:8000\/api\/v1\/interactions(?:\?.*)?$/u,
+    async (route) => {
+      await route.fulfill({
+        json: {
+          organisationId: "organisation-1",
+          items: [],
+          page: 1,
+          pageSize: 100,
+          total: 0,
+          pages: 0,
+        },
+      });
+    },
+  );
 });
 
 test("marketing home explains the end-to-end product honestly", async ({
@@ -632,6 +674,7 @@ test("interaction timeline supports deliberate creation and completion without i
       }
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           items: [
             linkedInteraction,
             ...(created
@@ -665,9 +708,11 @@ test("interaction timeline supports deliberate creation and completion without i
             name: "Acme Australia",
             website: null,
             industry: "Technology",
+            location: null,
             employeeCount: 120,
             status: "active",
             ownerUserId: "user-1",
+            archivedAt: null,
             createdAt: "2026-07-01T00:00:00Z",
             updatedAt: "2026-07-01T00:00:00Z",
           },
@@ -881,6 +926,7 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
       }
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           items: interactions,
           page: 1,
           pageSize: 100,
@@ -895,6 +941,7 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
     async (route) => {
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           items: [{ id: "company-1", name: "Southern Cross Operations" }],
           page: 1,
           pageSize: 100,
@@ -1310,9 +1357,11 @@ test("a presentation supports browser image upload, explicit review and intellig
           name: "Southern Cross Operations",
           website: null,
           industry: "Professional services",
+          location: null,
           employeeCount: 75,
           status: "active",
           ownerUserId: "user-1",
+          archivedAt: null,
           createdAt: "2026-08-01T00:00:00Z",
           updatedAt: "2026-08-14T02:15:00Z",
         },
@@ -1786,9 +1835,11 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
           name: "Acme Australia",
           website: null,
           industry: "Technology",
+          location: null,
           employeeCount: 120,
           status: "active",
           ownerUserId: "user-1",
+          archivedAt: null,
           createdAt: "2026-07-01T00:00:00Z",
           updatedAt: "2026-08-14T02:05:00Z",
         },
@@ -2216,9 +2267,11 @@ test("an authorised imported call recording uses the existing transcription and 
           name: "Acme Australia",
           website: null,
           industry: "Technology",
+          location: null,
           employeeCount: 120,
           status: "active",
           ownerUserId: "user-1",
+          archivedAt: null,
           createdAt: "2026-07-01T00:00:00Z",
           updatedAt: "2026-08-14T03:05:00Z",
         },
@@ -2936,9 +2989,11 @@ test("mobile Companion recording path persists a consented transcript into exist
                 name: "Acme Australia",
                 website: null,
                 industry: "Technology",
+                location: null,
                 employeeCount: 120,
                 status: "active",
                 ownerUserId: "user-1",
+                archivedAt: null,
                 createdAt: "2026-07-01T00:00:00Z",
                 updatedAt: "2026-08-14T02:12:00Z",
               }
@@ -3704,9 +3759,11 @@ test("opportunity workspace persists an associated meeting and composes stored i
               name: "Acme Australia",
               website: null,
               industry: null,
+              location: null,
               employeeCount: null,
               status: "prospect",
               ownerUserId: "user-1",
+              archivedAt: null,
               createdAt: "2026-07-20T00:00:00Z",
               updatedAt: "2026-07-20T00:00:00Z",
             },
@@ -4218,9 +4275,11 @@ test("document and email evidence require explicit review before appearing in th
           name: "Acme Australia",
           website: null,
           industry: "Technology",
+          location: null,
           employeeCount: 120,
           status: "active",
           ownerUserId: "user-1",
+          archivedAt: null,
           createdAt: "2026-07-01T00:00:00Z",
           updatedAt: "2026-07-01T00:00:00Z",
         },

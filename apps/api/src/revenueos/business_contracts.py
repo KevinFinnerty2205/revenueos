@@ -41,6 +41,10 @@ class Page[T](APIModel):
     pages: int
 
 
+class TenantPage[T](Page[T]):
+    organisation_id: UUID
+
+
 class UpdateRequest(APIModel):
     required_when_present: ClassVar[frozenset[str]] = frozenset()
 

@@ -3,6 +3,7 @@ import { auth as clerkAuth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ApiAuthBridge } from "@/components/api-auth-bridge";
 import { AppShell } from "@/components/app-shell";
+import { VerifiedOrganisationProvider } from "@/components/verified-organisation-context";
 import { getAuthState, isRouteAccessAllowed } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,13 @@ export default async function ProtectedLayout({
   const configured = getAuthState();
   if (configured.mode === "mock") {
     if (!isRouteAccessAllowed(configured)) redirect("/sign-in");
-    return <AppShell authState={configured}>{children}</AppShell>;
+    return (
+      <VerifiedOrganisationProvider
+        identityKey={configured.organisation?.id ?? "mock-organisation"}
+      >
+        <AppShell authState={configured}>{children}</AppShell>
+      </VerifiedOrganisationProvider>
+    );
   }
 
   const session = await clerkAuth();
@@ -46,7 +53,9 @@ export default async function ProtectedLayout({
 
   return (
     <ApiAuthBridge>
-      <AppShell authState={clerkState}>{children}</AppShell>
+      <VerifiedOrganisationProvider identityKey={session.orgId}>
+        <AppShell authState={clerkState}>{children}</AppShell>
+      </VerifiedOrganisationProvider>
     </ApiAuthBridge>
   );
 }

@@ -26,13 +26,23 @@ The current workspace definition is deliberately seller-owned rather than a broa
 member-wide portfolio. Administrators do not gain an implicit cross-user Ask mode.
 Adding manager/team scope would need a separate permission and product decision.
 
-The browser also treats the complete scope type and identifier as the rendered Ask
-session identity. A scope change immediately hides the previous question, answer,
-citations and errors; aborts or ignores obsolete capability and answer requests; and
-accepts a response only when its returned scope exactly matches the requested scope.
-These checks prevent stale or malformed responses from being presented under another
-account or opportunity. They are defence in depth only and never replace the server
-authorisation checks above.
+Both capability and answer responses carry the internal organisation UUID resolved
+from verified authentication context. The browser obtains that authoritative value
+from `/api/v1/me`; it never uses a freely supplied organisation identifier or treats
+an external session/organisation key as the tenant contract.
+
+The browser treats organisation, scope type, scope identifier and initial question as
+the rendered Ask session identity. A scope or route-question change immediately hides
+the previous question, answer, citations and errors; aborts or ignores obsolete
+capability and answer requests; and accepts a response only when its returned
+organisation and scope exactly match the request. Every question also carries a new
+`clientRequestId`, which the API echoes in the answer. A response is rendered only
+when that echo belongs to the active submission. The displayed answer retains the
+exact submitted question, so a failed later question can preserve the last verified
+answer without presenting it as the later result. Malformed successful responses fail
+safely. These checks prevent stale or malformed responses from being presented under
+another organisation, account, opportunity or question. They are defence in depth
+only and never replace the server authorisation checks above.
 
 ## Enumeration resistance
 

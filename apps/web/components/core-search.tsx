@@ -1,15 +1,16 @@
 "use client";
 
-import type {
-  AskScopeType,
-  Company,
-  EntityPage,
-  Interaction,
-} from "@revenueos/shared";
+import type { AskScopeType, Company, Interaction } from "@revenueos/shared";
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { AskRevenueOS } from "@/components/ask-revenueos";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
+import {
+  decodeTenantPage,
+  isCompanyResponse,
+  isInteractionResponse,
+} from "@/lib/private-response-identity";
 
 interface SearchResults {
   companies: Company[];
@@ -28,17 +29,49 @@ const emptyResults: SearchResults = {
   interactions: [],
 };
 
-export function CoreSearch({
-  initialMode = "search",
-  scopeType = "workspace",
-  scopeId = null,
-  initialQuestion = "",
-}: {
+interface CoreSearchProps {
   initialMode?: "search" | "ask";
   scopeType?: AskScopeType;
   scopeId?: string | null;
   initialQuestion?: string;
-}) {
+}
+
+export function CoreSearch(props: CoreSearchProps) {
+  const verifiedOrganisation = useVerifiedOrganisation();
+  if (verifiedOrganisation.status === "loading") {
+    return <p role="status">Verifying your secure workspace…</p>;
+  }
+  if (verifiedOrganisation.status === "unavailable") {
+    return (
+      <div role="alert" className="form-card border-rose-200 bg-rose-50">
+        Oryntela could not verify the active organisation. Reload the page to
+        try again.
+      </div>
+    );
+  }
+  const sessionKey = [
+    verifiedOrganisation.organisationId,
+    props.initialMode ?? "search",
+    props.scopeType ?? "workspace",
+    props.scopeId ?? "",
+    props.initialQuestion ?? "",
+  ].join(":");
+  return (
+    <CoreSearchSession
+      key={sessionKey}
+      {...props}
+      organisationId={verifiedOrganisation.organisationId}
+    />
+  );
+}
+
+function CoreSearchSession({
+  initialMode = "search",
+  scopeType = "workspace",
+  scopeId = null,
+  initialQuestion = "",
+  organisationId,
+}: CoreSearchProps & { organisationId: string }) {
   const [mode, setMode] = useState<"search" | "ask">(initialMode);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -130,19 +163,42 @@ export function CoreSearch({
       }
     }
 
-    void apiRequest<EntityPage<Company>>(
+    void apiRequest<unknown>(
       `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
       { signal: controller.signal },
     ).then(
-      (companies) => settleSource("companies", "available", companies.items),
+      (payload) => {
+        const companies = decodeTenantPage(
+          payload,
+          organisationId,
+          isCompanyResponse,
+          { expectedPage: 1 },
+        );
+        settleSource(
+          "companies",
+          companies ? "available" : "unavailable",
+          companies?.items,
+        );
+      },
       () => settleSource("companies", "unavailable"),
     );
-    void apiRequest<EntityPage<Interaction>>(
+    void apiRequest<unknown>(
       `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
       { signal: controller.signal },
     ).then(
-      (interactions) =>
-        settleSource("interactions", "available", interactions.items),
+      (payload) => {
+        const interactions = decodeTenantPage(
+          payload,
+          organisationId,
+          isInteractionResponse,
+          { expectedPage: 1 },
+        );
+        settleSource(
+          "interactions",
+          interactions ? "available" : "unavailable",
+          interactions?.items,
+        );
+      },
       () => settleSource("interactions", "unavailable"),
     );
   }
@@ -282,7 +338,7 @@ export function CoreSearch({
                 <ResultGroup
                   title="Conversations"
                   items={results.interactions.map((interaction) => ({
-                    href: `/conversations/${interaction.id}`,
+                    href: `/conversations/${encodeURIComponent(interaction.id)}`,
                     title: interaction.title,
                     detail: `${humanise(interaction.interactionType)} · ${humanise(
                       interaction.lifecycleStatus,
@@ -292,7 +348,7 @@ export function CoreSearch({
                 <ResultGroup
                   title="Accounts"
                   items={results.companies.map((company) => ({
-                    href: `/conversations/accounts/${company.id}`,
+                    href: `/conversations/accounts/${encodeURIComponent(company.id)}`,
                     title: company.name,
                     detail: company.industry ?? "Account",
                   }))}

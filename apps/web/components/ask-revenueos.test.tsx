@@ -6,9 +6,19 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AskAnswer, AskCapabilities } from "@revenueos/shared";
 import { AskRevenueOS } from "@/components/ask-revenueos";
+
+const organisationId = "organisation-1";
+const clientRequestId = "11111111-1111-4111-8111-111111111111";
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId,
+  }),
+}));
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -28,6 +38,7 @@ function deferred<T>() {
 const capabilities: AskCapabilities = {
   enabled: true,
   scope: {
+    organisationId,
     type: "opportunity",
     id: "opportunity-1",
     label: "Qantas expansion",
@@ -45,7 +56,7 @@ const capabilities: AskCapabilities = {
 function accountCapabilities(id: string, label: string): AskCapabilities {
   return {
     ...capabilities,
-    scope: { type: "account", id, label },
+    scope: { organisationId, type: "account", id, label },
   };
 }
 
@@ -53,6 +64,7 @@ function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
   return {
     schemaVersion: 1,
     askRequestId: "request-1",
+    clientRequestId,
     answer:
       "Security review is the clearest current blocker, and the approval path is still incomplete.",
     answerStatus: "partially_supported",
@@ -82,6 +94,7 @@ function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
     },
     followUpQuestions: ["Who is the economic buyer?"],
     scope: {
+      organisationId,
       type: "opportunity",
       id: "opportunity-1",
       label: "Qantas expansion",
@@ -98,7 +111,7 @@ function accountAnswer(
 ): AskAnswer {
   return answer({
     answer: answerText,
-    scope: { type: "account", id, label },
+    scope: { organisationId, type: "account", id, label },
     sources: [
       {
         ...answer().sources[0],
@@ -117,6 +130,10 @@ function accountAnswer(
 }
 
 describe("AskRevenueOS", () => {
+  beforeEach(() => {
+    vi.stubGlobal("crypto", { randomUUID: () => clientRequestId });
+  });
+
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows representative bounded workspace question phrasings", async () => {
@@ -125,7 +142,12 @@ describe("AskRevenueOS", () => {
       vi.fn().mockResolvedValue(
         jsonResponse({
           ...capabilities,
-          scope: { type: "workspace", id: null, label: "Your sales work" },
+          scope: {
+            organisationId,
+            type: "workspace",
+            id: null,
+            label: "Your sales work",
+          },
         }),
       ),
     );
@@ -200,6 +222,9 @@ describe("AskRevenueOS", () => {
       await screen.findByRole("heading", { name: "Partially supported" }),
     ).toBeVisible();
     expect(screen.getByText(/Security review is the clearest/)).toBeVisible();
+    expect(
+      screen.getByText("Answer to “What is holding this deal back?”"),
+    ).toBeVisible();
     expect(screen.getByText("Why Oryntela believes it")).toBeVisible();
     expect(screen.getByText("Needs clarification")).toBeVisible();
     expect(
@@ -229,6 +254,7 @@ describe("AskRevenueOS", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     const followUpBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body));
     expect(followUpBody).toMatchObject({
+      clientRequestId,
       question: "Who is the economic buyer?",
       scopeType: "opportunity",
       scopeId: "opportunity-1",
@@ -240,6 +266,100 @@ describe("AskRevenueOS", () => {
       eventType: "follow_up_selected",
       askRequestId: "request-1",
     });
+  });
+
+  it("keeps a verified answer bound to its question when a later 2xx body is invalid", async () => {
+    const first = accountAnswer(
+      "account-2",
+      "Bayside Health",
+      "Bayside confirmed the next workshop.",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      )
+      .mockResolvedValueOnce(jsonResponse(first))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "This unbound answer must not be shown.",
+          ),
+          clientRequestId: "22222222-2222-4222-8222-222222222222",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    fireEvent.change(question, { target: { value: "What changed first?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(
+      await screen.findByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(screen.getByText("Answer to “What changed first?”")).toBeVisible();
+
+    fireEvent.change(question, { target: { value: "What changed second?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ask Oryntela is unavailable right now.",
+    );
+    expect(
+      screen.getByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(screen.getByText("Answer to “What changed first?”")).toBeVisible();
+    expect(
+      screen.queryByText("This unbound answer must not be shown."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("contains malformed 2xx JSON without replacing the last verified answer", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "Bayside confirmed the next workshop.",
+          ),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response("{", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    fireEvent.change(question, { target: { value: "What changed first?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+
+    fireEvent.change(question, { target: { value: "What changed second?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Oryntela couldn’t answer that right now.",
+    );
+    expect(
+      screen.getByText("Bayside confirmed the next workshop."),
+    ).toBeVisible();
+    expect(screen.getByText("Answer to “What changed first?”")).toBeVisible();
   });
 
   it("labels Selling Profile answers as organisation context rather than customer Evidence", async () => {

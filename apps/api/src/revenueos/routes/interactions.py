@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from revenueos.business_contracts import Page
+from revenueos.business_contracts import TenantPage
 from revenueos.companion_contracts import (
     InteractionMarkerCreateRequest,
     InteractionMarkerDeleteResponse,
@@ -186,7 +186,7 @@ def _response(record: InteractionRecord) -> InteractionResponse:
     )
 
 
-@router.get("", response_model=Page[InteractionResponse])
+@router.get("", response_model=TenantPage[InteractionResponse])
 async def list_interactions(
     service: Interactions,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -203,7 +203,7 @@ async def list_interactions(
         Query(alias="sortBy"),
     ] = "start_at",
     sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "desc",
-) -> Page[InteractionResponse]:
+) -> TenantPage[InteractionResponse]:
     result = await service.list_interactions(
         page=page,
         page_size=page_size,
@@ -217,7 +217,8 @@ async def list_interactions(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    return Page(
+    return TenantPage(
+        organisation_id=service.tenant.organisation_id,
         items=[_response(record) for record in result.items],
         page=page,
         page_size=page_size,

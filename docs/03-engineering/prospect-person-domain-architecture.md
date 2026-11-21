@@ -8,6 +8,11 @@ WO-027 reuses the immutable Prospect pipeline by adding nullable `person_id` to 
 
 New tenant tables are `prospect_people`, `prospect_buying_role_hypotheses`, `prospect_buying_role_sources`, `prospect_contact_points` and `contact_field_sources`. Migration `0036_prospect_people` enables and forces PostgreSQL RLS on every new table. Composite foreign keys prevent cross-target or cross-tenant attachment.
 
-The current API surface is company-scoped discovery/listing, person read/research/refresh/delete, buying-role review, explicit person promotion and the Contact research link. Route handlers remain thin; `ProspectPeopleService` owns policy and `ProspectRepository` owns tenant predicates.
+The current API surface is company-scoped discovery/listing, person
+read/research/refresh/delete, buying-role review, explicit person promotion and the
+Contact research link. The link response carries the verified internal organisation;
+the browser renders it only when organisation and Contact identity match the active
+request, and stale request settlements are ignored. Route handlers remain thin;
+`ProspectPeopleService` owns policy and `ProspectRepository` owns tenant predicates.
 
 No new queue was introduced. The existing PostgreSQL-compatible Prospect worker claims company and person runs. Person refresh updates only the Prospect Person employment state and creates a new immutable research version; it never edits the promoted Contact or downstream truth domains.

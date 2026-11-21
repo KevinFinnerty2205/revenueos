@@ -39,8 +39,15 @@ from .test_business_api import create_company, create_opportunity
 from .test_meeting_api import cast_auth_dependency, secondary_user
 
 
-def _scope_payload(scope_type: str, scope_id: str | None, question: str) -> dict[str, object]:
+def _scope_payload(
+    scope_type: str,
+    scope_id: str | None,
+    question: str,
+    *,
+    client_request_id: str | None = None,
+) -> dict[str, object]:
     return {
+        "clientRequestId": client_request_id or str(uuid4()),
         "question": question,
         "scopeType": scope_type,
         "scopeId": scope_id,
@@ -96,10 +103,24 @@ def test_question_classifier_is_bounded_and_never_emits_a_query_language(
 
 def test_request_contract_rejects_implicit_scope_extra_fields_and_oversized_questions() -> None:
     with pytest.raises(ValidationError):
-        AskRequest.model_validate({"question": "What changed?", "scopeType": "opportunity"})
+        AskRequest.model_validate(
+            {
+                "question": "What changed?",
+                "scopeType": "workspace",
+            }
+        )
     with pytest.raises(ValidationError):
         AskRequest.model_validate(
             {
+                "clientRequestId": uuid4(),
+                "question": "What changed?",
+                "scopeType": "opportunity",
+            }
+        )
+    with pytest.raises(ValidationError):
+        AskRequest.model_validate(
+            {
+                "clientRequestId": uuid4(),
                 "question": "What changed?",
                 "scopeType": "workspace",
                 "scopeId": uuid4(),
@@ -108,6 +129,7 @@ def test_request_contract_rejects_implicit_scope_extra_fields_and_oversized_ques
     with pytest.raises(ValidationError):
         AskRequest.model_validate(
             {
+                "clientRequestId": uuid4(),
                 "question": "x" * 1_001,
                 "scopeType": "workspace",
                 "arbitrarySql": "select * from opportunities",
@@ -223,6 +245,7 @@ def test_answer_contract_rejects_fabricated_or_out_of_retrieval_citations() -> N
     )
     with pytest.raises(ValidationError, match="validated retrieved source"):
         AskAnswer(
+            client_request_id=uuid4(),
             ask_request_id=uuid4(),
             answer="The opportunity is open.",
             answer_status="supported",
@@ -232,7 +255,12 @@ def test_answer_contract_rejects_fabricated_or_out_of_retrieval_citations() -> N
             uncertainties=(),
             suggested_action=None,
             follow_up_questions=(),
-            scope=AskScope(type="opportunity", id=uuid4(), label="Platform expansion"),
+            scope=AskScope(
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                type="opportunity",
+                id=uuid4(),
+                label="Platform expansion",
+            ),
             generated_at="2026-08-24T00:00:00Z",  # type: ignore[arg-type]
         )
 
@@ -284,7 +312,12 @@ def test_customer_direct_and_seller_reported_evidence_are_never_flattened() -> N
         created_at=now,
     )
     service = object.__new__(AskRevenueOSService)
-    scope = AskScope(type="opportunity", id=opportunity_id, label="Synthetic deal")
+    scope = AskScope(
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        type="opportunity",
+        id=opportunity_id,
+        label="Synthetic deal",
+    )
 
     direct = service._evidence_candidates(
         [snapshot],
@@ -382,7 +415,12 @@ def test_capabilities_and_unknown_answers_state_product_boundaries(client: TestC
     assert capabilities.status_code == 200, capabilities.text
     assert capabilities.json() == {
         "enabled": True,
-        "scope": {"type": "opportunity", "id": opportunity["id"], "label": "Platform expansion"},
+        "scope": {
+            "organisationId": str(PRIMARY_ORGANISATION_ID),
+            "type": "opportunity",
+            "id": opportunity["id"],
+            "label": "Platform expansion",
+        },
         "supportedScopes": ["opportunity", "account", "workspace"],
         "retainedHistory": False,
         "publicWebResearch": False,
@@ -394,13 +432,21 @@ def test_capabilities_and_unknown_answers_state_product_boundaries(client: TestC
         ),
     }
 
+    client_request_id = str(uuid4())
     response = client.post(
         "/api/v1/ask",
-        json=_scope_payload("opportunity", str(opportunity["id"]), "Teach me how to negotiate"),
+        json=_scope_payload(
+            "opportunity",
+            str(opportunity["id"]),
+            "Teach me how to negotiate",
+            client_request_id=client_request_id,
+        ),
     )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["schemaVersion"] == 1
+    assert body["clientRequestId"] == client_request_id
+    assert body["scope"]["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert body["answerStatus"] == "unknown"
     assert body["sources"] == []
     assert "assumptions" in body["uncertainties"][0]

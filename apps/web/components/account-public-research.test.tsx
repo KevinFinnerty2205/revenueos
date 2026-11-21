@@ -2,6 +2,15 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountPublicResearch } from "@/components/account-public-research";
 
+const organisationId = "organisation-1";
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId,
+  }),
+}));
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -11,6 +20,7 @@ function jsonResponse(body: object, status = 200): Response {
 
 function research(companyId: string, targetId: string) {
   return {
+    organisationId,
     targetId,
     companyId,
     updatedAt: "2026-11-21T01:02:00Z",
@@ -183,6 +193,30 @@ describe("AccountPublicResearch", () => {
       await result.promise;
     });
 
+    expect(
+      screen.queryByRole("link", { name: "View research" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("foreign-target")).not.toBeInTheDocument();
+  });
+
+  it("fails closed when research identifies another organisation", async () => {
+    const result = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => result.promise),
+    );
+
+    render(<AccountPublicResearch companyId="company-a" />);
+
+    await act(async () => {
+      result.resolve(
+        jsonResponse({
+          ...research("company-a", "foreign-target"),
+          organisationId: "organisation-2",
+        }),
+      );
+      await result.promise;
+    });
     expect(
       screen.queryByRole("link", { name: "View research" }),
     ).not.toBeInTheDocument();

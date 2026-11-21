@@ -1053,6 +1053,7 @@ def test_promotion_is_explicit_idempotent_and_cannot_mutate_customer_truth(clien
 
     research_link = client.get(f"/api/v1/prospect/accounts/{company_id}/research-link")
     assert research_link.status_code == 200
+    assert research_link.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert research_link.json()["targetId"] == target_id
     assert client.delete(f"/api/v1/prospect/research/{target_id}").status_code == 204
     assert client.get(f"/api/v1/companies/{company_id}").status_code == 200

@@ -100,6 +100,12 @@ reach.
   The synthetic demo may use bundled local account marks; otherwise the interface
   renders deterministic initials. It does not fetch third-party favicons, and
   this does not imply a production logo provider.
+  The browser resolves the authoritative internal organisation through
+  `/api/v1/me`, then requires the same organisation on the Account, participant
+  and conversation responses. Participant and history pages are accepted only as
+  complete organisation-bearing batches; a mixed or malformed batch is rejected
+  atomically. An invalid later history page leaves the last verified page visible
+  with a recoverable error rather than replacing it with unverified content.
 
 ## Trust boundaries
 

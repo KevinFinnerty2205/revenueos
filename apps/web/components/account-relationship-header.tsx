@@ -1,37 +1,47 @@
 "use client";
 
-import type { Company, Contact, EntityPage } from "@revenueos/shared";
+import type { Company, Contact } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
-import { apiRequest } from "@/lib/api";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
+import { apiRequest, ApiClientError } from "@/lib/api";
+import {
+  decodeTenantPage,
+  isCompanyResponse,
+  isContactResponse,
+} from "@/lib/private-response-identity";
 
 type CompanyState =
-  | { companyId: string; status: "loading" }
-  | { companyId: string; status: "available"; company: Company }
-  | { companyId: string; status: "failed"; message: string };
+  | { requestKey: string; status: "loading" }
+  | { requestKey: string; status: "available"; company: Company }
+  | { requestKey: string; status: "failed"; message: string };
 
 type ParticipantState =
-  | { companyId: string; status: "loading" }
-  | { companyId: string; status: "available"; participants: Contact[] }
-  | { companyId: string; status: "unavailable" };
+  | { requestKey: string; status: "loading" }
+  | { requestKey: string; status: "available"; participants: Contact[] }
+  | { requestKey: string; status: "unavailable" };
 
 export function AccountRelationshipHeader({
   companyId,
 }: {
   companyId: string;
 }) {
+  const verifiedOrganisation = useVerifiedOrganisation();
+  const organisationId = verifiedOrganisation.organisationId;
+  const requestKey = `${organisationId ?? "unverified"}:${companyId}`;
   const [companyState, setCompanyState] = useState<CompanyState>({
-    companyId,
+    requestKey,
     status: "loading",
   });
   const [participantState, setParticipantState] = useState<ParticipantState>({
-    companyId,
+    requestKey,
     status: "loading",
   });
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
+    if (!organisationId) return;
     const controller = new AbortController();
     const encodedCompanyId = encodeURIComponent(companyId);
     const contactQuery = new URLSearchParams({
@@ -42,20 +52,24 @@ export function AccountRelationshipHeader({
       sortOrder: "asc",
     });
 
-    void apiRequest<Company>(`/api/v1/companies/${encodedCompanyId}`, {
+    void apiRequest<unknown>(`/api/v1/companies/${encodedCompanyId}`, {
       signal: controller.signal,
     })
-      .then((company) => {
+      .then((payload) => {
         if (controller.signal.aborted) return;
-        if (company.id !== companyId || company.archivedAt !== null) {
+        if (
+          !isCompanyResponse(payload, organisationId) ||
+          payload.id !== companyId ||
+          payload.archivedAt !== null
+        ) {
           setCompanyState({
-            companyId,
+            requestKey,
             status: "failed",
             message: "This account could not be loaded.",
           });
           return;
         }
-        setCompanyState({ companyId, status: "available", company });
+        setCompanyState({ requestKey, status: "available", company: payload });
       })
       .catch((reason: unknown) => {
         if (
@@ -65,53 +79,76 @@ export function AccountRelationshipHeader({
           return;
         }
         setCompanyState({
-          companyId,
+          requestKey,
           status: "failed",
           message:
-            reason instanceof Error
+            reason instanceof ApiClientError
               ? reason.message
               : "This account could not be loaded.",
         });
       });
 
-    void apiRequest<EntityPage<Contact>>(
-      `/api/v1/contacts?${contactQuery.toString()}`,
-      { signal: controller.signal },
-    )
-      .then((participants) => {
+    void apiRequest<unknown>(`/api/v1/contacts?${contactQuery.toString()}`, {
+      signal: controller.signal,
+    })
+      .then((payload) => {
         if (controller.signal.aborted) return;
+        const participants = decodeTenantPage(
+          payload,
+          organisationId,
+          isContactResponse,
+          { expectedPage: 1 },
+        );
         if (
+          !participants ||
           participants.items.some(
             (participant) =>
               participant.companyId !== companyId ||
               participant.archivedAt !== null,
           )
         ) {
-          setParticipantState({ companyId, status: "unavailable" });
+          setParticipantState({ requestKey, status: "unavailable" });
           return;
         }
         setParticipantState({
-          companyId,
+          requestKey,
           status: "available",
           participants: participants.items,
         });
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setParticipantState({ companyId, status: "unavailable" });
+        setParticipantState({ requestKey, status: "unavailable" });
       });
 
     return () => controller.abort();
-  }, [companyId, retryKey]);
+  }, [companyId, organisationId, requestKey, retryKey]);
 
   const visibleCompanyState =
-    companyState.companyId === companyId
+    companyState.requestKey === requestKey
       ? companyState
-      : ({ companyId, status: "loading" } satisfies CompanyState);
+      : ({ requestKey, status: "loading" } satisfies CompanyState);
   const visibleParticipantState =
-    participantState.companyId === companyId
+    participantState.requestKey === requestKey
       ? participantState
-      : ({ companyId, status: "loading" } satisfies ParticipantState);
+      : ({ requestKey, status: "loading" } satisfies ParticipantState);
+
+  if (verifiedOrganisation.status === "unavailable") {
+    return (
+      <section
+        className="rounded-3xl border border-rose-200 bg-rose-50 p-6 sm:p-8"
+        role="alert"
+      >
+        <h1 className="text-2xl font-semibold text-rose-950">
+          Oryntela couldn’t verify this workspace.
+        </h1>
+        <p className="mt-3 text-sm text-rose-900">
+          This account cannot be shown until the active organisation is
+          verified. Reload the page to try again.
+        </p>
+      </section>
+    );
+  }
 
   if (visibleCompanyState.status === "loading") {
     return (
@@ -143,8 +180,8 @@ export function AccountRelationshipHeader({
           type="button"
           className="secondary-button mt-5"
           onClick={() => {
-            setCompanyState({ companyId, status: "loading" });
-            setParticipantState({ companyId, status: "loading" });
+            setCompanyState({ requestKey, status: "loading" });
+            setParticipantState({ requestKey, status: "loading" });
             setRetryKey((value) => value + 1);
           }}
         >

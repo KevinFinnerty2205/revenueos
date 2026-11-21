@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -17,6 +18,12 @@ import {
 import { ProspectResearchBriefView } from "@/components/prospect-research-brief";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId: "organisation-1",
+  }),
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
@@ -869,6 +876,7 @@ describe("Prospect experience", () => {
       "fetch",
       vi.fn(() =>
         jsonResponse({
+          organisationId: "organisation-1",
           targetId: "target-1",
           companyId: "company-1",
           updatedAt: "2026-08-25T01:02:00Z",
@@ -1218,6 +1226,7 @@ describe("Prospect experience", () => {
       "fetch",
       vi.fn(() =>
         jsonResponse({
+          organisationId: "organisation-1",
           contactId: "contact-1",
           prospectPersonId: "person-1",
           companyTargetId: "target-1",
@@ -1236,6 +1245,40 @@ describe("Prospect experience", () => {
     expect(
       screen.getByRole("link", { name: "View public research" }),
     ).toHaveAttribute("href", "/find/target-1/people/person-1");
+  });
+
+  it("fails closed for a Contact research link from another organisation", async () => {
+    let resolveResponse: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => {
+      resolveResponse = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => pending),
+    );
+
+    render(<ContactPublicProfessionalResearch contactId="contact-1" />);
+    await act(async () => {
+      resolveResponse?.(
+        new Response(
+          JSON.stringify({
+            organisationId: "organisation-2",
+            contactId: "contact-1",
+            prospectPersonId: "person-foreign",
+            companyTargetId: "target-foreign",
+            updatedAt: "2026-08-25T01:02:00Z",
+            label: "Public professional research",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      await pending;
+    });
+
+    expect(
+      screen.queryByRole("link", { name: "View public research" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("person-foreign")).not.toBeInTheDocument();
   });
 
   it("shows a departed-role warning and unknown contact state without preserving a buying-role claim", async () => {

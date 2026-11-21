@@ -5,6 +5,14 @@ derive the tenant from verified server context and return camel-case JSON. Suppl
 `organisationId` is rejected. Missing or cross-tenant resources return the same safe
 not-found response and cannot be enumerated.
 
+The Interaction list returns a tenant page envelope containing `organisationId`,
+`items`, `page`, `pageSize`, `total` and `pages`, including when the page is empty.
+Browser pagination verifies the returned organisation and requested page before
+appending; an invalid later page leaves the last verified history intact. Raw search
+text is not echoed because it can match the current user's private notes. Browser
+search retains abort and generation fencing until a non-content correlation token is
+specified across the affected search endpoints.
+
 ## Endpoints
 
 | Method   | Path                                                                               | Purpose                                                       |
