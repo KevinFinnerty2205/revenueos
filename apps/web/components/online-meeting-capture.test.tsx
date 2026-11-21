@@ -212,6 +212,52 @@ describe("OnlineMeetingCapture", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 
+  it("rejects an imported transcript returned for another interaction", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/online-meeting/capabilities")) {
+        return jsonResponse(capabilities);
+      }
+      if (url.endsWith("/online-meeting/transcripts") && !init?.method) {
+        return jsonResponse([]);
+      }
+      if (
+        url.endsWith("/online-meeting/transcript") &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse(
+          transcriptImport("foreign-import", secondInteraction.id),
+          201,
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const onTranscriptImported = vi.fn();
+
+    render(
+      <OnlineMeetingCapture
+        interaction={interaction}
+        onTranscriptImported={onTranscriptImported}
+      />,
+    );
+
+    const transcript = await screen.findByLabelText("Paste transcript text");
+    fireEvent.change(transcript, {
+      target: { value: "Private conversation A text" },
+    });
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      fireEvent.click(checkbox);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Import transcript" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The transcript could not be imported. Try again.",
+    );
+    expect(transcript).toHaveValue("Private conversation A text");
+    expect(onTranscriptImported).not.toHaveBeenCalled();
+    expect(screen.queryByText("Transcript ready")).not.toBeInTheDocument();
+  });
+
   it("does not present unavailable native or recording capture as working", async () => {
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);
@@ -415,6 +461,50 @@ describe("OnlineMeetingCapture", () => {
     expect(
       screen.queryByText(/history is temporarily unavailable/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("rejects the whole history list when one transcript belongs to another interaction", async () => {
+    const foreignImport = transcriptImport(
+      "foreign-history",
+      secondInteraction.id,
+      2,
+    );
+    foreignImport.text = "Private renewal negotiation from another customer";
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/online-meeting/capabilities")) {
+        return jsonResponse(capabilities);
+      }
+      if (url.endsWith("/online-meeting/transcripts")) {
+        return jsonResponse([
+          transcriptImport("matching-history", interaction.id, 1),
+          foreignImport,
+        ]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<OnlineMeetingCapture interaction={interaction} />);
+
+    expect(
+      await screen.findByText(
+        /previous transcript import history is temporarily unavailable/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/authorised transcript versions? imported/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Private renewal negotiation from another customer"),
+    ).not.toBeInTheDocument();
+
+    const transcript = screen.getByLabelText("Paste transcript text");
+    fireEvent.change(transcript, {
+      target: { value: "Authorised current-customer transcript" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Import transcript" }),
+    ).toBeEnabled();
   });
 
   it("does not invent a count when successful history is empty", async () => {
