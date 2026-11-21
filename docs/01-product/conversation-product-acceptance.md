@@ -68,7 +68,9 @@ The default web experience must satisfy these behaviours:
 - Home brings the authenticated user's own nonblank, unreviewed follow-up drafts
   back as a bounded metadata-only review queue. It links to the private Review &
   follow-up section without exposing draft text, requiring CRM data or including
-  another member's workspace.
+  another member's workspace. Editing a nonblank draft reopens `Needs review`,
+  while saving an unchanged draft preserves `Reviewed`. `Reviewed` becomes visible
+  and removes the Home item only after the private save succeeds.
 
 Legacy CRM, pipeline, campaign, forecast and content-production records remain
 available through their existing compatibility routes. They are not collected into
