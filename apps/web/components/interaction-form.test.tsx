@@ -213,6 +213,56 @@ describe("InteractionForm", () => {
     });
   });
 
+  it("exposes settled relationship sources while another optional source is pending", async () => {
+    let resolveContacts: ((response: Response) => void) | undefined;
+    const pendingContacts = new Promise<Response>((resolve) => {
+      resolveContacts = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/contacts")) return pendingContacts;
+      if (path.includes("/companies")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [{ id: "company-ready", name: "Ready company" }],
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          ...emptyPage,
+          items: [{ id: "opportunity-ready", name: "Ready opportunity" }],
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+
+    expect(
+      await screen.findByRole("option", { name: "Ready company" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("option", { name: "Ready opportunity" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Company")).toBeEnabled();
+    expect(screen.getByLabelText("Opportunity")).toBeEnabled();
+    expect(
+      screen.getByText(/loading optional relationship context/i),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveContacts?.(jsonResponse(emptyPage));
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/loading optional relationship context/i),
+      ).toBeNull(),
+    );
+  });
+
   it("keeps page options usable when an exact linked company fails", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const path = String(input);
@@ -245,18 +295,17 @@ describe("InteractionForm", () => {
 
   it("retries optional sources without discarding core edits", async () => {
     let companyLoads = 0;
+    let resolveCompanyRetry: ((response: Response) => void) | undefined;
+    const companyRetry = new Promise<Response>((resolve) => {
+      resolveCompanyRetry = resolve;
+    });
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const path = String(input);
       if (path.includes("/companies")) {
         companyLoads += 1;
-        return Promise.resolve(
-          companyLoads === 1
-            ? jsonResponse({ code: "unavailable" }, 503)
-            : jsonResponse({
-                ...emptyPage,
-                items: [{ id: "company-restored", name: "Restored company" }],
-              }),
-        );
+        return companyLoads === 1
+          ? Promise.resolve(jsonResponse({ code: "unavailable" }, 503))
+          : companyRetry;
       }
       return Promise.resolve(jsonResponse(emptyPage));
     });
@@ -267,7 +316,30 @@ describe("InteractionForm", () => {
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Keep this conversation title" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Retry companies" }));
+    const retryButton = screen.getByRole("button", {
+      name: "Retry companies",
+    });
+    retryButton.focus();
+    fireEvent.click(retryButton);
+
+    const retryingButton = await screen.findByRole("button", {
+      name: "Retrying…",
+    });
+    expect(retryingButton).toBeDisabled();
+    expect(retryingButton).toHaveFocus();
+    expect(
+      screen.getByText(/company options are temporarily unavailable/i),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveCompanyRetry?.(
+        jsonResponse({
+          ...emptyPage,
+          items: [{ id: "company-restored", name: "Restored company" }],
+        }),
+      );
+      await Promise.resolve();
+    });
 
     expect(
       await screen.findByRole("option", { name: "Restored company" }),

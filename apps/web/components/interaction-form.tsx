@@ -226,9 +226,9 @@ export function InteractionForm({
       setOpportunityOptionsWarning(null);
     });
 
-    const companyPageRequest = apiRequest<EntityPage<Company>>(
-      "/api/v1/companies?pageSize=100",
-      { signal: controller.signal },
+    const companyOptionsRequest = loadCompanyOptions(
+      initialCompanyId,
+      controller.signal,
     );
     const contactOptionsRequest = loadContactOptions(
       initialContactId,
@@ -239,8 +239,73 @@ export function InteractionForm({
         ? Promise.resolve({ items: [], exactWarning: false })
         : loadOpportunityOptions(initialOpportunityId, controller.signal);
 
+    const requestIsActive = (): boolean =>
+      !controller.signal.aborted &&
+      activeLinkedContextIdentityRef.current === requestContextIdentity;
+
+    void companyOptionsRequest.then(
+      (loaded) => {
+        if (!requestIsActive()) return;
+        setCompanies(loaded.items);
+        setCompanyOptionsState("ready");
+        setCompanyOptionsWarning(
+          loaded.exactWarning
+            ? "The linked company could not be loaded. Choose another company or continue without one."
+            : null,
+        );
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        setCompanies([]);
+        setCompanyOptionsState("unavailable");
+        setCompanyOptionsWarning(
+          "Company options are temporarily unavailable. You can still add this conversation without company context.",
+        );
+      },
+    );
+    void opportunityOptionsRequest.then(
+      (loaded) => {
+        if (!requestIsActive()) return;
+        setOpportunities(loaded.items);
+        setOpportunityOptionsState("ready");
+        setOpportunityOptionsWarning(
+          loaded.exactWarning
+            ? "The linked opportunity could not be loaded. Choose another opportunity or continue without one."
+            : null,
+        );
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        setOpportunities([]);
+        setOpportunityOptionsState("unavailable");
+        setOpportunityOptionsWarning(
+          "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity.",
+        );
+      },
+    );
+    void contactOptionsRequest.then(
+      (loaded) => {
+        if (!requestIsActive()) return;
+        setContacts(loaded.items);
+        setContactOptionsState("ready");
+        setContactOptionsWarning(
+          loaded.exactWarning
+            ? "The linked person could not be loaded. Choose another person or continue without one."
+            : null,
+        );
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        setContacts([]);
+        setContactOptionsState("unavailable");
+        setContactOptionsWarning(
+          "People options are temporarily unavailable. You can still add this conversation without a person.",
+        );
+      },
+    );
+
     void Promise.allSettled([
-      companyPageRequest,
+      companyOptionsRequest,
       opportunityOptionsRequest,
       contactOptionsRequest,
     ]).then(async ([companyResult, opportunityResult, contactResult]) => {
@@ -270,7 +335,9 @@ export function InteractionForm({
         selectedContact?.companyId ||
         selectedOpportunity?.companyId ||
         "";
-      let companyExactWarning = false;
+      let companyExactWarning =
+        companyResult.status === "fulfilled" &&
+        companyResult.value.exactWarning;
       if (
         companyResult.status === "fulfilled" &&
         linkedCompanyCandidate &&
@@ -302,39 +369,14 @@ export function InteractionForm({
         return;
       }
 
-      setCompanies(nextCompanies);
-      setOpportunities(nextOpportunities);
-      setContacts(nextContacts);
-      setCompanyOptionsState(
-        companyResult.status === "fulfilled" ? "ready" : "unavailable",
-      );
-      setOpportunityOptionsState(
-        opportunityResult.status === "fulfilled" ? "ready" : "unavailable",
-      );
-      setContactOptionsState(
-        contactResult.status === "fulfilled" ? "ready" : "unavailable",
-      );
-      setCompanyOptionsWarning(
-        companyResult.status === "rejected"
-          ? "Company options are temporarily unavailable. You can still add this conversation without company context."
-          : companyExactWarning
+      if (companyResult.status === "fulfilled") {
+        setCompanies(nextCompanies);
+        setCompanyOptionsWarning(
+          companyExactWarning
             ? "The linked company could not be loaded. Choose another company or continue without one."
             : null,
-      );
-      setOpportunityOptionsWarning(
-        opportunityResult.status === "rejected"
-          ? "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity."
-          : opportunityResult.value.exactWarning
-            ? "The linked opportunity could not be loaded. Choose another opportunity or continue without one."
-            : null,
-      );
-      setContactOptionsWarning(
-        contactResult.status === "rejected"
-          ? "People options are temporarily unavailable. You can still add this conversation without a person."
-          : contactResult.value.exactWarning
-            ? "The linked person could not be loaded. Choose another person or continue without one."
-            : null,
-      );
+        );
+      }
 
       const linkedCompanyId = nextCompanies.some(
         (company) => company.id === linkedCompanyCandidate,
@@ -396,13 +438,10 @@ export function InteractionForm({
       }
       if (request.source === "company") {
         setCompanyOptionsState("loading");
-        setCompanyOptionsWarning(null);
       } else if (request.source === "opportunity") {
         setOpportunityOptionsState("loading");
-        setOpportunityOptionsWarning(null);
       } else {
         setContactOptionsState("loading");
-        setContactOptionsWarning(null);
       }
     });
 
