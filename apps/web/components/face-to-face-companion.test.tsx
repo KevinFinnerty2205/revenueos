@@ -697,6 +697,7 @@ describe("FaceToFaceCompanion", () => {
 
       const notesBeforeCapabilityCheck =
         await screen.findByLabelText("Private live notes");
+      await waitFor(() => expect(notesBeforeCapabilityCheck).toBeEnabled());
       fireEvent.change(notesBeforeCapabilityCheck, {
         target: { value: "Keep this draft mounted." },
       });
