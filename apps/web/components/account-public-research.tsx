@@ -2,7 +2,7 @@
 
 import type { ProspectAccountResearchLink } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
 
 function formatDate(value: string): string {
@@ -12,34 +12,65 @@ function formatDate(value: string): string {
 }
 
 export function AccountPublicResearch({ companyId }: { companyId: string }) {
-  const [research, setResearch] = useState<ProspectAccountResearchLink | null>(
-    null,
-  );
-  const [unavailable, setUnavailable] = useState(false);
+  const [state, setState] = useState<ResearchState>({
+    companyId,
+    status: "loading",
+  });
+  const requestSequence = useRef(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    const requestId = requestSequence.current + 1;
+    requestSequence.current = requestId;
+
     apiRequest<ProspectAccountResearchLink>(
-      `/api/v1/prospect/accounts/${companyId}/research-link`,
+      `/api/v1/prospect/accounts/${encodeURIComponent(companyId)}/research-link`,
       { signal: controller.signal },
     )
-      .then(setResearch)
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
+      .then((research) => {
+        if (
+          controller.signal.aborted ||
+          requestSequence.current !== requestId
+        ) {
           return;
+        }
+        if (research.companyId !== companyId) {
+          setState({ companyId, status: "unavailable" });
+          return;
+        }
+        setState({ companyId, status: "available", research });
+      })
+      .catch((reason: unknown) => {
+        if (
+          controller.signal.aborted ||
+          requestSequence.current !== requestId ||
+          (reason instanceof DOMException && reason.name === "AbortError")
+        ) {
+          return;
+        }
         if (
           reason instanceof ApiClientError &&
           (reason.status === 403 || reason.status === 404)
         ) {
-          setUnavailable(true);
+          setState({ companyId, status: "unavailable" });
           return;
         }
-        setUnavailable(true);
+        setState({ companyId, status: "unavailable" });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (requestSequence.current === requestId) {
+        requestSequence.current += 1;
+      }
+    };
   }, [companyId]);
 
-  if (unavailable || !research) return null;
+  const visibleState: ResearchState =
+    state.companyId === companyId ? state : { companyId, status: "loading" };
+
+  if (visibleState.status !== "available") return null;
+
+  const { research } = visibleState;
 
   return (
     <section
@@ -64,7 +95,7 @@ export function AccountPublicResearch({ companyId }: { companyId: string }) {
         </p>
       </div>
       <Link
-        href={`/find/${research.targetId}`}
+        href={`/find/${encodeURIComponent(research.targetId)}`}
         className="secondary-button shrink-0"
       >
         View research
@@ -72,3 +103,11 @@ export function AccountPublicResearch({ companyId }: { companyId: string }) {
     </section>
   );
 }
+
+type ResearchState =
+  | { companyId: string; status: "loading" | "unavailable" }
+  | {
+      companyId: string;
+      status: "available";
+      research: ProspectAccountResearchLink;
+    };
