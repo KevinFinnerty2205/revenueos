@@ -306,6 +306,7 @@ class ProviderReplyListResponse(APIModel):
 
 class ProviderCalendarEventResponse(APIModel):
     id: UUID
+    organisation_id: UUID
     title: str
     start_at: datetime
     end_at: datetime
@@ -324,6 +325,7 @@ class ProviderCalendarEventResponse(APIModel):
 
 
 class ProviderCalendarEventListResponse(APIModel):
+    organisation_id: UUID
     items: list[ProviderCalendarEventResponse]
     total: int
 

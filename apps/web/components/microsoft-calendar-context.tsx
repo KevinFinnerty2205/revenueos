@@ -1,13 +1,13 @@
 "use client";
 
-import type {
-  Interaction,
-  ProviderCalendarEvent,
-  ProviderCalendarEventListResponse,
-} from "@revenueos/shared";
+import type { Interaction, ProviderCalendarEvent } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import {
+  decodeProviderCalendarEventListResponse,
+  isProviderCalendarEventResponse,
+} from "@/lib/private-response-identity";
 
 interface CalendarItem extends ProviderCalendarEvent {
   provider: "microsoft" | "google";
@@ -26,8 +26,26 @@ interface EventMutationState {
 
 export function ProviderCalendarContext({
   interactions,
+  organisationId,
 }: {
   interactions: Interaction[];
+  organisationId: string;
+}) {
+  return (
+    <ProviderCalendarContextSession
+      key={organisationId}
+      interactions={interactions}
+      organisationId={organisationId}
+    />
+  );
+}
+
+function ProviderCalendarContextSession({
+  interactions,
+  organisationId,
+}: {
+  interactions: Interaction[];
+  organisationId: string;
 }) {
   const [events, setEvents] = useState<CalendarItem[]>([]);
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -36,30 +54,73 @@ export function ProviderCalendarContext({
   >({});
   const activeOperations = useRef<Record<string, number>>({});
   const operationSequence = useRef(0);
+  const interactionIds = useMemo(
+    () => new Set(interactions.map((interaction) => interaction.id)),
+    [interactions],
+  );
+
+  useEffect(() => {
+    let active = true;
+    window.queueMicrotask(() => {
+      if (!active) return;
+      setSelected((current) => {
+        const entries = Object.entries(current);
+        if (
+          entries.every(([, interactionId]) =>
+            interactionIds.has(interactionId),
+          )
+        ) {
+          return current;
+        }
+        return Object.fromEntries(
+          entries.filter(([, interactionId]) =>
+            interactionIds.has(interactionId),
+          ),
+        );
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [interactionIds]);
 
   useEffect(() => {
     const controller = new AbortController();
     Promise.allSettled([
-      apiRequest<ProviderCalendarEventListResponse>(
+      apiRequest<unknown>(
         "/api/v1/integrations/microsoft/calendar/events?limit=4",
         { signal: controller.signal },
-      ).then((result) =>
-        result.items.map((item) => ({
+      ).then((result) => {
+        const decoded = decodeProviderCalendarEventListResponse(
+          result,
+          organisationId,
+        );
+        if (decoded === null) {
+          throw new Error("Microsoft calendar events are unavailable.");
+        }
+        return decoded.items.map((item) => ({
           ...item,
           provider: "microsoft" as const,
           providerName: "Microsoft 365" as const,
-        })),
-      ),
-      apiRequest<ProviderCalendarEventListResponse>(
+        }));
+      }),
+      apiRequest<unknown>(
         "/api/v1/integrations/google/calendar/events?limit=4",
         { signal: controller.signal },
-      ).then((result) =>
-        result.items.map((item) => ({
+      ).then((result) => {
+        const decoded = decodeProviderCalendarEventListResponse(
+          result,
+          organisationId,
+        );
+        if (decoded === null) {
+          throw new Error("Google calendar events are unavailable.");
+        }
+        return decoded.items.map((item) => ({
           ...item,
           provider: "google" as const,
           providerName: "Google Workspace" as const,
-        })),
-      ),
+        }));
+      }),
     ])
       .then((results) => {
         const availableEvents: CalendarItem[] = [];
@@ -72,11 +133,22 @@ export function ProviderCalendarContext({
       })
       .catch(() => setEvents([]));
     return () => controller.abort();
-  }, []);
+  }, [organisationId]);
 
   async function linkEvent(event: CalendarItem) {
-    const interactionId = selected[eventKey(event)];
-    if (!interactionId) return;
+    const key = eventKey(event);
+    const interactionId = selected[key];
+    if (!interactionId || !interactionIds.has(interactionId)) {
+      if (interactionId) {
+        setSelected((current) => {
+          if (!(key in current)) return current;
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+      }
+      return;
+    }
     await updateInteraction(event, interactionId);
   }
 
@@ -99,17 +171,22 @@ export function ProviderCalendarContext({
       [key]: { operation, pending: true, error: null },
     }));
     try {
-      const updated = await apiRequest<ProviderCalendarEvent>(
-        `/api/v1/integrations/${event.provider}/calendar/events/${event.id}/interaction`,
+      const response = await apiRequest<unknown>(
+        `/api/v1/integrations/${event.provider}/calendar/events/${encodeURIComponent(event.id)}/interaction`,
         {
           method: "PUT",
           body: JSON.stringify({ interactionId }),
         },
       );
       if (activeOperations.current[key] !== operation) return;
-      if (updated.id !== event.id) {
+      if (
+        !isProviderCalendarEventResponse(response, organisationId) ||
+        response.id !== event.id ||
+        response.interactionId !== interactionId
+      ) {
         throw new Error("The calendar event could not be updated. Try again.");
       }
+      const updated = response;
       setEvents((current) =>
         current.map((item) =>
           item.provider === event.provider && item.id === event.id
@@ -160,6 +237,9 @@ export function ProviderCalendarContext({
         {events.map((event) => {
           const key = eventKey(event);
           const mutation = mutations[key];
+          const selectedInteractionId = interactionIds.has(selected[key] ?? "")
+            ? selected[key]
+            : "";
           return (
             <article
               key={key}
@@ -185,7 +265,7 @@ export function ProviderCalendarContext({
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <Link
                     className="inline-flex text-sm font-bold text-brand-secondary hover:underline"
-                    href={`/conversations/${event.interactionId}?view=prepare`}
+                    href={`/conversations/${encodeURIComponent(event.interactionId)}?view=prepare`}
                   >
                     Prepare →
                   </Link>
@@ -213,7 +293,7 @@ export function ProviderCalendarContext({
                   <select
                     id={`interaction-${event.provider}-${event.id}`}
                     className="form-control min-w-0 flex-1"
-                    value={selected[key] ?? ""}
+                    value={selectedInteractionId}
                     disabled={mutation?.pending}
                     onChange={(change) =>
                       setSelected((current) => ({
@@ -232,7 +312,7 @@ export function ProviderCalendarContext({
                   <button
                     type="button"
                     className="secondary-button"
-                    disabled={!selected[key] || mutation?.pending}
+                    disabled={!selectedInteractionId || mutation?.pending}
                     onClick={() => void linkEvent(event)}
                   >
                     {mutation?.pending ? "Linking…" : "Link"}

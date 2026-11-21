@@ -1179,6 +1179,10 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
             assert customer.opportunity_id is None
             assert customer.match_state == "review_required"
             assert google.full_message_reads == []
+            calendar_listing = await service.list_calendar_events(limit=10)
+            assert calendar_listing.organisation_id == PRIMARY_ORGANISATION_ID
+            assert calendar_listing.items
+            assert all(item.organisation_id == PRIMARY_ORGANISATION_ID for item in calendar_listing.items)
             interaction = Interaction(
                 id=uuid.uuid4(),
                 organisation_id=PRIMARY_ORGANISATION_ID,
@@ -1194,6 +1198,7 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
             session.add(interaction)
             await session.commit()
             linked = await service.link_interaction(customer.id, interaction.id)
+            assert linked.organisation_id == PRIMARY_ORGANISATION_ID
             assert linked.interaction_id == interaction.id
             with pytest.raises(PublicAPIError, match="Private Google calendar events"):
                 await service.link_interaction(private.id, interaction.id)

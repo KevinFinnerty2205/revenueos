@@ -721,6 +721,7 @@ test("interaction timeline supports deliberate creation and completion without i
       }
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           items: [
             {
               id: "company-1",
@@ -768,6 +769,7 @@ test("interaction timeline supports deliberate creation and completion without i
     async (route) => {
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           items: [
             {
               ...opportunity(),
@@ -4456,6 +4458,15 @@ function opportunity() {
     expectedCloseDate: "2026-09-30",
     ownerUserId: "user-1",
     description: null,
+    archivedAt: null,
+    pipelineId: null,
+    pipelineStageId: null,
+    stageEnteredAt: null,
+    stageTrackingStartedAt: null,
+    actualCloseDate: null,
+    outcomeReason: null,
+    outcomeNote: null,
+    outcomeProvenance: null,
     createdAt: "2026-07-20T00:00:00Z",
     updatedAt: "2026-07-24T00:00:00Z",
   };

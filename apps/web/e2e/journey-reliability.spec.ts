@@ -294,6 +294,14 @@ function opportunity() {
     ownerUserId: "user-flagship",
     description: "Synthetic flagship Opportunity.",
     archivedAt: null,
+    pipelineId: null,
+    pipelineStageId: null,
+    stageEnteredAt: null,
+    stageTrackingStartedAt: null,
+    actualCloseDate: null,
+    outcomeReason: null,
+    outcomeNote: null,
+    outcomeProvenance: null,
     createdAt: "2026-08-31T00:00:00Z",
     updatedAt: "2026-08-31T00:10:00Z",
   };
@@ -1546,6 +1554,7 @@ async function routeFlagship(page: Page) {
     }
     if (path === "/api/v1/interactions" && method === "GET") {
       await fulfilJson(route, {
+        organisationId: "organisation-flagship",
         items: [],
         page: 1,
         pageSize: 6,
@@ -1692,6 +1701,7 @@ async function routeFlagship(page: Page) {
     }
     if (path === "/api/v1/companies") {
       await fulfilJson(route, {
+        organisationId: "organisation-flagship",
         items: state.accountPromoted ? [account] : [],
         page: 1,
         pageSize: 100,
@@ -1702,6 +1712,7 @@ async function routeFlagship(page: Page) {
     }
     if (path === "/api/v1/contacts") {
       await fulfilJson(route, {
+        organisationId: "organisation-flagship",
         items: state.contactPromoted ? [contact] : [],
         page: 1,
         pageSize: 100,
@@ -1717,7 +1728,20 @@ async function routeFlagship(page: Page) {
         return;
       }
       await fulfilJson(route, {
-        items: state.opportunityCreated ? [opportunity()] : [],
+        organisationId: "organisation-flagship",
+        items: state.opportunityCreated
+          ? [
+              {
+                ...opportunity(),
+                companyName: account.name,
+                ownerName: "Alex Morgan",
+                latestMeetingId: null,
+                latestMeetingDate: null,
+                latestMeetingMomentum: null,
+                latestNextBestAction: null,
+              },
+            ]
+          : [],
         page: 1,
         pageSize: 100,
         total: state.opportunityCreated ? 1 : 0,

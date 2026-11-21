@@ -1,8 +1,8 @@
 import type {
   Company,
   DailyResponse,
-  EntityPage,
   Interaction,
+  TenantEntityPage,
 } from "@revenueos/shared";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,8 +10,32 @@ import DashboardPage from "@/app/(protected)/dashboard/page";
 import { apiRequest } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({ apiRequest: vi.fn() }));
+const organisationId = "organisation-1";
+const verifiedOrganisation = vi.hoisted(() => ({
+  state: {
+    status: "available" as "available" | "loading" | "unavailable",
+    organisationId: "organisation-1" as string | null,
+  },
+}));
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => verifiedOrganisation.state,
+}));
 
 const mockedApiRequest = vi.mocked(apiRequest);
+
+function tenantPage<T>(
+  items: T[],
+  pageOrganisationId = organisationId,
+): TenantEntityPage<T> {
+  return {
+    organisationId: pageOrganisationId,
+    items,
+    page: 1,
+    pageSize: Math.max(items.length, 1),
+    total: items.length,
+    pages: items.length === 0 ? 0 : 1,
+  };
+}
 
 function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
   return {
@@ -180,11 +204,11 @@ function mockHomeSources({
     if (String(path).startsWith("/api/v1/companies")) {
       return accountUnavailable
         ? Promise.reject(new Error("internal account provider detail"))
-        : Promise.resolve({ items: accountItems } as EntityPage<Company>);
+        : Promise.resolve(tenantPage(accountItems));
     }
     return historyUnavailable
       ? Promise.reject(new Error("internal history provider detail"))
-      : Promise.resolve({ items: historyItems } as EntityPage<Interaction>);
+      : Promise.resolve(tenantPage(historyItems));
   });
 }
 
@@ -195,6 +219,39 @@ function mockHome(day: DailyResponse = dailyFixture()) {
 describe("conversation-first Home", () => {
   beforeEach(() => {
     mockedApiRequest.mockReset();
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId,
+    };
+  });
+
+  it("waits for verified organisation context before loading private sources", () => {
+    verifiedOrganisation.state = {
+      status: "loading",
+      organisationId: null,
+    };
+
+    render(<DashboardPage />);
+
+    expect(screen.getByLabelText("Loading conversation home")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(mockedApiRequest).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when organisation context is unavailable", () => {
+    verifiedOrganisation.state = {
+      status: "unavailable",
+      organisationId: null,
+    };
+
+    render(<DashboardPage />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Oryntela couldn’t verify your organisation.",
+    );
+    expect(mockedApiRequest).not.toHaveBeenCalled();
   });
 
   it("prioritises the next conversation, follow-up and searchable memory", async () => {
@@ -451,10 +508,13 @@ describe("conversation-first Home", () => {
   });
 
   it("shows usable history without waiting for a pending account source", async () => {
-    let resolveAccounts: (value: EntityPage<Company>) => void = () => undefined;
-    const pendingAccounts = new Promise<EntityPage<Company>>((resolve) => {
-      resolveAccounts = resolve;
-    });
+    let resolveAccounts: (value: TenantEntityPage<Company>) => void = () =>
+      undefined;
+    const pendingAccounts = new Promise<TenantEntityPage<Company>>(
+      (resolve) => {
+        resolveAccounts = resolve;
+      },
+    );
     mockedApiRequest.mockImplementation((path) => {
       if (String(path).startsWith("/api/v1/daily")) {
         return Promise.reject(new Error("internal daily provider detail"));
@@ -462,7 +522,7 @@ describe("conversation-first Home", () => {
       if (String(path).startsWith("/api/v1/companies")) {
         return pendingAccounts;
       }
-      return Promise.resolve({ items: [recent] } as EntityPage<Interaction>);
+      return Promise.resolve(tenantPage([recent]));
     });
     render(<DashboardPage />);
 
@@ -496,7 +556,7 @@ describe("conversation-first Home", () => {
     ).toBeVisible();
 
     await act(async () => {
-      resolveAccounts({ items: [account] } as EntityPage<Company>);
+      resolveAccounts(tenantPage([account]));
     });
     expect(
       await screen.findByRole("link", {
@@ -506,15 +566,20 @@ describe("conversation-first Home", () => {
   });
 
   it("shows a successful Daily view without waiting for optional sources", async () => {
-    let resolveAccounts: (value: EntityPage<Company>) => void = () => undefined;
-    let resolveHistory: (value: EntityPage<Interaction>) => void = () =>
+    let resolveAccounts: (value: TenantEntityPage<Company>) => void = () =>
       undefined;
-    const pendingAccounts = new Promise<EntityPage<Company>>((resolve) => {
-      resolveAccounts = resolve;
-    });
-    const pendingHistory = new Promise<EntityPage<Interaction>>((resolve) => {
-      resolveHistory = resolve;
-    });
+    let resolveHistory: (value: TenantEntityPage<Interaction>) => void = () =>
+      undefined;
+    const pendingAccounts = new Promise<TenantEntityPage<Company>>(
+      (resolve) => {
+        resolveAccounts = resolve;
+      },
+    );
+    const pendingHistory = new Promise<TenantEntityPage<Interaction>>(
+      (resolve) => {
+        resolveHistory = resolve;
+      },
+    );
     mockedApiRequest.mockImplementation((path) => {
       if (String(path).startsWith("/api/v1/daily")) {
         return Promise.resolve(dailyFixture());
@@ -543,8 +608,8 @@ describe("conversation-first Home", () => {
     ).toBeVisible();
 
     await act(async () => {
-      resolveAccounts({ items: [account] } as EntityPage<Company>);
-      resolveHistory({ items: [recent] } as EntityPage<Interaction>);
+      resolveAccounts(tenantPage([account]));
+      resolveHistory(tenantPage([recent]));
     });
     expect(
       await screen.findByRole("heading", { name: "Recent conversations" }),
@@ -585,7 +650,7 @@ describe("conversation-first Home", () => {
         accountRequests += 1;
         return accountRequests === 1
           ? Promise.reject(new Error("initial account failure"))
-          : Promise.resolve({ items: [account] } as EntityPage<Company>);
+          : Promise.resolve(tenantPage([account]));
       }
       historyRequests += 1;
       return Promise.reject(new Error("history remains unavailable"));
@@ -626,12 +691,12 @@ describe("conversation-first Home", () => {
       if (String(path).startsWith("/api/v1/companies")) {
         accountRequests += 1;
         return accountRequests === 1
-          ? Promise.resolve({ items: [account] } as EntityPage<Company>)
+          ? Promise.resolve(tenantPage([account]))
           : Promise.reject(new Error("accounts must not be retried"));
       }
       historyRequests += 1;
       return historyRequests === 1
-        ? Promise.resolve({ items: [recent] } as EntityPage<Interaction>)
+        ? Promise.resolve(tenantPage([recent]))
         : Promise.reject(new Error("history must not be retried"));
     });
     render(<DashboardPage />);
@@ -700,12 +765,12 @@ describe("conversation-first Home", () => {
       if (String(path).startsWith("/api/v1/companies")) {
         accountRequests += 1;
         return accountRequests === 1
-          ? Promise.resolve({ items: [account] } as EntityPage<Company>)
+          ? Promise.resolve(tenantPage([account]))
           : Promise.reject(new Error("accounts must not be retried"));
       }
       historyRequests += 1;
       return historyRequests === 1
-        ? Promise.resolve({ items: [recent] } as EntityPage<Interaction>)
+        ? Promise.resolve(tenantPage([recent]))
         : Promise.reject(new Error("history must not be retried"));
     });
     render(<DashboardPage />);
@@ -760,5 +825,174 @@ describe("conversation-first Home", () => {
     expect(
       screen.queryByText("internal history provider detail"),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { invalidSource: "accounts" as const },
+    { invalidSource: "history" as const },
+  ])(
+    "rejects a wrong-organisation $invalidSource page without discarding the independent source",
+    async ({ invalidSource }) => {
+      mockedApiRequest.mockImplementation((path) => {
+        if (String(path).startsWith("/api/v1/daily")) {
+          return Promise.reject(new Error("Daily is unavailable"));
+        }
+        if (String(path).startsWith("/api/v1/companies")) {
+          return Promise.resolve(
+            tenantPage(
+              [account],
+              invalidSource === "accounts"
+                ? "organisation-other"
+                : organisationId,
+            ),
+          );
+        }
+        return Promise.resolve(
+          tenantPage(
+            [recent],
+            invalidSource === "history" ? "organisation-other" : organisationId,
+          ),
+        );
+      });
+
+      render(<DashboardPage />);
+
+      if (invalidSource === "accounts") {
+        expect(
+          await screen.findByRole("link", { name: /Founder coffee notes/u }),
+        ).toBeVisible();
+        expect(
+          screen.getByText(
+            "Account conversation links are temporarily unavailable.",
+          ),
+        ).toBeVisible();
+      } else {
+        expect(
+          await screen.findByRole("link", {
+            name: /Northstar Labs.*conversation memory/u,
+          }),
+        ).toBeVisible();
+        expect(
+          screen.getByText(
+            "Recent conversation history is temporarily unavailable.",
+          ),
+        ).toBeVisible();
+      }
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
+
+  it("encodes response-derived conversation and account route segments", async () => {
+    const unsafeInteractionId = "interaction/unsafe?view=bad#fragment";
+    const unsafeCompanyId = "company/unsafe?tab=bad#fragment";
+    mockHomeSources({
+      accountItems: [
+        { ...account, id: unsafeCompanyId, name: "Encoded account" },
+      ],
+      dayUnavailable: true,
+      historyItems: [
+        { ...recent, id: unsafeInteractionId, title: "Encoded conversation" },
+      ],
+    });
+
+    render(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("link", { name: /Encoded conversation/u }),
+    ).toHaveAttribute(
+      "href",
+      `/conversations/${encodeURIComponent(unsafeInteractionId)}`,
+    );
+    expect(
+      screen.getByRole("link", {
+        name: /Encoded account.*conversation memory/u,
+      }),
+    ).toHaveAttribute(
+      "href",
+      `/conversations/accounts/${encodeURIComponent(unsafeCompanyId)}#conversations`,
+    );
+  });
+
+  it("starts a fresh private-source session when the verified organisation changes", async () => {
+    let historyReads = 0;
+    let accountReads = 0;
+    let dailyReads = 0;
+    let resolveOldHistory: (
+      value: TenantEntityPage<Interaction>,
+    ) => void = () => undefined;
+    let resolveOldAccounts: (value: TenantEntityPage<Company>) => void = () =>
+      undefined;
+    let resolveOldDaily: (value: DailyResponse) => void = () => undefined;
+    const oldHistory = new Promise<TenantEntityPage<Interaction>>((resolve) => {
+      resolveOldHistory = resolve;
+    });
+    const oldAccounts = new Promise<TenantEntityPage<Company>>((resolve) => {
+      resolveOldAccounts = resolve;
+    });
+    const oldDaily = new Promise<DailyResponse>((resolve) => {
+      resolveOldDaily = resolve;
+    });
+    const nextOrganisationId = "organisation-2";
+    const nextRecent = {
+      ...recent,
+      id: "interaction-org-2",
+      organisationId: nextOrganisationId,
+      title: "New organisation conversation",
+    };
+    const nextAccount = {
+      ...account,
+      id: "company-org-2",
+      organisationId: nextOrganisationId,
+      name: "New organisation account",
+    };
+    mockedApiRequest.mockImplementation((path) => {
+      if (String(path).startsWith("/api/v1/daily")) {
+        dailyReads += 1;
+        return dailyReads === 1
+          ? oldDaily
+          : Promise.reject(new Error("Daily is unavailable"));
+      }
+      if (String(path).startsWith("/api/v1/companies")) {
+        accountReads += 1;
+        return accountReads === 1
+          ? oldAccounts
+          : Promise.resolve(tenantPage([nextAccount], nextOrganisationId));
+      }
+      historyReads += 1;
+      return historyReads === 1
+        ? oldHistory
+        : Promise.resolve(tenantPage([nextRecent], nextOrganisationId));
+    });
+
+    const { rerender } = render(<DashboardPage />);
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: nextOrganisationId,
+    };
+    rerender(<DashboardPage />);
+
+    expect(
+      await screen.findByRole("link", {
+        name: /New organisation conversation/u,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /New organisation account.*conversation memory/u,
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveOldHistory(tenantPage([recent]));
+      resolveOldAccounts(tenantPage([account]));
+      resolveOldDaily(dailyFixture());
+      await Promise.all([oldHistory, oldAccounts, oldDaily]);
+    });
+
+    expect(screen.queryByText("Founder coffee notes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Northstar Labs")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /New organisation conversation/u }),
+    ).toBeVisible();
   });
 });

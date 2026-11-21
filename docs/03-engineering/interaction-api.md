@@ -132,6 +132,36 @@ out of the create request while the unlinked conversation remains creatable. Thi
 a web-entry contract, not a universal API archive policy: exact record reads and
 historical Interaction relationships may still represent archived records.
 
+Protected Home, conversation-directory and Add conversation sessions start only
+after `VerifiedOrganisationProvider` has runtime-decoded `/api/v1/me`. They key all
+private client state by that verified internal organisation and never send a
+browser-supplied organisation identifier to a business endpoint. Company, Contact,
+Opportunity and Interaction list bodies are decoded from `unknown`; the envelope
+must match the verified organisation and requested page, and every item must satisfy
+its complete organisation-bearing contract. One malformed or foreign item rejects
+that source page atomically. Independent optional sources remain independent, and an
+invalid later page leaves the last verified history intact.
+
+Exact relationship fallbacks require a complete same-organisation response with the
+requested ID and `archivedAt: null`. Add conversation treats a successful create as
+complete only when the returned Interaction matches the verified organisation and
+has a non-empty ID; otherwise it shows a generic safe error and does not navigate.
+Every accepted response-derived ID is encoded as one route segment. These checks do
+not make CRM data mandatory: if optional relationship context is unavailable, a
+deliberate unlinked conversation remains creatable.
+
+Calendar handoff revalidates the selected Interaction against the current verified
+Interaction options before sending a link mutation and clears selections that are no
+longer present. Each provider list has an authoritative `organisationId` envelope and
+every calendar event carries the same trusted organisation identity; a foreign or
+malformed item rejects that provider list atomically. A link response must match the
+verified organisation and echo the exact calendar event and requested Interaction; an
+unlink response must match the organisation and echo the event with
+`interactionId: null`. Mismatched successes leave the previously verified event
+unchanged and surface only the safe mutation error. Event and Interaction identifiers
+used in paths are encoded as single route segments. The browser never supplies the
+organisation identifier to a calendar endpoint.
+
 The server owns `id`, `organisationId`, `creationOrigin`, `createdByUserId`,
 timestamps and the optional compatibility `meetingId`. Patch accepts only mutable
 domain fields. Complete accepts optional timezone-aware `actualEndAt`; when omitted,
@@ -139,8 +169,8 @@ the server uses the current UTC time.
 
 ## List contract
 
-List responses use `{items, page, pageSize, total, pages}`. `page` starts at 1 and
-`pageSize` is 1–100. Supported filters are:
+List responses use `{organisationId, items, page, pageSize, total, pages}`, including
+empty pages. `page` starts at 1 and `pageSize` is 1–100. Supported filters are:
 
 - `search` (title);
 - `companyId`;

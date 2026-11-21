@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from revenueos.auth import get_current_user
 from revenueos.models import OpportunityAuditEvent
 
-from .conftest import TEST_DB_URL
+from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
 from .test_business_api import create_company, create_opportunity
 from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
@@ -53,7 +53,10 @@ def test_list_and_workspace_are_product_safe_without_meetings(client: TestClient
 
     listing = client.get("/api/v1/opportunities")
     assert listing.status_code == 200
-    item = listing.json()["items"][0]
+    listing_body = listing.json()
+    assert listing_body["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    item = listing_body["items"][0]
+    assert item["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert item["companyName"] == company["name"]
     assert item["latestMeetingId"] is None
     assert item["latestMeetingMomentum"] is None

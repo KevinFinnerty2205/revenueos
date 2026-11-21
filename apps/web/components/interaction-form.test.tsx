@@ -5,13 +5,29 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Company, Contact, Opportunity } from "@revenueos/shared";
+import type {
+  Company,
+  Contact,
+  Interaction,
+  Opportunity,
+  OpportunityListItem,
+} from "@revenueos/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InteractionForm } from "@/components/interaction-form";
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
+const organisationId = "organisation-1";
+const verifiedOrganisation = vi.hoisted(() => ({
+  state: {
+    status: "available" as "available" | "loading" | "unavailable",
+    organisationId: "organisation-1" as string | null,
+  },
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => verifiedOrganisation.state,
+}));
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -21,11 +37,12 @@ function jsonResponse(body: object, status = 200): Response {
 }
 
 const emptyPage = {
+  organisationId,
   items: [],
   page: 1,
   pageSize: 100,
-  total: 0,
-  pages: 0,
+  total: 100,
+  pages: 1,
 };
 
 const exactRelationshipCases = (
@@ -75,7 +92,9 @@ function contactFixture(overrides: Partial<Contact> = {}): Contact {
   };
 }
 
-function opportunityFixture(overrides: Partial<Opportunity> = {}): Opportunity {
+function opportunityFixture(
+  overrides: Partial<OpportunityListItem> = {},
+): OpportunityListItem {
   return {
     id: "opportunity-1",
     organisationId: "organisation-1",
@@ -89,6 +108,61 @@ function opportunityFixture(overrides: Partial<Opportunity> = {}): Opportunity {
     ownerUserId: "user-1",
     description: null,
     archivedAt: null,
+    pipelineId: null,
+    pipelineStageId: null,
+    stageEnteredAt: null,
+    stageTrackingStartedAt: null,
+    actualCloseDate: null,
+    outcomeReason: null,
+    outcomeNote: null,
+    outcomeProvenance: null,
+    companyName: "Acme Australia",
+    ownerName: "Alex Owner",
+    latestMeetingId: null,
+    latestMeetingDate: null,
+    latestMeetingMomentum: null,
+    latestNextBestAction: null,
+    createdAt: "2026-11-20T00:00:00Z",
+    updatedAt: "2026-11-20T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function interactionFixture(
+  id: string,
+  overrides: Partial<Interaction> = {},
+): Interaction {
+  return {
+    id,
+    organisationId,
+    companyId: null,
+    opportunityId: null,
+    contactId: null,
+    meetingId: null,
+    eventId: null,
+    title: "Created conversation",
+    interactionType: "manual_interaction",
+    lifecycleStatus: "planned",
+    scheduledStartAt: null,
+    scheduledEndAt: null,
+    actualStartAt: null,
+    actualEndAt: null,
+    timezone: "Australia/Sydney",
+    creationOrigin: "manual",
+    callDirection: null,
+    callOutcome: null,
+    meetingPlatform: null,
+    meetingUrl: null,
+    externalMeetingId: null,
+    captureSource: null,
+    ingestionState: null,
+    durationSeconds: null,
+    captureMethods: [],
+    intelligenceState: "not_ready",
+    recordingAvailable: false,
+    createdByUserId: "user-1",
+    briefState: "not_generated",
+    briefGeneratedAt: null,
     createdAt: "2026-11-20T00:00:00Z",
     updatedAt: "2026-11-20T00:00:00Z",
     ...overrides,
@@ -98,13 +172,277 @@ function opportunityFixture(overrides: Partial<Opportunity> = {}): Opportunity {
 describe("InteractionForm", () => {
   afterEach(() => {
     router.push.mockReset();
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId,
+    };
     vi.unstubAllGlobals();
+  });
+
+  it("waits for verified organisation context before loading private options", () => {
+    verifiedOrganisation.state = {
+      status: "loading",
+      organisationId: null,
+    };
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+
+    expect(screen.getByText("Verifying your secure workspace…")).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when organisation context is unavailable", () => {
+    verifiedOrganisation.state = {
+      status: "unavailable",
+      organisationId: null,
+    };
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your organisation could not be verified.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects wrong-organisation option pages without adopting their records", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            organisationId: "organisation-other",
+            items: [
+              companyFixture({
+                organisationId: "organisation-other",
+                name: "Foreign company",
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    render(<InteractionForm />);
+
+    expect(
+      await screen.findByText(/company options are temporarily unavailable/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: "Foreign company" }),
+    ).toBeNull();
+    expect(screen.getByLabelText("Company")).toBeDisabled();
+  });
+
+  it("rejects a wrong-organisation exact linked record", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/api/v1/companies/company-linked")) {
+        return Promise.resolve(
+          jsonResponse(
+            companyFixture({
+              id: "company-linked",
+              organisationId: "organisation-other",
+              name: "Foreign linked company",
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm initialCompanyId="company-linked" />);
+
+    expect(
+      await screen.findByText(
+        /linked company could not be verified as active/i,
+      ),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Company")).toHaveValue("");
+    expect(
+      screen.queryByRole("option", { name: "Foreign linked company" }),
+    ).toBeNull();
+  });
+
+  it("rejects a complete create response owned by another organisation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        Promise.resolve(
+          init?.method === "POST"
+            ? jsonResponse(
+                interactionFixture("foreign-interaction", {
+                  organisationId: "organisation-other",
+                }),
+                201,
+              )
+            : jsonResponse(emptyPage),
+        ),
+      ),
+    );
+
+    render(<InteractionForm />);
+    await screen.findByRole("heading", { name: "Add conversation" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Private conversation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+
+    expect(
+      await screen.findByText("The conversation could not be created."),
+    ).toBeVisible();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("encodes the created response identifier before navigation", async () => {
+    const unsafeId = "interaction/unsafe?view=bad#fragment";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+        Promise.resolve(
+          init?.method === "POST"
+            ? jsonResponse(interactionFixture(unsafeId), 201)
+            : jsonResponse(emptyPage),
+        ),
+      ),
+    );
+
+    render(<InteractionForm />);
+    await screen.findByRole("heading", { name: "Add conversation" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Encoded conversation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(
+        `/conversations/${encodeURIComponent(unsafeId)}`,
+      ),
+    );
+  });
+
+  it("starts a fresh form session when the verified organisation changes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            organisationId: verifiedOrganisation.state.organisationId,
+          }),
+        ),
+      ),
+    );
+
+    const { rerender } = render(<InteractionForm />);
+    await screen.findByRole("heading", { name: "Add conversation" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Old organisation draft" },
+    });
+
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: "organisation-2",
+    };
+    rerender(<InteractionForm />);
+
+    expect(await screen.findByLabelText("Title")).toHaveValue("");
+    expect(screen.queryByDisplayValue("Old organisation draft")).toBeNull();
+  });
+
+  it("ignores a late create response after linked context changes", async () => {
+    let resolveCreate: (response: Response) => void = () => undefined;
+    const pendingCreate = new Promise<Response>((resolve) => {
+      resolveCreate = resolve;
+    });
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "POST"
+        ? pendingCreate
+        : Promise.resolve(jsonResponse(emptyPage)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<InteractionForm />);
+    await screen.findByRole("heading", { name: "Add conversation" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Old linked context" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "POST"),
+      ).toBe(true),
+    );
+
+    rerender(<InteractionForm initialCompanyId="company-new-context" />);
+    await act(async () => {
+      resolveCreate(jsonResponse(interactionFixture("stale-create"), 201));
+      await pendingCreate;
+    });
+
+    expect(router.push).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Add conversation" }),
+    ).toBeEnabled();
+  });
+
+  it("ignores a late create response after the verified organisation changes", async () => {
+    let resolveCreate: (response: Response) => void = () => undefined;
+    const pendingCreate = new Promise<Response>((resolve) => {
+      resolveCreate = resolve;
+    });
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "POST"
+        ? pendingCreate
+        : Promise.resolve(
+            jsonResponse({
+              ...emptyPage,
+              organisationId: verifiedOrganisation.state.organisationId,
+            }),
+          ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<InteractionForm />);
+    await screen.findByRole("heading", { name: "Add conversation" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Old organisation create" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "POST"),
+      ).toBe(true),
+    );
+
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: "organisation-2",
+    };
+    rerender(<InteractionForm />);
+    await act(async () => {
+      resolveCreate(
+        jsonResponse(interactionFixture("stale-tenant-create"), 201),
+      );
+      await pendingCreate;
+    });
+
+    expect(router.push).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Title")).toHaveValue("");
   });
 
   it("creates a deliberately supplied interaction and follows its stable URL", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ id: "interaction-1" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("interaction-1"), 201),
+        );
       }
       if (String(input).includes("/companies")) {
         return Promise.resolve(
@@ -182,7 +520,9 @@ describe("InteractionForm", () => {
       }
       return Promise.resolve(
         jsonResponse(
-          init?.method === "POST" ? { id: "conversation-1" } : emptyPage,
+          init?.method === "POST"
+            ? interactionFixture("conversation-1")
+            : emptyPage,
         ),
       );
     });
@@ -243,7 +583,9 @@ describe("InteractionForm", () => {
           string,
           unknown
         >;
-        return Promise.resolve(jsonResponse({ id: "manual-opportunity" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("manual-opportunity"), 201),
+        );
       }
       if (path.endsWith("/api/v1/companies/company-beyond-page")) {
         return companyVerification;
@@ -331,7 +673,9 @@ describe("InteractionForm", () => {
           string,
           unknown
         >;
-        return Promise.resolve(jsonResponse({ id: "manual-person" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("manual-person"), 201),
+        );
       }
       if (path.endsWith("/api/v1/companies/person-company")) {
         return companyVerification;
@@ -495,7 +839,7 @@ describe("InteractionForm", () => {
               unknown
             >;
             return Promise.resolve(
-              jsonResponse({ id: `omitted-${source}` }, 201),
+              jsonResponse(interactionFixture(`omitted-${source}`), 201),
             );
           }
           if (path.endsWith(`/api/v1/companies/${relatedCompanyId}`)) {
@@ -599,7 +943,10 @@ describe("InteractionForm", () => {
           const path = String(input);
           if (init?.method === "POST") {
             return Promise.resolve(
-              jsonResponse({ id: `created-${entity}-${outcome}` }, 201),
+              jsonResponse(
+                interactionFixture(`created-${entity}-${outcome}`),
+                201,
+              ),
             );
           }
           if (path.endsWith(`/api/v1/${plural}/${requestedId}`)) {
@@ -735,7 +1082,10 @@ describe("InteractionForm", () => {
           const path = String(input);
           if (init?.method === "POST") {
             return Promise.resolve(
-              jsonResponse({ id: `derived-company-${outcome}` }, 201),
+              jsonResponse(
+                interactionFixture(`derived-company-${outcome}`),
+                201,
+              ),
             );
           }
           if (path.endsWith("/api/v1/contacts/linked-contact")) {
@@ -809,7 +1159,9 @@ describe("InteractionForm", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ id: "compatible-context" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("compatible-context"), 201),
+        );
       }
       if (path.includes("/companies")) {
         return Promise.resolve(
@@ -890,7 +1242,7 @@ describe("InteractionForm", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
       Promise.resolve(
         init?.method === "POST"
-          ? jsonResponse({ id: "unlinked-conversation" }, 201)
+          ? jsonResponse(interactionFixture("unlinked-conversation"), 201)
           : jsonResponse(
               {
                 code: "persistence_unavailable",
@@ -933,7 +1285,9 @@ describe("InteractionForm", () => {
   it("keeps phone-call creation available when people options fail", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ id: "unlinked-call" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("unlinked-call"), 201),
+        );
       }
       if (String(input).includes("/contacts")) {
         return Promise.resolve(jsonResponse({ code: "unavailable" }, 503));
@@ -1081,7 +1435,7 @@ describe("InteractionForm", () => {
               unknown
             >;
             return Promise.resolve(
-              jsonResponse({ id: `retry-${source}-failure` }, 201),
+              jsonResponse(interactionFixture(`retry-${source}-failure`), 201),
             );
           }
           if (path.endsWith("/api/v1/companies/missing-company")) {
@@ -1370,6 +1724,88 @@ describe("InteractionForm", () => {
     ).toBeVisible();
   });
 
+  it("does not let late initial sources undo a successful relationship retry", async () => {
+    let companyLoads = 0;
+    let resolveContacts: ((response: Response) => void) | undefined;
+    const pendingContacts = new Promise<Response>((resolve) => {
+      resolveContacts = resolve;
+    });
+    let resolveOpportunities: ((response: Response) => void) | undefined;
+    const pendingOpportunities = new Promise<Response>((resolve) => {
+      resolveOpportunities = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === "POST") {
+        return Promise.resolve(
+          jsonResponse(interactionFixture("retry-before-settle"), 201),
+        );
+      }
+      if (path.includes("/companies")) {
+        companyLoads += 1;
+        return companyLoads === 1
+          ? Promise.resolve(jsonResponse({ code: "unavailable" }, 503))
+          : Promise.resolve(
+              jsonResponse({
+                ...emptyPage,
+                items: [
+                  companyFixture({
+                    id: "company-retry",
+                    name: "Retried before settle",
+                  }),
+                ],
+              }),
+            );
+      }
+      if (path.includes("/contacts")) return pendingContacts;
+      return pendingOpportunities;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm initialCompanyId="company-retry" />);
+    await screen.findByText(/company options are temporarily unavailable/i);
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Keep the retried company" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry companies" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveValue("company-retry"),
+    );
+    expect(
+      screen.getByRole("option", { name: "Retried before settle" }),
+    ).toBeVisible();
+
+    await act(async () => {
+      resolveContacts?.(jsonResponse(emptyPage));
+      resolveOpportunities?.(jsonResponse(emptyPage));
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/loading optional relationship context/i),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("Company")).toHaveValue("company-retry");
+    expect(
+      screen.getByRole("option", { name: "Retried before settle" }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(
+        "/conversations/retry-before-settle",
+      ),
+    );
+    const posted = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(JSON.parse(String(posted?.[1]?.body))).toMatchObject({
+      companyId: "company-retry",
+    });
+  });
+
   it("prevents another source retry from replacing an in-flight retry", async () => {
     let companyLoads = 0;
     let contactLoads = 0;
@@ -1445,7 +1881,9 @@ describe("InteractionForm", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ id: "selected-context" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("selected-context"), 201),
+        );
       }
       if (path.includes("/companies")) {
         return Promise.resolve(
@@ -1621,7 +2059,9 @@ describe("InteractionForm", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ id: "phone-call-1" }, 201));
+        return Promise.resolve(
+          jsonResponse(interactionFixture("phone-call-1"), 201),
+        );
       }
       if (path.includes("/contacts")) {
         return Promise.resolve(

@@ -5,15 +5,20 @@ import type {
   DailyAction,
   DailyInteraction,
   DailyResponse,
-  EntityPage,
   Interaction,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
+import {
+  decodeTenantPage,
+  isCompanyResponse,
+  isInteractionResponse,
+} from "@/lib/private-response-identity";
 
 function conversationHref(href: string): string {
   return href
@@ -24,6 +29,33 @@ function conversationHref(href: string): string {
 type SourceState = "loading" | "available" | "unavailable";
 
 export function ConversationHome() {
+  const organisation = useVerifiedOrganisation();
+  if (organisation.status === "loading") return <HomeLoading />;
+  if (organisation.status !== "available") {
+    return (
+      <section className="form-card border-rose-200 bg-rose-50" role="alert">
+        <h1 className="text-3xl font-semibold text-rose-950">
+          Oryntela couldn’t verify your organisation.
+        </h1>
+        <p className="mt-3 text-sm text-rose-900">
+          Your private conversation workspace is temporarily unavailable.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <ConversationHomeSession
+      key={organisation.organisationId}
+      organisationId={organisation.organisationId}
+    />
+  );
+}
+
+function ConversationHomeSession({
+  organisationId,
+}: {
+  organisationId: string;
+}) {
   const [daily, setDaily] = useState<DailyResponse | null>(null);
   const [recent, setRecent] = useState<Interaction[]>([]);
   const [accounts, setAccounts] = useState<Company[]>([]);
@@ -60,33 +92,51 @@ export function ConversationHome() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const historyRequest = apiRequest<EntityPage<Interaction>>(
+    const historyRequest = apiRequest<unknown>(
       "/api/v1/interactions?page=1&pageSize=6&status=completed&sortBy=start_at&sortOrder=desc",
       { signal: controller.signal },
     ).then(
       (value) => {
         if (controller.signal.aborted) return;
-        setRecent(value.items);
+        const page = decodeTenantPage(
+          value,
+          organisationId,
+          isInteractionResponse,
+          { expectedPage: 1 },
+        );
+        if (page === null) {
+          setHistoryState("unavailable");
+          return;
+        }
+        setRecent(page.items);
         setHistoryState("available");
       },
       () => {
         if (controller.signal.aborted) return;
-        setRecent([]);
         setHistoryState("unavailable");
       },
     );
-    const accountRequest = apiRequest<EntityPage<Company>>(
+    const accountRequest = apiRequest<unknown>(
       "/api/v1/companies?page=1&pageSize=8&sortBy=name&sortOrder=asc",
       { signal: controller.signal },
     ).then(
       (value) => {
         if (controller.signal.aborted) return;
-        setAccounts(value.items);
+        const page = decodeTenantPage(
+          value,
+          organisationId,
+          isCompanyResponse,
+          { expectedPage: 1 },
+        );
+        if (page === null) {
+          setAccountState("unavailable");
+          return;
+        }
+        setAccounts(page.items);
         setAccountState("available");
       },
       () => {
         if (controller.signal.aborted) return;
-        setAccounts([]);
         setAccountState("unavailable");
       },
     );
@@ -94,10 +144,13 @@ export function ConversationHome() {
     void historyRequest;
     void accountRequest;
     return () => controller.abort();
-  }, [secondaryRetryKey]);
+  }, [organisationId, secondaryRetryKey]);
 
   const usefulSecondarySource =
-    historyState === "available" || accountState === "available";
+    historyState === "available" ||
+    accountState === "available" ||
+    recent.length > 0 ||
+    accounts.length > 0;
 
   if (dailyState === "loading") {
     return <HomeLoading />;
@@ -276,7 +329,7 @@ export function ConversationHome() {
           ) : null}
         </HomeSection>
 
-        {historyState === "available" ? (
+        {historyState === "available" || recent.length > 0 ? (
           <div className="xl:col-span-2">
             <HomeSection
               eyebrow="Memory"
@@ -392,7 +445,7 @@ function ReducedConversationHome({
         </p>
       ) : null}
 
-      {accountState === "available" ? (
+      {accountState === "available" || accounts.length > 0 ? (
         accounts.length ? (
           <AccountDirectory accounts={accounts} />
         ) : (
@@ -410,7 +463,7 @@ function ReducedConversationHome({
         )
       ) : null}
 
-      {historyState === "available" ? (
+      {historyState === "available" || recent.length > 0 ? (
         <div className="mt-7">
           <HomeSection
             eyebrow="Memory"
@@ -440,7 +493,7 @@ function RecentConversationGrid({ recent }: { recent: Interaction[] }) {
       {recent.slice(0, 6).map((item) => (
         <li key={item.id}>
           <Link
-            href={`/conversations/${item.id}`}
+            href={`/conversations/${encodeURIComponent(item.id)}`}
             className="block h-full rounded-2xl border border-slate-200 p-4 transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
           >
             <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
@@ -487,7 +540,7 @@ function AccountDirectory({ accounts }: { accounts: Company[] }) {
           <li key={account.id}>
             <Link
               className="flex min-h-16 items-center gap-3 rounded-2xl border border-brand-primary/10 px-3 py-2 transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus"
-              href={`/conversations/accounts/${account.id}#conversations`}
+              href={`/conversations/accounts/${encodeURIComponent(account.id)}#conversations`}
             >
               <AccountAvatar
                 accountId={account.id}

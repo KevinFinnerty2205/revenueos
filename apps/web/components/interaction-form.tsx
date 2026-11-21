@@ -4,7 +4,6 @@ import type {
   CallDirection,
   Company,
   Contact,
-  EntityPage,
   Interaction,
   InteractionType,
   OnlineMeetingPlatform,
@@ -23,6 +22,15 @@ import {
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { interactionTypes } from "@/lib/interactions";
+import {
+  decodeTenantPage,
+  isCompanyResponse,
+  isContactResponse,
+  isInteractionResponse,
+  isOpportunityListItemResponse,
+  isOpportunityResponse,
+} from "@/lib/private-response-identity";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 
 interface LinkedInteractionContext {
   companyId: string;
@@ -61,6 +69,11 @@ interface ManualRelationshipFeedback {
   message: string;
 }
 
+interface SubmitRequest {
+  contextIdentity: string;
+  controller: AbortController;
+}
+
 interface RelationshipContextInput {
   companyId: string;
   opportunityId: string;
@@ -97,13 +110,6 @@ function appendUnique<T extends { id: string }>(
 
 function isActiveRecord(record: { archivedAt: string | null }): boolean {
   return record.archivedAt === null;
-}
-
-function exactActiveRecord<T extends { id: string; archivedAt: string | null }>(
-  record: T,
-  requestedId: string,
-): T | null {
-  return record.id === requestedId && isActiveRecord(record) ? record : null;
 }
 
 function activeRecordById<T extends { id: string; archivedAt: string | null }>(
@@ -174,23 +180,30 @@ function reconcileRelationshipContext({
 
 async function loadCompanyOptions(
   linkedId: string,
+  organisationId: string,
   signal: AbortSignal,
 ): Promise<LoadedOptions<Company>> {
-  const page = await apiRequest<EntityPage<Company>>(
-    "/api/v1/companies?pageSize=100",
-    { signal },
+  const page = decodeTenantPage(
+    await apiRequest<unknown>("/api/v1/companies?pageSize=100", { signal }),
+    organisationId,
+    isCompanyResponse,
+    { expectedPage: 1 },
   );
+  if (page === null) throw new Error("Company options are unavailable.");
   let exactWarning = false;
-  let items = page.items.filter(isActiveRecord);
+  let items: Company[] = page.items.filter(isActiveRecord);
   if (linkedId && !items.some((company) => company.id === linkedId)) {
     try {
-      const exact = exactActiveRecord(
-        await apiRequest<Company>(
-          `/api/v1/companies/${encodeURIComponent(linkedId)}`,
-          { signal },
-        ),
-        linkedId,
+      const response = await apiRequest<unknown>(
+        `/api/v1/companies/${encodeURIComponent(linkedId)}`,
+        { signal },
       );
+      const exact =
+        isCompanyResponse(response, organisationId) &&
+        response.id === linkedId &&
+        isActiveRecord(response)
+          ? response
+          : null;
       items = appendUnique(items, exact);
       exactWarning = exact === null;
     } catch (reason: unknown) {
@@ -203,23 +216,30 @@ async function loadCompanyOptions(
 
 async function loadContactOptions(
   linkedId: string,
+  organisationId: string,
   signal: AbortSignal,
 ): Promise<LoadedOptions<Contact>> {
-  const page = await apiRequest<EntityPage<Contact>>(
-    "/api/v1/contacts?pageSize=100",
-    { signal },
+  const page = decodeTenantPage(
+    await apiRequest<unknown>("/api/v1/contacts?pageSize=100", { signal }),
+    organisationId,
+    isContactResponse,
+    { expectedPage: 1 },
   );
+  if (page === null) throw new Error("People options are unavailable.");
   let exactWarning = false;
-  let items = page.items.filter(isActiveRecord);
+  let items: Contact[] = page.items.filter(isActiveRecord);
   if (linkedId && !items.some((contact) => contact.id === linkedId)) {
     try {
-      const exact = exactActiveRecord(
-        await apiRequest<Contact>(
-          `/api/v1/contacts/${encodeURIComponent(linkedId)}`,
-          { signal },
-        ),
-        linkedId,
+      const response = await apiRequest<unknown>(
+        `/api/v1/contacts/${encodeURIComponent(linkedId)}`,
+        { signal },
       );
+      const exact =
+        isContactResponse(response, organisationId) &&
+        response.id === linkedId &&
+        isActiveRecord(response)
+          ? response
+          : null;
       items = appendUnique(items, exact);
       exactWarning = exact === null;
     } catch (reason: unknown) {
@@ -232,23 +252,30 @@ async function loadContactOptions(
 
 async function loadOpportunityOptions(
   linkedId: string,
+  organisationId: string,
   signal: AbortSignal,
 ): Promise<LoadedOptions<Opportunity>> {
-  const page = await apiRequest<EntityPage<Opportunity>>(
-    "/api/v1/opportunities?pageSize=100",
-    { signal },
+  const page = decodeTenantPage(
+    await apiRequest<unknown>("/api/v1/opportunities?pageSize=100", { signal }),
+    organisationId,
+    isOpportunityListItemResponse,
+    { expectedPage: 1 },
   );
+  if (page === null) throw new Error("Opportunity options are unavailable.");
   let exactWarning = false;
-  let items = page.items.filter(isActiveRecord);
+  let items: Opportunity[] = page.items.filter(isActiveRecord);
   if (linkedId && !items.some((opportunity) => opportunity.id === linkedId)) {
     try {
-      const exact = exactActiveRecord(
-        await apiRequest<Opportunity>(
-          `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
-          { signal },
-        ),
-        linkedId,
+      const response = await apiRequest<unknown>(
+        `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
+        { signal },
       );
+      const exact =
+        isOpportunityResponse(response, organisationId) &&
+        response.id === linkedId &&
+        isActiveRecord(response)
+          ? response
+          : null;
       items = appendUnique(items, exact);
       exactWarning = exact === null;
     } catch (reason: unknown) {
@@ -261,17 +288,21 @@ async function loadOpportunityOptions(
 
 async function loadLinkedOpportunity(
   linkedId: string,
+  organisationId: string,
   signal: AbortSignal,
 ): Promise<LoadedOptions<Opportunity>> {
   if (!linkedId) return { items: [], exactWarning: false };
   try {
-    const exact = exactActiveRecord(
-      await apiRequest<Opportunity>(
-        `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
-        { signal },
-      ),
-      linkedId,
+    const response = await apiRequest<unknown>(
+      `/api/v1/opportunities/${encodeURIComponent(linkedId)}`,
+      { signal },
     );
+    const exact =
+      isOpportunityResponse(response, organisationId) &&
+      response.id === linkedId &&
+      isActiveRecord(response)
+        ? response
+        : null;
     return {
       items: exact ? [exact] : [],
       exactWarning: exact === null,
@@ -294,6 +325,54 @@ export function InteractionForm({
   initialOpportunityId?: string;
   initialContactId?: string;
   initialInteractionType?: InteractionType;
+}) {
+  const organisation = useVerifiedOrganisation();
+  if (organisation.status === "loading") {
+    return (
+      <section className="form-card" aria-busy="true">
+        <p role="status" className="text-sm text-slate-600">
+          Verifying your secure workspace…
+        </p>
+      </section>
+    );
+  }
+  if (organisation.status !== "available") {
+    return (
+      <section className="form-card border-rose-200 bg-rose-50" role="alert">
+        <p className="text-sm text-rose-900">
+          Your organisation could not be verified. Conversation creation is
+          temporarily unavailable.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <InteractionFormSession
+      key={organisation.organisationId}
+      organisationId={organisation.organisationId}
+      conversationOnly={conversationOnly}
+      initialCompanyId={initialCompanyId}
+      initialOpportunityId={initialOpportunityId}
+      initialContactId={initialContactId}
+      initialInteractionType={initialInteractionType}
+    />
+  );
+}
+
+function InteractionFormSession({
+  organisationId,
+  conversationOnly,
+  initialCompanyId,
+  initialOpportunityId,
+  initialContactId,
+  initialInteractionType,
+}: {
+  organisationId: string;
+  conversationOnly: boolean;
+  initialCompanyId: string;
+  initialOpportunityId: string;
+  initialContactId: string;
+  initialInteractionType: InteractionType;
 }) {
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -341,6 +420,7 @@ export function InteractionForm({
   const [pendingLinkedContext, setPendingLinkedContext] =
     useState<LinkedInteractionContext | null>(null);
   const linkedContextIdentity = JSON.stringify([
+    organisationId,
     conversationOnly,
     initialCompanyId,
     initialOpportunityId,
@@ -355,6 +435,7 @@ export function InteractionForm({
   const manualCompanyVerificationRef =
     useRef<ManualCompanyVerificationRequest | null>(null);
   const activeLinkedContextIdentityRef = useRef(linkedContextIdentity);
+  const submitRequestRef = useRef<SubmitRequest | null>(null);
   const companiesRef = useRef(companies);
   const opportunitiesRef = useRef(opportunities);
   const contactsRef = useRef(contacts);
@@ -362,7 +443,24 @@ export function InteractionForm({
 
   useLayoutEffect(() => {
     activeLinkedContextIdentityRef.current = linkedContextIdentity;
+    const submitRequest = submitRequestRef.current;
+    if (
+      submitRequest !== null &&
+      submitRequest.contextIdentity !== linkedContextIdentity
+    ) {
+      submitRequest.controller.abort();
+      submitRequestRef.current = null;
+      setSubmitting(false);
+    }
   }, [linkedContextIdentity]);
+
+  useEffect(
+    () => () => {
+      submitRequestRef.current?.controller.abort();
+      submitRequestRef.current = null;
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     companiesRef.current = companies;
@@ -400,16 +498,26 @@ export function InteractionForm({
 
     const companyOptionsRequest = loadCompanyOptions(
       initialCompanyId,
+      organisationId,
       controller.signal,
     );
     const contactOptionsRequest = loadContactOptions(
       initialContactId,
+      organisationId,
       controller.signal,
     );
     const opportunityOptionsRequest: Promise<LoadedOptions<Opportunity>> =
       conversationOnly
-        ? loadLinkedOpportunity(initialOpportunityId, controller.signal)
-        : loadOpportunityOptions(initialOpportunityId, controller.signal);
+        ? loadLinkedOpportunity(
+            initialOpportunityId,
+            organisationId,
+            controller.signal,
+          )
+        : loadOpportunityOptions(
+            initialOpportunityId,
+            organisationId,
+            controller.signal,
+          );
 
     const requestIsActive = (): boolean =>
       !controller.signal.aborted &&
@@ -495,26 +603,16 @@ export function InteractionForm({
         return;
       }
 
-      let nextCompanies =
-        companyResult.status === "fulfilled"
-          ? mergeActiveRecords(
-              companyResult.value.items,
-              manuallyVerifiedCompaniesRef.current,
-            )
-          : manuallyVerifiedCompaniesRef.current;
-      const nextOpportunities =
-        opportunityResult.status === "fulfilled"
-          ? opportunityResult.value.items
-          : [];
-      const nextContacts =
-        contactResult.status === "fulfilled" ? contactResult.value.items : [];
+      let nextCompanies = companiesRef.current;
+      let nextOpportunities = opportunitiesRef.current;
+      let nextContacts = contactsRef.current;
       const selectedContact = activeRecordById(nextContacts, initialContactId);
       const selectedOpportunity = activeRecordById(
         nextOpportunities,
         initialOpportunityId,
       );
       const selectedCompany = activeRecordById(nextCompanies, initialCompanyId);
-      const linkedCompanyCandidate =
+      let linkedCompanyCandidate =
         selectedCompany?.id ||
         (initialInteractionType === "phone_call"
           ? selectedContact?.companyId
@@ -530,14 +628,18 @@ export function InteractionForm({
         !nextCompanies.some((company) => company.id === linkedCompanyCandidate)
       ) {
         try {
-          const exact = exactActiveRecord(
-            await apiRequest<Company>(
-              `/api/v1/companies/${encodeURIComponent(linkedCompanyCandidate)}`,
-              { signal: controller.signal },
-            ),
-            linkedCompanyCandidate,
+          const response = await apiRequest<unknown>(
+            `/api/v1/companies/${encodeURIComponent(linkedCompanyCandidate)}`,
+            { signal: controller.signal },
           );
-          nextCompanies = appendUnique(nextCompanies, exact);
+          const exact =
+            isCompanyResponse(response, organisationId) &&
+            response.id === linkedCompanyCandidate &&
+            isActiveRecord(response)
+              ? response
+              : null;
+          nextCompanies = appendUnique(companiesRef.current, exact);
+          companiesRef.current = nextCompanies;
           companyExactWarning ||= exact === null;
         } catch (reason: unknown) {
           if (
@@ -556,6 +658,33 @@ export function InteractionForm({
       ) {
         return;
       }
+
+      // A source-specific retry can complete while the original batch is waiting
+      // for another source (or the derived Company exact read). Reconcile only
+      // from the newest verified snapshots so the late initial batch cannot undo
+      // that retry or silently remove a linked relationship.
+      nextCompanies = companiesRef.current;
+      nextOpportunities = opportunitiesRef.current;
+      nextContacts = contactsRef.current;
+      const latestSelectedContact = activeRecordById(
+        nextContacts,
+        initialContactId,
+      );
+      const latestSelectedOpportunity = activeRecordById(
+        nextOpportunities,
+        initialOpportunityId,
+      );
+      const latestSelectedCompany = activeRecordById(
+        nextCompanies,
+        initialCompanyId,
+      );
+      linkedCompanyCandidate =
+        latestSelectedCompany?.id ||
+        (initialInteractionType === "phone_call"
+          ? latestSelectedContact?.companyId
+          : "") ||
+        latestSelectedOpportunity?.companyId ||
+        "";
 
       if (companyResult.status === "fulfilled") {
         companiesRef.current = nextCompanies;
@@ -616,6 +745,7 @@ export function InteractionForm({
     initialInteractionType,
     initialOpportunityId,
     linkedContextIdentity,
+    organisationId,
   ]);
 
   useEffect(() => {
@@ -677,6 +807,7 @@ export function InteractionForm({
         if (request.source === "company") {
           const loaded = await loadCompanyOptions(
             request.linkedId,
+            organisationId,
             controller.signal,
           );
           if (
@@ -708,8 +839,16 @@ export function InteractionForm({
         }
         if (request.source === "opportunity") {
           const loaded = conversationOnly
-            ? await loadLinkedOpportunity(request.linkedId, controller.signal)
-            : await loadOpportunityOptions(request.linkedId, controller.signal);
+            ? await loadLinkedOpportunity(
+                request.linkedId,
+                organisationId,
+                controller.signal,
+              )
+            : await loadOpportunityOptions(
+                request.linkedId,
+                organisationId,
+                controller.signal,
+              );
           if (
             controller.signal.aborted ||
             activeLinkedContextIdentityRef.current !== request.contextIdentity
@@ -736,6 +875,7 @@ export function InteractionForm({
 
         const loaded = await loadContactOptions(
           request.linkedId,
+          organisationId,
           controller.signal,
         );
         if (
@@ -816,6 +956,7 @@ export function InteractionForm({
     initialOpportunityId,
     linkedContextIdentity,
     optionRetryRequest,
+    organisationId,
   ]);
 
   function requestOptionRetry(source: OptionRetryRequest["source"]): void {
@@ -937,13 +1078,18 @@ export function InteractionForm({
       finish();
     };
 
-    void apiRequest<Company>(
+    void apiRequest<unknown>(
       `/api/v1/companies/${encodeURIComponent(relatedCompanyId)}`,
       { signal: controller.signal },
     ).then(
       (record) => {
         if (!requestIsActive()) return;
-        const verifiedCompany = exactActiveRecord(record, relatedCompanyId);
+        const verifiedCompany =
+          isCompanyResponse(record, organisationId) &&
+          record.id === relatedCompanyId &&
+          isActiveRecord(record)
+            ? record
+            : null;
         if (verifiedCompany === null) {
           rejectUnlessAlreadyVerified();
           return;
@@ -1038,6 +1184,12 @@ export function InteractionForm({
     if (manualCompanyVerificationRef.current !== null) return;
     setSubmitError(null);
     setSubmitting(true);
+    const request: SubmitRequest = {
+      contextIdentity: linkedContextIdentity,
+      controller: new AbortController(),
+    };
+    submitRequestRef.current?.controller.abort();
+    submitRequestRef.current = request;
     const submittedContext = reconcileRelationshipContext({
       companyId,
       opportunityId,
@@ -1048,47 +1200,66 @@ export function InteractionForm({
       contacts: contactOptionsState === "ready" ? contacts : [],
     });
     try {
-      const interaction = await apiRequest<Interaction>(
-        "/api/v1/interactions",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            title: title.trim(),
-            interactionType,
-            lifecycleStatus: "planned",
-            companyId: submittedContext.companyId || null,
-            opportunityId: submittedContext.opportunityId || null,
-            contactId:
-              interactionType === "phone_call"
-                ? submittedContext.contactId || null
-                : null,
-            callDirection:
-              interactionType === "phone_call" ? callDirection : null,
-            meetingPlatform:
-              interactionType === "online_meeting" ? meetingPlatform : null,
-            meetingUrl:
-              interactionType === "online_meeting"
-                ? meetingUrl.trim() || null
-                : null,
-            scheduledStartAt: scheduledStartAt
-              ? new Date(scheduledStartAt).toISOString()
+      const response = await apiRequest<unknown>("/api/v1/interactions", {
+        method: "POST",
+        signal: request.controller.signal,
+        body: JSON.stringify({
+          title: title.trim(),
+          interactionType,
+          lifecycleStatus: "planned",
+          companyId: submittedContext.companyId || null,
+          opportunityId: submittedContext.opportunityId || null,
+          contactId:
+            interactionType === "phone_call"
+              ? submittedContext.contactId || null
               : null,
-            scheduledEndAt: scheduledEndAt
-              ? new Date(scheduledEndAt).toISOString()
+          callDirection:
+            interactionType === "phone_call" ? callDirection : null,
+          meetingPlatform:
+            interactionType === "online_meeting" ? meetingPlatform : null,
+          meetingUrl:
+            interactionType === "online_meeting"
+              ? meetingUrl.trim() || null
               : null,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          }),
-        },
-      );
-      router.push(`/conversations/${interaction.id}`);
+          scheduledStartAt: scheduledStartAt
+            ? new Date(scheduledStartAt).toISOString()
+            : null,
+          scheduledEndAt: scheduledEndAt
+            ? new Date(scheduledEndAt).toISOString()
+            : null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+      if (
+        request.controller.signal.aborted ||
+        submitRequestRef.current !== request ||
+        activeLinkedContextIdentityRef.current !== request.contextIdentity
+      ) {
+        return;
+      }
+      if (!isInteractionResponse(response, organisationId)) {
+        throw new Error("The conversation could not be created.");
+      }
+      router.push(`/conversations/${encodeURIComponent(response.id)}`);
     } catch (requestError: unknown) {
+      if (
+        request.controller.signal.aborted ||
+        submitRequestRef.current !== request ||
+        activeLinkedContextIdentityRef.current !== request.contextIdentity ||
+        isAbortError(requestError)
+      ) {
+        return;
+      }
       setSubmitError(
         requestError instanceof Error
           ? requestError.message
           : "The conversation could not be created.",
       );
     } finally {
-      setSubmitting(false);
+      if (submitRequestRef.current === request) {
+        submitRequestRef.current = null;
+        setSubmitting(false);
+      }
     }
   }
 

@@ -9,6 +9,8 @@ import type { Interaction, MicrosoftCalendarEvent } from "@revenueos/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MicrosoftCalendarContext } from "@/components/microsoft-calendar-context";
 
+const organisationId = "organisation-1";
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -22,6 +24,17 @@ function deferred<T>() {
     resolve = promiseResolve;
   });
   return { promise, resolve };
+}
+
+function calendarList(
+  items: MicrosoftCalendarEvent[],
+  responseOrganisationId = organisationId,
+) {
+  return {
+    organisationId: responseOrganisationId,
+    items,
+    total: items.length,
+  };
 }
 
 const interaction: Interaction = {
@@ -55,6 +68,7 @@ const interaction: Interaction = {
 
 const linkedEvent: MicrosoftCalendarEvent = {
   id: "calendar-event-1",
+  organisationId,
   title: "Customer discovery",
   startAt: "2026-09-10T00:00:00Z",
   endAt: "2026-09-10T01:00:00Z",
@@ -83,13 +97,18 @@ describe("MicrosoftCalendarContext", () => {
         );
       }
       if (String(input).includes("/integrations/google/")) {
-        return Promise.resolve(jsonResponse({ items: [], total: 0 }));
+        return Promise.resolve(jsonResponse(calendarList([])));
       }
-      return Promise.resolve(jsonResponse({ items: [linkedEvent], total: 1 }));
+      return Promise.resolve(jsonResponse(calendarList([linkedEvent])));
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<MicrosoftCalendarContext interactions={[interaction]} />);
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
     expect(
       await screen.findByRole("link", { name: "Prepare →" }),
     ).toHaveAttribute("href", "/conversations/interaction-1?view=prepare");
@@ -137,15 +156,18 @@ describe("MicrosoftCalendarContext", () => {
           : secondUpdate.promise;
       }
       if (url.includes("/integrations/google/")) {
-        return Promise.resolve(jsonResponse({ items: [], total: 0 }));
+        return Promise.resolve(jsonResponse(calendarList([])));
       }
-      return Promise.resolve(
-        jsonResponse({ items: [first, second], total: 2 }),
-      );
+      return Promise.resolve(jsonResponse(calendarList([first, second])));
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<MicrosoftCalendarContext interactions={[interaction]} />);
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
     const firstArticle = (await screen.findByText(first.title)).closest(
       "article",
     );
@@ -242,15 +264,18 @@ describe("MicrosoftCalendarContext", () => {
             : secondUpdate.promise;
         }
         if (url.includes("/integrations/google/")) {
-          return Promise.resolve(jsonResponse({ items: [], total: 0 }));
+          return Promise.resolve(jsonResponse(calendarList([])));
         }
-        return Promise.resolve(
-          jsonResponse({ items: [first, second], total: 2 }),
-        );
+        return Promise.resolve(jsonResponse(calendarList([first, second])));
       }),
     );
 
-    render(<MicrosoftCalendarContext interactions={[interaction]} />);
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
     const firstArticle = (await screen.findByText(first.title)).closest(
       "article",
     );
@@ -298,6 +323,392 @@ describe("MicrosoftCalendarContext", () => {
     expect(within(firstArticle).getByRole("alert")).toBeVisible();
   });
 
+  it("rejects a link response that echoes another interaction", async () => {
+    const unlinkedEvent = {
+      ...linkedEvent,
+      matchState: "unmatched" as const,
+      interactionId: null,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(
+          jsonResponse({
+            ...unlinkedEvent,
+            matchState: "matched",
+            interactionId: "interaction-foreign",
+          }),
+        );
+      }
+      if (String(input).includes("/integrations/google/")) {
+        return Promise.resolve(jsonResponse(calendarList([])));
+      }
+      return Promise.resolve(jsonResponse(calendarList([unlinkedEvent])));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    const select = await screen.findByLabelText(
+      "Link Customer discovery to an interaction",
+    );
+    fireEvent.change(select, { target: { value: interaction.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The calendar event could not be updated. Try again.",
+    );
+    expect(
+      screen.queryByRole("link", { name: "Prepare →" }),
+    ).not.toBeInTheDocument();
+    expect(select).toBeVisible();
+  });
+
+  it("rejects an unlink response that remains linked", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(
+          jsonResponse({
+            ...linkedEvent,
+            interactionId: "interaction-foreign",
+          }),
+        );
+      }
+      if (String(input).includes("/integrations/google/")) {
+        return Promise.resolve(jsonResponse(calendarList([])));
+      }
+      return Promise.resolve(jsonResponse(calendarList([linkedEvent])));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    const prepare = await screen.findByRole("link", { name: "Prepare →" });
+    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The calendar event could not be updated. Try again.",
+    );
+    expect(prepare).toHaveAttribute(
+      "href",
+      "/conversations/interaction-1?view=prepare",
+    );
+    expect(screen.getByRole("button", { name: "Unlink" })).toBeEnabled();
+  });
+
+  it("atomically rejects a calendar list containing another organisation", async () => {
+    const foreignEvent = {
+      ...linkedEvent,
+      id: "calendar-event-foreign",
+      organisationId: "organisation-other",
+      title: "Foreign private meeting title",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve(
+        jsonResponse(
+          String(input).includes("/integrations/google/")
+            ? calendarList([])
+            : calendarList([linkedEvent, foreignEvent]),
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(linkedEvent.title)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Foreign private meeting title"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects a link response owned by another organisation", async () => {
+    const unlinkedEvent = {
+      ...linkedEvent,
+      matchState: "unmatched" as const,
+      interactionId: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return Promise.resolve(
+            jsonResponse({
+              ...unlinkedEvent,
+              organisationId: "organisation-other",
+              matchState: "matched",
+              interactionId: interaction.id,
+            }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse(
+            String(input).includes("/integrations/google/")
+              ? calendarList([])
+              : calendarList([unlinkedEvent]),
+          ),
+        );
+      }),
+    );
+
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    const select = await screen.findByLabelText(
+      "Link Customer discovery to an interaction",
+    );
+    fireEvent.change(select, { target: { value: interaction.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The calendar event could not be updated. Try again.",
+    );
+    expect(select).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Prepare →" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects an unlink response owned by another organisation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return Promise.resolve(
+            jsonResponse({
+              ...linkedEvent,
+              organisationId: "organisation-other",
+              interactionId: null,
+            }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse(
+            String(input).includes("/integrations/google/")
+              ? calendarList([])
+              : calendarList([linkedEvent]),
+          ),
+        );
+      }),
+    );
+
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    const prepare = await screen.findByRole("link", { name: "Prepare →" });
+    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The calendar event could not be updated. Try again.",
+    );
+    expect(prepare).toBeVisible();
+    expect(screen.getByRole("button", { name: "Unlink" })).toBeEnabled();
+  });
+
+  it("clears a selection that is no longer in the interaction options", async () => {
+    const unlinkedEvent = {
+      ...linkedEvent,
+      matchState: "unmatched" as const,
+      interactionId: null,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(
+        jsonResponse(
+          String(input).includes("/integrations/google/")
+            ? calendarList([])
+            : calendarList([unlinkedEvent]),
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    const select = await screen.findByLabelText(
+      "Link Customer discovery to an interaction",
+    );
+    fireEvent.change(select, { target: { value: interaction.id } });
+    expect(select).toHaveValue(interaction.id);
+    expect(screen.getByRole("button", { name: "Link" })).toBeEnabled();
+
+    rerender(
+      <MicrosoftCalendarContext
+        interactions={[
+          {
+            ...interaction,
+            id: "interaction-2",
+            title: "Replacement interaction",
+          },
+        ]}
+        organisationId={organisationId}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Link Customer discovery to an interaction"),
+      ).toHaveValue(""),
+    );
+    const linkButton = screen.getByRole("button", { name: "Link" });
+    expect(linkButton).toBeDisabled();
+    fireEvent.click(linkButton);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+
+    rerender(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    await waitFor(() => expect(select).toHaveValue(""));
+  });
+
+  it("keeps an event mutation locked when the visible interaction set changes", async () => {
+    const unlinkedEvent = {
+      ...linkedEvent,
+      matchState: "unmatched" as const,
+      interactionId: null,
+    };
+    const update = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") return update.promise;
+      return Promise.resolve(
+        jsonResponse(
+          String(input).includes("/integrations/google/")
+            ? calendarList([])
+            : calendarList([unlinkedEvent]),
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
+    fireEvent.change(
+      await screen.findByLabelText("Link Customer discovery to an interaction"),
+      { target: { value: interaction.id } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    expect(screen.getByRole("button", { name: "Linking…" })).toBeDisabled();
+
+    rerender(
+      <MicrosoftCalendarContext
+        interactions={[
+          interaction,
+          {
+            ...interaction,
+            id: "interaction-2",
+            title: "Newly loaded interaction",
+          },
+        ]}
+        organisationId={organisationId}
+      />,
+    );
+
+    const pendingButton = await screen.findByRole("button", {
+      name: "Linking…",
+    });
+    expect(pendingButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT"),
+    ).toHaveLength(1);
+
+    update.resolve(
+      jsonResponse({
+        ...unlinkedEvent,
+        matchState: "matched",
+        interactionId: interaction.id,
+      }),
+    );
+    expect(
+      await screen.findByRole("link", { name: "Prepare →" }),
+    ).toHaveAttribute("href", `/conversations/${interaction.id}?view=prepare`);
+  });
+
+  it("encodes event and interaction route segments", async () => {
+    const encodedInteraction = {
+      ...interaction,
+      id: "interaction/with?#characters",
+    };
+    const unlinkedEvent = {
+      ...linkedEvent,
+      id: "calendar/event?#characters",
+      matchState: "unmatched" as const,
+      interactionId: null,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(
+          jsonResponse({
+            ...unlinkedEvent,
+            matchState: "matched",
+            interactionId: encodedInteraction.id,
+          }),
+        );
+      }
+      if (String(input).includes("/integrations/google/")) {
+        return Promise.resolve(jsonResponse(calendarList([])));
+      }
+      return Promise.resolve(jsonResponse(calendarList([unlinkedEvent])));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MicrosoftCalendarContext
+        interactions={[encodedInteraction]}
+        organisationId={organisationId}
+      />,
+    );
+    fireEvent.change(
+      await screen.findByLabelText("Link Customer discovery to an interaction"),
+      { target: { value: encodedInteraction.id } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+
+    expect(
+      await screen.findByRole("link", { name: "Prepare →" }),
+    ).toHaveAttribute(
+      "href",
+      "/conversations/interaction%2Fwith%3F%23characters?view=prepare",
+    );
+    const update = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === "PUT",
+    );
+    expect(String(update?.[0])).toContain(
+      "/events/calendar%2Fevent%3F%23characters/interaction",
+    );
+  });
+
   it("does not offer relationship linkage for private events", async () => {
     vi.stubGlobal(
       "fetch",
@@ -305,25 +716,27 @@ describe("MicrosoftCalendarContext", () => {
         Promise.resolve(
           jsonResponse(
             String(input).includes("/integrations/google/")
-              ? { items: [], total: 0 }
-              : {
-                  items: [
-                    {
-                      ...linkedEvent,
-                      id: "private-event-1",
-                      title: "Private event",
-                      matchState: "private",
-                      interactionId: null,
-                    },
-                  ],
-                  total: 1,
-                },
+              ? calendarList([])
+              : calendarList([
+                  {
+                    ...linkedEvent,
+                    id: "private-event-1",
+                    title: "Private event",
+                    matchState: "private",
+                    interactionId: null,
+                  },
+                ]),
           ),
         ),
       ),
     );
 
-    render(<MicrosoftCalendarContext interactions={[interaction]} />);
+    render(
+      <MicrosoftCalendarContext
+        interactions={[interaction]}
+        organisationId={organisationId}
+      />,
+    );
     expect(
       await screen.findByText(
         "Private events cannot be linked to an interaction.",

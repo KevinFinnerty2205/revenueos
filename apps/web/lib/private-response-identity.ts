@@ -2,6 +2,10 @@ import type {
   Company,
   Contact,
   Interaction,
+  Opportunity,
+  OpportunityListItem,
+  ProviderCalendarEvent,
+  ProviderCalendarEventListResponse,
   TenantEntityPage,
 } from "@revenueos/shared";
 
@@ -19,6 +23,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || isString(value);
+}
+
+function isNullableDecimalString(value: unknown): value is string | null {
+  return value === null || (isString(value) && /^\d+(?:\.\d+)?$/.test(value));
 }
 
 function isNullableSafeInteger(value: unknown): value is number | null {
@@ -67,6 +75,18 @@ const interactionTypes = new Set([
 ]);
 const companyStatuses = new Set(["prospect", "active", "inactive"]);
 const contactStatuses = new Set(["active", "left_company"]);
+const opportunityStages = new Set([
+  "qualification",
+  "discovery",
+  "evaluation",
+  "proposal",
+  "negotiation",
+  "procurement",
+  "closed_won",
+  "closed_lost",
+  "other",
+]);
+const opportunityStatuses = new Set(["open", "won", "lost", "on_hold"]);
 const interactionStatuses = new Set([
   "planned",
   "in_progress",
@@ -123,6 +143,14 @@ const onlineMeetingIngestionStates = new Set([
   "ready",
   "failed",
 ]);
+const providerCalendarEventStates = new Set(["active", "cancelled", "deleted"]);
+const providerCalendarMatchStates = new Set([
+  "unmatched",
+  "matched",
+  "review_required",
+  "internal",
+  "private",
+]);
 
 function hasTenantIdentity(
   value: Record<string, unknown>,
@@ -173,6 +201,62 @@ export function isContactResponse(
   );
 }
 
+function hasOpportunityResponseFields(
+  value: Record<string, unknown>,
+  organisationId: string,
+): boolean {
+  return (
+    hasTenantIdentity(value, organisationId) &&
+    isNullableString(value.companyId) &&
+    isString(value.name) &&
+    isAllowed(value.stage, opportunityStages) &&
+    isAllowed(value.status, opportunityStatuses) &&
+    isNullableDecimalString(value.estimatedValue) &&
+    isNullableString(value.currency) &&
+    isNullableDate(value.expectedCloseDate) &&
+    isNonEmptyString(value.ownerUserId) &&
+    isNullableString(value.description) &&
+    isNullableDate(value.archivedAt) &&
+    isNullableString(value.pipelineId) &&
+    isNullableString(value.pipelineStageId) &&
+    isNullableDate(value.stageEnteredAt) &&
+    isNullableDate(value.stageTrackingStartedAt) &&
+    isNullableDate(value.actualCloseDate) &&
+    isNullableString(value.outcomeReason) &&
+    (value.outcomeProvenance === null ||
+      value.outcomeProvenance === "seller_reported") &&
+    isDate(value.createdAt) &&
+    isDate(value.updatedAt)
+  );
+}
+
+export function isOpportunityResponse(
+  value: unknown,
+  organisationId: string,
+): value is Opportunity {
+  return (
+    isRecord(value) &&
+    hasOpportunityResponseFields(value, organisationId) &&
+    isNullableString(value.outcomeNote)
+  );
+}
+
+export function isOpportunityListItemResponse(
+  value: unknown,
+  organisationId: string,
+): value is OpportunityListItem {
+  return (
+    isRecord(value) &&
+    hasOpportunityResponseFields(value, organisationId) &&
+    isNullableString(value.companyName) &&
+    isString(value.ownerName) &&
+    isNullableString(value.latestMeetingId) &&
+    isNullableDate(value.latestMeetingDate) &&
+    isNullableString(value.latestMeetingMomentum) &&
+    isNullableString(value.latestNextBestAction)
+  );
+}
+
 export function isInteractionResponse(
   value: unknown,
   organisationId: string,
@@ -220,6 +304,52 @@ export function isInteractionResponse(
     isDate(value.createdAt) &&
     isDate(value.updatedAt)
   );
+}
+
+export function isProviderCalendarEventResponse(
+  value: unknown,
+  organisationId: string,
+): value is ProviderCalendarEvent {
+  return (
+    isRecord(value) &&
+    hasTenantIdentity(value, organisationId) &&
+    isString(value.title) &&
+    isDate(value.startAt) &&
+    isDate(value.endAt) &&
+    isString(value.providerTimezone) &&
+    Array.isArray(value.attendeeEmails) &&
+    value.attendeeEmails.every(isString) &&
+    isNullableString(value.location) &&
+    isNullableString(value.onlineMeetingUrl) &&
+    isString(value.sensitivity) &&
+    isAllowed(value.state, providerCalendarEventStates) &&
+    isAllowed(value.matchState, providerCalendarMatchStates) &&
+    isNullableString(value.contactId) &&
+    isNullableString(value.companyId) &&
+    isNullableString(value.opportunityId) &&
+    isNullableString(value.interactionId) &&
+    isDate(value.lastSyncedAt)
+  );
+}
+
+export function decodeProviderCalendarEventListResponse(
+  value: unknown,
+  organisationId: string,
+): ProviderCalendarEventListResponse | null {
+  if (
+    !isRecord(value) ||
+    value.organisationId !== organisationId ||
+    !Array.isArray(value.items) ||
+    !Number.isSafeInteger(value.total) ||
+    (value.total as number) < 0 ||
+    value.total !== value.items.length ||
+    !value.items.every((item) =>
+      isProviderCalendarEventResponse(item, organisationId),
+    )
+  ) {
+    return null;
+  }
+  return value as unknown as ProviderCalendarEventListResponse;
 }
 
 export function decodeTenantPage<T>(
