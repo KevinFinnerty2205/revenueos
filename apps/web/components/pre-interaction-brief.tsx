@@ -8,7 +8,7 @@ import type {
   PreInteractionBriefResponse,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { apiRequest, ApiClientError } from "@/lib/api";
 import { formatInteractionDate } from "@/lib/interactions";
 
@@ -332,11 +332,28 @@ export function PreInteractionBrief({
   interactionId,
   interactionType,
   onBriefChange,
-}: {
+}: PreInteractionBriefProps) {
+  return (
+    <PreInteractionBriefSession
+      key={interactionId}
+      interactionId={interactionId}
+      interactionType={interactionType}
+      onBriefChange={onBriefChange}
+    />
+  );
+}
+
+interface PreInteractionBriefProps {
   interactionId: string;
   interactionType: InteractionType;
   onBriefChange?: () => void;
-}) {
+}
+
+function PreInteractionBriefSession({
+  interactionId,
+  interactionType,
+  onBriefChange,
+}: PreInteractionBriefProps) {
   const [response, setResponse] = useState<PreInteractionBriefResponse | null>(
     null,
   );
@@ -344,6 +361,15 @@ export function PreInteractionBrief({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noticeRequired, setNoticeRequired] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const sessionActive = useRef(true);
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -351,12 +377,17 @@ export function PreInteractionBrief({
       `/api/v1/interactions/${interactionId}/companion/brief`,
       { signal: controller.signal },
     )
-      .then(setResponse)
+      .then((updated) => {
+        if (!controller.signal.aborted) setResponse(updated);
+      })
       .catch((requestError: unknown) => {
-        if (!(
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
-        )) {
+        if (
+          !controller.signal.aborted &&
+          !(
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          )
+        ) {
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -372,7 +403,14 @@ export function PreInteractionBrief({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [interactionId]);
+  }, [interactionId, retryKey]);
+
+  function retryLoad() {
+    setLoading(true);
+    setError(null);
+    setNoticeRequired(false);
+    setRetryKey((value) => value + 1);
+  }
 
   async function generate() {
     setWorking(true);
@@ -383,9 +421,11 @@ export function PreInteractionBrief({
         `/api/v1/interactions/${interactionId}/companion/brief`,
         { method: "POST", body: "{}" },
       );
+      if (!sessionActive.current) return;
       setResponse(updated);
       onBriefChange?.();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -396,7 +436,7 @@ export function PreInteractionBrief({
           requestError.code === "data_notice_acknowledgement_required",
       );
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
@@ -408,16 +448,18 @@ export function PreInteractionBrief({
         `/api/v1/interactions/${interactionId}/companion/brief/review`,
         { method: "POST", body: "{}" },
       );
+      if (!sessionActive.current) return;
       setResponse(updated);
       onBriefChange?.();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The review state could not be saved.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
@@ -462,7 +504,15 @@ export function PreInteractionBrief({
               <Link href="/onboarding" className="secondary-button mt-4">
                 Review data notice
               </Link>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                className="secondary-button mt-4"
+                onClick={retryLoad}
+              >
+                Try again
+              </button>
+            )}
           </div>
         ) : null}
         {!loading && response?.state === "unavailable" ? (
