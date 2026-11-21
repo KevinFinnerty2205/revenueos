@@ -1534,7 +1534,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   await expect(
     page.getByText("Customer requested a reviewed security workshop."),
   ).toBeVisible();
-  expect(workspaceReads).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => workspaceReads).toBeGreaterThanOrEqual(2);
 
   await page.goto("/companies/company-visual");
   await expect(
@@ -1893,7 +1893,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
     page.getByText("Jordan confirmed the budget owner."),
   ).toBeVisible();
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  expect(workspaceReads).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => workspaceReads).toBeGreaterThanOrEqual(2);
 
   await page.goto("/companies/company-1");
   await expect(
