@@ -44,6 +44,25 @@ function deferred<T>() {
   };
 }
 
+function authenticatedUserResponse() {
+  return {
+    user: {
+      id: "user-1",
+      externalAuthId: "user_dev_001",
+      displayName: "Alex Morgan",
+      email: "alex@example.test",
+    },
+    organisation: {
+      id: "organisation-1",
+      name: "Example Revenue Team",
+      slug: "example-revenue-team",
+    },
+    role: "member",
+    authMode: "mock",
+    requestId: "request-1",
+  };
+}
+
 function capability<T>(
   state: MeetingIntelligenceCapability<T>["state"],
   content: T | null = null,
@@ -1268,6 +1287,109 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(
       screen.getByRole("button", { name: "Mark reviewed" }),
     ).toBeDisabled();
+  });
+
+  it("does not review edits made while browser-draft ownership is being verified", async () => {
+    const ownerResponse = deferred<Response>();
+    const draftKey = "revenueos:follow-up-draft:meeting-1";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/api/v1/me")
+          ? ownerResponse.promise
+          : Promise.resolve(jsonResponse(completedWorkspace())),
+      ),
+    );
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    fireEvent.change(draft, {
+      target: { value: "Edit made while identity verification is pending." },
+    });
+
+    await act(async () => {
+      ownerResponse.resolve(jsonResponse(authenticatedUserResponse()));
+      await ownerResponse.promise;
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Mark reviewed" }),
+      ).toBeEnabled(),
+    );
+    expect(draft).toHaveValue(
+      "Edit made while identity verification is pending.",
+    );
+    expect(screen.getByText(/Review status: Needs review/)).toHaveTextContent(
+      "Unsaved edits",
+    );
+    expect(window.localStorage.getItem(draftKey)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    await waitFor(() =>
+      expect(JSON.parse(String(window.localStorage.getItem(draftKey)))).toEqual(
+        {
+          draft: "Edit made while identity verification is pending.",
+          approved: true,
+          ownerUserId: "user-1",
+        },
+      ),
+    );
+  });
+
+  it("does not replace edits made while browser-draft recovery is being verified", async () => {
+    const ownerResponse = deferred<Response>();
+    const draftKey = "revenueos:follow-up-draft:meeting-1";
+    window.localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        draft: "Previously reviewed browser draft.",
+        approved: true,
+        ownerUserId: "user-1",
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/api/v1/me")
+          ? ownerResponse.promise
+          : Promise.resolve(jsonResponse(completedWorkspace())),
+      ),
+    );
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Verify and load browser draft",
+      }),
+    );
+    fireEvent.change(draft, {
+      target: { value: "Keep this newer unsaved edit." },
+    });
+
+    await act(async () => {
+      ownerResponse.resolve(jsonResponse(authenticatedUserResponse()));
+      await ownerResponse.promise;
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "Verify and load browser draft",
+        }),
+      ).toBeEnabled(),
+    );
+    expect(draft).toHaveValue("Keep this newer unsaved edit.");
+    expect(screen.getByText(/Review status: Needs review/)).toHaveTextContent(
+      "Unsaved edits",
+    );
+    expect(window.localStorage.getItem(draftKey)).toContain(
+      "Previously reviewed browser draft.",
+    );
   });
 
   it("preserves persisted review status on unchanged saves and failed reviews", async () => {

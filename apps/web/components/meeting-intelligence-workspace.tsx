@@ -1344,12 +1344,14 @@ function LegacyFollowUpEmailView({
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [legacyRecoveryAvailable, setLegacyRecoveryAvailable] = useState(false);
   const [legacyOwnershipBlocked, setLegacyOwnershipBlocked] = useState(false);
+  const draftRevision = useRef(0);
   const draftKey = `revenueos:follow-up-draft:${meetingId}`;
 
   useEffect(() => {
     let active = true;
     window.queueMicrotask(() => {
       if (!active) return;
+      draftRevision.current += 1;
       setLegacyRecoveryAvailable(
         window.localStorage.getItem(draftKey) !== null,
       );
@@ -1395,8 +1397,10 @@ function LegacyFollowUpEmailView({
   }
 
   async function recoverBrowserDraft() {
+    const revisionAtStart = draftRevision.current;
     const verifiedOwnerUserId = await verifyOwner();
-    if (!verifiedOwnerUserId) return;
+    if (!verifiedOwnerUserId || revisionAtStart !== draftRevision.current)
+      return;
     const stored = window.localStorage.getItem(draftKey);
     if (!stored) {
       setLegacyRecoveryAvailable(false);
@@ -1414,6 +1418,7 @@ function LegacyFollowUpEmailView({
       ) {
         throw new Error("owner_mismatch");
       }
+      draftRevision.current += 1;
       setDraft(value.draft);
       setApproved(value.approved === true);
       setSaved(true);
@@ -1427,8 +1432,10 @@ function LegacyFollowUpEmailView({
   }
 
   async function saveDraft(nextApproved = approved) {
+    const revisionAtStart = draftRevision.current;
     const verifiedOwnerUserId = await verifyOwner();
-    if (!verifiedOwnerUserId) return;
+    if (!verifiedOwnerUserId || revisionAtStart !== draftRevision.current)
+      return;
     if (window.localStorage.getItem(draftKey) !== null && !saved) {
       setLegacyRecoveryAvailable(true);
       setOwnershipError(
@@ -1504,6 +1511,7 @@ function LegacyFollowUpEmailView({
           className="form-control mt-2 min-h-80 py-3 font-mono text-sm leading-6"
           value={draft}
           onChange={(event) => {
+            draftRevision.current += 1;
             setDraft(event.target.value);
             setDirty(true);
             setApproved(false);
