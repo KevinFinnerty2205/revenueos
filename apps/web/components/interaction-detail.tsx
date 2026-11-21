@@ -578,7 +578,12 @@ function InteractionDetailSession({
               <OnlineMeetingCapture
                 interaction={interaction}
                 onTranscriptImported={(result) => {
-                  if (!sessionActive.current) return;
+                  if (
+                    !sessionActive.current ||
+                    result.interactionId !== interactionId
+                  ) {
+                    return;
+                  }
                   setInteraction((current) =>
                     current?.id === interactionId
                       ? { ...current, meetingId: result.meetingId }

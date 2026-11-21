@@ -259,6 +259,9 @@ function OnlineMeetingCaptureForInteraction({
         },
       );
       if (!isCurrent()) return;
+      if (result.interactionId !== requestedInteractionId) {
+        throw new Error("The transcript could not be imported. Try again.");
+      }
       setCompletedState({
         interactionId: requestedInteractionId,
         value: result,

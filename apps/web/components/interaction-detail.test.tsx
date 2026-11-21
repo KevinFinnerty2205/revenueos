@@ -28,24 +28,51 @@ vi.mock("@/lib/use-conversation-workspace", () => ({
 
 vi.mock("@/components/meeting-intelligence-workspace", () => ({
   MeetingIntelligenceWorkspace: ({
+    meetingId,
     workspaceRefreshKey = 0,
   }: {
+    meetingId: string;
     workspaceRefreshKey?: number;
   }) => (
-    <textarea
-      aria-label="Visible private follow-up editor"
-      readOnly
-      value={
-        workspaceRefreshKey === 0
-          ? "Edited follow-up"
-          : "Corrected private follow-up"
-      }
-    />
+    <>
+      <p>Meeting intelligence for {meetingId}</p>
+      <textarea
+        aria-label="Visible private follow-up editor"
+        readOnly
+        value={
+          workspaceRefreshKey === 0
+            ? "Edited follow-up"
+            : "Corrected private follow-up"
+        }
+      />
+    </>
   ),
 }));
 
 vi.mock("@/components/online-meeting-capture", () => ({
-  OnlineMeetingCapture: () => <div>Online meeting capture</div>,
+  OnlineMeetingCapture: ({
+    onTranscriptImported,
+  }: {
+    onTranscriptImported?: (result: {
+      interactionId: string;
+      meetingId: string;
+    }) => void;
+  }) => (
+    <div>
+      Online meeting capture
+      <button
+        type="button"
+        onClick={() =>
+          onTranscriptImported?.({
+            interactionId: "interaction-foreign",
+            meetingId: "meeting-foreign",
+          })
+        }
+      >
+        Return foreign transcript
+      </button>
+    </div>
+  ),
 }));
 
 function workspaceController(
@@ -507,6 +534,34 @@ describe("InteractionDetail", () => {
     ).toHaveTextContent("In Progress");
     expect(
       screen.queryByRole("heading", { name: "Foreign conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores a transcript callback returned for another interaction", () => {
+    const completedInteraction: Interaction = {
+      ...interaction,
+      lifecycleStatus: "completed",
+      actualEndAt: "2026-08-01T01:00:00Z",
+    };
+
+    render(
+      <InteractionDetail
+        interactionId={completedInteraction.id}
+        initialInteraction={completedInteraction}
+      />,
+    );
+
+    expect(
+      screen.getByText("Meeting intelligence for meeting-1"),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return foreign transcript" }),
+    );
+    expect(
+      screen.getByText("Meeting intelligence for meeting-1"),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Meeting intelligence for meeting-foreign"),
     ).not.toBeInTheDocument();
   });
 
