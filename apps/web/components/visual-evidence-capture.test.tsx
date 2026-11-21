@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   VisualEvidence,
   VisualReviewResponse,
@@ -11,6 +18,23 @@ function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
+  });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function privateImageResponse(contents: string): Response {
+  return new Response(new Blob([contents], { type: "image/png" }), {
+    status: 200,
+    headers: { "Content-Type": "image/png" },
   });
 }
 
@@ -258,5 +282,158 @@ describe("VisualEvidenceCapture", () => {
         /Visual capture is unavailable for a cancelled interaction/i,
       ),
     ).toBeVisible();
+  });
+
+  it("does not carry a private preview into a different visual without a download URL", async () => {
+    const visualA = visual({
+      id: "visual-a",
+      captureSessionId: "visual-a",
+      contextLabel: "Visual A preview",
+      filename: "visual-a.png",
+      downloadUrl: "/private/visual-a",
+    });
+    const visualB = visual({
+      id: "visual-b",
+      captureSessionId: "visual-b",
+      contextLabel: "Visual B preview",
+      filename: "visual-b.png",
+      downloadUrl: null,
+    });
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:visual-a"),
+      revokeObjectURL,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/visual-evidence")) {
+          return Promise.resolve(jsonResponse([visualA, visualB]));
+        }
+        if (path.endsWith("/private/visual-a")) {
+          return Promise.resolve(privateImageResponse("visual-a"));
+        }
+        return Promise.resolve(
+          jsonResponse(
+            { code: "not_found", message: "Unexpected request" },
+            404,
+          ),
+        );
+      }),
+    );
+
+    render(
+      <VisualEvidenceCapture
+        interactionId="interaction-1"
+        interactionType="presentation"
+        lifecycleStatus="completed"
+      />,
+    );
+
+    const reviewHeading = await screen.findByRole("heading", {
+      name: "Review suggested evidence",
+    });
+    const review = reviewHeading.closest("section");
+    expect(review).not.toBeNull();
+    expect(
+      await within(review as HTMLElement).findByAltText("Visual A preview"),
+    ).toHaveAttribute("src", "blob:visual-a");
+
+    const visualBCard = screen.getByText("visual-b.png").closest("li");
+    expect(visualBCard).not.toBeNull();
+    fireEvent.click(
+      within(visualBCard as HTMLElement).getByRole("button", {
+        name: "Review suggestions",
+      }),
+    );
+
+    expect(
+      within(review as HTMLElement).queryByAltText("Visual B preview"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(review as HTMLElement).getByText("Private preview unavailable"),
+    ).toBeVisible();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:visual-a");
+  });
+
+  it("keeps the newer private preview when an obsolete request rejects", async () => {
+    const visualA = visual({
+      id: "visual-a",
+      captureSessionId: "visual-a",
+      contextLabel: "Visual A preview",
+      filename: "visual-a.png",
+      downloadUrl: "/private/visual-a",
+    });
+    const visualB = visual({
+      id: "visual-b",
+      captureSessionId: "visual-b",
+      contextLabel: "Visual B preview",
+      filename: "visual-b.png",
+      downloadUrl: "/private/visual-b",
+    });
+    const pendingVisualA = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/visual-evidence")) {
+        return Promise.resolve(jsonResponse([visualA, visualB]));
+      }
+      if (path.endsWith("/private/visual-a")) {
+        return pendingVisualA.promise;
+      }
+      if (path.endsWith("/private/visual-b")) {
+        return Promise.resolve(privateImageResponse("visual-b"));
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "not_found", message: "Unexpected request" }, 404),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:visual-b"),
+      revokeObjectURL: vi.fn(),
+    });
+
+    render(
+      <VisualEvidenceCapture
+        interactionId="interaction-1"
+        interactionType="presentation"
+        lifecycleStatus="completed"
+      />,
+    );
+
+    const reviewHeading = await screen.findByRole("heading", {
+      name: "Review suggested evidence",
+    });
+    const review = reviewHeading.closest("section");
+    expect(review).not.toBeNull();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          String(input).endsWith("/private/visual-a"),
+        ),
+      ).toHaveLength(2),
+    );
+
+    const visualBCard = screen.getByText("visual-b.png").closest("li");
+    expect(visualBCard).not.toBeNull();
+    fireEvent.click(
+      within(visualBCard as HTMLElement).getByRole("button", {
+        name: "Review suggestions",
+      }),
+    );
+    expect(
+      await within(review as HTMLElement).findByAltText("Visual B preview"),
+    ).toHaveAttribute("src", "blob:visual-b");
+
+    await act(async () => {
+      pendingVisualA.reject(new Error("obsolete private download failed"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      within(review as HTMLElement).getByAltText("Visual B preview"),
+    ).toHaveAttribute("src", "blob:visual-b");
   });
 });

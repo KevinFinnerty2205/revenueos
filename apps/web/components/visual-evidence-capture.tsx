@@ -904,28 +904,42 @@ function VisualReview({
 }
 
 function PrivateVisualPreview({ visual }: { visual: VisualEvidence }) {
-  const [source, setSource] = useState<string | null>(null);
+  const [source, setSource] = useState<{
+    requestedUrl: string;
+    objectUrl: string;
+  } | null>(null);
   useEffect(() => {
-    if (!visual.downloadUrl) return;
+    const requestedUrl = visual.downloadUrl;
     let objectUrl: string | null = null;
     let active = true;
-    apiBlob(visual.downloadUrl)
+
+    if (!requestedUrl) {
+      return () => {
+        active = false;
+      };
+    }
+
+    apiBlob(requestedUrl)
       .then((blob) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(blob);
-        setSource(objectUrl);
+        setSource({ requestedUrl, objectUrl });
       })
-      .catch(() => setSource(null));
+      .catch(() => {
+        if (active) setSource(null);
+      });
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [visual.downloadUrl]);
-  return source ? (
+  const visibleSource =
+    source?.requestedUrl === visual.downloadUrl ? source.objectUrl : null;
+  return visibleSource ? (
     // The source is a short-lived in-memory object URL loaded through an authenticated grant.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={source}
+      src={visibleSource}
       alt={visual.contextLabel ?? humanise(visual.visualType)}
       className="h-40 w-full rounded-xl bg-slate-100 object-contain"
     />
