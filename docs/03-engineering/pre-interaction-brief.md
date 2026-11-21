@@ -60,6 +60,11 @@ beta-maintenance path.
 GET returns unavailable, not-generated, completed, failed or cancelled product
 states. Queued/running remain in the public state union for future durable
 composition, but deterministic v1 completes within the bounded request. Responses
+always carry the authoritative top-level `interactionId`; completed content must
+carry the same identifier. Both the full Preparation view and the compact Companion
+view validate that identity before adopting a load, generation, refresh or review
+result. A mismatch fails closed with a product-safe error and does not replace a
+previously verified brief or empty state. Responses
 exclude transcript, raw artefact, provider, prompt, schema-registry, lease and
 worker fields. Product-safe source labels replace raw source IDs in the UI.
 

@@ -31,6 +31,7 @@ import { ConversationWorkspaceConflictRecovery } from "@/components/conversation
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
+import { assertPreInteractionBriefIdentity } from "@/lib/pre-interaction-brief-identity";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
 type CaptureChoice = "undecided" | "recording" | "passive";
@@ -210,7 +211,10 @@ function FaceToFaceCompanionSession({
       await Promise.allSettled([
         apiRequest<PreInteractionBriefResponse>(
           `/api/v1/interactions/${interactionId}/companion/brief`,
-        ),
+        ).then((response) => {
+          assertPreInteractionBriefIdentity(response, interactionId);
+          return response;
+        }),
         apiRequest<InteractionMarker[]>(
           `/api/v1/interactions/${interactionId}/companion/markers`,
         ),
@@ -349,7 +353,10 @@ function FaceToFaceCompanionSession({
       { signal: controller.signal },
     )
       .then((updated) => {
-        if (!controller.signal.aborted) setBrief(updated);
+        if (!controller.signal.aborted) {
+          assertPreInteractionBriefIdentity(updated, interactionId);
+          setBrief(updated);
+        }
       })
       .catch((requestError: unknown) => {
         if (
@@ -425,6 +432,7 @@ function FaceToFaceCompanionSession({
         `/api/v1/interactions/${interactionId}/companion/brief`,
         { method: "POST", body: "{}" },
       );
+      assertPreInteractionBriefIdentity(prepared, interactionId);
       if (!sessionActiveRef.current) return;
       setBrief(prepared);
     } catch (requestError: unknown) {

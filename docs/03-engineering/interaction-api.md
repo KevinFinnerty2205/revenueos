@@ -59,6 +59,12 @@ optional recording offset, with no free text. They can be created/deleted only
 while `in_progress`, never create evidence automatically, and remain read-only
 after completion. See the [Companion lifecycle guide](companion-state-lifecycle-guide.md).
 
+Every preparation response carries the path Interaction as top-level
+`interactionId`, including unavailable and not-generated states. Completed content
+must repeat the same identifier. The browser validates both identities before
+adopting initial, generated, refreshed or reviewed preparation and keeps previously
+verified state when a response is mismatched.
+
 ## Recording contract
 
 Recording creation is server-flagged and requires notice version, consent method,

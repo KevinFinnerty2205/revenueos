@@ -576,7 +576,11 @@ test("interaction timeline supports deliberate creation and completion without i
         return;
       }
       if (path.endsWith("/companion/brief")) {
-        await route.fulfill({ json: emptyBriefResponse() });
+        const requestedInteractionId = path.split("/").at(-3);
+        if (!requestedInteractionId) throw new Error("Missing interaction id");
+        await route.fulfill({
+          json: emptyBriefResponse(requestedInteractionId),
+        });
         return;
       }
       if (path.endsWith("/companion/markers")) {
@@ -853,13 +857,18 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
       if (path.endsWith("/companion/brief/review")) {
         faceReviewed = true;
         await route.fulfill({
-          json: companionBrief("face_to_face_meeting", true),
+          json: companionBrief(
+            "interaction-face",
+            "face_to_face_meeting",
+            true,
+          ),
         });
         return;
       }
       if (path.endsWith("/companion/brief") && interaction) {
         await route.fulfill({
           json: companionBrief(
+            String(interaction.id),
             String(interaction.interactionType),
             interaction.id === "interaction-face" && faceReviewed,
           ),
@@ -945,7 +954,7 @@ test("a presentation supports browser image upload, explicit review and intellig
     companyId: "company-visual",
     opportunityId: "opportunity-visual",
   });
-  let brief: Record<string, unknown> = emptyBriefResponse();
+  let brief: Record<string, unknown> = emptyBriefResponse("interaction-visual");
   let debrief = debriefSession("collecting", {
     interactionId: "interaction-visual",
   });
@@ -988,13 +997,13 @@ test("a presentation supports browser image upload, explicit review and intellig
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/companion/brief/review")) {
-        brief = companionBrief("presentation", true);
+        brief = companionBrief("interaction-visual", "presentation", true);
         await route.fulfill({ json: brief });
         return;
       }
       if (path.endsWith("/companion/brief")) {
         if (request.method() === "POST") {
-          brief = companionBrief("presentation", false);
+          brief = companionBrief("interaction-visual", "presentation", false);
         }
         await route.fulfill({ json: brief });
         return;
@@ -1617,12 +1626,18 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/companion/brief/review")) {
         briefReviewed = true;
-        await route.fulfill({ json: companionBrief("phone_call", true) });
+        await route.fulfill({
+          json: companionBrief("interaction-debrief", "phone_call", true),
+        });
         return;
       }
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({
-          json: companionBrief("phone_call", briefReviewed),
+          json: companionBrief(
+            "interaction-debrief",
+            "phone_call",
+            briefReviewed,
+          ),
         });
         return;
       }
@@ -2007,7 +2022,9 @@ test("an authorised imported call recording uses the existing transcription and 
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/companion/brief")) {
-        await route.fulfill({ json: emptyBriefResponse() });
+        await route.fulfill({
+          json: emptyBriefResponse("interaction-imported-call"),
+        });
         return;
       }
       if (path.endsWith("/recordings") && request.method() === "GET") {
@@ -2504,13 +2521,21 @@ test("mobile Companion recording path persists a consented transcript into exist
       if (path.endsWith("/companion/brief/review")) {
         briefReviewed = true;
         await route.fulfill({
-          json: companionBrief("face_to_face_meeting", true),
+          json: companionBrief(
+            "interaction-recording",
+            "face_to_face_meeting",
+            true,
+          ),
         });
         return;
       }
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({
-          json: companionBrief("face_to_face_meeting", briefReviewed),
+          json: companionBrief(
+            "interaction-recording",
+            "face_to_face_meeting",
+            briefReviewed,
+          ),
         });
         return;
       }
@@ -3127,7 +3152,7 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({
-          json: companionBrief("executive_lunch", false),
+          json: companionBrief("interaction-passive", "executive_lunch", false),
         });
         return;
       }
@@ -5090,8 +5115,9 @@ function debriefSession(
   };
 }
 
-function emptyBriefResponse() {
+function emptyBriefResponse(interactionId: string) {
   return {
+    interactionId,
     state: "not_generated",
     generationAvailable: true,
     unavailableReason: null,
@@ -5105,11 +5131,15 @@ function emptyBriefResponse() {
   };
 }
 
-function companionBrief(interactionType: string, reviewed: boolean) {
+function companionBrief(
+  interactionId: string,
+  interactionType: string,
+  reviewed: boolean,
+) {
   const presentation = interactionType === "presentation";
   const phone = interactionType === "phone_call";
   return {
-    ...emptyBriefResponse(),
+    ...emptyBriefResponse(interactionId),
     state: "completed",
     generatedAt: "2026-08-14T02:00:00Z",
     reviewed,
@@ -5120,7 +5150,7 @@ function companionBrief(interactionType: string, reviewed: boolean) {
       "Prior validated Meeting Intelligence",
     ],
     brief: {
-      interactionId: `interaction-${presentation ? "presentation" : phone ? "phone" : "face"}`,
+      interactionId,
       interactionType,
       briefVersion: 1,
       headline: presentation

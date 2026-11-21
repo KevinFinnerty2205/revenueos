@@ -202,6 +202,7 @@ function methodologyInteraction(overrides: Record<string, unknown> = {}) {
 
 function methodologyBrief(reviewed: boolean) {
   return {
+    interactionId: "interaction-methodology",
     state: "completed",
     generationAvailable: true,
     unavailableReason: null,

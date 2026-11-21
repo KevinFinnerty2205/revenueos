@@ -365,14 +365,26 @@ test("reviewing a private follow-up removes only its metadata from Home", async 
     if (path.endsWith("/conversation-memory")) {
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           state: "not_configured",
           safeMessage: "No framework is selected.",
           definition: null,
-          assignment: null,
+          assignment: {
+            interactionId: "interaction-private-follow-up",
+            thread: null,
+            lockVersion: 0,
+            confirmationKind: null,
+            confirmedByUserId: null,
+            confirmedAt: null,
+          },
           suggestions: [],
           currentConversation: null,
           confirmedThread: null,
-          confirmedInitiativeHistory: null,
+          confirmedInitiativeHistory: {
+            items: [],
+            total: 0,
+            truncated: false,
+          },
           generatedAt: "2026-10-30T02:00:00Z",
         },
       });
@@ -385,6 +397,7 @@ test("reviewing a private follow-up removes only its metadata from Home", async 
     if (path.endsWith("/companion/brief")) {
       await route.fulfill({
         json: {
+          interactionId: "interaction-private-follow-up",
           state: "unavailable",
           generationAvailable: false,
           brief: null,

@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { apiRequest, ApiClientError } from "@/lib/api";
 import { formatInteractionDate } from "@/lib/interactions";
+import { assertPreInteractionBriefIdentity } from "@/lib/pre-interaction-brief-identity";
 
 const priorityStyle: Record<BriefPriority, string> = {
   high: "bg-rose-50 text-rose-800",
@@ -382,6 +383,7 @@ function PreInteractionBriefSession({
     )
       .then((updated) => {
         if (!controller.signal.aborted) {
+          assertPreInteractionBriefIdentity(updated, interactionId);
           setResponse(updated);
           setErrorSource(null);
         }
@@ -430,6 +432,7 @@ function PreInteractionBriefSession({
         `/api/v1/interactions/${interactionId}/companion/brief`,
         { method: "POST", body: "{}" },
       );
+      assertPreInteractionBriefIdentity(updated, interactionId);
       if (!sessionActive.current) return;
       setResponse(updated);
       onBriefChange?.();
@@ -460,6 +463,7 @@ function PreInteractionBriefSession({
         `/api/v1/interactions/${interactionId}/companion/brief/review`,
         { method: "POST", body: "{}" },
       );
+      assertPreInteractionBriefIdentity(updated, interactionId);
       if (!sessionActive.current) return;
       setResponse(updated);
       onBriefChange?.();

@@ -52,17 +52,33 @@ function isInteractionStatus(
 
 function isConversationThreadSummary(
   value: unknown,
+  expectedOrganisationId: string,
 ): value is ConversationThreadSummary {
   if (!isRecord(value)) return false;
   return (
     typeof value.id === "string" &&
+    value.organisationId === expectedOrganisationId &&
+    (value.companyId === null || typeof value.companyId === "string") &&
     typeof value.name === "string" &&
     (value.status === "active" || value.status === "archived") &&
-    typeof value.interactionCount === "number"
+    typeof value.interactionCount === "number" &&
+    Number.isInteger(value.interactionCount) &&
+    value.interactionCount >= 0 &&
+    (value.lastInteractionAt === null || isDateTime(value.lastInteractionAt)) &&
+    typeof value.lockVersion === "number" &&
+    Number.isInteger(value.lockVersion) &&
+    value.lockVersion >= 1 &&
+    typeof value.createdByUserId === "string" &&
+    typeof value.updatedByUserId === "string" &&
+    isDateTime(value.createdAt) &&
+    isDateTime(value.updatedAt)
   );
 }
 
-function isCoverage(value: unknown): value is ConversationFrameworkCoverage {
+function isCoverage(
+  value: unknown,
+  expectedCurrentInteractionId?: string,
+): value is ConversationFrameworkCoverage {
   if (!isRecord(value) || !isRecord(value.stateCounts)) return false;
   const counts = value.stateCounts;
   const validCounts = [
@@ -96,6 +112,8 @@ function isCoverage(value: unknown): value is ConversationFrameworkCoverage {
         isRecord(source) &&
         typeof source.sourceId === "string" &&
         typeof source.interactionId === "string" &&
+        (expectedCurrentInteractionId === undefined ||
+          source.interactionId === expectedCurrentInteractionId) &&
         typeof source.interactionTitle === "string" &&
         isDateTime(source.occurredAt),
     );
@@ -137,18 +155,25 @@ function isInitiativeHistory(
 function isConversationMemoryResponse(
   value: unknown,
   expectedInteractionId: string,
+  expectedOrganisationId: string,
 ): value is ConversationMemoryResponse {
   if (!isRecord(value) || !isRecord(value.assignment)) return false;
   const assignment = value.assignment;
   const validThread =
     assignment.thread === null ||
-    isConversationThreadSummary(assignment.thread);
+    isConversationThreadSummary(assignment.thread, expectedOrganisationId);
   const validSuggestions =
     Array.isArray(value.suggestions) &&
     value.suggestions.every(
       (suggestion) =>
         isRecord(suggestion) &&
-        isConversationThreadSummary(suggestion.thread) &&
+        isConversationThreadSummary(
+          suggestion.thread,
+          expectedOrganisationId,
+        ) &&
+        typeof suggestion.score === "number" &&
+        Number.isInteger(suggestion.score) &&
+        suggestion.score >= 1 &&
         Array.isArray(suggestion.reasons) &&
         suggestion.reasons.every((reason) => typeof reason === "string"),
     );
@@ -156,7 +181,8 @@ function isConversationMemoryResponse(
     value.definition === null ||
     (isRecord(value.definition) && typeof value.definition.name === "string");
   const validCurrentCoverage =
-    value.currentConversation === null || isCoverage(value.currentConversation);
+    value.currentConversation === null ||
+    isCoverage(value.currentConversation, expectedInteractionId);
   const validThreadCoverage =
     value.confirmedThread === null || isCoverage(value.confirmedThread);
   const validInitiativeHistory = isInitiativeHistory(
@@ -164,30 +190,36 @@ function isConversationMemoryResponse(
   );
   return (
     (value.state === "not_configured" || value.state === "current") &&
+    value.organisationId === expectedOrganisationId &&
     typeof value.safeMessage === "string" &&
     validDefinition &&
     assignment.interactionId === expectedInteractionId &&
     typeof assignment.lockVersion === "number" &&
+    Number.isInteger(assignment.lockVersion) &&
+    assignment.lockVersion >= 0 &&
     validThread &&
     validSuggestions &&
     validCurrentCoverage &&
     validThreadCoverage &&
     validInitiativeHistory &&
-    typeof value.generatedAt === "string"
+    isDateTime(value.generatedAt)
   );
 }
 
 export function ConversationMemory({
   interactionId,
+  organisationId,
   companyId,
 }: {
   interactionId: string;
+  organisationId: string;
   companyId: string | null;
 }) {
   return (
     <ConversationMemorySession
-      key={`${interactionId}:${companyId ?? ""}`}
+      key={`${organisationId}:${interactionId}:${companyId ?? ""}`}
       interactionId={interactionId}
+      organisationId={organisationId}
       companyId={companyId}
     />
   );
@@ -195,9 +227,11 @@ export function ConversationMemory({
 
 function ConversationMemorySession({
   interactionId,
+  organisationId,
   companyId,
 }: {
   interactionId: string;
+  organisationId: string;
   companyId: string | null;
 }) {
   const [memory, setMemory] = useState<ConversationMemoryResponse | null>(null);
@@ -225,47 +259,52 @@ function ConversationMemorySession({
     };
   }, []);
 
-  const loadThreadDirectory = useCallback(async (signal?: AbortSignal) => {
-    const requestId = threadDirectoryRequestId.current + 1;
-    threadDirectoryRequestId.current = requestId;
-    if (!sessionActiveRef.current) return;
-    setThreadDirectoryState("loading");
-    try {
-      const payload = await apiRequest<unknown>(
-        "/api/v1/conversation-threads",
-        { signal },
-      );
-      if (
-        !Array.isArray(payload) ||
-        !payload.every(isConversationThreadSummary)
-      ) {
-        throw new Error("Unexpected initiative directory response.");
+  const loadThreadDirectory = useCallback(
+    async (signal?: AbortSignal) => {
+      const requestId = threadDirectoryRequestId.current + 1;
+      threadDirectoryRequestId.current = requestId;
+      if (!sessionActiveRef.current) return;
+      setThreadDirectoryState("loading");
+      try {
+        const payload = await apiRequest<unknown>(
+          "/api/v1/conversation-threads",
+          { signal },
+        );
+        if (
+          !Array.isArray(payload) ||
+          !payload.every((item) =>
+            isConversationThreadSummary(item, organisationId),
+          )
+        ) {
+          throw new Error("Unexpected initiative directory response.");
+        }
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          threadDirectoryRequestId.current !== requestId
+        )
+          return;
+        setThreads(payload);
+        setThreadDirectoryState("available");
+      } catch (requestError: unknown) {
+        if (
+          requestError instanceof DOMException &&
+          requestError.name === "AbortError"
+        ) {
+          return;
+        }
+        if (
+          signal?.aborted ||
+          !sessionActiveRef.current ||
+          threadDirectoryRequestId.current !== requestId
+        )
+          return;
+        setThreads([]);
+        setThreadDirectoryState("unavailable");
       }
-      if (
-        signal?.aborted ||
-        !sessionActiveRef.current ||
-        threadDirectoryRequestId.current !== requestId
-      )
-        return;
-      setThreads(payload);
-      setThreadDirectoryState("available");
-    } catch (requestError: unknown) {
-      if (
-        requestError instanceof DOMException &&
-        requestError.name === "AbortError"
-      ) {
-        return;
-      }
-      if (
-        signal?.aborted ||
-        !sessionActiveRef.current ||
-        threadDirectoryRequestId.current !== requestId
-      )
-        return;
-      setThreads([]);
-      setThreadDirectoryState("unavailable");
-    }
-  }, []);
+    },
+    [organisationId],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -287,8 +326,13 @@ function ConversationMemorySession({
         ) {
           return;
         }
-        if (!isConversationMemoryResponse(memoryPayload, interactionId)) {
-          setMemory(null);
+        if (
+          !isConversationMemoryResponse(
+            memoryPayload,
+            interactionId,
+            organisationId,
+          )
+        ) {
           throw new Error(
             "Conversation memory returned an unexpected response. Reload this section to try again.",
           );
@@ -325,7 +369,7 @@ function ConversationMemorySession({
         }
       }
     },
-    [interactionId, loadThreadDirectory],
+    [interactionId, loadThreadDirectory, organisationId],
   );
 
   useEffect(() => {

@@ -715,6 +715,9 @@ payloads. See [Follow-up Email Composer](follow-up-email-composer.md).
 The active tenant is server-derived. Generation requires `aiCompanion`, the
 current data-notice acknowledgement and available daily generation quota. Version
 1 is bounded synchronous application work with no provider/worker call. Responses
+always include the path Interaction as top-level `interactionId`; completed brief
+content must repeat that same identity. Browser consumers verify both fields before
+adopting a response and preserve previously verified state on mismatch. Responses
 contain product-safe source labels but no raw source IDs, transcript, raw artefact,
 prompt, schema-registry, provider or worker metadata. See the
 [Pre-Interaction Brief guide](pre-interaction-brief.md).
@@ -741,6 +744,15 @@ non-deleted Interactions in that thread only. It retains source conversation dat
 conflicts and staleness and never reads private live/enhanced notes. Cross-tenant
 threads and Interactions remain hidden, and corrections append metadata-only audit
 events.
+
+Conversation-memory responses include the authoritative server-derived
+`organisationId`. Every returned assignment and suggestion summary must carry that
+same organisation, and every current-conversation source must carry the requested
+Interaction. The browser validates complete summaries and rejects the entire memory
+or directory payload when any private item has the wrong scope; it never filters a
+mixed payload into a partially trusted result. Previously verified memory remains
+visible when a later reload fails this check, while an invalid directory becomes
+unavailable.
 
 ## Document and email evidence
 

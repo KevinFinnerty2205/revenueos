@@ -6,7 +6,23 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConversationMemory } from "@/components/conversation-memory";
+import { ConversationMemory as ConversationMemoryComponent } from "@/components/conversation-memory";
+
+function ConversationMemory({
+  interactionId,
+  companyId,
+}: {
+  interactionId: string;
+  companyId: string | null;
+}) {
+  return (
+    <ConversationMemoryComponent
+      interactionId={interactionId}
+      organisationId="organisation-1"
+      companyId={companyId}
+    />
+  );
+}
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -120,6 +136,7 @@ const initiativeHistory = {
 
 function memory(assigned: boolean) {
   return {
+    organisationId: "organisation-1",
     state: "current",
     safeMessage: assigned
       ? "Current-conversation coverage is separate from the user-confirmed initiative history."
@@ -162,6 +179,12 @@ function interactionMemory(
     assignment: {
       ...value.assignment,
       interactionId,
+    },
+    currentConversation: {
+      ...value.currentConversation,
+      sourceConversations: value.currentConversation.sourceConversations.map(
+        (source) => ({ ...source, interactionId }),
+      ),
     },
     confirmedInitiativeHistory: {
       ...value.confirmedInitiativeHistory,
@@ -304,6 +327,72 @@ describe("ConversationMemory", () => {
     expect(
       screen.queryByRole("link", { name: "A March expansion review" }),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "a different organisation",
+      { ...memory(true), organisationId: "organisation-2" },
+    ],
+    [
+      "an assignment from a different organisation",
+      {
+        ...memory(true),
+        assignment: {
+          ...memory(true).assignment,
+          thread: { ...thread, organisationId: "organisation-2" },
+        },
+      },
+    ],
+    [
+      "a suggestion from a different organisation",
+      {
+        ...memory(false),
+        suggestions: [
+          {
+            ...memory(false).suggestions[0],
+            thread: { ...thread, organisationId: "organisation-2" },
+          },
+        ],
+      },
+    ],
+    [
+      "current coverage from another interaction",
+      {
+        ...memory(true),
+        currentConversation: {
+          ...coverage,
+          sourceConversations: [
+            {
+              ...coverage.sourceConversations[0],
+              interactionId: "interaction-2",
+            },
+          ],
+        },
+      },
+    ],
+  ])("rejects authoritative memory containing %s", async (_, payload) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/conversation-memory")) return jsonResponse(payload);
+      if (url.endsWith("/conversation-threads")) return jsonResponse([thread]);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <ConversationMemory
+        interactionId="interaction-1"
+        companyId="company-1"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/conversation memory returned an unexpected/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "March expansion review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Expansion")).not.toBeInTheDocument();
   });
 
   it("does not refresh the previous conversation after its assignment settles late", async () => {
@@ -494,6 +583,46 @@ describe("ConversationMemory", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("atomically rejects a mixed-organisation initiative directory", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/conversation-memory"))
+        return jsonResponse(memory(true));
+      if (url.endsWith("/conversation-threads")) {
+        return jsonResponse([
+          thread,
+          {
+            ...thread,
+            id: "thread-private-foreign",
+            organisationId: "organisation-2",
+            name: "Private foreign initiative",
+          },
+        ]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <ConversationMemory
+        interactionId="interaction-1"
+        companyId="company-1"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "January expansion discovery" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/initiative choices are temporarily unavailable/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("combobox", {
+        name: "Choose an existing initiative",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Private foreign initiative")).toBeNull();
+  });
+
   it("restores initiative choices after retrying the optional directory", async () => {
     let directoryAttempts = 0;
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
@@ -581,6 +710,52 @@ describe("ConversationMemory", () => {
         name: "Choose an existing initiative",
       }),
     ).toBeVisible();
+  });
+
+  it("preserves verified memory when a post-mutation reload has the wrong organisation", async () => {
+    let memoryReads = 0;
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/conversation-memory")) {
+        memoryReads += 1;
+        return jsonResponse(
+          memoryReads === 1
+            ? memory(true)
+            : { ...memory(true), organisationId: "organisation-2" },
+        );
+      }
+      if (url.endsWith("/conversation-threads")) return jsonResponse([thread]);
+      if (url.endsWith("/thread-assignment") && init?.method === "PUT") {
+        return jsonResponse(memory(false).assignment);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <ConversationMemory
+        interactionId="interaction-1"
+        companyId="company-1"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "March expansion review" }),
+    ).toBeVisible();
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Choose an existing initiative",
+      }),
+      { target: { value: "" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm grouping" }));
+
+    expect(
+      await screen.findByText(/conversation memory returned an unexpected/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "March expansion review" }),
+    ).toBeVisible();
+    expect(screen.getByText("Confirmed · Expansion")).toBeVisible();
   });
 
   it("keeps a required memory failure fatal even when initiative choices load", async () => {

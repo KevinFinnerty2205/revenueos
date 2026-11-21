@@ -46,6 +46,14 @@ Interactions; PostgreSQL RLS remains defence in depth. It never joins private
 workspaces, transcripts, Evidence or intelligence content and never falls back
 to all conversations at the same company.
 
+The memory response repeats the authoritative server-derived `organisationId`.
+Assignment and suggestion summaries must match it, while current-conversation
+coverage sources must match the requested Interaction. Browser consumers validate
+the complete summary shape and fail closed atomically: a mixed-organisation memory
+or directory payload is rejected in full rather than filtered. A failed later reload
+does not replace previously verified memory; a rejected directory exposes no
+initiative choices.
+
 ### Private user work
 
 Live notes, enhanced notes and follow-up drafts are stored in

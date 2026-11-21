@@ -42,6 +42,10 @@ The default web experience must satisfy these behaviours:
   editor, discard its local text or strand the conversation lifecycle.
 - Preparation works without a company or opportunity. Confirmed initiative history
   is used deliberately; unrelated work at the same company is not silently merged.
+- Preparation and relationship-memory responses are adopted only when their
+  authoritative conversation and organisation identities match the active view.
+  Mixed private payloads fail closed atomically, and a mismatched later response
+  does not replace already verified on-screen state.
 - Relationship history lists a bounded set of earlier conversations only from the
   explicitly confirmed initiative, even when no sales framework or intelligence
   output exists. Each metadata-only item links back to its source conversation;

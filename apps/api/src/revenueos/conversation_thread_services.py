@@ -333,6 +333,7 @@ class ConversationThreadService:
             )
         if selection.selection == "none" or selection.effective_definition is None:
             return ConversationMemoryResponse(
+                organisation_id=self.tenant.organisation_id,
                 state="not_configured",
                 safe_message=(
                     "No framework is selected. Earlier conversations from the confirmed initiative remain "
@@ -362,6 +363,7 @@ class ConversationThreadService:
             )
             cumulative = self._coverage(selection.effective_definition.fields, thread_records, now)
         return ConversationMemoryResponse(
+            organisation_id=self.tenant.organisation_id,
             state="current",
             safe_message=(
                 "Earlier conversation links and framework coverage remain separate in the user-confirmed initiative."

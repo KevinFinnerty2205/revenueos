@@ -15,6 +15,10 @@
 - The server feature flag, active membership, current notice acknowledgement and
   private-beta quota fail closed.
 - Product responses exclude internal source IDs and infrastructure metadata.
+- Every preparation response carries an authoritative `interactionId`; the API
+  rejects completed content for a different Interaction and browser adoption paths
+  reject mismatched load, generation, refresh and review results without replacing
+  previously verified state.
 - Retention dry runs/counts, approved deletion, organisation export and demo reset
   include brief rows without logging their content.
 

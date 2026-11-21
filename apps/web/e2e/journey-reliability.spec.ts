@@ -422,6 +422,7 @@ function outreach() {
 
 function preparationBrief() {
   return {
+    interactionId: ids.interaction,
     state: "completed",
     generationAvailable: true,
     unavailableReason: null,

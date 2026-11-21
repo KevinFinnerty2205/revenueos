@@ -85,6 +85,7 @@ function interaction(overrides: Partial<Interaction> = {}): Interaction {
 }
 
 const completedBrief: PreInteractionBriefResponse = {
+  interactionId: "interaction-1",
   state: "completed",
   generationAvailable: true,
   unavailableReason: null,
@@ -135,6 +136,22 @@ const completedBrief: PreInteractionBriefResponse = {
   },
 };
 
+function emptyBrief(interactionId: string): PreInteractionBriefResponse {
+  return {
+    interactionId,
+    state: "not_generated",
+    generationAvailable: true,
+    unavailableReason: null,
+    safeMessage: null,
+    generatedAt: null,
+    reviewed: false,
+    reviewedAt: null,
+    priorVersions: [],
+    sourceLabels: [],
+    brief: null,
+  };
+}
+
 function installApi(
   initialInteraction: Interaction,
   {
@@ -146,6 +163,7 @@ function installApi(
     personalWorkspaceConflictsOnce,
     personalWorkspaceSaveResponse,
     personalWorkspaceLoadResponse,
+    briefResponses,
   }: {
     aiCompanionEnabled?: boolean;
     liveInteractionIntelligenceEnabled?: boolean;
@@ -160,6 +178,7 @@ function installApi(
     };
     personalWorkspaceSaveResponse?: Promise<Response>;
     personalWorkspaceLoadResponse?: Promise<Response>;
+    briefResponses?: PreInteractionBriefResponse[];
   } = {},
 ) {
   let currentInteraction = initialInteraction;
@@ -185,6 +204,7 @@ function installApi(
     importedFromBrowserAt: null,
     updatedAt: null as string | null,
   };
+  let briefResponseIndex = 0;
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -224,6 +244,14 @@ function installApi(
             503,
           ),
         );
+      }
+      if (briefResponses?.length) {
+        const response =
+          briefResponses[
+            Math.min(briefResponseIndex, briefResponses.length - 1)
+          ];
+        briefResponseIndex += 1;
+        return Promise.resolve(jsonResponse(response));
       }
       return Promise.resolve(jsonResponse(completedBrief));
     }
@@ -426,6 +454,99 @@ describe("FaceToFaceCompanion", () => {
     ).toMatchObject({
       liveNotes: "Finance will confirm the signer on Friday.",
     });
+  });
+
+  it("rejects initial preparation guidance from another interaction", async () => {
+    installApi(interaction(), {
+      briefResponses: [
+        {
+          ...completedBrief,
+          interactionId: "interaction-from-another-tab",
+          brief: {
+            ...completedBrief.brief!,
+            interactionId: "interaction-from-another-tab",
+            headline: "Private brief from another interaction",
+          },
+        },
+      ],
+    });
+
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+
+    expect(
+      await screen.findByText(
+        "Preparation guidance could not be loaded. Your private notes remain available.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Private brief from another interaction"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves a verified brief when refresh returns another interaction", async () => {
+    installApi(interaction(), {
+      briefResponses: [
+        completedBrief,
+        {
+          ...completedBrief,
+          interactionId: "interaction-from-another-tab",
+          brief: {
+            ...completedBrief.brief!,
+            interactionId: "interaction-from-another-tab",
+            headline: "Private refreshed brief from another interaction",
+          },
+        },
+      ],
+    });
+
+    const { rerender } = render(
+      <FaceToFaceCompanion interactionId="interaction-1" briefRefreshKey={0} />,
+    );
+    expect(await screen.findByText("Confirm the renewal path")).toBeVisible();
+
+    rerender(
+      <FaceToFaceCompanion interactionId="interaction-1" briefRefreshKey={1} />,
+    );
+
+    expect(
+      await screen.findByText(
+        "The refreshed preparation brief could not be loaded. Your private notes remain available.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("Confirm the renewal path")).toBeVisible();
+    expect(
+      screen.queryByText("Private refreshed brief from another interaction"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves the empty brief when preparation returns another interaction", async () => {
+    installApi(interaction(), {
+      briefResponses: [
+        emptyBrief("interaction-1"),
+        {
+          ...completedBrief,
+          interactionId: "interaction-from-another-tab",
+          brief: {
+            ...completedBrief.brief!,
+            interactionId: "interaction-from-another-tab",
+            headline: "Private generated brief from another interaction",
+          },
+        },
+      ],
+    });
+
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Prepare brief" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The preparation response did not match this conversation. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Prepare brief" })).toBeVisible();
+    expect(
+      screen.queryByText("Private generated brief from another interaction"),
+    ).not.toBeInTheDocument();
   });
 
   it("forces a phone call into honest passive mode", async () => {
@@ -1331,6 +1452,7 @@ describe("FaceToFaceCompanion", () => {
         return Promise.resolve(
           jsonResponse({
             ...completedBrief,
+            interactionId: requestedInteractionId,
             brief: {
               ...completedBrief.brief,
               interactionId: requestedInteractionId,

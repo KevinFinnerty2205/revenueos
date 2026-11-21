@@ -330,6 +330,7 @@ test("online meeting offers deliberate audio capture and persists transcript imp
 
 function completedBrief() {
   return {
+    interactionId: "interaction-online",
     state: "completed",
     generationAvailable: true,
     unavailableReason: null,
