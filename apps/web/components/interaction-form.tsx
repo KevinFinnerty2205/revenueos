@@ -350,6 +350,7 @@ export function InteractionForm({
   const contextDirtyRef = useRef(false);
   const linkedContextLoadedRef = useRef(false);
   const optionRetrySequenceRef = useRef(0);
+  const optionRetryRequestRef = useRef<OptionRetryRequest | null>(null);
   const manualVerificationSequenceRef = useRef(0);
   const manualCompanyVerificationRef =
     useRef<ManualCompanyVerificationRequest | null>(null);
@@ -374,6 +375,7 @@ export function InteractionForm({
     const requestContextIdentity = linkedContextIdentity;
     manualCompanyVerificationRef.current?.controller.abort();
     manualCompanyVerificationRef.current = null;
+    optionRetryRequestRef.current = null;
     manuallyVerifiedCompaniesRef.current = [];
     window.queueMicrotask(() => {
       if (
@@ -391,6 +393,7 @@ export function InteractionForm({
       setCompanyOptionsWarning(null);
       setContactOptionsWarning(null);
       setOpportunityOptionsWarning(null);
+      setOptionRetryRequest(null);
       setManualCompanyVerification(null);
       setManualRelationshipFeedback(null);
     });
@@ -618,8 +621,18 @@ export function InteractionForm({
   useEffect(() => {
     if (optionRetryRequest === null) return;
     const request = optionRetryRequest;
-    if (request.contextIdentity !== linkedContextIdentity) return;
+    if (
+      request.contextIdentity !== linkedContextIdentity ||
+      optionRetryRequestRef.current !== request
+    ) {
+      return;
+    }
     const controller = new AbortController();
+    const finishRetry = (): void => {
+      if (optionRetryRequestRef.current !== request) return;
+      optionRetryRequestRef.current = null;
+      setOptionRetryRequest(null);
+    };
     window.queueMicrotask(() => {
       if (
         controller.signal.aborted ||
@@ -690,7 +703,7 @@ export function InteractionForm({
               ? linkedCompanyWarning
               : null,
           );
-          setOptionRetryRequest(null);
+          finishRetry();
           return;
         }
         if (request.source === "opportunity") {
@@ -717,7 +730,7 @@ export function InteractionForm({
               ? linkedOpportunityWarning
               : null,
           );
-          setOptionRetryRequest(null);
+          finishRetry();
           return;
         }
 
@@ -745,41 +758,53 @@ export function InteractionForm({
             ? linkedContactWarning
             : null,
         );
-        setOptionRetryRequest(null);
-      } catch (reason: unknown) {
+        finishRetry();
+      } catch {
         if (
           controller.signal.aborted ||
-          activeLinkedContextIdentityRef.current !== request.contextIdentity ||
-          isAbortError(reason)
+          activeLinkedContextIdentityRef.current !== request.contextIdentity
         ) {
           return;
         }
         if (request.source === "company") {
-          const verifiedCompanies = manuallyVerifiedCompaniesRef.current;
+          const verifiedCompanies = companiesRef.current.filter(isActiveRecord);
           companiesRef.current = verifiedCompanies;
           setCompanies(verifiedCompanies);
           setCompanyOptionsState(
             verifiedCompanies.length > 0 ? "ready" : "unavailable",
           );
           setCompanyOptionsWarning(
-            "Company options are temporarily unavailable. You can still add this conversation without company context.",
+            verifiedCompanies.length > 0
+              ? "Company choices could not be refreshed. Previously verified choices remain available."
+              : "Company options are temporarily unavailable. You can still add this conversation without company context.",
           );
         } else if (request.source === "opportunity") {
-          opportunitiesRef.current = [];
-          setOpportunities([]);
-          setOpportunityOptionsState("unavailable");
+          const verifiedOpportunities =
+            opportunitiesRef.current.filter(isActiveRecord);
+          opportunitiesRef.current = verifiedOpportunities;
+          setOpportunities(verifiedOpportunities);
+          setOpportunityOptionsState(
+            verifiedOpportunities.length > 0 ? "ready" : "unavailable",
+          );
           setOpportunityOptionsWarning(
-            "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity.",
+            verifiedOpportunities.length > 0
+              ? "Opportunity choices could not be refreshed. Previously verified choices remain available."
+              : "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity.",
           );
         } else {
-          contactsRef.current = [];
-          setContacts([]);
-          setContactOptionsState("unavailable");
+          const verifiedContacts = contactsRef.current.filter(isActiveRecord);
+          contactsRef.current = verifiedContacts;
+          setContacts(verifiedContacts);
+          setContactOptionsState(
+            verifiedContacts.length > 0 ? "ready" : "unavailable",
+          );
           setContactOptionsWarning(
-            "People options are temporarily unavailable. You can still add this conversation without a person.",
+            verifiedContacts.length > 0
+              ? "People choices could not be refreshed. Previously verified choices remain available."
+              : "People options are temporarily unavailable. You can still add this conversation without a person.",
           );
         }
-        setOptionRetryRequest(null);
+        finishRetry();
       }
     })();
     return () => controller.abort();
@@ -794,6 +819,7 @@ export function InteractionForm({
   ]);
 
   function requestOptionRetry(source: OptionRetryRequest["source"]): void {
+    if (optionRetryRequestRef.current !== null) return;
     const linkedCompanyId =
       initialCompanyId ||
       contactsRef.current.find((contact) => contact.id === initialContactId)
@@ -802,7 +828,7 @@ export function InteractionForm({
         (opportunity) => opportunity.id === initialOpportunityId,
       )?.companyId ||
       "";
-    setOptionRetryRequest({
+    const request: OptionRetryRequest = {
       source,
       sequence: ++optionRetrySequenceRef.current,
       contextIdentity: linkedContextIdentity,
@@ -812,7 +838,9 @@ export function InteractionForm({
           : source === "opportunity"
             ? initialOpportunityId
             : initialContactId,
-    });
+    };
+    optionRetryRequestRef.current = request;
+    setOptionRetryRequest(request);
   }
 
   function clearManualCompanyVerification(clearSelection: boolean): void {
@@ -1221,7 +1249,11 @@ export function InteractionForm({
               <OptionAvailability
                 message={companyOptionsWarning}
                 retryLabel="Retry companies"
-                loading={companyOptionsState === "loading"}
+                loading={
+                  companyOptionsState === "loading" ||
+                  optionRetryRequest?.source === "company"
+                }
+                retryDisabled={optionRetryRequest !== null}
                 onRetry={() => requestOptionRetry("company")}
               />
             </div>
@@ -1264,7 +1296,11 @@ export function InteractionForm({
                 <OptionAvailability
                   message={opportunityOptionsWarning}
                   retryLabel="Retry opportunities"
-                  loading={opportunityOptionsState === "loading"}
+                  loading={
+                    opportunityOptionsState === "loading" ||
+                    optionRetryRequest?.source === "opportunity"
+                  }
+                  retryDisabled={optionRetryRequest !== null}
                   onRetry={() => requestOptionRetry("opportunity")}
                 />
                 <ManualRelationshipStatus
@@ -1279,7 +1315,11 @@ export function InteractionForm({
             <OptionAvailability
               message={opportunityOptionsWarning}
               retryLabel="Retry linked opportunity"
-              loading={opportunityOptionsState === "loading"}
+              loading={
+                opportunityOptionsState === "loading" ||
+                optionRetryRequest?.source === "opportunity"
+              }
+              retryDisabled={optionRetryRequest !== null}
               onRetry={() => requestOptionRetry("opportunity")}
             />
           ) : null}
@@ -1342,7 +1382,11 @@ export function InteractionForm({
                 <OptionAvailability
                   message={contactOptionsWarning}
                   retryLabel="Retry people"
-                  loading={contactOptionsState === "loading"}
+                  loading={
+                    contactOptionsState === "loading" ||
+                    optionRetryRequest?.source === "contact"
+                  }
+                  retryDisabled={optionRetryRequest !== null}
                   onRetry={() => requestOptionRetry("contact")}
                 />
                 <ManualRelationshipStatus
@@ -1457,11 +1501,13 @@ function OptionAvailability({
   message,
   retryLabel,
   loading,
+  retryDisabled,
   onRetry,
 }: {
   message: string | null;
   retryLabel: string;
   loading: boolean;
+  retryDisabled: boolean;
   onRetry: () => void;
 }) {
   return message ? (
@@ -1473,7 +1519,7 @@ function OptionAvailability({
       <button
         type="button"
         className="secondary-button mt-3"
-        disabled={loading}
+        disabled={loading || retryDisabled}
         onClick={onRetry}
       >
         {loading ? "Retrying…" : retryLabel}

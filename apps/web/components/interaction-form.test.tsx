@@ -1063,6 +1063,183 @@ describe("InteractionForm", () => {
     ).toBeVisible();
   });
 
+  it.each([
+    { source: "company" as const },
+    { source: "opportunity" as const },
+    { source: "contact" as const },
+  ])(
+    "preserves verified $source options and selections when their retry fails",
+    async ({ source }) => {
+      let sourcePageLoads = 0;
+      let createPayload: Record<string, unknown> | null = null;
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          if (init?.method === "POST") {
+            createPayload = JSON.parse(String(init.body)) as Record<
+              string,
+              unknown
+            >;
+            return Promise.resolve(
+              jsonResponse({ id: `retry-${source}-failure` }, 201),
+            );
+          }
+          if (path.endsWith("/api/v1/companies/missing-company")) {
+            return Promise.resolve(jsonResponse({ code: "not_found" }, 404));
+          }
+          if (path.endsWith("/api/v1/opportunities/missing-opportunity")) {
+            return Promise.resolve(jsonResponse({ code: "not_found" }, 404));
+          }
+          if (path.endsWith("/api/v1/contacts/missing-contact")) {
+            return Promise.resolve(jsonResponse({ code: "not_found" }, 404));
+          }
+          if (path.includes("/companies")) {
+            if (source === "company") {
+              sourcePageLoads += 1;
+              return Promise.resolve(
+                sourcePageLoads === 1
+                  ? jsonResponse({
+                      ...emptyPage,
+                      items: [
+                        companyFixture({
+                          id: "company-safe",
+                          name: "Safe company",
+                        }),
+                      ],
+                    })
+                  : jsonResponse({ code: "unavailable" }, 503),
+              );
+            }
+            return Promise.resolve(
+              jsonResponse({ ...emptyPage, items: [companyFixture()] }),
+            );
+          }
+          if (path.includes("/opportunities")) {
+            if (source === "opportunity") {
+              sourcePageLoads += 1;
+              return Promise.resolve(
+                sourcePageLoads === 1
+                  ? jsonResponse({
+                      ...emptyPage,
+                      items: [
+                        opportunityFixture({
+                          id: "opportunity-safe",
+                          companyId: null,
+                          name: "Safe opportunity",
+                        }),
+                      ],
+                    })
+                  : jsonResponse({ code: "unavailable" }, 503),
+              );
+            }
+            return Promise.resolve(jsonResponse(emptyPage));
+          }
+          if (source === "contact") {
+            sourcePageLoads += 1;
+            return Promise.resolve(
+              sourcePageLoads === 1
+                ? jsonResponse({
+                    ...emptyPage,
+                    items: [
+                      contactFixture({
+                        id: "contact-safe",
+                        firstName: "Safe",
+                        lastName: "Person",
+                      }),
+                    ],
+                  })
+                : jsonResponse({ code: "unavailable" }, 503),
+            );
+          }
+          return Promise.resolve(jsonResponse(emptyPage));
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <InteractionForm
+          initialCompanyId={source === "company" ? "missing-company" : ""}
+          initialOpportunityId={
+            source === "opportunity" ? "missing-opportunity" : ""
+          }
+          initialContactId={source === "contact" ? "missing-contact" : ""}
+          initialInteractionType={
+            source === "contact" ? "phone_call" : "manual_interaction"
+          }
+        />,
+      );
+
+      const warningPattern =
+        source === "company"
+          ? /linked company could not be verified as active/i
+          : source === "opportunity"
+            ? /linked opportunity could not be verified as active/i
+            : /linked person could not be verified as active/i;
+      await screen.findByText(warningPattern);
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: `Keep safe ${source}` },
+      });
+
+      if (source === "company") {
+        fireEvent.change(screen.getByLabelText("Company"), {
+          target: { value: "company-safe" },
+        });
+      } else if (source === "opportunity") {
+        fireEvent.change(screen.getByLabelText("Opportunity"), {
+          target: { value: "opportunity-safe" },
+        });
+      } else {
+        fireEvent.change(screen.getByLabelText("Company"), {
+          target: { value: "company-1" },
+        });
+        fireEvent.change(screen.getByLabelText("Person"), {
+          target: { value: "contact-safe" },
+        });
+      }
+
+      const retryLabel =
+        source === "company"
+          ? "Retry companies"
+          : source === "opportunity"
+            ? "Retry opportunities"
+            : "Retry people";
+      fireEvent.click(screen.getByRole("button", { name: retryLabel }));
+      await screen.findByText(/choices could not be refreshed/i);
+
+      const selectionLabel =
+        source === "company"
+          ? "Company"
+          : source === "opportunity"
+            ? "Opportunity"
+            : "Person";
+      const selectionId =
+        source === "company"
+          ? "company-safe"
+          : source === "opportunity"
+            ? "opportunity-safe"
+            : "contact-safe";
+      expect(screen.getByLabelText(selectionLabel)).toBeEnabled();
+      expect(screen.getByLabelText(selectionLabel)).toHaveValue(selectionId);
+
+      fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+      await waitFor(() =>
+        expect(router.push).toHaveBeenCalledWith(
+          `/conversations/retry-${source}-failure`,
+        ),
+      );
+      expect(createPayload).toMatchObject({
+        companyId:
+          source === "company"
+            ? "company-safe"
+            : source === "contact"
+              ? "company-1"
+              : null,
+        opportunityId: source === "opportunity" ? "opportunity-safe" : null,
+        contactId: source === "contact" ? "contact-safe" : null,
+      });
+    },
+  );
+
   it("retries optional sources without discarding core edits", async () => {
     let companyLoads = 0;
     let resolveCompanyRetry: ((response: Response) => void) | undefined;
@@ -1191,6 +1368,76 @@ describe("InteractionForm", () => {
     expect(
       screen.getByRole("option", { name: "Retried company" }),
     ).toBeVisible();
+  });
+
+  it("prevents another source retry from replacing an in-flight retry", async () => {
+    let companyLoads = 0;
+    let contactLoads = 0;
+    let resolveCompanyRetry: ((response: Response) => void) | undefined;
+    const companyRetry = new Promise<Response>((resolve) => {
+      resolveCompanyRetry = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/companies")) {
+        companyLoads += 1;
+        return companyLoads === 1
+          ? Promise.resolve(jsonResponse({ code: "unavailable" }, 503))
+          : companyRetry;
+      }
+      if (path.includes("/contacts")) {
+        contactLoads += 1;
+        return contactLoads === 1
+          ? Promise.resolve(jsonResponse({ code: "unavailable" }, 503))
+          : Promise.resolve(jsonResponse(emptyPage));
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+    await screen.findByText(/company options are temporarily unavailable/i);
+    fireEvent.change(screen.getByLabelText("Conversation type"), {
+      target: { value: "phone_call" },
+    });
+    await screen.findByText(/people options are temporarily unavailable/i);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry companies" }));
+    const activeRetry = await screen.findByRole("button", {
+      name: "Retrying…",
+    });
+    expect(activeRetry).toBeDisabled();
+    const blockedRetry = screen.getByRole("button", { name: "Retry people" });
+    expect(blockedRetry).toBeDisabled();
+    fireEvent.click(blockedRetry);
+    expect(companyLoads).toBe(2);
+    expect(contactLoads).toBe(1);
+
+    await act(async () => {
+      resolveCompanyRetry?.(
+        jsonResponse({
+          ...emptyPage,
+          items: [companyFixture({ name: "Recovered company" })],
+        }),
+      );
+      await Promise.resolve();
+    });
+    expect(
+      await screen.findByRole("option", { name: "Recovered company" }),
+    ).toBeVisible();
+
+    const availableRetry = screen.getByRole("button", {
+      name: "Retry people",
+    });
+    expect(availableRetry).toBeEnabled();
+    fireEvent.click(availableRetry);
+    await waitFor(() => expect(contactLoads).toBe(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/people options are temporarily unavailable/i),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("Company")).toBeEnabled();
   });
 
   it("retries only the failed source and preserves ready relationship selections", async () => {
