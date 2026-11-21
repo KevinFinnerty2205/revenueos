@@ -125,6 +125,7 @@ def test_aggregate_read_is_product_safe_and_unavailable_without_transcript(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["meetingId"] == meeting["id"]
     assert body["overallState"] == "unavailable"
     assert body["generationAvailable"] is False
     assert body["progress"] == {
@@ -168,7 +169,7 @@ def test_aggregate_read_remains_bounded_to_four_queries(client: TestClient) -> N
     )
     assert client.post(f"/api/v1/meetings/{meeting['id']}/intelligence/generate").status_code == 202
 
-    async def read_workspace() -> tuple[int, int]:
+    async def read_workspace() -> tuple[int, int, uuid.UUID]:
         engine = create_async_engine(TEST_DB_URL)
         select_statements: list[str] = []
 
@@ -199,11 +200,12 @@ def test_aggregate_read_remains_bounded_to_four_queries(client: TestClient) -> N
         finally:
             event.remove(engine.sync_engine, "before_cursor_execute", record_statement)
             await engine.dispose()
-        return len(select_statements), response.progress.total
+        return len(select_statements), response.progress.total, response.meeting_id
 
-    query_count, total = asyncio.run(read_workspace())
+    query_count, total, response_meeting_id = asyncio.run(read_workspace())
     assert query_count == 4
     assert total == 10
+    assert response_meeting_id == uuid.UUID(meeting["id"])
 
 
 def test_aggregate_read_emits_metadata_only_polling_and_transition_telemetry(
@@ -280,6 +282,7 @@ def test_generation_orchestrates_missing_work_and_composer_dependencies(
 
     first = client.post(f"{base}/generate")
     assert first.status_code == 202, first.text
+    assert first.json()["meetingId"] == meeting["id"]
     assert first.json()["createdCapabilities"] == [
         "executive_summary",
         "buying_signals",
@@ -310,6 +313,7 @@ def test_generation_orchestrates_missing_work_and_composer_dependencies(
 
     composer = client.post(f"{base}/generate")
     assert composer.status_code == 202
+    assert composer.json()["meetingId"] == meeting["id"]
     assert composer.json()["createdCapabilities"] == ["next_best_action", "follow_up_email"]
     assert composer.json()["followUpEmail"]["state"] == "queued"
     assert composer.json()["nextBestAction"]["state"] == "queued"

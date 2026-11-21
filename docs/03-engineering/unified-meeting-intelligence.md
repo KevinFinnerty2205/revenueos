@@ -26,7 +26,11 @@ codes, transcript text, prompt text or raw provider output.
 `GET /api/v1/meetings/{meetingId}/intelligence` returns the current transcript
 version's ten product-safe capability views, overall state, last activity time,
 generation/retry availability and progress counts. It preserves all individual
-capability endpoints.
+capability endpoints. The aggregate response and its generation subtype carry the
+authoritative `meetingId`. The browser validates that identity before using a read,
+poll or generation result. A mismatched initial response fails closed; a mismatched
+later response cannot replace the last verified workspace, change its tone or poll
+state, or initialise an editable private follow-up draft for another Interaction.
 
 The read path performs four bounded tenant-scoped reads: meeting, current
 transcript, current-version capability jobs and artefacts for the selected jobs.
@@ -189,9 +193,10 @@ tests prove artefact-only provider input and Risks & Blockers exclusion.
 
 Frontend tests cover ordered rendering, duplicate-submit prevention, unified
 polling and termination, automatic dependency orchestration, partial failures,
-copy/no-send behaviour and abort on unmount. Deterministic Playwright routes
-exercise the complete mock-only flow, refresh persistence, copy and mobile
-overflow without a real OpenAI call.
+copy/no-send behaviour, response-identity rejection across initial reads, polls and
+generation, private follow-up source isolation, and abort on unmount. Deterministic
+Playwright routes exercise the complete mock-only flow, refresh persistence, copy
+and mobile overflow without a real OpenAI call.
 
 For local use, run the API, web app and durable worker, add a synthetic transcript,
 open the Intelligence tab and select **Generate Meeting Intelligence**. The mock

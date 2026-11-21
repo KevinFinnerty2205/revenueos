@@ -210,6 +210,320 @@ describe("progressive transcription PCM capture", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("rejects a foreign start response before buffered PCM can reach any session route", async () => {
+    const paths: string[] = [];
+    const closeCapture = vi.fn(() => Promise.resolve());
+    const onEvents = vi.fn();
+    const onRecoverableError = vi.fn();
+    const request = async <T>(path: string): Promise<T> => {
+      paths.push(path);
+      return {
+        sessionId: "foreign-session",
+        interactionId: "foreign-interaction",
+        recordingSessionId: "foreign-recording",
+        lifecycle: "capturing",
+        nextAudioSequence: 0,
+        events: [],
+      } as T;
+    };
+
+    await expect(
+      startProgressiveTranscriptionCapture({
+        interactionId: "interaction-1",
+        recordingSessionId: "recording-1",
+        stream: {} as MediaStream,
+        externalProcessingAcknowledged: true,
+        request,
+        onEvents,
+        onRecoverableError,
+        mediaStreamPcmCaptureFactory: async (_stream, onPcm) => {
+          onPcm(new Uint8Array(24_000 * 2 * 4).fill(1));
+          return {
+            pause() {},
+            resume() {},
+            async drainAndClose() {},
+            close: closeCapture,
+          };
+        },
+      }),
+    ).rejects.toThrow(
+      "The live transcription response could not be verified. Please try again.",
+    );
+
+    expect(paths).toEqual([
+      "/api/v1/interactions/interaction-1/progressive-transcription/sessions",
+    ]);
+    expect(paths.some((path) => /\/(audio|finish|cancel)$/u.test(path))).toBe(
+      false,
+    );
+    expect(closeCapture).toHaveBeenCalledTimes(1);
+    expect(onEvents).not.toHaveBeenCalled();
+    expect(onRecoverableError).not.toHaveBeenCalled();
+  });
+
+  it("stops queued PCM and cancels only the adopted session after a foreign audio response", async () => {
+    const validatedPath =
+      "/api/v1/interactions/interaction-1/progressive-transcription/sessions/session-1";
+    const onEvents = vi.fn();
+    const onRecoverableError = vi.fn();
+    const pauseCapture = vi.fn();
+    const paths: string[] = [];
+    let audioRequests = 0;
+    const response = {
+      sessionId: "session-1",
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      lifecycle: "capturing" as const,
+      nextAudioSequence: 0,
+      events: [],
+    };
+    const request = async <T>(path: string): Promise<T> => {
+      paths.push(path);
+      if (path.endsWith("/audio")) {
+        audioRequests += 1;
+        return {
+          ...response,
+          recordingSessionId: "foreign-recording",
+        } as T;
+      }
+      return response as T;
+    };
+
+    await startProgressiveTranscriptionCapture({
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      stream: {} as MediaStream,
+      externalProcessingAcknowledged: true,
+      request,
+      onEvents,
+      onRecoverableError,
+      mediaStreamPcmCaptureFactory: async (_stream, onPcm) => {
+        onPcm(new Uint8Array(24_000 * 2 * 4 * 3).fill(1));
+        return {
+          pause: pauseCapture,
+          resume() {},
+          async drainAndClose() {},
+          async close() {},
+        };
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        paths.filter((path) => path === `${validatedPath}/cancel`),
+      ).toHaveLength(1);
+    });
+
+    expect(audioRequests).toBe(1);
+    expect(paths.some((path) => path.includes("foreign-recording"))).toBe(
+      false,
+    );
+    expect(pauseCapture).toHaveBeenCalledTimes(1);
+    expect(onEvents).not.toHaveBeenCalled();
+    expect(onRecoverableError).toHaveBeenCalledTimes(1);
+    expect(onRecoverableError.mock.calls[0]?.[0]).toMatchObject({
+      message:
+        "The live transcription response could not be verified. Please try again.",
+    });
+  });
+
+  it("rejects foreign event streams before rendering and stops further PCM", async () => {
+    const validatedPath =
+      "/api/v1/interactions/interaction-1/progressive-transcription/sessions/session-1";
+    const onEvents = vi.fn();
+    const onRecoverableError = vi.fn();
+    const paths: string[] = [];
+    let audioRequests = 0;
+    const response = {
+      sessionId: "session-1",
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      lifecycle: "capturing" as const,
+      nextAudioSequence: 0,
+      events: [],
+    };
+    const request = async <T>(path: string): Promise<T> => {
+      paths.push(path);
+      if (path.endsWith("/audio")) {
+        audioRequests += 1;
+        return {
+          ...response,
+          events: [
+            {
+              eventId: "foreign-event",
+              streamId: "foreign-session",
+              providerName: "fixture",
+              itemId: "foreign-item",
+              sourceAudioSequence: 0,
+              itemIndex: 0,
+              revision: 1,
+              kind: "partial",
+              text: "Must not render",
+              startMs: 0,
+              endMs: 1,
+              speakerLabel: null,
+            },
+          ],
+        } as T;
+      }
+      return response as T;
+    };
+
+    await startProgressiveTranscriptionCapture({
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      stream: {} as MediaStream,
+      externalProcessingAcknowledged: true,
+      request,
+      onEvents,
+      onRecoverableError,
+      mediaStreamPcmCaptureFactory: async (_stream, onPcm) => {
+        onPcm(new Uint8Array(24_000 * 2 * 4 * 3).fill(1));
+        return {
+          pause() {},
+          resume() {},
+          async drainAndClose() {},
+          async close() {},
+        };
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        paths.filter((path) => path === `${validatedPath}/cancel`),
+      ).toHaveLength(1);
+    });
+
+    expect(audioRequests).toBe(1);
+    expect(onEvents).not.toHaveBeenCalled();
+    expect(onRecoverableError).toHaveBeenCalledTimes(1);
+    expect(onRecoverableError.mock.calls[0]?.[0]).toMatchObject({
+      message:
+        "The live transcription response could not be verified. Please try again.",
+    });
+  });
+
+  it("cancels the adopted session when a finish response changes identity", async () => {
+    const validatedPath =
+      "/api/v1/interactions/interaction-1/progressive-transcription/sessions/session-1";
+    const onEvents = vi.fn();
+    const onRecoverableError = vi.fn();
+    const paths: string[] = [];
+    const response = {
+      sessionId: "session-1",
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      lifecycle: "capturing" as const,
+      nextAudioSequence: 0,
+      events: [],
+    };
+    const request = async <T>(path: string): Promise<T> => {
+      paths.push(path);
+      if (path.endsWith("/finish")) {
+        return { ...response, sessionId: "foreign-session" } as T;
+      }
+      return response as T;
+    };
+    const capture = await startProgressiveTranscriptionCapture({
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      stream: {} as MediaStream,
+      externalProcessingAcknowledged: true,
+      request,
+      onEvents,
+      onRecoverableError,
+      mediaStreamPcmCaptureFactory: async () => ({
+        pause() {},
+        resume() {},
+        async drainAndClose() {},
+        async close() {},
+      }),
+    });
+
+    await expect(capture.finish()).rejects.toThrow(
+      "The live transcription response could not be verified. Please try again.",
+    );
+
+    expect(
+      paths.filter((path) => path === `${validatedPath}/cancel`),
+    ).toHaveLength(1);
+    expect(paths.some((path) => path.includes("foreign-session"))).toBe(false);
+    expect(onEvents).not.toHaveBeenCalled();
+    expect(onRecoverableError).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses a valid finish result when explicit cancellation wins the race", async () => {
+    let markFinishStarted: () => void = () => undefined;
+    const finishStarted = new Promise<void>((resolve) => {
+      markFinishStarted = resolve;
+    });
+    let releaseFinish: (response: object) => void = () => undefined;
+    const finishResponse = new Promise<object>((resolve) => {
+      releaseFinish = resolve;
+    });
+    const onEvents = vi.fn();
+    const onRecoverableError = vi.fn();
+    const response = {
+      sessionId: "session-1",
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      lifecycle: "capturing" as const,
+      nextAudioSequence: 0,
+      events: [],
+    };
+    const request = async <T>(path: string): Promise<T> => {
+      if (path.endsWith("/finish")) {
+        markFinishStarted();
+        return (await finishResponse) as T;
+      }
+      return response as T;
+    };
+    const capture = await startProgressiveTranscriptionCapture({
+      interactionId: "interaction-1",
+      recordingSessionId: "recording-1",
+      stream: {} as MediaStream,
+      externalProcessingAcknowledged: true,
+      request,
+      onEvents,
+      onRecoverableError,
+      mediaStreamPcmCaptureFactory: async () => ({
+        pause() {},
+        resume() {},
+        async drainAndClose() {},
+        async close() {},
+      }),
+    });
+
+    const finishing = capture.finish();
+    await finishStarted;
+    const cancelling = capture.cancel("consent_withdrawn");
+    releaseFinish({
+      ...response,
+      lifecycle: "finished",
+      events: [
+        {
+          eventId: "late-finish-event",
+          streamId: "session-1",
+          providerName: "fixture",
+          itemId: "late-finish-item",
+          sourceAudioSequence: 0,
+          itemIndex: 0,
+          revision: 1,
+          kind: "final",
+          text: "Must not render",
+          startMs: 0,
+          endMs: 1,
+          speakerLabel: null,
+        },
+      ],
+    });
+    await cancelling;
+    await expect(finishing).rejects.toThrow(/already ended/u);
+
+    expect(onEvents).not.toHaveBeenCalled();
+    expect(onRecoverableError).not.toHaveBeenCalled();
+  });
+
   it("reuses the start key and drains queued worklet PCM before finalising", async () => {
     const paths: string[] = [];
     const startKeys: string[] = [];
@@ -436,6 +750,132 @@ describe("progressive transcription PCM capture", () => {
     expect(audioRequests).toBe(1);
     expect(finishRequests).toBe(0);
     expect(cancelRequests).toBe(1);
+  });
+
+  it("does not retry audio after consent is withdrawn during retry backoff", async () => {
+    vi.useFakeTimers();
+    try {
+      let audioRequests = 0;
+      let cancelRequests = 0;
+      let markAudioStarted: () => void = () => undefined;
+      const audioStarted = new Promise<void>((resolve) => {
+        markAudioStarted = resolve;
+      });
+      const onRecoverableError = vi.fn();
+      const response = {
+        sessionId: "session-1",
+        interactionId: "interaction-1",
+        recordingSessionId: "recording-1",
+        lifecycle: "capturing" as const,
+        nextAudioSequence: 0,
+        events: [],
+      };
+      const request = async <T>(path: string): Promise<T> => {
+        if (path.endsWith("/audio")) {
+          audioRequests += 1;
+          markAudioStarted();
+          throw new ApiClientError(
+            "Synthetic transient audio failure.",
+            0,
+            "network_error",
+          );
+        }
+        if (path.endsWith("/cancel")) cancelRequests += 1;
+        return response as T;
+      };
+      const capture = await startProgressiveTranscriptionCapture({
+        interactionId: "interaction-1",
+        recordingSessionId: "recording-1",
+        stream: {} as MediaStream,
+        externalProcessingAcknowledged: true,
+        request,
+        onRecoverableError,
+        mediaStreamPcmCaptureFactory: async (_stream, onPcm) => {
+          onPcm(new Uint8Array(24_000 * 2 * 4 * 2).fill(1));
+          return {
+            pause() {},
+            resume() {},
+            async drainAndClose() {},
+            async close() {},
+          };
+        },
+      });
+
+      await audioStarted;
+      await capture.cancel("consent_withdrawn");
+      await vi.runAllTimersAsync();
+
+      expect(audioRequests).toBe(1);
+      expect(cancelRequests).toBe(1);
+      expect(onRecoverableError).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry finish after consent is withdrawn during retry backoff", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishRequests = 0;
+      let cancelRequests = 0;
+      let markFinishStarted: () => void = () => undefined;
+      const finishStarted = new Promise<void>((resolve) => {
+        markFinishStarted = resolve;
+      });
+      const onEvents = vi.fn();
+      const onRecoverableError = vi.fn();
+      const response = {
+        sessionId: "session-1",
+        interactionId: "interaction-1",
+        recordingSessionId: "recording-1",
+        lifecycle: "capturing" as const,
+        nextAudioSequence: 0,
+        events: [],
+      };
+      const request = async <T>(path: string): Promise<T> => {
+        if (path.endsWith("/finish")) {
+          finishRequests += 1;
+          markFinishStarted();
+          throw new ApiClientError(
+            "Synthetic transient finish failure.",
+            0,
+            "network_error",
+          );
+        }
+        if (path.endsWith("/cancel")) cancelRequests += 1;
+        return response as T;
+      };
+      const capture = await startProgressiveTranscriptionCapture({
+        interactionId: "interaction-1",
+        recordingSessionId: "recording-1",
+        stream: {} as MediaStream,
+        externalProcessingAcknowledged: true,
+        request,
+        onEvents,
+        onRecoverableError,
+        mediaStreamPcmCaptureFactory: async () => ({
+          pause() {},
+          resume() {},
+          async drainAndClose() {},
+          async close() {},
+        }),
+      });
+
+      const finishing = capture.finish();
+      const finishAssertion =
+        expect(finishing).rejects.toThrow(/already ended/u);
+      await finishStarted;
+      await capture.cancel("consent_withdrawn");
+      await vi.runAllTimersAsync();
+      await finishAssertion;
+
+      expect(finishRequests).toBe(1);
+      expect(cancelRequests).toBe(1);
+      expect(onEvents).not.toHaveBeenCalled();
+      expect(onRecoverableError).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("drops queued PCM after cancellation while one audio request is in flight", async () => {

@@ -14,6 +14,8 @@ const REQUEST_TIMEOUT_MS = 12_000;
 const FINISH_TIMEOUT_MS = 45_000;
 const WORKLET_DRAIN_TIMEOUT_MS = 2_000;
 const RETRY_DELAYS_MS = [0, 150, 600] as const;
+const PROGRESSIVE_SESSION_IDENTITY_ERROR =
+  "The live transcription response could not be verified. Please try again.";
 
 export interface ProgressiveTranscriptEvent {
   eventId: string;
@@ -44,6 +46,12 @@ interface ProgressiveSessionResponse {
     | "failed";
   nextAudioSequence: number;
   events: ProgressiveTranscriptEvent[];
+}
+
+interface ProgressiveSessionIdentity {
+  sessionId: string;
+  interactionId: string;
+  recordingSessionId: string;
 }
 
 type ProgressiveRequester = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -142,6 +150,54 @@ async function retryMutation<T>(operation: () => Promise<T>): Promise<T> {
   throw failure instanceof Error
     ? failure
     : new Error("Progressive transcription is temporarily unavailable.");
+}
+
+function progressiveSessionIdentityError(): Error {
+  return new Error(PROGRESSIVE_SESSION_IDENTITY_ERROR);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function adoptProgressiveSessionIdentity(
+  response: unknown,
+  interactionId: string,
+  recordingSessionId: string,
+): ProgressiveSessionIdentity {
+  if (!isRecord(response)) throw progressiveSessionIdentityError();
+  if (
+    typeof response.sessionId !== "string" ||
+    response.sessionId.length === 0 ||
+    response.interactionId !== interactionId ||
+    response.recordingSessionId !== recordingSessionId
+  ) {
+    throw progressiveSessionIdentityError();
+  }
+  return {
+    sessionId: response.sessionId,
+    interactionId,
+    recordingSessionId,
+  };
+}
+
+function assertProgressiveSessionIdentity(
+  response: unknown,
+  identity: ProgressiveSessionIdentity,
+): void {
+  if (!isRecord(response)) throw progressiveSessionIdentityError();
+  const events = response.events;
+  if (
+    response.sessionId !== identity.sessionId ||
+    response.interactionId !== identity.interactionId ||
+    response.recordingSessionId !== identity.recordingSessionId ||
+    !Array.isArray(events) ||
+    events.some(
+      (event) => !isRecord(event) || event.streamId !== identity.sessionId,
+    )
+  ) {
+    throw progressiveSessionIdentityError();
+  }
 }
 
 export class StreamingPcm16Encoder {
@@ -403,15 +459,14 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
 
   constructor(
     private readonly request: ProgressiveRequester,
-    private readonly interactionId: string,
-    private readonly sessionId: string,
+    private readonly identity: ProgressiveSessionIdentity,
     private readonly onEvents: (
       events: readonly ProgressiveTranscriptEvent[],
     ) => void,
     private readonly onRecoverableError: (error: Error) => void,
     initiallyPaused: boolean,
   ) {
-    this.path = `/api/v1/interactions/${interactionId}/progressive-transcription/sessions/${sessionId}`;
+    this.path = `/api/v1/interactions/${identity.interactionId}/progressive-transcription/sessions/${identity.sessionId}`;
     this.paused = initiallyPaused;
   }
 
@@ -467,8 +522,9 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
         this.queueSegment(this.consume(this.stagedBytes));
       await this.operation;
       if (this.failed) throw this.failed;
-      const response = await retryMutation(() =>
-        requestWithTimeout<ProgressiveSessionResponse>(
+      const response = await retryMutation(() => {
+        this.throwIfCancelled();
+        return requestWithTimeout<ProgressiveSessionResponse>(
           this.request,
           `${this.path}/finish`,
           {
@@ -476,12 +532,15 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
             body: JSON.stringify({ externalProcessingAcknowledged: true }),
           },
           FINISH_TIMEOUT_MS,
-        ),
-      );
-      this.serverFinished = true;
+        );
+      });
+      if (this.cancelled)
+        throw new Error("Progressive transcription has already ended.");
       this.publish(response);
+      this.serverFinished = true;
       return response;
     } catch (error: unknown) {
+      if (this.cancelled) throw error;
       this.fail(error);
       await this.cancel("capture_ended");
       throw this.failed ?? error;
@@ -525,8 +584,9 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
     this.operation = this.operation
       .then(async () => {
         if (this.failed || this.cancelled) return;
-        const response = await retryMutation(() =>
-          requestWithTimeout<ProgressiveSessionResponse>(
+        const response = await retryMutation(() => {
+          this.throwIfCancelled();
+          return requestWithTimeout<ProgressiveSessionResponse>(
             this.request,
             `${this.path}/audio`,
             {
@@ -541,8 +601,8 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
               }),
             },
             REQUEST_TIMEOUT_MS,
-          ),
-        );
+          );
+        });
         if (!this.cancelled) this.publish(response);
       })
       .catch((error: unknown) => {
@@ -559,8 +619,9 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
     this.operation = this.operation
       .then(async () => {
         if (this.terminal || this.failed) return;
-        const response = await retryMutation(() =>
-          requestWithTimeout<ProgressiveSessionResponse>(
+        const response = await retryMutation(() => {
+          this.throwIfCancelled();
+          return requestWithTimeout<ProgressiveSessionResponse>(
             this.request,
             `${this.path}/poll`,
             {
@@ -568,8 +629,8 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
               body: JSON.stringify({ externalProcessingAcknowledged: true }),
             },
             REQUEST_TIMEOUT_MS,
-          ),
-        );
+          );
+        });
         if (!this.cancelled) this.publish(response);
       })
       .catch((error: unknown) => {
@@ -597,6 +658,7 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
   }
 
   private publish(response: ProgressiveSessionResponse): void {
+    assertProgressiveSessionIdentity(response, this.identity);
     const fresh = response.events.filter((event) => {
       if (this.seenEventIds.has(event.eventId)) return false;
       this.seenEventIds.add(event.eventId);
@@ -608,6 +670,11 @@ class ProgressiveTransport implements ProgressiveTranscriptionCapture {
       return true;
     });
     if (fresh.length > 0) this.onEvents(fresh);
+  }
+
+  private throwIfCancelled(): void {
+    if (this.cancelled)
+      throw new Error("Progressive transcription has already ended.");
   }
 
   private fail(error: unknown): void {
@@ -685,10 +752,15 @@ export async function startProgressiveTranscriptionCapture(
         REQUEST_TIMEOUT_MS,
       ),
     );
+    const identity = adoptProgressiveSessionIdentity(
+      started,
+      options.interactionId,
+      options.recordingSessionId,
+    );
+    assertProgressiveSessionIdentity(started, identity);
     transport = new ProgressiveTransport(
       request,
-      options.interactionId,
-      started.sessionId,
+      identity,
       options.onEvents ?? (() => undefined),
       options.onRecoverableError ?? (() => undefined),
       options.initiallyPaused ?? false,

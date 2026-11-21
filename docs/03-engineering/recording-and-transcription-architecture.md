@@ -313,6 +313,18 @@ authoritative whole-recording transcript and segments. It does not pretend WO-01
 imports are live or create a second transcript system. Segment `speaker_role` is
 controlled and optional; a label remains different from identity.
 
+The browser adopts a progressive session only after the start response echoes the
+expected Interaction and Recording Capture Session. Every subsequent audio, poll
+and finish response must match that adopted session/Interaction/recording triple,
+and every transcript event must name the adopted session as its stream before any
+text reaches presentation state. A start mismatch closes local capture without
+calling an untrusted session path. A later mismatch pauses capture, suppresses the
+whole response, reports one content-free recovery error and cancels only the
+previously validated session. This is browser defence in depth; authenticated
+server ownership checks remain authoritative. Cancellation is also checked before
+every retry attempt, so consent withdrawal cannot start another audio, poll or
+finish request after an in-flight attempt settles.
+
 Live signals consume incomplete evidence and are labelled provisional with exact
 segment ranges. They cannot update Revenue Brain, trigger external action or be
 presented as validated post-interaction intelligence. After final transcript and

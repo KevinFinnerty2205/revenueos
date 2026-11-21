@@ -403,6 +403,17 @@ allow only tenant/Interaction/session IDs, controlled states, counts and safe er
 codes—never statements, source text, names, brief text or provider payloads. See the
 [Live Intelligence security review](live-intelligence-security-review.md).
 
+Progressive browser capture additionally binds its adopted transport to the exact
+Interaction, Recording Capture Session and progressive session echoed by the
+authenticated start response. Audio, poll and finish responses, including every
+event stream identifier, are checked against that immutable tuple before any event
+is rendered. A mismatch never logs the identifiers or content: startup closes
+locally without following the returned session identifier; an established session
+pauses, suppresses the response, emits one generic recovery error and cancels only
+its already validated path. Consent withdrawal fences each retry attempt before a
+new audio, poll or finish request, preventing a retry from sending more PCM or
+re-finalising after withdrawal.
+
 Normal Meeting deletion remains soft deletion and also soft-deletes its linked
 Interaction. The separate beta retention command hard-deletes eligible
 Meeting/transcript/intelligence/Revenue Brain dependencies and eligible standalone

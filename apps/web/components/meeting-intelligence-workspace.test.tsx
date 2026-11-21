@@ -236,8 +236,11 @@ const nextBestActionContent: NextBestActionContent = {
   ],
 };
 
-function notStartedWorkspace(): MeetingIntelligenceResponse {
+function notStartedWorkspace(
+  meetingId = "meeting-1",
+): MeetingIntelligenceResponse {
   return {
+    meetingId,
     overallState: "not_started",
     generationAvailable: true,
     retryAvailable: false,
@@ -269,9 +272,9 @@ function notStartedWorkspace(): MeetingIntelligenceResponse {
   };
 }
 
-function queuedWorkspace(): MeetingIntelligenceResponse {
+function queuedWorkspace(meetingId = "meeting-1"): MeetingIntelligenceResponse {
   return {
-    ...notStartedWorkspace(),
+    ...notStartedWorkspace(meetingId),
     overallState: "queued",
     generationAvailable: false,
     lastUpdatedAt: "2026-07-20T00:00:00Z",
@@ -314,8 +317,11 @@ function queuedWorkspace(): MeetingIntelligenceResponse {
   };
 }
 
-function completedWorkspace(): MeetingIntelligenceResponse {
+function completedWorkspace(
+  meetingId = "meeting-1",
+): MeetingIntelligenceResponse {
   return {
+    meetingId,
     overallState: "completed",
     generationAvailable: false,
     retryAvailable: false,
@@ -604,8 +610,12 @@ describe("MeetingIntelligenceWorkspace", () => {
   it("renders cautious stakeholder evidence and requests it through the unified workspace", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse(completedWorkspace()))
-      .mockResolvedValueOnce(jsonResponse(notStartedWorkspace()))
+      .mockResolvedValueOnce(
+        jsonResponse(completedWorkspace("meeting-completed")),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(notStartedWorkspace("meeting-not-started")),
+      )
       .mockResolvedValueOnce(jsonResponse({ status: "queued" }, 202));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -648,10 +658,11 @@ describe("MeetingIntelligenceWorkspace", () => {
 
   it("renders every stakeholder generation state with a safe message", async () => {
     const stakeholderState = (
+      meetingId: string,
       state: "queued" | "processing" | "failed" | "cancelled" | "unavailable",
       message: string | null,
     ): MeetingIntelligenceResponse => ({
-      ...notStartedWorkspace(),
+      ...notStartedWorkspace(meetingId),
       overallState:
         state === "processing"
           ? "processing"
@@ -673,11 +684,18 @@ describe("MeetingIntelligenceWorkspace", () => {
     });
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse(stakeholderState("queued", null)))
-      .mockResolvedValueOnce(jsonResponse(stakeholderState("processing", null)))
+      .mockResolvedValueOnce(
+        jsonResponse(stakeholderState("meeting-queued", "queued", null)),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          stakeholderState("meeting-processing", "processing", null),
+        ),
+      )
       .mockResolvedValueOnce(
         jsonResponse(
           stakeholderState(
+            "meeting-failed",
             "failed",
             "Stakeholder Intelligence could not be completed.",
           ),
@@ -686,6 +704,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       .mockResolvedValueOnce(
         jsonResponse(
           stakeholderState(
+            "meeting-cancelled",
             "cancelled",
             "Stakeholder Intelligence generation was cancelled.",
           ),
@@ -694,6 +713,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       .mockResolvedValueOnce(
         jsonResponse(
           stakeholderState(
+            "meeting-unavailable",
             "unavailable",
             "Add a usable transcript before generating Stakeholder Intelligence.",
           ),
@@ -743,7 +763,7 @@ describe("MeetingIntelligenceWorkspace", () => {
 
   it("renders every active and terminal objection capability state accessibly", async () => {
     const unavailable = {
-      ...notStartedWorkspace(),
+      ...notStartedWorkspace("meeting-unavailable"),
       overallState: "unavailable" as const,
       generationAvailable: false,
       objectionsCompetitiveSignals:
@@ -754,7 +774,7 @@ describe("MeetingIntelligenceWorkspace", () => {
         }),
     };
     const processing = {
-      ...queuedWorkspace(),
+      ...queuedWorkspace("meeting-processing"),
       overallState: "processing" as const,
       progress: {
         ready: 0,
@@ -771,7 +791,7 @@ describe("MeetingIntelligenceWorkspace", () => {
         }),
     };
     const failed = {
-      ...completedWorkspace(),
+      ...completedWorkspace("meeting-failed"),
       overallState: "partially_failed" as const,
       retryAvailable: true,
       objectionsCompetitiveSignals:
@@ -781,6 +801,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     };
     const cancelled = {
       ...failed,
+      meetingId: "meeting-cancelled",
       objectionsCompetitiveSignals:
         capability<ObjectionsCompetitiveSignalsContent>("cancelled", null, {
           message: "Objections & Competitive Signals was cancelled.",
@@ -791,7 +812,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       vi
         .fn()
         .mockResolvedValueOnce(jsonResponse(unavailable))
-        .mockResolvedValueOnce(jsonResponse(queuedWorkspace()))
+        .mockResolvedValueOnce(jsonResponse(queuedWorkspace("meeting-queued")))
         .mockResolvedValueOnce(jsonResponse(processing))
         .mockResolvedValueOnce(jsonResponse(failed))
         .mockResolvedValueOnce(jsonResponse(cancelled)),
@@ -967,7 +988,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       }),
     };
     const emptyResults = {
-      ...completedWorkspace(),
+      ...completedWorkspace("meeting-2"),
       overallState: "completed_with_empty_results" as const,
       decisions: capability(
         "completed",
@@ -1074,7 +1095,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     const fetchMock = vi
       .fn()
       .mockReturnValueOnce(firstResponse)
-      .mockResolvedValueOnce(jsonResponse(completedWorkspace()));
+      .mockResolvedValueOnce(jsonResponse(completedWorkspace("meeting-2")));
     vi.stubGlobal("fetch", fetchMock);
 
     const { rerender } = render(
@@ -1090,6 +1111,206 @@ describe("MeetingIntelligenceWorkspace", () => {
     });
     expect(screen.getByText("10 of 10 ready")).toBeVisible();
     expect(screen.queryByText("8 sections queued")).not.toBeInTheDocument();
+  });
+
+  it("fails closed before a mismatched initial response can seed a private follow-up", async () => {
+    const foreignSummary = "FOREIGN-MEETING-A-SUMMARY";
+    const foreignSubject = "FOREIGN-MEETING-A-FOLLOW-UP";
+    const foreignWorkspace = {
+      ...completedWorkspace("meeting-a"),
+      executiveSummary: capability("completed", {
+        ...summaryContent,
+        executiveSummary: foreignSummary,
+      }),
+      followUpEmail: {
+        ...completedWorkspace("meeting-a").followUpEmail,
+        content: { ...emailContent, subject: foreignSubject },
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(foreignWorkspace));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-b"
+        interactionId="interaction-b"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Meeting Intelligence could not be loaded",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/could not be verified for this meeting/i),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(screen.queryByText(foreignSummary)).not.toBeInTheDocument();
+    expect(screen.queryByText(foreignSubject)).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Editable follow-up draft"),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes(
+          "/interactions/interaction-b/personal-workspace",
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+  });
+
+  it("preserves the last verified workspace and clears polling identity after a mismatched poll", async () => {
+    vi.useFakeTimers();
+    const verified = {
+      ...completedWorkspace("meeting-b"),
+      overallState: "processing" as const,
+      progress: {
+        ready: 9,
+        queued: 0,
+        processing: 1,
+        failed: 0,
+        notGenerated: 0,
+        total: 10 as const,
+        summary: "Generating 1 section",
+      },
+      risksBlockers: capability<RisksBlockersContent>("processing", null, {
+        generationAvailable: false,
+      }),
+    };
+    const foreignSummary = "FOREIGN-POLL-SUMMARY";
+    const foreign = {
+      ...completedWorkspace("meeting-a"),
+      executiveSummary: capability("completed", {
+        ...summaryContent,
+        executiveSummary: foreignSummary,
+      }),
+      followUpEmail: {
+        ...completedWorkspace("meeting-a").followUpEmail,
+        tone: "friendly" as const,
+      },
+    };
+    const recovered = {
+      ...completedWorkspace("meeting-b"),
+      executiveSummary: capability("completed", {
+        ...summaryContent,
+        executiveSummary: "VERIFIED-MEETING-B-SUMMARY",
+      }),
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(verified))
+      .mockResolvedValueOnce(jsonResponse(foreign))
+      .mockResolvedValueOnce(jsonResponse(recovered));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-b" />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Generating 1 section")).toBeVisible();
+    expect(screen.getByLabelText("Tone")).toHaveValue("professional");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(
+      screen.getByText(/could not be verified for this meeting/i),
+    ).toBeVisible();
+    expect(screen.getByText("Generating 1 section")).toBeVisible();
+    expect(screen.queryByText(foreignSummary)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Tone")).toHaveValue("professional");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("VERIFIED-MEETING-B-SUMMARY")).toBeVisible();
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
+      "previousOverallState=processing",
+    );
+    expect(String(fetchMock.mock.calls[2]?.[0])).not.toContain("pollingEvent=");
+  });
+
+  it("rejects a mismatched automatic composer generation response", async () => {
+    const prerequisitesReady = {
+      ...completedWorkspace("meeting-b"),
+      overallState: "partially_generated" as const,
+      generationAvailable: true,
+      nextBestAction: capability<NextBestActionContent>("not_generated", null, {
+        generationAvailable: true,
+      }),
+      followUpEmail: {
+        ...capability("not_generated", null, { generationAvailable: true }),
+        tone: null,
+      },
+    };
+    const foreignSubject = "FOREIGN-AUTOMATIC-COMPOSER";
+    const foreign = {
+      ...completedWorkspace("meeting-a"),
+      followUpEmail: {
+        ...completedWorkspace("meeting-a").followUpEmail,
+        content: { ...emailContent, subject: foreignSubject },
+      },
+      createdCapabilities: ["next_best_action", "follow_up_email"],
+      reusedCapabilities: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(prerequisitesReady))
+      .mockResolvedValueOnce(jsonResponse(foreign, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-b" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Meeting Intelligence could not be loaded",
+      }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      "/intelligence/generate",
+    );
+    expect(screen.queryByText(foreignSubject)).not.toBeInTheDocument();
+  });
+
+  it("keeps the verified meeting after a mismatched manual generation response", async () => {
+    const foreignSummary = "FOREIGN-MANUAL-GENERATION";
+    const foreign = {
+      ...completedWorkspace("meeting-a"),
+      executiveSummary: capability("completed", {
+        ...summaryContent,
+        executiveSummary: foreignSummary,
+      }),
+      createdCapabilities: ["executive_summary"],
+      reusedCapabilities: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(notStartedWorkspace("meeting-b")))
+      .mockResolvedValueOnce(jsonResponse(foreign, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-b" />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Generate Meeting Intelligence",
+      }),
+    );
+
+    expect(
+      await screen.findByText(/could not be verified for this meeting/i),
+    ).toBeVisible();
+    expect(screen.getByText("0 of 10 ready")).toBeVisible();
+    expect(screen.queryByText(foreignSummary)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
   });
 
   it("copies the rendered Follow-up Email and never exposes a Send action", async () => {
@@ -1151,9 +1372,10 @@ describe("MeetingIntelligenceWorkspace", () => {
     );
     vi.stubGlobal(
       "fetch",
-      vi.fn((input: RequestInfo | URL) =>
-        Promise.resolve(
-          String(input).endsWith("/api/v1/me")
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        return Promise.resolve(
+          url.endsWith("/api/v1/me")
             ? jsonResponse({
                 user: {
                   id: "user-1",
@@ -1170,9 +1392,15 @@ describe("MeetingIntelligenceWorkspace", () => {
                 authMode: "mock",
                 requestId: "request-1",
               })
-            : jsonResponse(completedWorkspace()),
-        ),
-      ),
+            : jsonResponse(
+                completedWorkspace(
+                  url.includes("/meetings/meeting-2/")
+                    ? "meeting-2"
+                    : "meeting-1",
+                ),
+              ),
+        );
+      }),
     );
 
     const first = render(
@@ -1276,16 +1504,16 @@ describe("MeetingIntelligenceWorkspace", () => {
   it("removes regenerated private text before loading another meeting", async () => {
     const meetingBIntelligence = deferred<Response>();
     let meetingAIntelligence = {
-      ...completedWorkspace(),
+      ...completedWorkspace("meeting-a"),
       followUpEmail: {
-        ...completedWorkspace().followUpEmail,
+        ...completedWorkspace("meeting-a").followUpEmail,
         content: { ...emailContent, subject: "Initial A next steps" },
       },
     };
     const meetingBIntelligenceResponse = {
-      ...completedWorkspace(),
+      ...completedWorkspace("meeting-b"),
       followUpEmail: {
-        ...completedWorkspace().followUpEmail,
+        ...completedWorkspace("meeting-b").followUpEmail,
         content: { ...emailContent, subject: "Meeting B next steps" },
       },
     };

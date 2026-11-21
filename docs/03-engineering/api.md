@@ -471,10 +471,13 @@ inherited from the active tenant-scoped meeting.
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue both composers           |
 
 GET returns a derived overall state, generation/retry availability, last activity
-time, deterministic progress counts and the ten ordered capability views. Valid
-empty lists are completed with `emptyResult=true`. The response excludes job and
-artefact IDs, transcript/prompts, provider/model and schema configuration, worker
-fields, internal error codes and raw errors.
+time, deterministic progress counts and the ten ordered capability views. Both
+GET and aggregate generation responses include the authoritative `meetingId` from
+the requested tenant-scoped Meeting. Clients must match it to the requested path
+before rendering, polling, composing or handing a generated source to another
+workspace. Valid empty lists are completed with `emptyResult=true`. The response
+excludes job and artefact IDs, transcript/prompts, provider/model and schema
+configuration, worker fields, internal error codes and raw errors.
 
 Later polling reads may include the optional safe query metadata
 `previousOverallState` and `pollingEvent=started|continued`. These values are

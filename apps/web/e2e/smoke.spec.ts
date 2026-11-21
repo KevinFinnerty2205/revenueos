@@ -4652,6 +4652,7 @@ function workspace(
   const processing = stage === "extractions" ? 8 : 0;
   const queued = stage === "email" ? 2 : 0;
   return {
+    meetingId: "meeting-1",
     overallState:
       stage === "not_started"
         ? "not_started"

@@ -360,7 +360,7 @@ class MeetingIntelligenceService:
 
         if transcript_version is None:
             unavailable = self._unavailable_snapshots(None)
-            return self._response(unavailable, transcript_usable=False)
+            return self._response(meeting_id, unavailable, transcript_usable=False)
         jobs = await self.jobs.list_intelligence_jobs_for_meeting(
             self.tenant.organisation_id,
             meeting_id,
@@ -385,7 +385,7 @@ class MeetingIntelligenceService:
             for configuration in CAPABILITIES
         }
         snapshots = self._snapshots_for_selection(selected_jobs, artifacts_by_job)
-        return self._response(snapshots, transcript_usable=True)
+        return self._response(meeting_id, snapshots, transcript_usable=True)
 
     async def generate(self, meeting_id: UUID) -> GenerationResult:
         logger.info(
@@ -599,7 +599,10 @@ class MeetingIntelligenceService:
         )
         if transcript is None:
             unavailable = self._unavailable_snapshots(None)
-            return self._response(unavailable, transcript_usable=False), unavailable
+            return (
+                self._response(meeting_id, unavailable, transcript_usable=False),
+                unavailable,
+            )
 
         jobs = await self.jobs.list_intelligence_jobs_for_meeting(
             self.tenant.organisation_id,
@@ -625,10 +628,13 @@ class MeetingIntelligenceService:
         )
         if not transcript_usable:
             unavailable = self._unavailable_snapshots(transcript)
-            return self._response(unavailable, transcript_usable=False), unavailable
+            return (
+                self._response(meeting_id, unavailable, transcript_usable=False),
+                unavailable,
+            )
 
         snapshots = self._snapshots_for_selection(selected_jobs, artifacts_by_job)
-        return self._response(snapshots, transcript_usable=True), snapshots
+        return self._response(meeting_id, snapshots, transcript_usable=True), snapshots
 
     def _snapshots_for_selection(
         self,
@@ -822,6 +828,7 @@ class MeetingIntelligenceService:
 
     def _response(
         self,
+        meeting_id: UUID,
         snapshots: dict[CapabilityName, CapabilitySnapshot],
         *,
         transcript_usable: bool,
@@ -871,6 +878,7 @@ class MeetingIntelligenceService:
             and overall_state not in {"completed", "completed_with_empty_results"}
         )
         return MeetingIntelligenceResponse(
+            meeting_id=meeting_id,
             overall_state=overall_state,
             generation_available=generation_available,
             retry_available=failed > 0 and queued == 0 and processing == 0,
