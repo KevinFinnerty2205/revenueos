@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TermsAcceptance } from "@/components/terms-acceptance";
 
@@ -100,7 +100,7 @@ describe("TermsAcceptance", () => {
     expect(confirmation).toHaveTextContent(
       "Current Terms accepted for this organisation",
     );
-    expect(confirmation).toHaveFocus();
+    await waitFor(() => expect(confirmation).toHaveFocus());
     expect(screen.getByText("Trial onboarding unlocked")).toBeVisible();
     expect(JSON.parse(String(fetch.mock.calls.at(-1)?.[1]?.body))).toEqual({
       authorityAndTermsAccepted: true,

@@ -756,9 +756,11 @@ describe("Prospect experience", () => {
     fireEvent.click(trigger);
 
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByRole("heading", { name: "Confirm Credit spend" }),
-    ).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("heading", { name: "Confirm Credit spend" }),
+      ).toHaveFocus(),
+    );
     expect(within(dialog).getByText("5 Credits")).toBeVisible();
     expect(within(dialog).getByText("20 Credits")).toBeVisible();
     fireEvent.click(
