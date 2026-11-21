@@ -8,6 +8,9 @@ The primary seller journey is dependable only when the following behaviours hold
   contextual navigation.
 - A hand-off carries a canonical identifier or an explicit return target; display
   names are never used as identity.
+- When a canonical resource identifier changes inside a mounted client boundary,
+  the previous resource's content and actions disappear before the new resource
+  renders. Late completions cannot update or navigate the new destination.
 - A successful mutation updates the local owner and deliberately revalidates every
   visible consumer that could now be stale.
 - No normal workflow asks the seller to hard refresh or repair the database.

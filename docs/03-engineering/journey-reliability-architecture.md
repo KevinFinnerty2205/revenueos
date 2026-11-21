@@ -16,11 +16,15 @@ targeted invalidation, not a client cache or new state platform.
 ## Frontend data revalidation guidance
 
 1. Treat the API response as authoritative; do not infer a successful transition.
-2. Update the component that owns the mutation from the returned representation.
-3. Notify other mounted consumers by the narrow domain event when required.
-4. Re-read on a later route load; do not carry stale record snapshots in query
+2. Key stateful editors and workspaces by canonical resource type and identifier.
+   Bind mutations to the rendered identity and committed snapshot, clear prior
+   values, errors and lock metadata during the identity-change commit, and ignore
+   late reads, writes and callbacks from the previous identity.
+3. Update the component that owns the mutation from the returned representation.
+4. Notify other mounted consumers by the narrow domain event when required.
+5. Re-read on a later route load; do not carry stale record snapshots in query
    strings or browser storage.
-5. Abort obsolete reads on unmount. Ignore only the resulting `AbortError`.
+6. Abort obsolete reads on unmount. Ignore only the resulting `AbortError`.
 
 The shared API client gives bodyless reads no JSON `Content-Type`, assigns one safe
 request ID and makes up to three attempts only for network-failed GETs with 50 ms and
