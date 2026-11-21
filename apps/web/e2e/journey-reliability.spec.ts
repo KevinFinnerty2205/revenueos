@@ -1909,6 +1909,10 @@ async function routeFlagship(page: Page) {
       await fulfilJson(route, interaction());
       return;
     }
+    if (path === `/api/v1/interactions/${ids.interaction}/debrief/latest`) {
+      await route.fulfill({ json: null });
+      return;
+    }
     if (path === `/api/v1/interactions/${ids.interaction}/debrief`) {
       await fulfilJson(route, debriefSession("collecting"), 201);
       return;

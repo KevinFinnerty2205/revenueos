@@ -119,6 +119,11 @@ without promoting them. Interrupted audio can resume if the source is intact or 
 back to text. A session that expires remains viewable and deletable but is labelled
 unreviewed.
 
+A transient restore failure preserves the opaque browser session reference,
+withholds fresh-start controls and offers retry. Only an authoritative not-found
+result may clear that reference. When latest-session restoration is enabled, a
+stale explicit reference falls back to the latest available private session.
+
 ## Evidence semantics
 
 Voice and text debrief responses are **salesperson-reported evidence**. Speech-to-text

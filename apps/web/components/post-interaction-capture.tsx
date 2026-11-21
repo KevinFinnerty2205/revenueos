@@ -14,7 +14,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { apiRequest } from "@/lib/api";
+import { ApiClientError, apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
   type ConversationWorkspaceController,
@@ -32,6 +32,30 @@ const MIME_TYPES = [
   "audio/webm",
   "audio/mp4",
 ] as const;
+
+const DEBRIEF_IDENTITY_ERROR =
+  "The private capture response did not match this conversation. Try again.";
+
+class DebriefSessionIdentityError extends Error {
+  constructor() {
+    super(DEBRIEF_IDENTITY_ERROR);
+    this.name = "DebriefSessionIdentityError";
+  }
+}
+
+function validateDebriefSession<T extends DebriefSession>(
+  next: T,
+  interactionId: string,
+  expectedSessionId?: string,
+): T {
+  if (
+    next.interactionId !== interactionId ||
+    (expectedSessionId !== undefined && next.id !== expectedSessionId)
+  ) {
+    throw new DebriefSessionIdentityError();
+  }
+  return next;
+}
 
 function requestKey(prefix: string): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -102,6 +126,8 @@ function StatefulPostInteractionCapture({
   const [answer, setAnswer] = useState("");
   const [working, setWorking] = useState(false);
   const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreRetryKey, setRestoreRetryKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>(
@@ -121,15 +147,22 @@ function StatefulPostInteractionCapture({
   const recordingCancelledRef = useRef(false);
 
   const remember = useCallback(
-    (next: DebriefSession) => {
-      setSession(next);
+    <T extends DebriefSession>(next: T, expectedSessionId?: string) => {
+      const validated = validateDebriefSession(
+        next,
+        interactionId,
+        expectedSessionId,
+      );
+      setSession(validated);
       if (typeof window !== "undefined") {
         if (
-          ["completed", "cancelled", "failed"].includes(next.lifecycleStatus)
+          ["completed", "cancelled", "failed"].includes(
+            validated.lifecycleStatus,
+          )
         ) {
           window.localStorage.removeItem(storageKey(interactionId));
         } else {
-          window.localStorage.setItem(storageKey(interactionId), next.id);
+          window.localStorage.setItem(storageKey(interactionId), validated.id);
         }
       }
     },
@@ -143,26 +176,77 @@ function StatefulPostInteractionCapture({
       return;
     }
     const controller = new AbortController();
-    apiRequest<DebriefSession | null>(
-      saved
-        ? `/api/v1/interactions/${interactionId}/debrief/${saved}`
-        : `/api/v1/interactions/${interactionId}/debrief/latest`,
-      { signal: controller.signal },
-    )
-      .then((restored) => {
-        if (!restored) return;
+    const loadSession = async (
+      path: string,
+      expectedSessionId?: string,
+    ): Promise<DebriefSession | null> => {
+      const restored = await apiRequest<DebriefSession | null>(path, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || !restored) return restored;
+      return validateDebriefSession(restored, interactionId, expectedSessionId);
+    };
+    const missingSession = (reason: unknown) =>
+      reason instanceof ApiClientError && reason.code === "debrief_not_found";
+
+    async function restore() {
+      let restored: DebriefSession | null = null;
+      try {
+        if (saved) {
+          try {
+            restored = await loadSession(
+              `/api/v1/interactions/${interactionId}/debrief/${saved}`,
+              saved,
+            );
+            if (!restored) {
+              throw new Error("The saved capture returned no session.");
+            }
+          } catch (reason: unknown) {
+            if (controller.signal.aborted) return;
+            if (!missingSession(reason)) throw reason;
+            window.localStorage.removeItem(storageKey(interactionId));
+            if (!restoreLatest) return;
+            try {
+              restored = await loadSession(
+                `/api/v1/interactions/${interactionId}/debrief/latest`,
+              );
+            } catch (latestReason: unknown) {
+              if (!missingSession(latestReason)) throw latestReason;
+              return;
+            }
+          }
+        } else {
+          try {
+            restored = await loadSession(
+              `/api/v1/interactions/${interactionId}/debrief/latest`,
+            );
+          } catch (reason: unknown) {
+            if (!missingSession(reason)) throw reason;
+            return;
+          }
+        }
+
+        if (controller.signal.aborted || !restored) return;
         remember(restored);
         setVoiceAcknowledged(restored.captureType === "voice_journal");
         if (restored.lifecycleStatus !== "completed") {
           setMessage("Your in-progress capture was restored.");
         }
-      })
-      .catch(() => window.localStorage.removeItem(storageKey(interactionId)))
-      .finally(() => {
+      } catch (reason: unknown) {
+        if (controller.signal.aborted) return;
+        setRestoreError(
+          reason instanceof DebriefSessionIdentityError
+            ? reason.message
+            : "Your capture could not be restored. Any saved capture remains preserved. Check your connection and try again.",
+        );
+      } finally {
         if (!controller.signal.aborted) setRestoring(false);
-      });
+      }
+    }
+
+    void restore();
     return () => controller.abort();
-  }, [interactionId, remember, restoreLatest]);
+  }, [interactionId, remember, restoreLatest, restoreRetryKey]);
 
   useEffect(() => {
     if (recordingState !== "recording") return;
@@ -217,8 +301,8 @@ function StatefulPostInteractionCapture({
           }),
         },
       );
-      setPreference(nextPreference);
       remember(next);
+      setPreference(nextPreference);
     } catch (requestError: unknown) {
       setError(
         requestError instanceof Error
@@ -232,6 +316,7 @@ function StatefulPostInteractionCapture({
 
   async function submitText() {
     if (!session || !answer.trim()) return;
+    const expectedSessionId = session.id;
     setWorking(true);
     setError(null);
     try {
@@ -245,8 +330,8 @@ function StatefulPostInteractionCapture({
           }),
         },
       );
+      remember(next, expectedSessionId);
       setAnswer("");
-      remember(next);
     } catch (requestError: unknown) {
       setError(
         requestError instanceof Error
@@ -264,6 +349,7 @@ function StatefulPostInteractionCapture({
     duration: number,
   ) {
     if (!session) return;
+    const expectedSessionId = session.id;
     setRecordingState("uploading");
     setError(null);
     try {
@@ -280,7 +366,7 @@ function StatefulPostInteractionCapture({
           }),
         },
       );
-      remember(next);
+      remember(next, expectedSessionId);
       setMessage(
         "Voice answer transcribed and saved. The audio was not retained.",
       );
@@ -393,6 +479,7 @@ function StatefulPostInteractionCapture({
 
   async function finish() {
     if (!session) return;
+    const expectedSessionId = session.id;
     setWorking(true);
     setError(null);
     try {
@@ -406,7 +493,7 @@ function StatefulPostInteractionCapture({
           }),
         },
       );
-      remember(next);
+      remember(next, expectedSessionId);
       setDecisions(
         Object.fromEntries(
           next.candidates.map((candidate) => [
@@ -429,6 +516,7 @@ function StatefulPostInteractionCapture({
   async function completeReview() {
     if (!session || decisionsReady(session.candidates, decisions) === false)
       return;
+    const expectedSessionId = session.id;
     setWorking(true);
     setError(null);
     try {
@@ -449,7 +537,7 @@ function StatefulPostInteractionCapture({
           }),
         },
       );
-      remember(next);
+      remember(next, expectedSessionId);
       setMessage(
         next.revenueBrainUpdated
           ? "Reviewed evidence saved to the interaction and Revenue Brain."
@@ -513,6 +601,23 @@ function StatefulPostInteractionCapture({
         </div>
       ) : null}
 
+      {restoreError ? (
+        <div className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-900">
+          <p role="alert">{restoreError}</p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            onClick={() => {
+              setRestoreError(null);
+              setRestoring(true);
+              setRestoreRetryKey((current) => current + 1);
+            }}
+          >
+            Try restore again
+          </button>
+        </div>
+      ) : null}
+
       {error ? (
         <p
           role="alert"
@@ -530,7 +635,7 @@ function StatefulPostInteractionCapture({
         </p>
       ) : null}
 
-      {!session ? (
+      {!session && !restoreError ? (
         <StartCapture
           phoneCall={interactionType === "phone_call"}
           working={working}

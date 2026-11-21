@@ -64,6 +64,23 @@ Session start, answer/voice upload, finish and review are idempotent at their du
 boundaries. Row locks and unique tenant-scoped keys prevent duplicate turns,
 candidates, accepted Evidence and intelligence composition.
 
+Client restoration treats only `debrief_not_found` as a stale saved session.
+Network and server failures retain the browser session ID and block a new capture
+until retry resolves. With `restoreLatest`, an explicitly missing saved session
+falls back to the latest session.
+
+The browser also treats response identity as a fail-closed boundary. Every returned
+Debrief Session must belong to the requested Interaction. Exact saved-session
+restore and existing-session mutations must also return the requested session
+identifier before any private content is rendered or the browser session key is
+updated. A latest-session fallback is Interaction-bound but may legitimately return
+a new session identifier, which then replaces the confirmed stale browser key.
+Server-side tenant and owner checks remain authoritative; the client check is
+defence in depth against malformed or stale successful responses. A transient or
+identity restore failure keeps any valid opaque saved session reference, blocks
+fresh-start controls and requires an explicit retry. Obsolete completions cannot
+update a newly selected Interaction.
+
 ## Configuration
 
 - `API_FEATURE_AI_DEBRIEF_ENABLED=true`
