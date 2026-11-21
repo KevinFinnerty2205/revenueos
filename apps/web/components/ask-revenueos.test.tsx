@@ -578,6 +578,86 @@ describe("AskRevenueOS", () => {
     expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
   });
 
+  it("does not let an obsolete answer steal focus from a newer same-scope request", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      }),
+    );
+    const secondAnswer = deferred<Response>();
+    let postCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          postCount += 1;
+          return postCount === 1
+            ? Promise.resolve(
+                jsonResponse(
+                  accountAnswer(
+                    "account-2",
+                    "Bayside Health",
+                    "The first scoped answer.",
+                  ),
+                ),
+              )
+            : secondAnswer.promise;
+        }
+        return Promise.resolve(
+          jsonResponse(accountCapabilities("account-2", "Bayside Health")),
+        );
+      }),
+    );
+    render(<AskRevenueOS scopeType="account" scopeId="account-2" />);
+    await screen.findByText("About: Bayside Health");
+    const question = screen.getByLabelText("Ask Oryntela");
+    const form = question.closest("form");
+    expect(form).not.toBeNull();
+
+    fireEvent.change(question, { target: { value: "First question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    const firstAnswerRegion = await screen.findByRole("region", {
+      name: "Partially supported",
+    });
+    expect(frames).toHaveLength(1);
+
+    fireEvent.change(question, { target: { value: "Second question?" } });
+    fireEvent.submit(form as HTMLFormElement);
+    question.focus();
+    expect(question).toHaveFocus();
+
+    act(() => {
+      frames.shift()?.(0);
+    });
+    expect(question).toHaveFocus();
+    expect(firstAnswerRegion).not.toHaveFocus();
+
+    await act(async () => {
+      secondAnswer.resolve(
+        jsonResponse(
+          accountAnswer(
+            "account-2",
+            "Bayside Health",
+            "The second scoped answer.",
+          ),
+        ),
+      );
+      await secondAnswer.promise;
+    });
+    expect(await screen.findByText("The second scoped answer.")).toBeVisible();
+    const secondAnswerRegion = await screen.findByRole("region", {
+      name: "Partially supported",
+    });
+    expect(frames).toHaveLength(1);
+    act(() => {
+      frames.shift()?.(0);
+    });
+    expect(secondAnswerRegion).toHaveFocus();
+  });
+
   it("invalidates an in-flight answer when a new submission is invalid", async () => {
     const pendingAnswer = deferred<Response>();
     vi.stubGlobal(

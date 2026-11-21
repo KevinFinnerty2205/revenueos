@@ -284,7 +284,10 @@ export function AskRevenueOS({
       );
       if (validScope) {
         window.requestAnimationFrame(() => {
-          if (activeSessionKey.current === requestSessionKey) {
+          if (
+            activeSessionKey.current === requestSessionKey &&
+            answerRequestSequence.current === requestId
+          ) {
             answerRef.current?.focus();
           }
         });
