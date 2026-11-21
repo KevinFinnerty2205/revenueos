@@ -31,7 +31,8 @@ export function ConversationHome() {
   const [historyState, setHistoryState] = useState<SourceState>("loading");
   const [accountState, setAccountState] = useState<SourceState>("loading");
   const [retrying, setRetrying] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
+  const [dailyRetryKey, setDailyRetryKey] = useState(0);
+  const [secondaryRetryKey, setSecondaryRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,6 +54,12 @@ export function ConversationHome() {
         setRetrying(false);
       },
     );
+    void dailyRequest;
+    return () => controller.abort();
+  }, [dailyRetryKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
     const historyRequest = apiRequest<EntityPage<Interaction>>(
       "/api/v1/interactions?page=1&pageSize=6&status=completed&sortBy=start_at&sortOrder=desc",
       { signal: controller.signal },
@@ -84,11 +91,10 @@ export function ConversationHome() {
       },
     );
 
-    void dailyRequest;
     void historyRequest;
     void accountRequest;
     return () => controller.abort();
-  }, [retryKey]);
+  }, [secondaryRetryKey]);
 
   const usefulSecondarySource =
     historyState === "available" || accountState === "available";
@@ -107,7 +113,7 @@ export function ConversationHome() {
           retrying={retrying}
           retry={() => {
             setRetrying(true);
-            setRetryKey((value) => value + 1);
+            setDailyRetryKey((value) => value + 1);
           }}
         />
       );
@@ -132,7 +138,8 @@ export function ConversationHome() {
           disabled={retrying}
           onClick={() => {
             setRetrying(true);
-            setRetryKey((value) => value + 1);
+            setDailyRetryKey((value) => value + 1);
+            setSecondaryRetryKey((value) => value + 1);
           }}
         >
           {retrying ? "Trying again…" : "Try again"}
