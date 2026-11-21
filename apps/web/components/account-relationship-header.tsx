@@ -6,20 +6,29 @@ import { useEffect, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import { apiRequest } from "@/lib/api";
 
-type AccountRelationship = {
-  company: Company;
-  participants: Contact[];
-};
+type CompanyState =
+  | { companyId: string; status: "loading" }
+  | { companyId: string; status: "available"; company: Company }
+  | { companyId: string; status: "failed"; message: string };
+
+type ParticipantState =
+  | { companyId: string; status: "loading" }
+  | { companyId: string; status: "available"; participants: Contact[] }
+  | { companyId: string; status: "unavailable" };
 
 export function AccountRelationshipHeader({
   companyId,
 }: {
   companyId: string;
 }) {
-  const [relationship, setRelationship] = useState<AccountRelationship | null>(
-    null,
-  );
-  const [error, setError] = useState<string | null>(null);
+  const [companyState, setCompanyState] = useState<CompanyState>({
+    companyId,
+    status: "loading",
+  });
+  const [participantState, setParticipantState] = useState<ParticipantState>({
+    companyId,
+    status: "loading",
+  });
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -33,35 +42,78 @@ export function AccountRelationshipHeader({
       sortOrder: "asc",
     });
 
-    Promise.all([
-      apiRequest<Company>(`/api/v1/companies/${encodedCompanyId}`, {
-        signal: controller.signal,
-      }),
-      apiRequest<EntityPage<Contact>>(
-        `/api/v1/contacts?${contactQuery.toString()}`,
-        { signal: controller.signal },
-      ),
-    ])
-      .then(([company, participants]) => {
+    void apiRequest<Company>(`/api/v1/companies/${encodedCompanyId}`, {
+      signal: controller.signal,
+    })
+      .then((company) => {
         if (controller.signal.aborted) return;
-        setRelationship({ company, participants: participants.items });
-        setError(null);
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError") {
+        if (company.id !== companyId || company.archivedAt !== null) {
+          setCompanyState({
+            companyId,
+            status: "failed",
+            message: "This account could not be loaded.",
+          });
           return;
         }
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "This account could not be loaded.",
-        );
+        setCompanyState({ companyId, status: "available", company });
+      })
+      .catch((reason: unknown) => {
+        if (
+          controller.signal.aborted ||
+          (reason instanceof DOMException && reason.name === "AbortError")
+        ) {
+          return;
+        }
+        setCompanyState({
+          companyId,
+          status: "failed",
+          message:
+            reason instanceof Error
+              ? reason.message
+              : "This account could not be loaded.",
+        });
+      });
+
+    void apiRequest<EntityPage<Contact>>(
+      `/api/v1/contacts?${contactQuery.toString()}`,
+      { signal: controller.signal },
+    )
+      .then((participants) => {
+        if (controller.signal.aborted) return;
+        if (
+          participants.items.some(
+            (participant) =>
+              participant.companyId !== companyId ||
+              participant.archivedAt !== null,
+          )
+        ) {
+          setParticipantState({ companyId, status: "unavailable" });
+          return;
+        }
+        setParticipantState({
+          companyId,
+          status: "available",
+          participants: participants.items,
+        });
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setParticipantState({ companyId, status: "unavailable" });
       });
 
     return () => controller.abort();
   }, [companyId, retryKey]);
 
-  if (!relationship && !error) {
+  const visibleCompanyState =
+    companyState.companyId === companyId
+      ? companyState
+      : ({ companyId, status: "loading" } satisfies CompanyState);
+  const visibleParticipantState =
+    participantState.companyId === companyId
+      ? participantState
+      : ({ companyId, status: "loading" } satisfies ParticipantState);
+
+  if (visibleCompanyState.status === "loading") {
     return (
       <section
         aria-busy="true"
@@ -75,7 +127,7 @@ export function AccountRelationshipHeader({
     );
   }
 
-  if (!relationship) {
+  if (visibleCompanyState.status === "failed") {
     return (
       <section
         className="rounded-3xl border border-rose-200 bg-rose-50 p-6 sm:p-8"
@@ -84,12 +136,15 @@ export function AccountRelationshipHeader({
         <h1 className="text-2xl font-semibold text-rose-950">
           Oryntela couldn’t load this account.
         </h1>
-        <p className="mt-3 text-sm text-rose-900">{error}</p>
+        <p className="mt-3 text-sm text-rose-900">
+          {visibleCompanyState.message}
+        </p>
         <button
           type="button"
           className="secondary-button mt-5"
           onClick={() => {
-            setError(null);
+            setCompanyState({ companyId, status: "loading" });
+            setParticipantState({ companyId, status: "loading" });
             setRetryKey((value) => value + 1);
           }}
         >
@@ -99,7 +154,7 @@ export function AccountRelationshipHeader({
     );
   }
 
-  const { company, participants } = relationship;
+  const { company } = visibleCompanyState;
   const context = [
     company.industry,
     company.location,
@@ -151,15 +206,33 @@ export function AccountRelationshipHeader({
               People in this relationship
             </h2>
           </div>
-          <p className="text-sm font-semibold text-slate-500">
-            {participants.length}{" "}
-            {participants.length === 1 ? "person" : "people"}
-          </p>
+          {visibleParticipantState.status === "available" ? (
+            <p className="text-sm font-semibold text-slate-500">
+              {visibleParticipantState.participants.length}{" "}
+              {visibleParticipantState.participants.length === 1
+                ? "person"
+                : "people"}
+            </p>
+          ) : null}
         </div>
 
-        {participants.length ? (
+        {visibleParticipantState.status === "loading" ? (
+          <p className="mt-5 text-sm text-slate-600" role="status">
+            Loading people linked to this account…
+          </p>
+        ) : null}
+        {visibleParticipantState.status === "unavailable" ? (
+          <p
+            className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950"
+            role="status"
+          >
+            People linked to this account are temporarily unavailable.
+          </p>
+        ) : null}
+        {visibleParticipantState.status === "available" &&
+        visibleParticipantState.participants.length ? (
           <ul className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {participants.map((participant) => (
+            {visibleParticipantState.participants.map((participant) => (
               <li
                 key={participant.id}
                 className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
@@ -173,11 +246,13 @@ export function AccountRelationshipHeader({
               </li>
             ))}
           </ul>
-        ) : (
+        ) : null}
+        {visibleParticipantState.status === "available" &&
+        visibleParticipantState.participants.length === 0 ? (
           <p className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
             Participants linked to future conversations will appear here.
           </p>
-        )}
+        ) : null}
       </div>
     </section>
   );
