@@ -11,6 +11,10 @@ The primary seller journey is dependable only when the following behaviours hold
 - When a canonical resource identifier changes inside a mounted client boundary,
   the previous resource's content and actions disappear before the new resource
   renders. Late completions cannot update or navigate the new destination.
+- Exact-resource responses that can render or seed private content carry their
+  authoritative canonical identifier. The client rejects a response whose identity
+  does not match the requested destination before display, polling state, source
+  hand-off or persistence changes.
 - A successful mutation updates the local owner and deliberately revalidates every
   visible consumer that could now be stale.
 - No normal workflow asks the seller to hard refresh or repair the database.

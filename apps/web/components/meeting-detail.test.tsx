@@ -144,6 +144,7 @@ describe("MeetingDetail", () => {
       if (url.endsWith("/intelligence"))
         return Promise.resolve(
           jsonResponse({
+            meetingId: "meeting-1",
             overallState: "unavailable",
             generationAvailable: false,
             retryAvailable: false,

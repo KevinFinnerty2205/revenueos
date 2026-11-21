@@ -640,6 +640,7 @@ class MeetingIntelligenceProgressResponse(APIModel):
 
 
 class MeetingIntelligenceResponse(APIModel):
+    meeting_id: UUID
     overall_state: MeetingIntelligenceOverallState
     generation_available: bool
     retry_available: bool

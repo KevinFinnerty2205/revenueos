@@ -42,6 +42,7 @@ function capability<T>(content: T): MeetingIntelligenceCapability<T> {
 
 function completedIntelligence(): MeetingIntelligenceResponse {
   return {
+    meetingId: "meeting-1",
     overallState: "completed",
     generationAvailable: false,
     retryAvailable: false,
