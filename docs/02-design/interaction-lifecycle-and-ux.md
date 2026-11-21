@@ -197,6 +197,12 @@ Every step needs loading, empty, permission-denied, offline, partial, failed,
 expired and deleted states. Completed evidence remains usable when another source
 fails. Retry is bounded and explicit.
 
+- Client-side navigation between interactions hides the previous interaction
+  immediately. The top-level conversation workspace owns loading, failure, view
+  and preparation-refresh state by the requested interaction, while detail loads,
+  child updates, transcript imports and lifecycle mutations stay bound to that
+  same session. A response with another interaction identity fails closed without
+  changing the visible lifecycle.
 - use semantic headings, form labels, live regions and native controls;
 - make start/stop and recording state screen-reader clear;
 - provide captions/transcripts when available and a text debrief alternative;

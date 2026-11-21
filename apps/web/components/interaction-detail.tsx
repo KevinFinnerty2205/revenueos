@@ -2,7 +2,7 @@
 
 import type { CallOutcome, Interaction } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
@@ -18,17 +18,23 @@ import { ConversationMemory } from "@/components/conversation-memory";
 import { ConversationNotesReview } from "@/components/conversation-notes-review";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
-export function InteractionDetail({
-  interactionId,
-  initialInteraction,
-  reviewOnly = false,
-  onOpenCapture,
-}: {
+interface InteractionDetailProps {
   interactionId: string;
   initialInteraction?: Interaction;
   reviewOnly?: boolean;
   onOpenCapture?: () => void;
-}) {
+}
+
+export function InteractionDetail(props: InteractionDetailProps) {
+  return <InteractionDetailSession key={props.interactionId} {...props} />;
+}
+
+function InteractionDetailSession({
+  interactionId,
+  initialInteraction,
+  reviewOnly = false,
+  onOpenCapture,
+}: InteractionDetailProps) {
   const seededInteraction =
     initialInteraction?.id === interactionId ? initialInteraction : null;
   const [loadedInteraction, setInteraction] = useState<Interaction | null>(
@@ -40,6 +46,15 @@ export function InteractionDetail({
   const [starting, setStarting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
+  const sessionActive = useRef(true);
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
+
   const personalWorkspace = useConversationWorkspace({ interactionId });
   const liveNotesStatus = personalWorkspace.loading
     ? "Loading your private notes…"
@@ -62,17 +77,26 @@ export function InteractionDetail({
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
+      if (!sessionActive.current) return;
       setLoading(true);
       setError(null);
       setInteraction(null);
       void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`, {
         signal: controller.signal,
       })
-        .then(setInteraction)
+        .then((nextInteraction) => {
+          if (controller.signal.aborted || !sessionActive.current) return;
+          if (nextInteraction.id !== interactionId) {
+            throw new Error("The conversation could not be loaded. Try again.");
+          }
+          setInteraction(nextInteraction);
+        })
         .catch((requestError: unknown) => {
           if (
-            requestError instanceof DOMException &&
-            requestError.name === "AbortError"
+            controller.signal.aborted ||
+            !sessionActive.current ||
+            (requestError instanceof DOMException &&
+              requestError.name === "AbortError")
           ) {
             return;
           }
@@ -83,7 +107,9 @@ export function InteractionDetail({
           );
         })
         .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
+          if (!controller.signal.aborted && sessionActive.current) {
+            setLoading(false);
+          }
         });
     }, 0);
     return () => {
@@ -101,20 +127,24 @@ export function InteractionDetail({
     setStarting(true);
     setError(null);
     try {
-      setInteraction(
-        await apiRequest<Interaction>(
-          `/api/v1/interactions/${interactionId}/start`,
-          { method: "POST", body: "{}" },
-        ),
+      const nextInteraction = await apiRequest<Interaction>(
+        `/api/v1/interactions/${interactionId}/start`,
+        { method: "POST", body: "{}" },
       );
+      if (!sessionActive.current) return;
+      if (nextInteraction.id !== interactionId) {
+        throw new Error("The conversation could not be started. Try again.");
+      }
+      setInteraction(nextInteraction);
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The conversation could not be started.",
       );
     } finally {
-      setStarting(false);
+      if (sessionActive.current) setStarting(false);
     }
   }
 
@@ -122,23 +152,27 @@ export function InteractionDetail({
     setCompleting(true);
     setError(null);
     try {
-      setInteraction(
-        await apiRequest<Interaction>(
-          `/api/v1/interactions/${interactionId}/complete`,
-          {
-            method: "POST",
-            body: JSON.stringify(callOutcome ? { callOutcome } : {}),
-          },
-        ),
+      const nextInteraction = await apiRequest<Interaction>(
+        `/api/v1/interactions/${interactionId}/complete`,
+        {
+          method: "POST",
+          body: JSON.stringify(callOutcome ? { callOutcome } : {}),
+        },
       );
+      if (!sessionActive.current) return;
+      if (nextInteraction.id !== interactionId) {
+        throw new Error("The conversation could not be completed. Try again.");
+      }
+      setInteraction(nextInteraction);
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The conversation could not be completed.",
       );
     } finally {
-      setCompleting(false);
+      if (sessionActive.current) setCompleting(false);
     }
   }
 
@@ -543,13 +577,19 @@ export function InteractionDetail({
             {interaction.interactionType === "online_meeting" ? (
               <OnlineMeetingCapture
                 interaction={interaction}
-                onTranscriptImported={(result) =>
+                onTranscriptImported={(result) => {
+                  if (
+                    !sessionActive.current ||
+                    result.interactionId !== interactionId
+                  ) {
+                    return;
+                  }
                   setInteraction((current) =>
-                    current
+                    current?.id === interactionId
                       ? { ...current, meetingId: result.meetingId }
                       : current,
-                  )
-                }
+                  );
+                }}
               />
             ) : interaction.interactionType === "phone_call" ? (
               <BetaFeatureGate feature="recordingCapture">

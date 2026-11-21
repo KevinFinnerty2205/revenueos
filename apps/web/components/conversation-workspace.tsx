@@ -2,7 +2,7 @@
 
 import type { Interaction } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BetaFeatureGate } from "@/components/beta-feature-gate";
 import { ConversationMemory } from "@/components/conversation-memory";
 import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
@@ -20,6 +20,13 @@ const views: { id: ConversationView; label: string }[] = [
   { id: "history", label: "Relationship history" },
 ];
 
+type ConversationLoadState =
+  | { status: "loading" }
+  | { status: "available"; interaction: Interaction }
+  | { status: "failed"; message: string };
+
+const conversationLoadFailure = "This conversation could not be loaded.";
+
 export function ConversationWorkspace({
   interactionId,
   initialView,
@@ -27,22 +34,62 @@ export function ConversationWorkspace({
   interactionId: string;
   initialView?: ConversationView;
 }) {
-  const [interaction, setInteraction] = useState<Interaction | null>(null);
+  return (
+    <ConversationWorkspaceSession
+      key={interactionId}
+      interactionId={interactionId}
+      initialView={initialView}
+    />
+  );
+}
+
+function ConversationWorkspaceSession({
+  interactionId,
+  initialView,
+}: {
+  interactionId: string;
+  initialView?: ConversationView;
+}) {
+  const [loadState, setLoadState] = useState<ConversationLoadState>({
+    status: "loading",
+  });
   const [view, setView] = useState<ConversationView>(initialView ?? "prepare");
   const [opened, setOpened] = useState<Set<ConversationView>>(new Set());
   const [briefRefreshKey, setBriefRefreshKey] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const active = useRef(true);
+  const requestSequence = useRef(0);
+
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      requestSequence.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
+    const request = requestSequence.current + 1;
+    requestSequence.current = request;
+    const requestIsCurrent = () =>
+      active.current &&
+      requestSequence.current === request &&
+      !controller.signal.aborted;
+
     void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`, {
       signal: controller.signal,
     })
       .then((loaded) => {
-        if (controller.signal.aborted) return;
-        setInteraction(loaded);
-        setError(null);
+        if (!requestIsCurrent()) return;
+        if (loaded.id !== interactionId) {
+          setLoadState({
+            status: "failed",
+            message: conversationLoadFailure,
+          });
+          return;
+        }
+        setLoadState({ status: "available", interaction: loaded });
         const hash = window.location.hash;
         const selected =
           initialView ??
@@ -60,14 +107,19 @@ export function ConversationWorkspace({
         setOpened(new Set([selected]));
       })
       .catch((reason: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "This conversation could not be loaded.",
-        );
+        if (!requestIsCurrent()) return;
+        setLoadState({
+          status: "failed",
+          message:
+            reason instanceof Error ? reason.message : conversationLoadFailure,
+        });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (requestSequence.current === request) {
+        requestSequence.current += 1;
+      }
+    };
   }, [initialView, interactionId, retryKey]);
 
   function select(next: ConversationView) {
@@ -79,14 +131,25 @@ export function ConversationWorkspace({
     window.history.replaceState(window.history.state, "", url);
   }
 
-  if (!interaction || interaction.id !== interactionId) {
-    return error ? (
+  function updateInteraction(next: Interaction) {
+    if (next.id !== interactionId) {
+      setLoadState({ status: "failed", message: conversationLoadFailure });
+      return;
+    }
+    setLoadState({ status: "available", interaction: next });
+  }
+
+  if (loadState.status !== "available") {
+    return loadState.status === "failed" ? (
       <div role="alert" className="form-card">
-        <p>{error}</p>
+        <p>{loadState.message}</p>
         <button
           type="button"
           className="secondary-button mt-3"
-          onClick={() => setRetryKey((value) => value + 1)}
+          onClick={() => {
+            setLoadState({ status: "loading" });
+            setRetryKey((value) => value + 1);
+          }}
         >
           Try again
         </button>
@@ -95,6 +158,8 @@ export function ConversationWorkspace({
       <p role="status">Loading conversation…</p>
     );
   }
+
+  const { interaction } = loadState;
 
   return (
     <section aria-labelledby="conversation-title" className="space-y-6">
@@ -176,7 +241,7 @@ export function ConversationWorkspace({
             interactionId={interaction.id}
             initialInteraction={interaction}
             embedded
-            onInteractionChange={setInteraction}
+            onInteractionChange={updateInteraction}
             onOpenPreparation={() => select("prepare")}
             onOpenReview={() => select("review")}
             briefRefreshKey={briefRefreshKey}
