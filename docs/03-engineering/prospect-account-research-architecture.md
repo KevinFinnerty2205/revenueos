@@ -69,6 +69,14 @@ longer supported findings without mutating earlier runs.
 All routes require authenticated, active tenant membership. OpenAPI/Pydantic remains
 the source of truth and `packages/shared` mirrors only client-facing contracts.
 
+The separately labelled Account public-research card also fails closed in the
+browser. Its read state is owned by the requested Company ID, late responses from a
+previous Account are ignored, and a research-link response is rendered only when
+its `companyId` exactly matches the active Account. The returned research-target
+ID is encoded as one `/find` path segment rather than trusted as a route. This is
+presentation-layer defence in depth; tenant membership and Company/research
+ownership remain enforced by the API and repository.
+
 ## WO-027 extension
 
 Migration `0036_prospect_people` adds a separate Prospect Person aggregate, optional
