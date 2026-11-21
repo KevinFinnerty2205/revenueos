@@ -69,7 +69,9 @@ Debrief Session must belong to the requested Interaction, and restore plus
 existing-session mutations must return the requested session identifier before any
 private content is rendered or the browser session key is updated. Server-side
 tenant and owner checks remain authoritative; the client check is defence in depth
-against malformed or stale successful responses.
+against malformed or stale successful responses. A restore identity mismatch keeps
+the opaque saved session reference, blocks fresh-start controls and requires an
+explicit retry.
 
 ## Configuration
 

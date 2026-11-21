@@ -287,25 +287,27 @@ describe("PostInteractionCapture", () => {
   it("keeps the saved session key private when restore returns another session", async () => {
     const key = "revenueos:post-interaction-capture:interaction-1";
     const foreignQuestion = "Question from the wrong private session";
+    const retry = deferred<Response>();
+    const foreignResponse = () =>
+      response(
+        session({
+          id: "session-foreign",
+          currentQuestion: {
+            status: "ask",
+            question: foreignQuestion,
+            reason: "Private foreign context.",
+            target: "other",
+            priority: "high",
+          },
+        }),
+      );
     window.localStorage.setItem(key, "session-expected");
     vi.stubGlobal(
       "fetch",
-      vi.fn(() =>
-        Promise.resolve(
-          response(
-            session({
-              id: "session-foreign",
-              currentQuestion: {
-                status: "ask",
-                question: foreignQuestion,
-                reason: "Private foreign context.",
-                target: "other",
-                priority: "high",
-              },
-            }),
-          ),
-        ),
-      ),
+      vi
+        .fn()
+        .mockResolvedValueOnce(foreignResponse())
+        .mockReturnValueOnce(retry.promise),
     );
 
     render(
@@ -321,6 +323,26 @@ describe("PostInteractionCapture", () => {
     expect(screen.queryByText(foreignQuestion)).not.toBeInTheDocument();
     expect(
       screen.queryByText("Your in-progress capture was restored."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start personal notes" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start AI Debrief" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try restore again" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Restoring post-interaction capture…",
+    );
+    await act(async () => {
+      retry.resolve(foreignResponse());
+      await retry.promise;
+    });
+    expect(
+      await screen.findByRole("button", { name: "Try restore again" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Start personal notes" }),
     ).not.toBeInTheDocument();
     expect(window.localStorage.getItem(key)).toBe("session-expected");
   });

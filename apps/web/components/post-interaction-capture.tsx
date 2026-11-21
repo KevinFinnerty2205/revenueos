@@ -126,6 +126,8 @@ function StatefulPostInteractionCapture({
   const [answer, setAnswer] = useState("");
   const [working, setWorking] = useState(false);
   const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreRetryKey, setRestoreRetryKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>(
@@ -190,7 +192,7 @@ function StatefulPostInteractionCapture({
       })
       .catch((requestError: unknown) => {
         if (requestError instanceof DebriefSessionIdentityError) {
-          setError(requestError.message);
+          setRestoreError(requestError.message);
           return;
         }
         window.localStorage.removeItem(storageKey(interactionId));
@@ -199,7 +201,7 @@ function StatefulPostInteractionCapture({
         if (!controller.signal.aborted) setRestoring(false);
       });
     return () => controller.abort();
-  }, [interactionId, remember, restoreLatest]);
+  }, [interactionId, remember, restoreLatest, restoreRetryKey]);
 
   useEffect(() => {
     if (recordingState !== "recording") return;
@@ -554,6 +556,23 @@ function StatefulPostInteractionCapture({
         </div>
       ) : null}
 
+      {restoreError ? (
+        <div className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-900">
+          <p role="alert">{restoreError}</p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            onClick={() => {
+              setRestoreError(null);
+              setRestoring(true);
+              setRestoreRetryKey((current) => current + 1);
+            }}
+          >
+            Try restore again
+          </button>
+        </div>
+      ) : null}
+
       {error ? (
         <p
           role="alert"
@@ -571,7 +590,7 @@ function StatefulPostInteractionCapture({
         </p>
       ) : null}
 
-      {!session ? (
+      {!session && !restoreError ? (
         <StartCapture
           phoneCall={interactionType === "phone_call"}
           working={working}
