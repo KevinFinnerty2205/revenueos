@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommercialPlanSettings } from "@/components/commercial-plan-settings";
 
@@ -179,6 +179,10 @@ describe("CommercialPlanSettings", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Complete")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Plan access" })).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Plan access" }),
+      ).toHaveFocus(),
+    );
   });
 });
