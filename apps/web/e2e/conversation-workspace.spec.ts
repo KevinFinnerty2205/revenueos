@@ -87,10 +87,17 @@ test("account history opens one CRM-independent conversation workspace and prese
       await route.fulfill({
         json: {
           id: "northstar-proof",
+          organisationId: "organisation-proof",
           name: "Northstar",
           website: null,
           industry: "Facilities",
           location: "Sydney",
+          employeeCount: null,
+          status: "prospect",
+          ownerUserId: "owner-proof",
+          archivedAt: null,
+          createdAt: "2026-11-01T00:00:00Z",
+          updatedAt: "2026-11-01T00:00:00Z",
         },
       });
       return;
