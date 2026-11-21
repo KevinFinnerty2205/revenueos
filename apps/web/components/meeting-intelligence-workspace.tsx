@@ -1543,14 +1543,17 @@ function LegacyFollowUpEmailView({
           }}
         />
       </label>
-      <p className="mt-3 text-xs font-semibold text-slate-500">
+      <p
+        role="status"
+        aria-live="polite"
+        className="mt-3 text-xs font-semibold text-slate-500"
+      >
+        Review status: {draft.trim() && approved ? "Reviewed" : "Needs review"}
         {dirty
-          ? "Unsaved edits"
-          : approved
-            ? "Reviewed and saved locally"
-            : saved
-              ? "Draft saved locally — review still required"
-              : "Generated draft — not yet saved or reviewed"}
+          ? " · Unsaved edits"
+          : saved
+            ? " · Saved locally"
+            : " · Generated draft not yet saved"}
       </p>
       {copyStatus ? (
         <p role="status" className="mt-4 text-sm text-slate-700">
@@ -1586,14 +1589,14 @@ function LegacyFollowUpEmailView({
             type="button"
             className="secondary-button"
             disabled={identityChecking}
-            onClick={() => void saveDraft(false)}
+            onClick={() => void saveDraft()}
           >
             Save draft
           </button>
           <button
             type="button"
             className="secondary-button"
-            disabled={identityChecking}
+            disabled={identityChecking || !draft.trim() || approved}
             onClick={() => void saveDraft(true)}
           >
             Mark reviewed
@@ -1688,14 +1691,6 @@ function PersistedFollowUpEmailView({
 
   if (!content) return <MissingContent />;
 
-  async function saveDraft(reviewed: boolean) {
-    workspace.setValues((current) => ({
-      ...current,
-      followUpReviewed: reviewed,
-    }));
-    await workspace.save({ followUpReviewed: reviewed });
-  }
-
   async function recoverLegacyDraft() {
     const stored = window.localStorage.getItem(legacyKey);
     if (!stored) return;
@@ -1747,6 +1742,15 @@ function PersistedFollowUpEmailView({
     URL.revokeObjectURL(url);
   }
 
+  const workspaceActionDisabled =
+    workspace.loading ||
+    workspace.saveState === "saving" ||
+    workspace.saveState === "conflict" ||
+    workspace.conflictRecovery.state !== "idle";
+  const followUpHasContent = workspace.values.followUpDraft.trim().length > 0;
+  const followUpReviewed =
+    followUpHasContent && workspace.values.followUpReviewed;
+
   return (
     <div className="mt-5">
       <p className="text-xs font-medium text-slate-500">
@@ -1772,14 +1776,17 @@ function PersistedFollowUpEmailView({
           }
         />
       </label>
-      <p className="mt-3 text-xs font-semibold text-slate-500">
+      <p
+        role="status"
+        aria-live="polite"
+        className="mt-3 text-xs font-semibold text-slate-500"
+      >
+        Review status: {followUpReviewed ? "Reviewed" : "Needs review"}
         {workspace.saveState === "saving"
-          ? "Saving…"
-          : workspace.saveState === "saved" && workspace.values.followUpReviewed
-            ? "Reviewed and saved privately"
-            : workspace.saveState === "saved"
-              ? "Draft saved privately — review still required"
-              : "Generated or edited draft — save required"}
+          ? " · Saving…"
+          : workspace.saveState === "saved"
+            ? " · Saved privately"
+            : " · Save required"}
       </p>
       {legacyRecoveryAvailable ? (
         <button
@@ -1883,12 +1890,8 @@ function PersistedFollowUpEmailView({
           <button
             type="button"
             className="secondary-button"
-            disabled={
-              workspace.loading ||
-              workspace.saveState === "saving" ||
-              workspace.saveState === "conflict"
-            }
-            onClick={() => void saveDraft(false)}
+            disabled={workspaceActionDisabled}
+            onClick={() => void workspace.save()}
           >
             Save draft
           </button>
@@ -1896,11 +1899,9 @@ function PersistedFollowUpEmailView({
             type="button"
             className="secondary-button"
             disabled={
-              workspace.loading ||
-              workspace.saveState === "saving" ||
-              workspace.saveState === "conflict"
+              workspaceActionDisabled || !followUpHasContent || followUpReviewed
             }
-            onClick={() => void saveDraft(true)}
+            onClick={() => void workspace.save({ followUpReviewed: true })}
           >
             Mark reviewed
           </button>

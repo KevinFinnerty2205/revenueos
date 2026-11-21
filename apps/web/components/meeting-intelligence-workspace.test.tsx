@@ -1442,6 +1442,152 @@ describe("MeetingIntelligenceWorkspace", () => {
     );
   });
 
+  it("keeps a reviewed browser-only draft reviewed when saving it unchanged", async () => {
+    const draftKey = "revenueos:follow-up-draft:meeting-1";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          String(input).endsWith("/api/v1/me")
+            ? jsonResponse({
+                user: {
+                  id: "user-1",
+                  externalAuthId: "user_dev_001",
+                  displayName: "Alex Morgan",
+                  email: "alex@example.test",
+                },
+                organisation: {
+                  id: "organisation-1",
+                  name: "Example Revenue Team",
+                  slug: "example-revenue-team",
+                },
+                role: "member",
+                authMode: "mock",
+                requestId: "request-1",
+              })
+            : jsonResponse(completedWorkspace()),
+        ),
+      ),
+    );
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    await waitFor(() =>
+      expect(JSON.parse(String(window.localStorage.getItem(draftKey)))).toEqual(
+        expect.objectContaining({ approved: true }),
+      ),
+    );
+    expect(screen.getByText(/Review status: Reviewed/)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Mark reviewed" }),
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() =>
+      expect(JSON.parse(String(window.localStorage.getItem(draftKey)))).toEqual(
+        expect.objectContaining({ approved: true }),
+      ),
+    );
+
+    fireEvent.change(draft, { target: { value: "" } });
+    expect(screen.getByText(/Review status: Needs review/)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Mark reviewed" }),
+    ).toBeDisabled();
+  });
+
+  it("preserves persisted review status on unchanged saves and failed reviews", async () => {
+    const reviewedWorkspace = {
+      exists: true,
+      ownerUserId: "user-1",
+      lockVersion: 2,
+      liveNotes: "",
+      enhancedNotes: "",
+      followUpDraft: "Keep this reviewed private follow-up.",
+      followUpReviewed: true,
+      generationFingerprint: null,
+      generationState: "not_started" as const,
+      generationId: null,
+      generationTranscriptVersion: null,
+      generationPersonalNotesState: "not_included" as const,
+      generationFailureCode: null,
+      generationRetryAvailable: false,
+      generationUpdateAvailable: false,
+      generationCompletedAt: null,
+      importedFromBrowserAt: null,
+      updatedAt: "2026-10-31T00:00:00Z",
+    };
+    let putCount = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/personal-workspace")) {
+        if (init?.method !== "PUT") {
+          return Promise.resolve(jsonResponse(reviewedWorkspace));
+        }
+        putCount += 1;
+        if (putCount === 1) {
+          return Promise.resolve(
+            jsonResponse({
+              ...reviewedWorkspace,
+              lockVersion: 3,
+            }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "conversation_workspace_unavailable",
+              message: "Your private workspace could not be saved.",
+            },
+            503,
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse(completedWorkspace()));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MeetingIntelligenceWorkspace
+        meetingId="meeting-1"
+        interactionId="interaction-1"
+      />,
+    );
+
+    const draft = await screen.findByLabelText("Editable follow-up draft");
+    await waitFor(() =>
+      expect(draft).toHaveValue(reviewedWorkspace.followUpDraft),
+    );
+    expect(screen.getByText(/Review status: Reviewed/)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Mark reviewed" }),
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(putCount).toBe(1));
+    const firstPut = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/personal-workspace") && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(firstPut?.[1]?.body))).toMatchObject({
+      followUpReviewed: true,
+    });
+
+    fireEvent.change(draft, {
+      target: { value: "Edited private follow-up awaiting review." },
+    });
+    expect(screen.getByText(/Review status: Needs review/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+
+    expect(
+      await screen.findByText(/Your private workspace could not be saved/),
+    ).toBeVisible();
+    expect(screen.getByText(/Review status: Needs review/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Mark reviewed" })).toBeEnabled();
+  });
+
   it("offers regenerated follow-up text without replacing the private draft", async () => {
     let intelligence = completedWorkspace();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

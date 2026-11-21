@@ -99,6 +99,9 @@ export function ConversationNotesReview({
     controller.saveState === "saving" ||
     conflictActive ||
     controller.conflictRecovery.state === "saving";
+  const followUpHasContent = controller.values.followUpDraft.trim().length > 0;
+  const followUpReviewed =
+    followUpHasContent && controller.values.followUpReviewed;
   const submittedConflictFields = controller.conflictRecovery.submittedFields;
   const reviewedConflictValues: Partial<WorkspaceValues> = {};
   if (controller.dirtyFields.liveNotes || submittedConflictFields.liveNotes) {
@@ -322,32 +325,27 @@ export function ConversationNotesReview({
             }))
           }
         />
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-3 text-sm font-semibold text-amber-950"
+        >
+          Review status: {followUpReviewed ? "Reviewed" : "Needs review"}
+        </p>
         <div className="mt-3 flex flex-wrap gap-3">
           <button
             type="button"
             className="secondary-button"
             disabled={saveDisabled}
-            onClick={() => {
-              controller.setValues((current) => ({
-                ...current,
-                followUpReviewed: false,
-              }));
-              void controller.save({ followUpReviewed: false });
-            }}
+            onClick={() => void controller.save()}
           >
             Save follow-up draft
           </button>
           <button
             type="button"
             className="secondary-button"
-            disabled={saveDisabled || !controller.values.followUpDraft.trim()}
-            onClick={() => {
-              controller.setValues((current) => ({
-                ...current,
-                followUpReviewed: true,
-              }));
-              void controller.save({ followUpReviewed: true });
-            }}
+            disabled={saveDisabled || !followUpHasContent || followUpReviewed}
+            onClick={() => void controller.save({ followUpReviewed: true })}
           >
             Mark reviewed
           </button>

@@ -251,6 +251,190 @@ test("Home keeps the next conversation, follow-up and memory central", async ({
   }
 });
 
+test("reviewing a private follow-up removes only its metadata from Home", async ({
+  page,
+}) => {
+  const privateDraft =
+    "Private sentinel: send the founder the agreed implementation summary.";
+  let workspace = {
+    exists: true,
+    ownerUserId: "user-1",
+    lockVersion: 3,
+    liveNotes: "",
+    enhancedNotes: "",
+    followUpDraft: privateDraft,
+    followUpReviewed: false,
+    generationFingerprint: null,
+    generationState: "not_started",
+    generationId: null,
+    generationTranscriptVersion: null,
+    generationPersonalNotesState: "not_included",
+    generationFailureCode: null,
+    generationRetryAvailable: false,
+    generationUpdateAvailable: false,
+    generationCompletedAt: null,
+    importedFromBrowserAt: null,
+    updatedAt: "2026-10-30T02:00:00Z",
+  };
+  const interaction = {
+    id: "interaction-private-follow-up",
+    organisationId: "organisation-1",
+    companyId: null,
+    opportunityId: null,
+    contactId: null,
+    meetingId: null,
+    eventId: null,
+    interactionType: "manual_interaction",
+    lifecycleStatus: "completed",
+    title: "Founder coffee follow-up",
+    scheduledStartAt: null,
+    scheduledEndAt: null,
+    actualStartAt: "2026-10-30T01:00:00Z",
+    actualEndAt: "2026-10-30T01:30:00Z",
+    timezone: "Australia/Sydney",
+    creationOrigin: "manual",
+    callDirection: null,
+    callOutcome: null,
+    meetingPlatform: null,
+    meetingUrl: null,
+    externalMeetingId: null,
+    captureSource: null,
+    ingestionState: null,
+    durationSeconds: 1800,
+    captureMethods: ["debrief"],
+    intelligenceState: "ready",
+    recordingAvailable: false,
+    createdByUserId: "user-1",
+    briefState: "unavailable",
+    briefGeneratedAt: null,
+    createdAt: "2026-10-30T01:00:00Z",
+    updatedAt: "2026-10-30T02:00:00Z",
+  };
+
+  await page.route("http://localhost:8000/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+
+    if (path === "/api/v1/daily") {
+      const privateFollowUps = workspace.followUpReviewed
+        ? { attentionCount: 0, items: [], truncated: false }
+        : dailyResponse().privateFollowUps;
+      await route.fulfill({ json: dailyResponse({ privateFollowUps }) });
+      return;
+    }
+    if (path === "/api/v1/interactions") {
+      await route.fulfill({ json: recentPage() });
+      return;
+    }
+    if (path === "/api/v1/companies") {
+      await route.fulfill({
+        json: { items: [], total: 0, page: 1, pageSize: 6, pages: 0 },
+      });
+      return;
+    }
+    if (path === "/api/v1/beta/capabilities") {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            aiCompanion: false,
+            aiDebrief: false,
+            recordingCapture: false,
+            visualEvidence: false,
+            liveInteractionIntelligence: false,
+          },
+        },
+      });
+      return;
+    }
+    if (
+      path ===
+      "/api/v1/interactions/interaction-private-follow-up/personal-workspace"
+    ) {
+      if (request.method() === "PUT") {
+        workspace = {
+          ...workspace,
+          ...request.postDataJSON(),
+          exists: true,
+          lockVersion: workspace.lockVersion + 1,
+          updatedAt: "2026-10-30T02:05:00Z",
+        };
+      }
+      await route.fulfill({ json: workspace });
+      return;
+    }
+    if (path.endsWith("/conversation-memory")) {
+      await route.fulfill({
+        json: {
+          state: "not_configured",
+          safeMessage: "No framework is selected.",
+          definition: null,
+          assignment: null,
+          suggestions: [],
+          currentConversation: null,
+          confirmedThread: null,
+          confirmedInitiativeHistory: null,
+          generatedAt: "2026-10-30T02:00:00Z",
+        },
+      });
+      return;
+    }
+    if (path === "/api/v1/conversation-threads") {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path.endsWith("/companion/brief")) {
+      await route.fulfill({
+        json: {
+          state: "unavailable",
+          generationAvailable: false,
+          brief: null,
+          priorVersions: [],
+          sourceLabels: [],
+          reviewed: false,
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/companion/markers")) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path === "/api/v1/interactions/interaction-private-follow-up") {
+      await route.fulfill({ json: interaction });
+      return;
+    }
+    await route.fulfill({
+      status: 404,
+      json: { code: "not_found", message: "Not part of this test." },
+    });
+  });
+
+  await page.goto("/dashboard");
+  await expect(page.getByText("Founder coffee follow-up")).toBeVisible();
+  await expect(page.getByText(privateDraft)).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Review private draft" }).click();
+  await expect(page.getByLabel("Private follow-up draft")).toHaveValue(
+    privateDraft,
+  );
+  await expect(page.getByText("Review status: Needs review")).toBeVisible();
+  await page.getByRole("button", { name: "Mark reviewed" }).click();
+  await expect(page.getByText("Review status: Reviewed")).toBeVisible();
+  if (process.env.CAPTURE_FOLLOW_UP_REVIEW_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/private-follow-up-reviewed.png",
+      fullPage: true,
+    });
+  }
+
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Home" })
+    .click();
+  await expect(page.getByText("Founder coffee follow-up")).toHaveCount(0);
+  await expect(page.getByText(privateDraft)).toHaveCount(0);
+});
+
 test("Home starts with knowledge or a conversation without CRM setup", async ({
   page,
 }) => {
