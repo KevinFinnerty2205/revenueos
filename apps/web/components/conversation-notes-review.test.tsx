@@ -179,6 +179,115 @@ describe("ConversationNotesReview", () => {
     ).toBeVisible();
   });
 
+  it("preserves a reviewed follow-up when saving unchanged text", async () => {
+    const reviewedWorkspace = {
+      ...readyWorkspace,
+      followUpReviewed: true,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(reviewedWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...reviewedWorkspace,
+          lockVersion: reviewedWorkspace.lockVersion + 1,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ReviewHarness />);
+
+    expect(await screen.findByText("Review status: Reviewed")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Mark reviewed" }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save follow-up draft" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)),
+    ).toMatchObject({
+      followUpDraft: reviewedWorkspace.followUpDraft,
+      followUpReviewed: true,
+    });
+    expect(screen.getByText("Review status: Reviewed")).toBeVisible();
+  });
+
+  it("reopens review when the follow-up text changes", async () => {
+    const reviewedWorkspace = {
+      ...readyWorkspace,
+      followUpReviewed: true,
+    };
+    const editedDraft =
+      "Subject: Updated Friday review\n\nPlease review the changes.";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(reviewedWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...reviewedWorkspace,
+          lockVersion: reviewedWorkspace.lockVersion + 1,
+          followUpDraft: editedDraft,
+          followUpReviewed: false,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ReviewHarness />);
+
+    const draft = await screen.findByLabelText("Private follow-up draft");
+    expect(screen.getByText("Review status: Reviewed")).toBeVisible();
+    fireEvent.change(draft, { target: { value: editedDraft } });
+
+    expect(screen.getByText("Review status: Needs review")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Mark reviewed" })).toBeEnabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save follow-up draft" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)),
+    ).toMatchObject({
+      followUpDraft: editedDraft,
+      followUpReviewed: false,
+    });
+  });
+
+  it("keeps a failed review visibly pending", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(readyWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_unavailable",
+            message: "Your private workspace could not be saved.",
+          },
+          503,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ReviewHarness />);
+
+    expect(
+      await screen.findByText("Review status: Needs review"),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+
+    expect(
+      await screen.findByText(/Your private workspace could not be saved/),
+    ).toBeVisible();
+    expect(screen.getByText("Review status: Needs review")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Mark reviewed" })).toBeEnabled();
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)),
+    ).toMatchObject({ followUpReviewed: true });
+  });
+
   it("distinguishes unsaved rough-note edits from the saved note used for generation", async () => {
     vi.stubGlobal(
       "fetch",
