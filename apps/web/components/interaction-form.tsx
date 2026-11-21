@@ -45,6 +45,22 @@ interface OptionRetryRequest {
   contextIdentity: string;
 }
 
+type ManualRelationshipSource = "opportunity" | "contact";
+
+interface ManualCompanyVerificationRequest {
+  source: ManualRelationshipSource;
+  sequence: number;
+  relationshipId: string;
+  companyId: string;
+  contextIdentity: string;
+  controller: AbortController;
+}
+
+interface ManualRelationshipFeedback {
+  source: ManualRelationshipSource;
+  message: string;
+}
+
 interface RelationshipContextInput {
   companyId: string;
   opportunityId: string;
@@ -61,6 +77,10 @@ const linkedOpportunityWarning =
   "The linked opportunity could not be verified as active for this account. Continue without it or choose another opportunity when available.";
 const linkedContactWarning =
   "The linked person could not be verified as active for this account. Choose another person or continue without one.";
+const selectedOpportunityCompanyWarning =
+  "The selected opportunity’s company could not be verified as active. Choose another opportunity or continue without one.";
+const selectedContactCompanyWarning =
+  "The selected person’s company could not be verified as active. Choose another person or continue without one.";
 
 function isAbortError(reason: unknown): boolean {
   return reason instanceof DOMException && reason.name === "AbortError";
@@ -92,6 +112,17 @@ function activeRecordById<T extends { id: string; archivedAt: string | null }>(
 ): T | null {
   const record = items.find((item) => item.id === id);
   return record && isActiveRecord(record) ? record : null;
+}
+
+function mergeActiveRecords<
+  T extends { id: string; archivedAt: string | null },
+>(items: T[], additions: T[]): T[] {
+  return additions
+    .filter(isActiveRecord)
+    .reduce(
+      (merged, item) => appendUnique(merged, item),
+      items.filter(isActiveRecord),
+    );
 }
 
 function reconcileRelationshipContext({
@@ -288,6 +319,10 @@ export function InteractionForm({
   >(null);
   const [optionRetryRequest, setOptionRetryRequest] =
     useState<OptionRetryRequest | null>(null);
+  const [manualCompanyVerification, setManualCompanyVerification] =
+    useState<ManualCompanyVerificationRequest | null>(null);
+  const [manualRelationshipFeedback, setManualRelationshipFeedback] =
+    useState<ManualRelationshipFeedback | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
@@ -315,15 +350,31 @@ export function InteractionForm({
   const contextDirtyRef = useRef(false);
   const linkedContextLoadedRef = useRef(false);
   const optionRetrySequenceRef = useRef(0);
+  const manualVerificationSequenceRef = useRef(0);
+  const manualCompanyVerificationRef =
+    useRef<ManualCompanyVerificationRequest | null>(null);
   const activeLinkedContextIdentityRef = useRef(linkedContextIdentity);
+  const companiesRef = useRef(companies);
+  const opportunitiesRef = useRef(opportunities);
+  const contactsRef = useRef(contacts);
+  const manuallyVerifiedCompaniesRef = useRef<Company[]>([]);
 
   useLayoutEffect(() => {
     activeLinkedContextIdentityRef.current = linkedContextIdentity;
   }, [linkedContextIdentity]);
 
+  useLayoutEffect(() => {
+    companiesRef.current = companies;
+    opportunitiesRef.current = opportunities;
+    contactsRef.current = contacts;
+  }, [companies, contacts, opportunities]);
+
   useEffect(() => {
     const controller = new AbortController();
     const requestContextIdentity = linkedContextIdentity;
+    manualCompanyVerificationRef.current?.controller.abort();
+    manualCompanyVerificationRef.current = null;
+    manuallyVerifiedCompaniesRef.current = [];
     window.queueMicrotask(() => {
       if (
         controller.signal.aborted ||
@@ -340,6 +391,8 @@ export function InteractionForm({
       setCompanyOptionsWarning(null);
       setContactOptionsWarning(null);
       setOpportunityOptionsWarning(null);
+      setManualCompanyVerification(null);
+      setManualRelationshipFeedback(null);
     });
 
     const companyOptionsRequest = loadCompanyOptions(
@@ -362,7 +415,12 @@ export function InteractionForm({
     void companyOptionsRequest.then(
       (loaded) => {
         if (!requestIsActive()) return;
-        setCompanies(loaded.items);
+        const nextCompanies = mergeActiveRecords(
+          loaded.items,
+          manuallyVerifiedCompaniesRef.current,
+        );
+        companiesRef.current = nextCompanies;
+        setCompanies(nextCompanies);
         setCompanyOptionsState("ready");
         setCompanyOptionsWarning(
           loaded.exactWarning ? linkedCompanyWarning : null,
@@ -370,8 +428,12 @@ export function InteractionForm({
       },
       (reason: unknown) => {
         if (!requestIsActive() || isAbortError(reason)) return;
-        setCompanies([]);
-        setCompanyOptionsState("unavailable");
+        const verifiedCompanies = manuallyVerifiedCompaniesRef.current;
+        companiesRef.current = verifiedCompanies;
+        setCompanies(verifiedCompanies);
+        setCompanyOptionsState(
+          verifiedCompanies.length > 0 ? "ready" : "unavailable",
+        );
         setCompanyOptionsWarning(
           "Company options are temporarily unavailable. You can still add this conversation without company context.",
         );
@@ -380,6 +442,7 @@ export function InteractionForm({
     void opportunityOptionsRequest.then(
       (loaded) => {
         if (!requestIsActive()) return;
+        opportunitiesRef.current = loaded.items;
         setOpportunities(loaded.items);
         setOpportunityOptionsState("ready");
         setOpportunityOptionsWarning(
@@ -388,6 +451,7 @@ export function InteractionForm({
       },
       (reason: unknown) => {
         if (!requestIsActive() || isAbortError(reason)) return;
+        opportunitiesRef.current = [];
         setOpportunities([]);
         setOpportunityOptionsState("unavailable");
         setOpportunityOptionsWarning(
@@ -398,6 +462,7 @@ export function InteractionForm({
     void contactOptionsRequest.then(
       (loaded) => {
         if (!requestIsActive()) return;
+        contactsRef.current = loaded.items;
         setContacts(loaded.items);
         setContactOptionsState("ready");
         setContactOptionsWarning(
@@ -406,6 +471,7 @@ export function InteractionForm({
       },
       (reason: unknown) => {
         if (!requestIsActive() || isAbortError(reason)) return;
+        contactsRef.current = [];
         setContacts([]);
         setContactOptionsState("unavailable");
         setContactOptionsWarning(
@@ -427,7 +493,12 @@ export function InteractionForm({
       }
 
       let nextCompanies =
-        companyResult.status === "fulfilled" ? companyResult.value.items : [];
+        companyResult.status === "fulfilled"
+          ? mergeActiveRecords(
+              companyResult.value.items,
+              manuallyVerifiedCompaniesRef.current,
+            )
+          : manuallyVerifiedCompaniesRef.current;
       const nextOpportunities =
         opportunityResult.status === "fulfilled"
           ? opportunityResult.value.items
@@ -484,6 +555,7 @@ export function InteractionForm({
       }
 
       if (companyResult.status === "fulfilled") {
+        companiesRef.current = nextCompanies;
         setCompanies(nextCompanies);
         setCompanyOptionsWarning(
           companyExactWarning ? linkedCompanyWarning : null,
@@ -513,20 +585,27 @@ export function InteractionForm({
       ) {
         setContactOptionsWarning(linkedContactWarning);
       }
-      if (!linkedContextLoadedRef.current || !contextDirtyRef.current) {
+      if (!contextDirtyRef.current) {
         setCompanyId(linkedContext.companyId);
         setOpportunityId(linkedContext.opportunityId);
         setContactId(linkedContext.contactId);
         setInteractionType(linkedContext.interactionType);
         contextDirtyRef.current = false;
         setPendingLinkedContext(null);
-      } else {
+      } else if (linkedContextLoadedRef.current) {
         setPendingLinkedContext(linkedContext);
       }
       linkedContextLoadedRef.current = true;
       setLoading(false);
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      const manualRequest = manualCompanyVerificationRef.current;
+      if (manualRequest?.contextIdentity === requestContextIdentity) {
+        manualRequest.controller.abort();
+        manualCompanyVerificationRef.current = null;
+      }
+    };
   }, [
     conversationOnly,
     initialCompanyId,
@@ -593,12 +672,17 @@ export function InteractionForm({
           ) {
             return;
           }
-          setCompanies(loaded.items);
+          const nextCompanies = mergeActiveRecords(
+            loaded.items,
+            manuallyVerifiedCompaniesRef.current,
+          );
+          companiesRef.current = nextCompanies;
+          setCompanies(nextCompanies);
           setCompanyOptionsState("ready");
           const linkedContext = adoptVerifiedContext(
-            loaded.items,
-            opportunities,
-            contacts,
+            nextCompanies,
+            opportunitiesRef.current,
+            contactsRef.current,
           );
           setCompanyOptionsWarning(
             loaded.exactWarning ||
@@ -619,12 +703,13 @@ export function InteractionForm({
           ) {
             return;
           }
+          opportunitiesRef.current = loaded.items;
           setOpportunities(loaded.items);
           setOpportunityOptionsState("ready");
           const linkedContext = adoptVerifiedContext(
-            companies,
+            companiesRef.current,
             loaded.items,
-            contacts,
+            contactsRef.current,
           );
           setOpportunityOptionsWarning(
             loaded.exactWarning ||
@@ -646,11 +731,12 @@ export function InteractionForm({
         ) {
           return;
         }
+        contactsRef.current = loaded.items;
         setContacts(loaded.items);
         setContactOptionsState("ready");
         const linkedContext = adoptVerifiedContext(
-          companies,
-          opportunities,
+          companiesRef.current,
+          opportunitiesRef.current,
           loaded.items,
         );
         setContactOptionsWarning(
@@ -669,18 +755,24 @@ export function InteractionForm({
           return;
         }
         if (request.source === "company") {
-          setCompanies([]);
-          setCompanyOptionsState("unavailable");
+          const verifiedCompanies = manuallyVerifiedCompaniesRef.current;
+          companiesRef.current = verifiedCompanies;
+          setCompanies(verifiedCompanies);
+          setCompanyOptionsState(
+            verifiedCompanies.length > 0 ? "ready" : "unavailable",
+          );
           setCompanyOptionsWarning(
             "Company options are temporarily unavailable. You can still add this conversation without company context.",
           );
         } else if (request.source === "opportunity") {
+          opportunitiesRef.current = [];
           setOpportunities([]);
           setOpportunityOptionsState("unavailable");
           setOpportunityOptionsWarning(
             "Opportunity options are temporarily unavailable. You can still add this conversation without an opportunity.",
           );
         } else {
+          contactsRef.current = [];
           setContacts([]);
           setContactOptionsState("unavailable");
           setContactOptionsWarning(
@@ -692,23 +784,21 @@ export function InteractionForm({
     })();
     return () => controller.abort();
   }, [
-    companies,
-    contacts,
     conversationOnly,
     initialCompanyId,
     initialContactId,
     initialInteractionType,
     initialOpportunityId,
     linkedContextIdentity,
-    opportunities,
     optionRetryRequest,
   ]);
 
   function requestOptionRetry(source: OptionRetryRequest["source"]): void {
     const linkedCompanyId =
       initialCompanyId ||
-      contacts.find((contact) => contact.id === initialContactId)?.companyId ||
-      opportunities.find(
+      contactsRef.current.find((contact) => contact.id === initialContactId)
+        ?.companyId ||
+      opportunitiesRef.current.find(
         (opportunity) => opportunity.id === initialOpportunityId,
       )?.companyId ||
       "";
@@ -725,11 +815,188 @@ export function InteractionForm({
     });
   }
 
+  function clearManualCompanyVerification(clearSelection: boolean): void {
+    const request = manualCompanyVerificationRef.current;
+    if (request === null) return;
+    request.controller.abort();
+    manualCompanyVerificationRef.current = null;
+    setManualCompanyVerification(null);
+    if (!clearSelection) return;
+    if (request.source === "opportunity") {
+      setOpportunityId((current) =>
+        current === request.relationshipId ? "" : current,
+      );
+    } else {
+      setContactId((current) =>
+        current === request.relationshipId ? "" : current,
+      );
+    }
+  }
+
+  function rejectManualRelationship(
+    source: ManualRelationshipSource,
+    relationshipId: string,
+  ): void {
+    if (source === "opportunity") {
+      setOpportunityId((current) =>
+        current === relationshipId ? "" : current,
+      );
+      setManualRelationshipFeedback({
+        source,
+        message: selectedOpportunityCompanyWarning,
+      });
+    } else {
+      setContactId((current) => (current === relationshipId ? "" : current));
+      setManualRelationshipFeedback({
+        source,
+        message: selectedContactCompanyWarning,
+      });
+    }
+  }
+
+  function verifyManualRelationshipCompany(
+    source: ManualRelationshipSource,
+    relationshipId: string,
+    relatedCompanyId: string,
+  ): void {
+    const controller = new AbortController();
+    const request: ManualCompanyVerificationRequest = {
+      source,
+      sequence: ++manualVerificationSequenceRef.current,
+      relationshipId,
+      companyId: relatedCompanyId,
+      contextIdentity: linkedContextIdentity,
+      controller,
+    };
+    manualCompanyVerificationRef.current = request;
+    setManualCompanyVerification(request);
+    setManualRelationshipFeedback(null);
+
+    const requestIsActive = (): boolean =>
+      !controller.signal.aborted &&
+      manualCompanyVerificationRef.current === request &&
+      activeLinkedContextIdentityRef.current === request.contextIdentity;
+    const finish = (): void => {
+      if (!requestIsActive()) return;
+      manualCompanyVerificationRef.current = null;
+      setManualCompanyVerification(null);
+    };
+    const adoptVerifiedCompany = (verifiedCompany: Company): void => {
+      manuallyVerifiedCompaniesRef.current = appendUnique(
+        manuallyVerifiedCompaniesRef.current,
+        verifiedCompany,
+      );
+      const nextCompanies = mergeActiveRecords(companiesRef.current, [
+        verifiedCompany,
+      ]);
+      companiesRef.current = nextCompanies;
+      setCompanies(nextCompanies);
+      setCompanyOptionsState("ready");
+      setCompanyId(verifiedCompany.id);
+      setManualRelationshipFeedback(null);
+      finish();
+    };
+    const rejectUnlessAlreadyVerified = (): void => {
+      const currentlyVerified = activeRecordById(
+        companiesRef.current,
+        relatedCompanyId,
+      );
+      if (currentlyVerified !== null) {
+        adoptVerifiedCompany(currentlyVerified);
+        return;
+      }
+      rejectManualRelationship(source, relationshipId);
+      finish();
+    };
+
+    void apiRequest<Company>(
+      `/api/v1/companies/${encodeURIComponent(relatedCompanyId)}`,
+      { signal: controller.signal },
+    ).then(
+      (record) => {
+        if (!requestIsActive()) return;
+        const verifiedCompany = exactActiveRecord(record, relatedCompanyId);
+        if (verifiedCompany === null) {
+          rejectUnlessAlreadyVerified();
+          return;
+        }
+        adoptVerifiedCompany(verifiedCompany);
+      },
+      (reason: unknown) => {
+        if (!requestIsActive() || isAbortError(reason)) return;
+        rejectUnlessAlreadyVerified();
+      },
+    );
+  }
+
+  function selectManualOpportunity(nextOpportunityId: string): void {
+    clearManualCompanyVerification(true);
+    setManualRelationshipFeedback(null);
+    setOpportunityId(nextOpportunityId);
+    if (!nextOpportunityId) return;
+    const nextOpportunity = activeRecordById(
+      opportunitiesRef.current,
+      nextOpportunityId,
+    );
+    if (nextOpportunity === null) {
+      rejectManualRelationship("opportunity", nextOpportunityId);
+      return;
+    }
+    if (nextOpportunity.companyId === null) return;
+    if (companyId && companyId !== nextOpportunity.companyId) {
+      rejectManualRelationship("opportunity", nextOpportunityId);
+      return;
+    }
+    const verifiedCompany = activeRecordById(
+      companiesRef.current,
+      nextOpportunity.companyId,
+    );
+    if (verifiedCompany !== null) {
+      setCompanyId(verifiedCompany.id);
+      return;
+    }
+    verifyManualRelationshipCompany(
+      "opportunity",
+      nextOpportunity.id,
+      nextOpportunity.companyId,
+    );
+  }
+
+  function selectManualContact(nextContactId: string): void {
+    clearManualCompanyVerification(true);
+    setManualRelationshipFeedback(null);
+    setContactId(nextContactId);
+    if (!nextContactId) return;
+    const nextContact = activeRecordById(contactsRef.current, nextContactId);
+    if (
+      nextContact === null ||
+      (companyId && companyId !== nextContact.companyId)
+    ) {
+      rejectManualRelationship("contact", nextContactId);
+      return;
+    }
+    const verifiedCompany = activeRecordById(
+      companiesRef.current,
+      nextContact.companyId,
+    );
+    if (verifiedCompany !== null) {
+      setCompanyId(verifiedCompany.id);
+      return;
+    }
+    verifyManualRelationshipCompany(
+      "contact",
+      nextContact.id,
+      nextContact.companyId,
+    );
+  }
+
   function markContextDirty(): void {
     contextDirtyRef.current = true;
   }
 
   function applyLinkedContext(context: LinkedInteractionContext): void {
+    clearManualCompanyVerification(true);
+    setManualRelationshipFeedback(null);
     setCompanyId(context.companyId);
     setOpportunityId(context.opportunityId);
     setContactId(context.contactId);
@@ -740,6 +1007,7 @@ export function InteractionForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (manualCompanyVerificationRef.current !== null) return;
     setSubmitError(null);
     setSubmitting(true);
     const submittedContext = reconcileRelationshipContext({
@@ -856,7 +1124,20 @@ export function InteractionForm({
               value={interactionType}
               onChange={(event) => {
                 markContextDirty();
-                setInteractionType(event.target.value as InteractionType);
+                const nextInteractionType = event.target
+                  .value as InteractionType;
+                if (
+                  nextInteractionType !== "phone_call" &&
+                  manualCompanyVerificationRef.current?.source === "contact"
+                ) {
+                  clearManualCompanyVerification(true);
+                }
+                if (nextInteractionType !== "phone_call") {
+                  setManualRelationshipFeedback((current) =>
+                    current?.source === "contact" ? null : current,
+                  );
+                }
+                setInteractionType(nextInteractionType);
               }}
             >
               {(conversationOnly
@@ -898,6 +1179,8 @@ export function InteractionForm({
                   value={companyOptionsState === "ready" ? companyId : ""}
                   onChange={(event) => {
                     markContextDirty();
+                    clearManualCompanyVerification(true);
+                    setManualRelationshipFeedback(null);
                     const nextCompanyId = event.target.value;
                     setCompanyId(nextCompanyId);
                     const selectedOpportunity = activeRecordById(
@@ -954,15 +1237,7 @@ export function InteractionForm({
                     }
                     onChange={(event) => {
                       markContextDirty();
-                      const nextOpportunityId = event.target.value;
-                      setOpportunityId(nextOpportunityId);
-                      const nextOpportunity = activeRecordById(
-                        opportunities,
-                        nextOpportunityId,
-                      );
-                      if (!companyId && nextOpportunity?.companyId) {
-                        setCompanyId(nextOpportunity.companyId);
-                      }
+                      selectManualOpportunity(event.target.value);
                     }}
                   >
                     <option value="">
@@ -991,6 +1266,11 @@ export function InteractionForm({
                   retryLabel="Retry opportunities"
                   loading={opportunityOptionsState === "loading"}
                   onRetry={() => requestOptionRetry("opportunity")}
+                />
+                <ManualRelationshipStatus
+                  source="opportunity"
+                  verification={manualCompanyVerification}
+                  feedback={manualRelationshipFeedback}
                 />
               </div>
             ) : null}
@@ -1036,15 +1316,7 @@ export function InteractionForm({
                     value={contactOptionsState === "ready" ? contactId : ""}
                     onChange={(event) => {
                       markContextDirty();
-                      const nextContactId = event.target.value;
-                      setContactId(nextContactId);
-                      const nextContact = activeRecordById(
-                        contacts,
-                        nextContactId,
-                      );
-                      if (!companyId && nextContact) {
-                        setCompanyId(nextContact.companyId);
-                      }
+                      selectManualContact(event.target.value);
                     }}
                   >
                     <option value="">
@@ -1072,6 +1344,11 @@ export function InteractionForm({
                   retryLabel="Retry people"
                   loading={contactOptionsState === "loading"}
                   onRetry={() => requestOptionRetry("contact")}
+                />
+                <ManualRelationshipStatus
+                  source="contact"
+                  verification={manualCompanyVerification}
+                  feedback={manualRelationshipFeedback}
                 />
               </div>
             </fieldset>
@@ -1158,9 +1435,13 @@ export function InteractionForm({
             <button
               type="submit"
               className="primary-button"
-              disabled={submitting}
+              disabled={submitting || manualCompanyVerification !== null}
             >
-              {submitting ? "Creating…" : "Add conversation"}
+              {manualCompanyVerification
+                ? "Verifying relationship…"
+                : submitting
+                  ? "Creating…"
+                  : "Add conversation"}
             </button>
             <Link className="secondary-button" href="/conversations">
               Cancel
@@ -1199,6 +1480,32 @@ function OptionAvailability({
       </button>
     </div>
   ) : null;
+}
+
+function ManualRelationshipStatus({
+  source,
+  verification,
+  feedback,
+}: {
+  source: ManualRelationshipSource;
+  verification: ManualCompanyVerificationRequest | null;
+  feedback: ManualRelationshipFeedback | null;
+}) {
+  const verifying = verification?.source === source;
+  const message = feedback?.source === source ? feedback.message : null;
+  if (!verifying && message === null) return null;
+  return (
+    <p
+      role="status"
+      className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-normal leading-6 text-amber-950"
+    >
+      {verifying
+        ? source === "opportunity"
+          ? "Verifying the selected opportunity’s company…"
+          : "Verifying the selected person’s company…"
+        : message}
+    </p>
+  );
 }
 
 function OptionalSchedule({

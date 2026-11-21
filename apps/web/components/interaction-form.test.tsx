@@ -230,6 +230,360 @@ describe("InteractionForm", () => {
     );
   });
 
+  it("verifies a missing company before retaining a manually selected opportunity", async () => {
+    let resolveCompany: ((response: Response) => void) | undefined;
+    const companyVerification = new Promise<Response>((resolve) => {
+      resolveCompany = resolve;
+    });
+    let createPayload: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === "POST") {
+        createPayload = JSON.parse(String(init.body)) as Record<
+          string,
+          unknown
+        >;
+        return Promise.resolve(jsonResponse({ id: "manual-opportunity" }, 201));
+      }
+      if (path.endsWith("/api/v1/companies/company-beyond-page")) {
+        return companyVerification;
+      }
+      if (path.includes("/opportunities")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              opportunityFixture({
+                id: "opportunity-beyond-page",
+                companyId: "company-beyond-page",
+                name: "Beyond-page opportunity",
+              }),
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+    await screen.findByRole("option", { name: "Beyond-page opportunity" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Verify selected opportunity" },
+    });
+    fireEvent.change(screen.getByLabelText("Opportunity"), {
+      target: { value: "opportunity-beyond-page" },
+    });
+
+    expect(
+      await screen.findByText(/verifying the selected opportunity’s company/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Verifying relationship…" }),
+    ).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/companies/company-beyond-page"),
+      expect.any(Object),
+    );
+
+    await act(async () => {
+      resolveCompany?.(
+        jsonResponse(
+          companyFixture({
+            id: "company-beyond-page",
+            name: "Beyond-page company",
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveValue(
+        "company-beyond-page",
+      ),
+    );
+    expect(screen.getByLabelText("Opportunity")).toHaveValue(
+      "opportunity-beyond-page",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(
+        "/conversations/manual-opportunity",
+      ),
+    );
+    expect(createPayload).toMatchObject({
+      companyId: "company-beyond-page",
+      opportunityId: "opportunity-beyond-page",
+    });
+  });
+
+  it("verifies a missing company before retaining a manually selected person", async () => {
+    let resolveCompany: ((response: Response) => void) | undefined;
+    const companyVerification = new Promise<Response>((resolve) => {
+      resolveCompany = resolve;
+    });
+    let createPayload: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === "POST") {
+        createPayload = JSON.parse(String(init.body)) as Record<
+          string,
+          unknown
+        >;
+        return Promise.resolve(jsonResponse({ id: "manual-person" }, 201));
+      }
+      if (path.endsWith("/api/v1/companies/person-company")) {
+        return companyVerification;
+      }
+      if (path.includes("/contacts")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              contactFixture({
+                id: "person-beyond-page",
+                companyId: "person-company",
+                firstName: "Morgan",
+                lastName: "Chen",
+              }),
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Verify selected person" },
+    });
+    fireEvent.change(screen.getByLabelText("Conversation type"), {
+      target: { value: "phone_call" },
+    });
+    await screen.findByRole("option", { name: "Morgan Chen" });
+    fireEvent.change(screen.getByLabelText("Person"), {
+      target: { value: "person-beyond-page" },
+    });
+
+    expect(
+      await screen.findByText(/verifying the selected person’s company/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Verifying relationship…" }),
+    ).toBeDisabled();
+
+    await act(async () => {
+      resolveCompany?.(
+        jsonResponse(
+          companyFixture({
+            id: "person-company",
+            name: "Person company",
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveValue("person-company"),
+    );
+    expect(screen.getByLabelText("Person")).toHaveValue("person-beyond-page");
+    fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith("/conversations/manual-person"),
+    );
+    expect(createPayload).toMatchObject({
+      companyId: "person-company",
+      contactId: "person-beyond-page",
+    });
+  });
+
+  it("ignores deferred manual company verification after the linked context changes", async () => {
+    let resolveOldVerification: ((response: Response) => void) | undefined;
+    const oldVerification = new Promise<Response>((resolve) => {
+      resolveOldVerification = resolve;
+    });
+    let companyPageLoads = 0;
+    let opportunityPageLoads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith("/api/v1/companies/company-old")) {
+        return oldVerification;
+      }
+      if (path.includes("/companies")) {
+        companyPageLoads += 1;
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items:
+              companyPageLoads === 1
+                ? []
+                : [companyFixture({ id: "company-new", name: "New company" })],
+          }),
+        );
+      }
+      if (path.includes("/opportunities")) {
+        opportunityPageLoads += 1;
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items:
+              opportunityPageLoads === 1
+                ? [
+                    opportunityFixture({
+                      id: "opportunity-old",
+                      companyId: "company-old",
+                      name: "Old opportunity",
+                    }),
+                  ]
+                : [],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<InteractionForm />);
+    await screen.findByRole("option", { name: "Old opportunity" });
+    fireEvent.change(screen.getByLabelText("Opportunity"), {
+      target: { value: "opportunity-old" },
+    });
+    expect(
+      await screen.findByText(/verifying the selected opportunity’s company/i),
+    ).toBeVisible();
+
+    await act(async () => {
+      rerender(<InteractionForm initialCompanyId="company-new" />);
+      resolveOldVerification?.(
+        jsonResponse(
+          companyFixture({ id: "company-old", name: "Old company" }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      await screen.findByText(/current selections were kept/i),
+    ).toBeVisible();
+    expect(screen.queryByRole("option", { name: "Old company" })).toBeNull();
+    expect(screen.getByLabelText("Opportunity")).toHaveValue("");
+    expect(
+      screen.queryByText(/verifying the selected opportunity’s company/i),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Use linked context" }));
+    expect(screen.getByLabelText("Company")).toHaveValue("company-new");
+  });
+
+  it.each([
+    { source: "opportunity" as const, companyOutcome: "wrong_id" as const },
+    { source: "contact" as const, companyOutcome: "unavailable" as const },
+  ])(
+    "warns and omits a manually selected $source when its company is $companyOutcome",
+    async ({ source, companyOutcome }) => {
+      let createPayload: Record<string, unknown> | null = null;
+      const relationshipId = `manual-${source}`;
+      const relatedCompanyId = `${source}-company`;
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          if (init?.method === "POST") {
+            createPayload = JSON.parse(String(init.body)) as Record<
+              string,
+              unknown
+            >;
+            return Promise.resolve(
+              jsonResponse({ id: `omitted-${source}` }, 201),
+            );
+          }
+          if (path.endsWith(`/api/v1/companies/${relatedCompanyId}`)) {
+            return Promise.resolve(
+              companyOutcome === "wrong_id"
+                ? jsonResponse(companyFixture({ id: "wrong-company" }))
+                : jsonResponse({ code: "persistence_unavailable" }, 503),
+            );
+          }
+          if (source === "opportunity" && path.includes("/opportunities")) {
+            return Promise.resolve(
+              jsonResponse({
+                ...emptyPage,
+                items: [
+                  opportunityFixture({
+                    id: relationshipId,
+                    companyId: relatedCompanyId,
+                    name: "Manual opportunity",
+                  }),
+                ],
+              }),
+            );
+          }
+          if (source === "contact" && path.includes("/contacts")) {
+            return Promise.resolve(
+              jsonResponse({
+                ...emptyPage,
+                items: [
+                  contactFixture({
+                    id: relationshipId,
+                    companyId: relatedCompanyId,
+                    firstName: "Manual",
+                    lastName: "Person",
+                  }),
+                ],
+              }),
+            );
+          }
+          return Promise.resolve(jsonResponse(emptyPage));
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<InteractionForm />);
+      await waitFor(() =>
+        expect(
+          screen.queryByText(/loading optional relationship context/i),
+        ).not.toBeInTheDocument(),
+      );
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: `Omit ${source}` },
+      });
+      if (source === "contact") {
+        fireEvent.change(screen.getByLabelText("Conversation type"), {
+          target: { value: "phone_call" },
+        });
+      }
+      const label = source === "opportunity" ? "Opportunity" : "Person";
+      await screen.findByRole("option", {
+        name: source === "opportunity" ? "Manual opportunity" : "Manual Person",
+      });
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value: relationshipId },
+      });
+
+      expect(
+        await screen.findByText(
+          new RegExp(
+            `selected ${source === "contact" ? "person" : source}’s company could not be verified`,
+            "i",
+          ),
+        ),
+      ).toBeVisible();
+      expect(screen.getByLabelText(label)).toHaveValue("");
+      fireEvent.click(screen.getByRole("button", { name: "Add conversation" }));
+      await waitFor(() =>
+        expect(router.push).toHaveBeenCalledWith(
+          `/conversations/omitted-${source}`,
+        ),
+      );
+      expect(createPayload).toMatchObject({
+        companyId: null,
+        opportunityId: null,
+        contactId: null,
+      });
+    },
+  );
+
   it.each(exactRelationshipCases)(
     "adopts only a valid exact $entity record when it is $outcome",
     async ({ entity, outcome }) => {
@@ -769,6 +1123,74 @@ describe("InteractionForm", () => {
       "Keep this conversation title",
     );
     expect(companyLoads).toBe(2);
+  });
+
+  it("keeps one retry request active while unrelated sources settle", async () => {
+    let companyLoads = 0;
+    let resolveCompanyRetry: ((response: Response) => void) | undefined;
+    const companyRetry = new Promise<Response>((resolve) => {
+      resolveCompanyRetry = resolve;
+    });
+    let resolveContacts: ((response: Response) => void) | undefined;
+    const pendingContacts = new Promise<Response>((resolve) => {
+      resolveContacts = resolve;
+    });
+    let resolveOpportunities: ((response: Response) => void) | undefined;
+    const pendingOpportunities = new Promise<Response>((resolve) => {
+      resolveOpportunities = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/companies")) {
+        companyLoads += 1;
+        return companyLoads === 1
+          ? Promise.resolve(jsonResponse({ code: "unavailable" }, 503))
+          : companyRetry;
+      }
+      if (path.includes("/contacts")) return pendingContacts;
+      return pendingOpportunities;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm initialCompanyId="company-retry" />);
+    await screen.findByText(/company options are temporarily unavailable/i);
+    fireEvent.click(screen.getByRole("button", { name: "Retry companies" }));
+    await waitFor(() => expect(companyLoads).toBe(2));
+
+    await act(async () => {
+      resolveContacts?.(jsonResponse(emptyPage));
+      resolveOpportunities?.(jsonResponse(emptyPage));
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/loading optional relationship context/i),
+      ).not.toBeInTheDocument(),
+    );
+    expect(companyLoads).toBe(2);
+
+    await act(async () => {
+      resolveCompanyRetry?.(
+        jsonResponse({
+          ...emptyPage,
+          items: [
+            companyFixture({
+              id: "company-retry",
+              name: "Retried company",
+            }),
+          ],
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Company")).toHaveValue("company-retry"),
+    );
+    expect(companyLoads).toBe(2);
+    expect(
+      screen.getByRole("option", { name: "Retried company" }),
+    ).toBeVisible();
   });
 
   it("retries only the failed source and preserves ready relationship selections", async () => {
