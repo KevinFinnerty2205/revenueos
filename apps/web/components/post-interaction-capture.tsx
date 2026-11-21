@@ -184,11 +184,7 @@ function StatefulPostInteractionCapture({
         signal: controller.signal,
       });
       if (controller.signal.aborted || !restored) return restored;
-      return validateDebriefSession(
-        restored,
-        interactionId,
-        expectedSessionId,
-      );
+      return validateDebriefSession(restored, interactionId, expectedSessionId);
     };
     const missingSession = (reason: unknown) =>
       reason instanceof ApiClientError && reason.code === "debrief_not_found";

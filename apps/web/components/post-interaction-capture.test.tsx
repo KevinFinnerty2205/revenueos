@@ -408,6 +408,49 @@ describe("PostInteractionCapture", () => {
     ).toBe("session-1");
   });
 
+  it("keeps the current session collecting when finish returns another session", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    const collecting = session({ canFinish: true });
+    window.localStorage.setItem(key, collecting.id);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/finish")
+          ? Promise.resolve(
+              response(
+                session({
+                  id: "session-foreign",
+                  lifecycleStatus: "review",
+                  currentQuestion: null,
+                }),
+              ),
+            )
+          : Promise.resolve(response(collecting)),
+      ),
+    );
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="online_meeting"
+      />,
+    );
+
+    expect(await screen.findByText("How did it go?")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Finish and review" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(screen.getByText("How did it go?")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Review before updating intelligence",
+      }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(key)).toBe("session-1");
+  });
+
   it("rejects a review response that swaps the private session", async () => {
     const key = "revenueos:post-interaction-capture:interaction-1";
     const candidate = {
@@ -753,6 +796,63 @@ describe("PostInteractionCapture", () => {
       expect.stringContaining("/debrief/latest"),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it("blocks a foreign latest fallback after a saved session is confirmed missing", async () => {
+    const key = "revenueos:post-interaction-capture:interaction-1";
+    const foreignQuestion = "Private question from another conversation";
+    window.localStorage.setItem(key, "stale-session");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/debrief/stale-session")
+          ? Promise.resolve(
+              response(
+                {
+                  code: "debrief_not_found",
+                  message: "The requested debrief session was not found.",
+                  requestId: "request-restore-foreign",
+                },
+                404,
+              ),
+            )
+          : Promise.resolve(
+              response(
+                session({
+                  id: "foreign-latest-session",
+                  interactionId: "interaction-foreign",
+                  currentQuestion: {
+                    status: "ask",
+                    question: foreignQuestion,
+                    reason: "Private foreign context.",
+                    target: "other",
+                    priority: "high",
+                  },
+                }),
+              ),
+            ),
+      ),
+    );
+
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="executive_lunch"
+        restoreLatest
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The private capture response did not match this conversation. Try again.",
+    );
+    expect(screen.queryByText(foreignQuestion)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start personal notes" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start AI Debrief" }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(key)).toBeNull();
   });
 
   it("ignores an old interaction restore failure after navigation", async () => {
