@@ -197,6 +197,10 @@ Every step needs loading, empty, permission-denied, offline, partial, failed,
 expired and deleted states. Completed evidence remains usable when another source
 fails. Retry is bounded and explicit.
 
+- Client-side navigation between interactions hides the previous interaction
+  immediately. Detail loads and lifecycle mutations are bound to the requested
+  interaction session, and a response with another interaction identity fails
+  closed without changing the visible lifecycle.
 - use semantic headings, form labels, live regions and native controls;
 - make start/stop and recording state screen-reader clear;
 - provide captions/transcripts when available and a text debrief alternative;

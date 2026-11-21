@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { Interaction } from "@revenueos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InteractionDetail } from "@/components/interaction-detail";
@@ -6,6 +12,10 @@ import { PostConversationDraftStatus } from "@/components/conversation-notes-rev
 
 vi.mock("@/components/conversation-memory", () => ({
   ConversationMemory: () => <div>Conversation memory</div>,
+}));
+
+vi.mock("@/components/pre-interaction-brief", () => ({
+  PreInteractionBrief: () => <div>Preparation brief</div>,
 }));
 
 const conversationWorkspaceMock = vi.hoisted(() => ({
@@ -94,6 +104,28 @@ function jsonResponse(body: object, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function deferred<T>() {
+  let resolvePromise: ((value: T) => void) | undefined;
+  let rejectPromise: ((reason?: unknown) => void) | undefined;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      if (!resolvePromise)
+        throw new Error("Deferred promise was not initialised.");
+      resolvePromise(value);
+    },
+    reject(reason?: unknown) {
+      if (!rejectPromise)
+        throw new Error("Deferred promise was not initialised.");
+      rejectPromise(reason);
+    },
+  };
 }
 
 const interaction: Interaction = {
@@ -240,6 +272,242 @@ describe("InteractionDetail", () => {
       await screen.findByRole("heading", { name: "Acme discovery" }),
     ).toBeVisible();
     expect(detailAttempts).toBe(2);
+  });
+
+  it("keeps the next conversation visible when a late start response settles", async () => {
+    const startResponse = deferred<Response>();
+    const interactionA: Interaction = {
+      ...interaction,
+      id: "interaction-a",
+      title: "Alpha discovery",
+    };
+    const interactionB: Interaction = {
+      ...interaction,
+      id: "interaction-b",
+      title: "Bravo discovery",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/interactions/interaction-a/start")) {
+        return startResponse.promise;
+      }
+      if (path.endsWith("/interactions/interaction-a") && !init?.method) {
+        return Promise.resolve(jsonResponse(interactionA));
+      }
+      if (path.endsWith("/interactions/interaction-b") && !init?.method) {
+        return Promise.resolve(jsonResponse(interactionB));
+      }
+      return Promise.resolve(jsonResponse({ featureFlags: {} }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <InteractionDetail interactionId="interaction-a" />,
+    );
+    await screen.findByRole("heading", { name: "Alpha discovery" });
+    fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
+    expect(screen.getByRole("button", { name: "Starting…" })).toBeDisabled();
+
+    rerender(<InteractionDetail interactionId="interaction-b" />);
+    expect(
+      screen.queryByRole("heading", { name: "Alpha discovery" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading conversation",
+    );
+    await screen.findByRole("heading", { name: "Bravo discovery" });
+
+    await act(async () => {
+      startResponse.resolve(
+        jsonResponse({
+          ...interactionA,
+          lifecycleStatus: "in_progress",
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Bravo discovery" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start meeting" })).toBeEnabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each(["success", "failure"] as const)(
+    "keeps the next conversation isolated from a late completion %s",
+    async (outcome) => {
+      const completionResponse = deferred<Response>();
+      const interactionA: Interaction = {
+        ...interaction,
+        id: "interaction-a",
+        title: "Alpha active meeting",
+        lifecycleStatus: "in_progress",
+      };
+      const interactionB: Interaction = {
+        ...interaction,
+        id: "interaction-b",
+        title: "Bravo discovery",
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          if (path.endsWith("/interactions/interaction-a/complete")) {
+            return completionResponse.promise;
+          }
+          if (path.endsWith("/interactions/interaction-a") && !init?.method) {
+            return Promise.resolve(jsonResponse(interactionA));
+          }
+          if (path.endsWith("/interactions/interaction-b") && !init?.method) {
+            return Promise.resolve(jsonResponse(interactionB));
+          }
+          return Promise.resolve(jsonResponse({ featureFlags: {} }));
+        }),
+      );
+
+      const { rerender } = render(
+        <InteractionDetail interactionId="interaction-a" />,
+      );
+      await screen.findByRole("heading", { name: "Alpha active meeting" });
+      fireEvent.click(screen.getByRole("button", { name: "End meeting" }));
+      expect(screen.getByRole("button", { name: "Ending…" })).toBeDisabled();
+
+      rerender(<InteractionDetail interactionId="interaction-b" />);
+      expect(
+        screen.queryByRole("heading", { name: "Alpha active meeting" }),
+      ).not.toBeInTheDocument();
+      await screen.findByRole("heading", { name: "Bravo discovery" });
+
+      await act(async () => {
+        if (outcome === "success") {
+          completionResponse.resolve(
+            jsonResponse({
+              ...interactionA,
+              lifecycleStatus: "completed",
+              actualEndAt: "2026-08-01T01:00:00Z",
+            }),
+          );
+        } else {
+          completionResponse.reject(
+            new Error("Alpha completion must stay private to Alpha."),
+          );
+        }
+        await Promise.resolve();
+      });
+
+      expect(
+        screen.getByRole("heading", { name: "Bravo discovery" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Start meeting" }),
+      ).toBeEnabled();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
+
+  it("rejects a mismatched interaction returned by the detail endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/api/v1/interactions/interaction-1")
+          ? Promise.resolve(
+              jsonResponse({
+                ...interaction,
+                id: "interaction-foreign",
+                title: "Foreign conversation",
+              }),
+            )
+          : Promise.resolve(jsonResponse({ featureFlags: {} })),
+      ),
+    );
+
+    render(<InteractionDetail interactionId="interaction-1" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The conversation could not be loaded. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Foreign conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects a mismatched interaction returned after starting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.endsWith("/start") && init?.method === "POST") {
+          return Promise.resolve(
+            jsonResponse({
+              ...interaction,
+              id: "interaction-foreign",
+              title: "Foreign conversation",
+              lifecycleStatus: "in_progress",
+            }),
+          );
+        }
+        if (path.endsWith("/api/v1/interactions/interaction-1")) {
+          return Promise.resolve(jsonResponse(interaction));
+        }
+        return Promise.resolve(jsonResponse({ featureFlags: {} }));
+      }),
+    );
+
+    render(<InteractionDetail interactionId="interaction-1" />);
+    await screen.findByRole("heading", { name: "Acme discovery" });
+    fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The conversation could not be started. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Start meeting" })).toBeEnabled();
+    expect(
+      screen.queryByRole("heading", { name: "Foreign conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects a mismatched interaction returned after completion", async () => {
+    const activeInteraction: Interaction = {
+      ...interaction,
+      lifecycleStatus: "in_progress",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.endsWith("/complete") && init?.method === "POST") {
+          return Promise.resolve(
+            jsonResponse({
+              ...activeInteraction,
+              id: "interaction-foreign",
+              title: "Foreign conversation",
+              lifecycleStatus: "completed",
+            }),
+          );
+        }
+        if (path.endsWith("/api/v1/interactions/interaction-1")) {
+          return Promise.resolve(jsonResponse(activeInteraction));
+        }
+        return Promise.resolve(jsonResponse({ featureFlags: {} }));
+      }),
+    );
+
+    render(<InteractionDetail interactionId="interaction-1" />);
+    await screen.findByRole("heading", { name: "Acme discovery" });
+    fireEvent.click(screen.getByRole("button", { name: "End meeting" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The conversation could not be completed. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "End meeting" })).toBeEnabled();
+    expect(
+      screen.getByRole("status", { name: "Conversation lifecycle status" }),
+    ).toHaveTextContent("In Progress");
+    expect(
+      screen.queryByRole("heading", { name: "Foreign conversation" }),
+    ).not.toBeInTheDocument();
   });
 
   it("uses a matching seeded interaction without repeating the detail request", async () => {
