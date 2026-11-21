@@ -1,6 +1,10 @@
 import type { RecordingChunkUpload } from "@revenueos/shared";
 import { describe, expect, it } from "vitest";
-import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
+import {
+  assertRecordingChunkCompletionIdentity,
+  assertRecordingChunkUploadIdentity,
+  type RecordingChunkCompletion,
+} from "@/lib/recording-chunk-upload";
 
 const expected = {
   recordingSessionId: "recording-1",
@@ -19,6 +23,17 @@ const chunk: RecordingChunkUpload = {
   uploadExpiresAt: "2026-08-15T00:05:00Z",
 };
 
+const completedChunk: RecordingChunkCompletion = {
+  id: chunk.id,
+  recordingSessionId: chunk.recordingSessionId,
+  sequenceNumber: chunk.sequenceNumber,
+  byteSize: chunk.byteSize,
+  checksumSha256: chunk.checksumSha256,
+  uploadState: "verified",
+  uploadedAt: "2026-08-15T00:01:00Z",
+  createdAt: chunk.createdAt,
+};
+
 describe("assertRecordingChunkUploadIdentity", () => {
   it("accepts an exact reservation response", () => {
     expect(() =>
@@ -34,9 +49,46 @@ describe("assertRecordingChunkUploadIdentity", () => {
     { field: "sequence", override: { sequenceNumber: 1 } },
     { field: "byte size", override: { byteSize: 31 } },
     { field: "checksum", override: { checksumSha256: "b".repeat(64) } },
-  ])("rejects a mismatched $field", ({ override }) => {
+    { field: "chunk id", override: { id: "" } },
+    { field: "upload URL", override: { uploadUrl: "" } },
+    { field: "upload state", override: { uploadState: "verified" } },
+  ] satisfies Array<{
+    field: string;
+    override: Partial<RecordingChunkUpload>;
+  }>)("rejects a mismatched $field", ({ override }) => {
     expect(() =>
       assertRecordingChunkUploadIdentity({ ...chunk, ...override }, expected),
+    ).toThrow("The recording upload could not be verified. Try again.");
+  });
+
+  it("accepts an exact verified completion response", () => {
+    expect(() =>
+      assertRecordingChunkCompletionIdentity(completedChunk, {
+        id: chunk.id,
+        ...expected,
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    { field: "chunk id", override: { id: "chunk-2" } },
+    {
+      field: "recording session",
+      override: { recordingSessionId: "recording-2" },
+    },
+    { field: "sequence", override: { sequenceNumber: 1 } },
+    { field: "byte size", override: { byteSize: 31 } },
+    { field: "checksum", override: { checksumSha256: "b".repeat(64) } },
+    { field: "upload state", override: { uploadState: "uploaded" } },
+  ] satisfies Array<{
+    field: string;
+    override: Partial<RecordingChunkCompletion>;
+  }>)("rejects a completion with mismatched $field", ({ override }) => {
+    expect(() =>
+      assertRecordingChunkCompletionIdentity(
+        { ...completedChunk, ...override },
+        { id: chunk.id, ...expected },
+      ),
     ).toThrow("The recording upload could not be verified. Try again.");
   });
 });

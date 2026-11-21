@@ -2,6 +2,7 @@ import type {
   RecordingMimeType,
   RecordingSession,
   RecordingSource,
+  RecordingTranscription,
   RecordingType,
 } from "@revenueos/shared";
 
@@ -108,4 +109,16 @@ export function validateRecordingSessionsForInteraction<
   return sessions.map((session) =>
     validateInteractionAnchor(session, interactionId),
   );
+}
+
+export function validateRecordingTranscription<
+  T extends RecordingTranscription,
+>(transcription: T, recordingId: string): T {
+  if (
+    !hasIdentifier(transcription.recordingId) ||
+    transcription.recordingId !== recordingId
+  ) {
+    throw new RecordingSessionIdentityError();
+  }
+  return transcription;
 }

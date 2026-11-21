@@ -9,7 +9,11 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest, apiUpload } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
-import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
+import {
+  assertRecordingChunkCompletionIdentity,
+  assertRecordingChunkUploadIdentity,
+  type RecordingChunkCompletion,
+} from "@/lib/recording-chunk-upload";
 import {
   RecordingSessionIdentityError,
   validateCreatedRecordingSession,
@@ -258,7 +262,7 @@ export function ImportedCallRecording({
           checksumSha256,
         });
         await apiUpload(chunk.uploadUrl, chunkBlob, mimeType);
-        await apiRequest(
+        const completedChunk = await apiRequest<RecordingChunkCompletion>(
           `/api/v1/interactions/${interactionId}/recordings/${started.id}/chunks/${chunk.id}/complete`,
           {
             method: "POST",
@@ -270,6 +274,13 @@ export function ImportedCallRecording({
             }),
           },
         );
+        assertRecordingChunkCompletionIdentity(completedChunk, {
+          id: chunk.id,
+          recordingSessionId: started.id,
+          sequenceNumber,
+          byteSize: chunkBlob.size,
+          checksumSha256,
+        });
         setProgress(Math.round(((sequenceNumber + 1) / chunkCount) * 100));
       }
       const finalised = validateRecordingSession(

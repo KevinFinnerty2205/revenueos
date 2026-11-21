@@ -4,6 +4,7 @@ import {
   validateCreatedRecordingSession,
   validateRecordingSession,
   validateRecordingSessionsForInteraction,
+  validateRecordingTranscription,
 } from "@/lib/recording-session-identity";
 
 const session: RecordingSession = {
@@ -109,6 +110,39 @@ describe("recording session identity", () => {
       validateRecordingSessionsForInteraction(
         [{ ...session, interactionId: "interaction-2" }],
         "interaction-1",
+      ),
+    ).toThrow("The recording response did not match this interaction.");
+  });
+
+  it("requires a transcription to retain the exact recording identity", () => {
+    const transcription = {
+      recordingId: "recording-1",
+      status: "completed" as const,
+      transcriptVersionId: "version-1",
+      transcriptId: "transcript-1",
+      meetingId: "meeting-1",
+      version: 1,
+      source: "recorded_audio" as const,
+      language: "en-AU",
+      text: "Synthetic transcript.",
+      segments: [],
+      completedAt: "2026-08-15T00:05:00Z",
+      safeMessage: "Transcription is ready.",
+    };
+
+    expect(validateRecordingTranscription(transcription, "recording-1")).toBe(
+      transcription,
+    );
+    expect(() =>
+      validateRecordingTranscription(
+        { ...transcription, recordingId: "recording-2" },
+        "recording-1",
+      ),
+    ).toThrow("The recording response did not match this interaction.");
+    expect(() =>
+      validateRecordingTranscription(
+        { ...transcription, recordingId: "" },
+        "recording-1",
       ),
     ).toThrow("The recording response did not match this interaction.");
   });

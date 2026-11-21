@@ -95,6 +95,7 @@ describe("ImportedCallRecording", () => {
       },
     });
     const calls: Array<{ path: string; body: string }> = [];
+    let reservedChunk: Record<string, unknown> | null = null;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       calls.push({ path, body: String(init?.body ?? "") });
@@ -124,29 +125,31 @@ describe("ImportedCallRecording", () => {
           byteSize: number;
           checksumSha256: string;
         };
-        return Promise.resolve(
-          jsonResponse(
-            {
-              id: "chunk-1",
-              recordingSessionId: "recording-1",
-              sequenceNumber: request.sequenceNumber,
-              byteSize: request.byteSize,
-              checksumSha256: request.checksumSha256,
-              uploadState: "pending",
-              uploadedAt: null,
-              createdAt: "2026-08-15T00:00:00Z",
-              uploadUrl: "/private-call-upload",
-              uploadExpiresAt: "2026-08-15T00:05:00Z",
-            },
-            201,
-          ),
-        );
+        reservedChunk = {
+          id: "chunk-1",
+          recordingSessionId: "recording-1",
+          sequenceNumber: request.sequenceNumber,
+          byteSize: request.byteSize,
+          checksumSha256: request.checksumSha256,
+          uploadState: "pending",
+          uploadedAt: null,
+          createdAt: "2026-08-15T00:00:00Z",
+          uploadUrl: "/private-call-upload",
+          uploadExpiresAt: "2026-08-15T00:05:00Z",
+        };
+        return Promise.resolve(jsonResponse(reservedChunk, 201));
       }
       if (path.endsWith("/private-call-upload")) {
         return Promise.resolve(new Response(null, { status: 204 }));
       }
       if (path.endsWith("/complete")) {
-        return Promise.resolve(jsonResponse({ uploadState: "verified" }));
+        return Promise.resolve(
+          jsonResponse({
+            ...reservedChunk,
+            uploadState: "verified",
+            uploadedAt: "2026-08-15T00:01:00Z",
+          }),
+        );
       }
       if (path.endsWith("/finalize")) {
         return Promise.resolve(jsonResponse(recording));
@@ -476,4 +479,113 @@ describe("ImportedCallRecording", () => {
       ).toBeEnabled();
     },
   );
+
+  it("rejects a mismatched chunk completion before finalising an import", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "request-id"),
+      subtle: {
+        digest: vi.fn(() => Promise.resolve(new Uint8Array(32).buffer)),
+      },
+    });
+    let reservedChunk: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/recordings") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (path.endsWith("/recordings") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              ...recording,
+              lifecycleStatus: "created",
+              finalMimeType: null,
+            },
+            201,
+          ),
+        );
+      }
+      if (path.endsWith("/start") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            ...recording,
+            lifecycleStatus: "uploading",
+            finalMimeType: null,
+          }),
+        );
+      }
+      if (path.endsWith("/chunks") && method === "POST") {
+        const request = JSON.parse(String(init?.body)) as {
+          sequenceNumber: number;
+          byteSize: number;
+          checksumSha256: string;
+        };
+        reservedChunk = {
+          id: "chunk-1",
+          recordingSessionId: recording.id,
+          sequenceNumber: request.sequenceNumber,
+          byteSize: request.byteSize,
+          checksumSha256: request.checksumSha256,
+          uploadState: "pending",
+          uploadedAt: null,
+          createdAt: "2026-08-15T00:00:00Z",
+          uploadUrl: "/private-call-upload",
+          uploadExpiresAt: "2026-08-15T00:05:00Z",
+        };
+        return Promise.resolve(jsonResponse(reservedChunk, 201));
+      }
+      if (path.endsWith("/private-call-upload") && method === "PUT") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (path.endsWith("/complete") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            ...reservedChunk,
+            id: "chunk-foreign",
+            uploadState: "verified",
+            uploadedAt: "2026-08-15T00:01:00Z",
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: path }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ImportedCallRecording interactionId="interaction-1" />);
+    const file = new File(
+      [new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])],
+      "call.webm",
+      { type: "audio/webm" },
+    );
+    fireEvent.change(screen.getByLabelText("Audio file"), {
+      target: { files: [file] },
+    });
+    fireEvent.change(screen.getByLabelText("Call duration in seconds"), {
+      target: { value: "45" },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /authorised business interaction/i,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import recording" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The recording upload could not be verified. Try again.",
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/finalize"),
+      ),
+    ).toBe(false);
+    expect(
+      screen.queryByText("Recording imported securely"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import recording" }),
+    ).toBeEnabled();
+  });
 });

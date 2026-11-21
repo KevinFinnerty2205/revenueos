@@ -36,6 +36,8 @@ type VisualUploadIdentity = Pick<
 
 const VISUAL_UPLOAD_IDENTITY_ERROR =
   "The image upload could not be verified. Your selected image has been kept so you can try again.";
+const VISUAL_RESPONSE_IDENTITY_ERROR =
+  "Visual evidence could not be verified. Unverified data was not used; please try again.";
 
 const VISUAL_TYPES: VisualType[] = [
   "whiteboard",
@@ -95,6 +97,33 @@ function quickType(interactionType: InteractionType): VisualType {
   return "whiteboard";
 }
 
+function isNonEmptyIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasCandidateSourceIdentity(response: VisualEvidence): boolean {
+  return (
+    Array.isArray(response.candidates) &&
+    response.candidates.every(
+      (candidate) =>
+        Boolean(candidate) &&
+        candidate.sourceVisualId === response.id &&
+        candidate.sourceOwnership === response.sourceOwnership,
+    )
+  );
+}
+
+function visualIdentity(visual: VisualEvidence): VisualUploadIdentity {
+  return {
+    id: visual.id,
+    interactionId: visual.interactionId,
+    captureSessionId: visual.captureSessionId,
+    mimeType: visual.mimeType,
+    visualType: visual.visualType,
+    sourceOwnership: visual.sourceOwnership,
+  };
+}
+
 function requireCreatedVisualIdentity(
   created: VisualUploadCreateResponse,
   requested: {
@@ -107,8 +136,10 @@ function requireCreatedVisualIdentity(
   },
 ): VisualUploadIdentity {
   if (
+    !created ||
     created.interactionId !== requested.interactionId ||
-    !created.id ||
+    !isNonEmptyIdentifier(created.id) ||
+    !isNonEmptyIdentifier(created.captureSessionId) ||
     created.captureSessionId !== created.id ||
     created.mimeType !== requested.mimeType ||
     created.byteSize !== requested.byteSize ||
@@ -131,22 +162,48 @@ function requireCreatedVisualIdentity(
 function requireVisualIdentity(
   response: VisualEvidence,
   expected: VisualUploadIdentity,
+  errorMessage = VISUAL_UPLOAD_IDENTITY_ERROR,
 ): void {
   if (
+    !response ||
+    !isNonEmptyIdentifier(response.id) ||
+    !isNonEmptyIdentifier(response.captureSessionId) ||
+    response.captureSessionId !== response.id ||
     response.id !== expected.id ||
     response.interactionId !== expected.interactionId ||
     response.captureSessionId !== expected.captureSessionId ||
     response.mimeType !== expected.mimeType ||
     response.visualType !== expected.visualType ||
     response.sourceOwnership !== expected.sourceOwnership ||
-    response.candidates.some(
-      (candidate) =>
-        candidate.sourceVisualId !== expected.id ||
-        candidate.sourceOwnership !== expected.sourceOwnership,
+    !hasCandidateSourceIdentity(response)
+  ) {
+    throw new Error(errorMessage);
+  }
+}
+
+function requireVisualListIdentity(
+  response: VisualEvidence[],
+  interactionId: string,
+): VisualEvidence[] {
+  if (
+    !Array.isArray(response) ||
+    response.some(
+      (visual) =>
+        !visual ||
+        visual.interactionId !== interactionId ||
+        !isNonEmptyIdentifier(visual.id) ||
+        !isNonEmptyIdentifier(visual.captureSessionId) ||
+        visual.captureSessionId !== visual.id ||
+        !hasCandidateSourceIdentity(visual),
     )
   ) {
-    throw new Error(VISUAL_UPLOAD_IDENTITY_ERROR);
+    throw new Error(VISUAL_RESPONSE_IDENTITY_ERROR);
   }
+  return response;
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "AbortError";
 }
 
 type VisualEvidenceCaptureProps = {
@@ -185,6 +242,8 @@ function VisualEvidenceCaptureSession({
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const listRequestGeneration = useRef(0);
+  const listRequestController = useRef<AbortController | null>(null);
 
   useLayoutEffect(() => {
     sessionActive.current = true;
@@ -193,40 +252,64 @@ function VisualEvidenceCaptureSession({
     };
   }, []);
 
-  const load = useCallback(async () => {
-    const loaded = await apiRequest<VisualEvidence[]>(
-      `/api/v1/interactions/${interactionId}/visual-evidence`,
-    );
-    setVisuals(loaded);
-    const awaiting = loaded.find(
-      (visual) => visual.processingStatus === "review",
-    );
-    if (awaiting) {
-      setReviewingId(awaiting.id);
-      setDecisions(initialDecisions(awaiting.candidates));
+  const load = useCallback(async (): Promise<void> => {
+    const requestGeneration = listRequestGeneration.current + 1;
+    listRequestGeneration.current = requestGeneration;
+    listRequestController.current?.abort();
+    const controller = new AbortController();
+    listRequestController.current = controller;
+    try {
+      const response = await apiRequest<VisualEvidence[]>(
+        `/api/v1/interactions/${interactionId}/visual-evidence`,
+        { signal: controller.signal },
+      );
+      if (
+        !sessionActive.current ||
+        controller.signal.aborted ||
+        requestGeneration !== listRequestGeneration.current
+      ) {
+        return;
+      }
+      const loaded = requireVisualListIdentity(response, interactionId);
+      if (
+        !sessionActive.current ||
+        controller.signal.aborted ||
+        requestGeneration !== listRequestGeneration.current
+      ) {
+        return;
+      }
+      setVisuals(loaded);
+      const awaiting = loaded.find(
+        (visual) => visual.processingStatus === "review",
+      );
+      setReviewingId(awaiting?.id ?? null);
+      setDecisions(awaiting ? initialDecisions(awaiting.candidates) : {});
+    } catch (requestError: unknown) {
+      if (
+        !sessionActive.current ||
+        controller.signal.aborted ||
+        requestGeneration !== listRequestGeneration.current ||
+        isAbortError(requestError)
+      ) {
+        return;
+      }
+      throw requestError;
+    } finally {
+      if (listRequestController.current === controller) {
+        listRequestController.current = null;
+      }
     }
   }, [interactionId]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    apiRequest<VisualEvidence[]>(
-      `/api/v1/interactions/${interactionId}/visual-evidence`,
-      { signal: controller.signal },
-    )
-      .then((loaded) => {
-        setVisuals(loaded);
-        const awaiting = loaded.find(
-          (visual) => visual.processingStatus === "review",
-        );
-        if (awaiting) {
-          setReviewingId(awaiting.id);
-          setDecisions(initialDecisions(awaiting.candidates));
-        }
-      })
-      .catch((requestError: unknown) => {
+    let effectActive = true;
+    queueMicrotask(() => {
+      if (!effectActive || !sessionActive.current) return;
+      void load().catch((requestError: unknown) => {
         if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
+          !effectActive ||
+          !sessionActive.current ||
+          isAbortError(requestError)
         ) {
           return;
         }
@@ -236,8 +319,14 @@ function VisualEvidenceCaptureSession({
             : "Visual evidence could not be loaded.",
         );
       });
-    return () => controller.abort();
-  }, [interactionId]);
+    });
+    return () => {
+      effectActive = false;
+      listRequestGeneration.current += 1;
+      listRequestController.current?.abort();
+      listRequestController.current = null;
+    };
+  }, [load]);
 
   useEffect(
     () => () => {
@@ -396,6 +485,11 @@ function VisualEvidenceCaptureSession({
           body: JSON.stringify({ idempotencyKey: requestKey("visual-retry") }),
         },
       );
+      requireVisualIdentity(
+        processed,
+        visualIdentity(visual),
+        VISUAL_RESPONSE_IDENTITY_ERROR,
+      );
       if (processed.processingStatus === "review") {
         setReviewingId(processed.id);
         setDecisions(initialDecisions(processed.candidates));
@@ -439,6 +533,11 @@ function VisualEvidenceCaptureSession({
             idempotencyKey: requestKey("visual-review"),
           }),
         },
+      );
+      requireVisualIdentity(
+        reviewed,
+        visualIdentity(visual),
+        VISUAL_RESPONSE_IDENTITY_ERROR,
       );
       setReviewingId(null);
       setDecisions({});

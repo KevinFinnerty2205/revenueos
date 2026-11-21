@@ -72,12 +72,14 @@ function selectAndAuthorise(file: File): void {
 }
 
 function visual(overrides: Partial<VisualEvidence> = {}): VisualEvidence {
+  const id = overrides.id ?? "visual-1";
+  const sourceOwnership = overrides.sourceOwnership ?? "unknown_origin";
   return {
-    id: "visual-1",
+    id,
     interactionId: "interaction-1",
-    captureSessionId: "visual-1",
+    captureSessionId: overrides.captureSessionId ?? id,
     visualType: "presentation_slide",
-    sourceOwnership: "unknown_origin",
+    sourceOwnership,
     contextLabel: "Customer question board",
     filename: "board.png",
     mimeType: "image/png",
@@ -91,14 +93,14 @@ function visual(overrides: Partial<VisualEvidence> = {}): VisualEvidence {
     failureCode: null,
     providerMode: "mock",
     externalProcessing: false,
-    candidates: [
+    candidates: overrides.candidates ?? [
       {
         id: "candidate-1",
         category: "customer_request",
         statement: "Customer asked for a security workshop.",
         originalStatement: "Customer asked for a security workshop.",
-        sourceVisualId: "visual-1",
-        sourceOwnership: "customer_created",
+        sourceVisualId: id,
+        sourceOwnership,
         origin: "ai_inferred",
         supportClassification: "direct",
         validationState: "unreviewed",
@@ -371,6 +373,120 @@ describe("VisualEvidenceCapture", () => {
 
   it.each([
     {
+      caseName: "foreign interaction identity",
+      response: () =>
+        visual({
+          interactionId: "foreign-interaction",
+          filename: "untrusted-list.png",
+          downloadUrl:
+            "https://private-storage.example/foreign-list?token=placeholder",
+        }),
+    },
+    {
+      caseName: "empty visual identity",
+      response: () =>
+        visual({
+          id: "",
+          captureSessionId: "",
+          filename: "untrusted-list.png",
+          downloadUrl:
+            "https://private-storage.example/foreign-list?token=placeholder",
+        }),
+    },
+    {
+      caseName: "empty capture session identity",
+      response: () =>
+        visual({
+          captureSessionId: "",
+          filename: "untrusted-list.png",
+          downloadUrl:
+            "https://private-storage.example/foreign-list?token=placeholder",
+        }),
+    },
+    {
+      caseName: "mismatched capture session identity",
+      response: () =>
+        visual({
+          captureSessionId: "foreign-session",
+          filename: "untrusted-list.png",
+          downloadUrl:
+            "https://private-storage.example/foreign-list?token=placeholder",
+        }),
+    },
+    {
+      caseName: "foreign candidate visual identity",
+      response: () =>
+        visual({
+          filename: "untrusted-list.png",
+          downloadUrl:
+            "https://private-storage.example/foreign-list?token=placeholder",
+          candidates: visual().candidates.map((candidate) => ({
+            ...candidate,
+            sourceVisualId: "foreign-visual",
+          })),
+        }),
+    },
+    {
+      caseName: "foreign candidate ownership",
+      response: () =>
+        visual({
+          filename: "untrusted-list.png",
+          downloadUrl:
+            "https://private-storage.example/foreign-list?token=placeholder",
+          candidates: visual().candidates.map((candidate) => ({
+            ...candidate,
+            sourceOwnership: "customer_created",
+          })),
+        }),
+    },
+  ])(
+    "rejects $caseName from a list before rendering or following its private URL",
+    async ({ response }) => {
+      const untrusted = response();
+      const privateUrl = untrusted.downloadUrl;
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/visual-evidence")) {
+          return Promise.resolve(jsonResponse([untrusted]));
+        }
+        if (path === privateUrl) {
+          return Promise.resolve(privateImageResponse("untrusted visual"));
+        }
+        return Promise.resolve(
+          jsonResponse(
+            { code: "not_found", message: "Unexpected request" },
+            404,
+          ),
+        );
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <VisualEvidenceCapture
+          interactionId="interaction-1"
+          interactionType="presentation"
+          lifecycleStatus="completed"
+        />,
+      );
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Visual evidence could not be verified. Unverified data was not used; please try again.",
+      );
+      expect(screen.queryByText("untrusted-list.png")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Customer asked for a security workshop."),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Delete" }),
+      ).not.toBeInTheDocument();
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input) === privateUrl),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    {
       caseName: "interaction identity",
       responseOverrides: { interactionId: "foreign-interaction" },
     },
@@ -636,6 +752,147 @@ describe("VisualEvidenceCapture", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps the verified retry state when processing returns a foreign visual", async () => {
+    const failed = visual({
+      processingStatus: "failed",
+      candidates: [],
+      failureCode: "provider_timeout",
+    });
+    const privateUrl =
+      "https://private-storage.example/foreign-retry?token=placeholder";
+    const foreign = visual({
+      id: "foreign-visual",
+      interactionId: "foreign-interaction",
+      filename: "foreign-retry.png",
+      downloadUrl: privateUrl,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/visual-evidence") && method === "GET") {
+        return Promise.resolve(jsonResponse([failed]));
+      }
+      if (path.endsWith("/process") && method === "POST") {
+        return Promise.resolve(jsonResponse(foreign));
+      }
+      if (path === privateUrl) {
+        return Promise.resolve(privateImageResponse("foreign retry"));
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "not_found", message: "Unexpected request" }, 404),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <VisualEvidenceCapture
+        interactionId="interaction-1"
+        interactionType="presentation"
+        lifecycleStatus="completed"
+      />,
+    );
+    const retryButton = await screen.findByRole("button", {
+      name: "Retry analysis",
+    });
+    fireEvent.click(retryButton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Visual evidence could not be verified. Unverified data was not used; please try again.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Retry analysis" }),
+    ).toBeEnabled();
+    expect(screen.queryByText("foreign-retry.png")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Review suggested evidence" }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/visual-evidence") &&
+          (init?.method ?? "GET") === "GET",
+      ),
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input) === privateUrl),
+    ).toBe(false);
+  });
+
+  it("keeps a verified review open when the review response has foreign identity", async () => {
+    const pending = visual({ filename: "trusted-review.png" });
+    const privateUrl =
+      "https://private-storage.example/foreign-review?token=placeholder";
+    const foreignReviewed: VisualReviewResponse = {
+      ...visual({
+        id: "foreign-visual",
+        interactionId: "foreign-interaction",
+        filename: "foreign-review.png",
+        processingStatus: "completed",
+        downloadUrl: privateUrl,
+      }),
+      acceptedCount: 1,
+      rejectedCount: 0,
+      interactionUpdated: true,
+      revenueBrainUpdated: true,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/visual-evidence") && method === "GET") {
+        return Promise.resolve(jsonResponse([pending]));
+      }
+      if (path.endsWith("/review") && method === "POST") {
+        return Promise.resolve(jsonResponse(foreignReviewed));
+      }
+      if (path === privateUrl) {
+        return Promise.resolve(privateImageResponse("foreign review"));
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "not_found", message: "Unexpected request" }, 404),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <VisualEvidenceCapture
+        interactionId="interaction-1"
+        interactionType="presentation"
+        lifecycleStatus="completed"
+      />,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Review suggested evidence" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Finish review" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Visual evidence could not be verified. Unverified data was not used; please try again.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Review suggested evidence" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Suggested statement")).toHaveValue(
+      "Customer asked for a security workshop.",
+    );
+    expect(screen.getByRole("button", { name: "Finish review" })).toBeEnabled();
+    expect(
+      screen.queryByText(
+        /was added to Interaction Intelligence and Revenue Brain/i,
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("foreign-review.png")).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/visual-evidence") &&
+          (init?.method ?? "GET") === "GET",
+      ),
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input) === privateUrl),
+    ).toBe(false);
+  });
+
   it("ignores a valid process response that settles after the interaction changes", async () => {
     const processing = deferred<Response>();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -724,6 +981,80 @@ describe("VisualEvidenceCapture", () => {
           (init?.method ?? "GET") === "GET",
       ),
     ).toHaveLength(1);
+  });
+
+  it("does not let an older list response replace newer upload state", async () => {
+    const initialList = deferred<Response>();
+    const pending = uploadVisual();
+    let listRequests = 0;
+    const initialListSignals: AbortSignal[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/visual-evidence") && method === "GET") {
+        listRequests += 1;
+        if (listRequests === 1) {
+          if (init?.signal) initialListSignals.push(init.signal);
+          return initialList.promise;
+        }
+        return Promise.resolve(jsonResponse([pending]));
+      }
+      if (path.endsWith("/visual-evidence/uploads") && method === "POST") {
+        return Promise.resolve(jsonResponse(uploadCreateResponse(), 201));
+      }
+      if (path.includes("/content?token=") && method === "PUT") {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (path.endsWith("/complete") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse(
+            uploadVisual({ processingStatus: "uploaded", candidates: [] }),
+          ),
+        );
+      }
+      if (path.endsWith("/process") && method === "POST") {
+        return Promise.resolve(jsonResponse(pending));
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "not_found", message: "Unexpected request" }, 404),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    stubUploadBrowser();
+
+    render(
+      <VisualEvidenceCapture
+        interactionId="interaction-1"
+        interactionType="presentation"
+        lifecycleStatus="completed"
+      />,
+    );
+    await waitFor(() => expect(listRequests).toBe(1));
+    selectAndAuthorise(testImageFile());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Upload and prepare review" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Review suggested evidence" }),
+    ).toBeVisible();
+    expect(screen.getByText("board.png")).toBeVisible();
+    expect(listRequests).toBe(2);
+    expect(initialListSignals[0]?.aborted).toBe(true);
+
+    await act(async () => {
+      initialList.resolve(jsonResponse([]));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Review suggested evidence" }),
+    ).toBeVisible();
+    expect(screen.getByText("board.png")).toBeVisible();
+    expect(
+      screen.queryByText("No visual evidence added."),
+    ).not.toBeInTheDocument();
   });
 
   it("shows conservative business-card and site-photo guidance with cancellation fallback", async () => {

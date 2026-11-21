@@ -32,11 +32,17 @@ import {
   type ProgressiveTranscriptionCapture,
   startProgressiveTranscriptionCapture,
 } from "@/lib/progressive-transcription-capture";
-import { assertRecordingChunkUploadIdentity } from "@/lib/recording-chunk-upload";
 import {
+  assertRecordingChunkCompletionIdentity,
+  assertRecordingChunkUploadIdentity,
+  type RecordingChunkCompletion,
+} from "@/lib/recording-chunk-upload";
+import {
+  RecordingSessionIdentityError,
   validateCreatedRecordingSession,
   validateRecordingSession,
   validateRecordingSessionsForInteraction,
+  validateRecordingTranscription,
 } from "@/lib/recording-session-identity";
 
 const MIME_PREFERENCES = [
@@ -96,6 +102,7 @@ export type RecorderState =
 interface PendingChunk {
   blob: Blob;
   sequenceNumber: number;
+  captureGeneration: number;
   checksumSha256: string | null;
   createIdempotencyKey: string;
   completeIdempotencyKey: string;
@@ -358,50 +365,109 @@ export function RecordingFoundation({
   const locallyStartedSessionRef = useRef(false);
   const teardownCancellationStartedRef = useRef(false);
   const teardownCancellationKeyRef = useRef<string | null>(null);
+  const activeChunkAbortControllerRef = useRef<AbortController | null>(null);
+  const captureGenerationRef = useRef(0);
+  const loadAbortControllerRef = useRef<AbortController | null>(null);
+  const loadGenerationRef = useRef(0);
+  const transcriptionRecordingIdRef = useRef<string | null>(null);
   const progressiveCaptureRef = useRef<ProgressiveTranscriptionCapture | null>(
     null,
   );
 
   const load = useCallback(async () => {
-    const recordings = validateRecordingSessionsForInteraction(
-      await apiRequest<RecordingSession[]>(
-        `/api/v1/interactions/${interactionId}/recordings`,
-      ),
-      interactionId,
-    );
-    if (!mountedRef.current) return;
-    const latest = recordings[0] ?? null;
-    setRecording(latest);
-    recordingRef.current = latest;
-    if (!latest) return;
-    if (
-      ["uploaded", "transcribing", "completed", "failed"].includes(
-        latest.lifecycleStatus,
-      )
-    ) {
-      const transcript = await apiRequest<RecordingTranscription>(
-        `/api/v1/interactions/${interactionId}/recordings/${latest.id}/transcription`,
+    const generation = loadGenerationRef.current + 1;
+    loadGenerationRef.current = generation;
+    loadAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortControllerRef.current = controller;
+    const isCurrent = () =>
+      mountedRef.current &&
+      !controller.signal.aborted &&
+      loadGenerationRef.current === generation;
+
+    try {
+      const recordings = validateRecordingSessionsForInteraction(
+        await apiRequest<RecordingSession[]>(
+          `/api/v1/interactions/${interactionId}/recordings`,
+          { signal: controller.signal },
+        ),
+        interactionId,
       );
-      if (!mountedRef.current) return;
-      setTranscription(transcript);
-      setState(transcript.status === "completed" ? "completed" : "processing");
-    } else if (
-      ["created", "recording", "uploading"].includes(latest.lifecycleStatus)
-    ) {
-      setState("interrupted");
-      const chunks = await apiRequest<
-        Array<{ sequenceNumber: number; uploadState: string }>
-      >(`/api/v1/interactions/${interactionId}/recordings/${latest.id}/chunks`);
-      if (!mountedRef.current) return;
-      const verified = chunks.filter(
-        (chunk) => chunk.uploadState === "verified",
+      if (!isCurrent()) return;
+      const latest = recordings[0] ?? null;
+      setRecording(latest);
+      recordingRef.current = latest;
+      if (!latest) {
+        setTranscription(null);
+        transcriptionRecordingIdRef.current = null;
+        setError(null);
+        return;
+      }
+      if (
+        ["uploaded", "transcribing", "completed", "failed"].includes(
+          latest.lifecycleStatus,
+        )
+      ) {
+        if (transcriptionRecordingIdRef.current !== latest.id) {
+          setTranscription(null);
+          transcriptionRecordingIdRef.current = null;
+        }
+        setState("processing");
+        const response = await apiRequest<RecordingTranscription>(
+          `/api/v1/interactions/${interactionId}/recordings/${latest.id}/transcription`,
+          { signal: controller.signal },
+        );
+        if (!isCurrent()) return;
+        const transcript = validateRecordingTranscription(response, latest.id);
+        setTranscription(transcript);
+        transcriptionRecordingIdRef.current = latest.id;
+        setState(
+          transcript.status === "completed" ? "completed" : "processing",
+        );
+        setError(null);
+      } else if (
+        ["created", "recording", "uploading"].includes(latest.lifecycleStatus)
+      ) {
+        setTranscription(null);
+        transcriptionRecordingIdRef.current = null;
+        setState("interrupted");
+        const chunks = await apiRequest<
+          Array<{ sequenceNumber: number; uploadState: string }>
+        >(
+          `/api/v1/interactions/${interactionId}/recordings/${latest.id}/chunks`,
+          { signal: controller.signal },
+        );
+        if (!isCurrent()) return;
+        const verified = chunks.filter(
+          (chunk) => chunk.uploadState === "verified",
+        );
+        setUploadedChunks(verified.length);
+        nextSequenceRef.current =
+          verified.length === 0
+            ? 0
+            : Math.max(...verified.map((chunk) => chunk.sequenceNumber)) + 1;
+        setElapsedSeconds(latest.durationSeconds ?? 0);
+        setError(null);
+      } else {
+        setTranscription(null);
+        transcriptionRecordingIdRef.current = null;
+        setError(null);
+      }
+    } catch (requestError: unknown) {
+      if (!isCurrent()) return;
+      if (requestError instanceof RecordingSessionIdentityError) {
+        setTranscription(null);
+        transcriptionRecordingIdRef.current = null;
+      }
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Recordings could not be loaded.",
       );
-      setUploadedChunks(verified.length);
-      nextSequenceRef.current =
-        verified.length === 0
-          ? 0
-          : Math.max(...verified.map((chunk) => chunk.sequenceNumber)) + 1;
-      setElapsedSeconds(latest.durationSeconds ?? 0);
+    } finally {
+      if (loadAbortControllerRef.current === controller) {
+        loadAbortControllerRef.current = null;
+      }
     }
   }, [interactionId]);
 
@@ -611,6 +677,12 @@ export function RecordingFoundation({
     return () => {
       mountedRef.current = false;
       cancelledRef.current = true;
+      captureGenerationRef.current += 1;
+      loadGenerationRef.current += 1;
+      loadAbortControllerRef.current?.abort();
+      loadAbortControllerRef.current = null;
+      activeChunkAbortControllerRef.current?.abort();
+      activeChunkAbortControllerRef.current = null;
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
       const recorder = recorderRef.current;
@@ -659,62 +731,103 @@ export function RecordingFoundation({
     if (mountedRef.current) setElapsedSeconds(measuredElapsedSeconds());
   }
 
-  async function uploadChunkOnce(item: PendingChunk): Promise<void> {
+  function captureUploadCancelled(captureGeneration: number): boolean {
+    return (
+      cancelledRef.current ||
+      !mountedRef.current ||
+      captureGeneration !== captureGenerationRef.current
+    );
+  }
+
+  async function uploadChunkOnce(item: PendingChunk): Promise<boolean> {
     const current = recordingRef.current;
-    if (!current || item.blob.size === 0 || cancelledRef.current) return;
+    if (
+      !current ||
+      item.blob.size === 0 ||
+      captureUploadCancelled(item.captureGeneration)
+    ) {
+      return false;
+    }
     const checksum = item.checksumSha256 ?? (await sha256(item.blob));
+    if (captureUploadCancelled(item.captureGeneration)) return false;
     item.checksumSha256 = checksum;
-    const chunk = await apiRequest<RecordingChunkUpload>(
-      `/api/v1/interactions/${interactionId}/recordings/${current.id}/chunks`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          sequenceNumber: item.sequenceNumber,
-          byteSize: item.blob.size,
-          checksumSha256: checksum,
-          idempotencyKey: item.createIdempotencyKey,
-        }),
-      },
-    );
-    assertRecordingChunkUploadIdentity(chunk, {
-      recordingSessionId: current.id,
-      sequenceNumber: item.sequenceNumber,
-      byteSize: item.blob.size,
-      checksumSha256: checksum,
-    });
-    await apiUpload(
-      chunk.uploadUrl,
-      item.blob,
-      normaliseMimeType(mimeTypeRef.current ?? item.blob.type),
-    );
-    await apiRequest(
-      `/api/v1/interactions/${interactionId}/recordings/${current.id}/chunks/${chunk.id}/complete`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          checksumSha256: checksum,
-          idempotencyKey: item.completeIdempotencyKey,
-        }),
-      },
-    );
-    if (mountedRef.current) {
+    const controller = new AbortController();
+    activeChunkAbortControllerRef.current = controller;
+    try {
+      const chunk = await apiRequest<RecordingChunkUpload>(
+        `/api/v1/interactions/${interactionId}/recordings/${current.id}/chunks`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            sequenceNumber: item.sequenceNumber,
+            byteSize: item.blob.size,
+            checksumSha256: checksum,
+            idempotencyKey: item.createIdempotencyKey,
+          }),
+          signal: controller.signal,
+        },
+      );
+      if (captureUploadCancelled(item.captureGeneration)) return false;
+      assertRecordingChunkUploadIdentity(chunk, {
+        recordingSessionId: current.id,
+        sequenceNumber: item.sequenceNumber,
+        byteSize: item.blob.size,
+        checksumSha256: checksum,
+      });
+      if (captureUploadCancelled(item.captureGeneration)) return false;
+      await apiUpload(
+        chunk.uploadUrl,
+        item.blob,
+        normaliseMimeType(mimeTypeRef.current ?? item.blob.type),
+        { signal: controller.signal },
+      );
+      if (captureUploadCancelled(item.captureGeneration)) return false;
+      const completed = await apiRequest<RecordingChunkCompletion>(
+        `/api/v1/interactions/${interactionId}/recordings/${current.id}/chunks/${chunk.id}/complete`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            checksumSha256: checksum,
+            idempotencyKey: item.completeIdempotencyKey,
+          }),
+          signal: controller.signal,
+        },
+      );
+      if (captureUploadCancelled(item.captureGeneration)) return false;
+      assertRecordingChunkCompletionIdentity(completed, {
+        id: chunk.id,
+        recordingSessionId: current.id,
+        sequenceNumber: item.sequenceNumber,
+        byteSize: item.blob.size,
+        checksumSha256: checksum,
+      });
+      if (captureUploadCancelled(item.captureGeneration)) return false;
       setUploadedChunks((count) => Math.max(count, item.sequenceNumber + 1));
+      return true;
+    } finally {
+      if (activeChunkAbortControllerRef.current === controller) {
+        activeChunkAbortControllerRef.current = null;
+      }
     }
   }
 
   async function uploadChunkWithRetry(item: PendingChunk): Promise<void> {
     let lastError: unknown = null;
     for (const delay of UPLOAD_RETRY_DELAYS_MS) {
-      if (cancelledRef.current) return;
+      if (captureUploadCancelled(item.captureGeneration)) return;
       if (delay) await wait(delay);
+      if (captureUploadCancelled(item.captureGeneration)) return;
       try {
-        await uploadChunkOnce(item);
+        const completed = await uploadChunkOnce(item);
+        if (!completed || captureUploadCancelled(item.captureGeneration))
+          return;
         pendingChunksRef.current.delete(item.sequenceNumber);
         if (mountedRef.current) {
           setPendingChunkCount(pendingChunksRef.current.size);
         }
         return;
       } catch (requestError: unknown) {
+        if (captureUploadCancelled(item.captureGeneration)) return;
         lastError = requestError;
       }
     }
@@ -727,6 +840,7 @@ export function RecordingFoundation({
     const item: PendingChunk = {
       blob,
       sequenceNumber,
+      captureGeneration: captureGenerationRef.current,
       checksumSha256: null,
       createIdempotencyKey: requestKey(`recording-chunk-${sequenceNumber}`),
       completeIdempotencyKey: requestKey(
@@ -750,6 +864,7 @@ export function RecordingFoundation({
   }
 
   async function retryQueuedChunks() {
+    const captureGeneration = captureGenerationRef.current;
     setState("uploading");
     setError(null);
     for (const item of [...pendingChunksRef.current.values()].sort(
@@ -757,6 +872,7 @@ export function RecordingFoundation({
     )) {
       try {
         await uploadChunkWithRetry(item);
+        if (captureUploadCancelled(captureGeneration)) return;
       } catch (requestError: unknown) {
         if (!mountedRef.current) return;
         setState("failed");
@@ -768,7 +884,8 @@ export function RecordingFoundation({
         return;
       }
     }
-    await finishUpload();
+    if (captureUploadCancelled(captureGeneration)) return;
+    await finishUpload(captureGeneration);
   }
 
   async function start() {
@@ -784,6 +901,12 @@ export function RecordingFoundation({
     setState("requesting_permission");
     setError(null);
     setSourceNotice(null);
+    captureGenerationRef.current += 1;
+    loadGenerationRef.current += 1;
+    loadAbortControllerRef.current?.abort();
+    loadAbortControllerRef.current = null;
+    activeChunkAbortControllerRef.current?.abort();
+    activeChunkAbortControllerRef.current = null;
     cancelledRef.current = false;
     locallyStartedSessionRef.current = false;
     teardownCancellationStartedRef.current = false;
@@ -1035,7 +1158,8 @@ export function RecordingFoundation({
     }
     if (timerRef.current) clearInterval(timerRef.current);
     updateElapsed();
-    recorder.onstop = () => void finishUpload();
+    const captureGeneration = captureGenerationRef.current;
+    recorder.onstop = () => void finishUpload(captureGeneration);
     recorder.stop();
   }
 
@@ -1096,7 +1220,8 @@ export function RecordingFoundation({
     }
   }
 
-  async function finishUpload() {
+  async function finishUpload(captureGeneration: number) {
+    if (captureUploadCancelled(captureGeneration)) return;
     const current = recordingRef.current;
     if (!current) {
       recorderActiveRef.current = false;
@@ -1124,7 +1249,7 @@ export function RecordingFoundation({
         controlQueueRef.current,
         progressiveFinish,
       ]);
-      if (!mountedRef.current || cancelledRef.current) return;
+      if (captureUploadCancelled(captureGeneration)) return;
       if (pendingChunksRef.current.size > 0) {
         throw new Error(
           "Some audio is still queued in this tab and must upload before finalisation.",
@@ -1145,7 +1270,7 @@ export function RecordingFoundation({
         current,
         { finalMimeState: "not_finalised" },
       );
-      if (!mountedRef.current || cancelledRef.current) return;
+      if (captureUploadCancelled(captureGeneration)) return;
       setRecording(stopped);
       recordingRef.current = stopped;
       const finalized = validateRecordingSession(
@@ -1166,7 +1291,7 @@ export function RecordingFoundation({
         stopped,
         { finalMimeState: "finalised" },
       );
-      if (!mountedRef.current || cancelledRef.current) return;
+      if (captureUploadCancelled(captureGeneration)) return;
       setRecording(finalized);
       recordingRef.current = finalized;
       locallyStartedSessionRef.current = false;
@@ -1174,7 +1299,7 @@ export function RecordingFoundation({
       onFinalized?.(finalized);
       await load();
     } catch (requestError: unknown) {
-      if (!mountedRef.current) return;
+      if (captureUploadCancelled(captureGeneration)) return;
       setState("failed");
       setError(
         requestError instanceof Error
@@ -1182,16 +1307,20 @@ export function RecordingFoundation({
           : "The recording upload could not be finalised.",
       );
     } finally {
-      recorderActiveRef.current = false;
-      recorderRef.current = null;
-      await releaseWakeLock();
-      await releaseAudioCapture();
+      if (captureGeneration === captureGenerationRef.current) {
+        recorderActiveRef.current = false;
+        recorderRef.current = null;
+        await releaseWakeLock();
+        await releaseAudioCapture();
+      }
     }
   }
 
   async function retryFinalization() {
+    const captureGeneration = captureGenerationRef.current;
     const current = recordingRef.current;
     if (
+      captureUploadCancelled(captureGeneration) ||
       !current ||
       current.lifecycleStatus !== "uploading" ||
       nextSequenceRef.current === 0
@@ -1217,14 +1346,14 @@ export function RecordingFoundation({
         current,
         { finalMimeState: "finalised" },
       );
-      if (!mountedRef.current) return;
+      if (captureUploadCancelled(captureGeneration)) return;
       setRecording(finalized);
       recordingRef.current = finalized;
       locallyStartedSessionRef.current = false;
       setState("processing");
       await load();
     } catch (requestError: unknown) {
-      if (!mountedRef.current) return;
+      if (captureUploadCancelled(captureGeneration)) return;
       setState("failed");
       setError(
         requestError instanceof Error
@@ -1240,12 +1369,19 @@ export function RecordingFoundation({
     interruptionHandledRef.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
     updateElapsed();
-    recorder.onstop = () => void finishUpload();
+    const captureGeneration = captureGenerationRef.current;
+    recorder.onstop = () => void finishUpload(captureGeneration);
     recorder.stop();
   }
 
   async function cancel() {
     cancelledRef.current = true;
+    captureGenerationRef.current += 1;
+    loadGenerationRef.current += 1;
+    loadAbortControllerRef.current?.abort();
+    loadAbortControllerRef.current = null;
+    activeChunkAbortControllerRef.current?.abort();
+    activeChunkAbortControllerRef.current = null;
     setError(null);
     setSourceNotice(null);
     setProgressiveTranscriptEvents([]);

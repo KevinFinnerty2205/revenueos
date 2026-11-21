@@ -1936,6 +1936,7 @@ test("an authorised imported call recording uses the existing transcription and 
   let imported = false;
   let transcriptionReady = false;
   let createPayload: Record<string, unknown> | null = null;
+  let importedChunk: Record<string, unknown> | null = null;
   let debrief = debriefSession("collecting", {
     interactionId: "interaction-imported-call",
     maxQuestions: 2,
@@ -2035,21 +2036,19 @@ test("an authorised imported call recording uses the existing transcription and 
           checksumSha256: string;
           sequenceNumber: number;
         };
-        await route.fulfill({
-          status: 201,
-          json: {
-            id: "chunk-imported-call",
-            recordingSessionId: "recording-imported-call",
-            sequenceNumber: body.sequenceNumber,
-            byteSize: body.byteSize,
-            checksumSha256: body.checksumSha256,
-            uploadState: "pending",
-            uploadedAt: null,
-            createdAt: "2026-08-14T03:02:00Z",
-            uploadUrl: `${path}/chunk-imported-call/content?token=synthetic`,
-            uploadExpiresAt: "2026-08-14T03:07:00Z",
-          },
-        });
+        importedChunk = {
+          id: "chunk-imported-call",
+          recordingSessionId: "recording-imported-call",
+          sequenceNumber: body.sequenceNumber,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          uploadState: "pending",
+          uploadedAt: null,
+          createdAt: "2026-08-14T03:02:00Z",
+          uploadUrl: `${path}/chunk-imported-call/content?token=synthetic`,
+          uploadExpiresAt: "2026-08-14T03:07:00Z",
+        };
+        await route.fulfill({ status: 201, json: importedChunk });
         return;
       }
       if (path.endsWith("/chunk-imported-call/content")) {
@@ -2057,11 +2056,11 @@ test("an authorised imported call recording uses the existing transcription and 
         return;
       }
       if (path.endsWith("/chunk-imported-call/complete")) {
-        const body = request.postDataJSON() as { checksumSha256: string };
         await route.fulfill({
           json: {
+            ...importedChunk,
             uploadState: "verified",
-            checksumSha256: body.checksumSha256,
+            uploadedAt: "2026-08-14T03:02:01Z",
           },
         });
         return;
@@ -2344,6 +2343,7 @@ test("mobile Companion recording path persists a consented transcript into exist
   let recordingLifecycle = "created";
   let transcriptionReads = 0;
   let chunkUploadAttempts = 0;
+  let activeRecordingChunk: Record<string, unknown> | null = null;
   let intelligenceGenerated = false;
   const markers: Array<Record<string, unknown>> = [];
   const visuals: Array<Record<string, unknown>> = [];
@@ -2639,21 +2639,19 @@ test("mobile Companion recording path persists a consented transcript into exist
           checksumSha256: string;
           sequenceNumber: number;
         };
-        await route.fulfill({
-          status: 201,
-          json: {
-            id: "chunk-1",
-            recordingSessionId: "recording-1",
-            sequenceNumber: body.sequenceNumber,
-            byteSize: body.byteSize,
-            checksumSha256: body.checksumSha256,
-            uploadState: "pending",
-            uploadedAt: null,
-            createdAt: "2026-08-14T02:10:00Z",
-            uploadUrl: `${path}/chunk-1/content?token=short-lived-test-token`,
-            uploadExpiresAt: "2026-08-14T02:15:00Z",
-          },
-        });
+        activeRecordingChunk = {
+          id: "chunk-1",
+          recordingSessionId: "recording-1",
+          sequenceNumber: body.sequenceNumber,
+          byteSize: body.byteSize,
+          checksumSha256: body.checksumSha256,
+          uploadState: "pending",
+          uploadedAt: null,
+          createdAt: "2026-08-14T02:10:00Z",
+          uploadUrl: `${path}/chunk-1/content?token=short-lived-test-token`,
+          uploadExpiresAt: "2026-08-14T02:15:00Z",
+        };
+        await route.fulfill({ status: 201, json: activeRecordingChunk });
         return;
       }
       if (path.endsWith("/content") && request.method() === "PUT") {
@@ -2668,7 +2666,13 @@ test("mobile Companion recording path persists a consented transcript into exist
         return;
       }
       if (path.endsWith("/complete") && path.includes("/chunks/")) {
-        await route.fulfill({ json: { uploadState: "verified" } });
+        await route.fulfill({
+          json: {
+            ...activeRecordingChunk,
+            uploadState: "verified",
+            uploadedAt: "2026-08-14T02:11:00Z",
+          },
+        });
         return;
       }
       if (path.endsWith("/stop")) {
