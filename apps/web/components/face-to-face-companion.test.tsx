@@ -19,6 +19,39 @@ function jsonResponse(body: object, status = 200): Response {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function emptyWorkspace() {
+  return {
+    exists: false,
+    ownerUserId: "user-1",
+    lockVersion: 0,
+    liveNotes: null,
+    enhancedNotes: null,
+    followUpDraft: null,
+    followUpReviewed: false,
+    generationFingerprint: null,
+    generationState: "not_started",
+    generationId: null,
+    generationTranscriptVersion: null,
+    generationPersonalNotesState: "not_included",
+    generationFailureCode: null,
+    generationRetryAvailable: false,
+    generationUpdateAvailable: false,
+    generationCompletedAt: null,
+    importedFromBrowserAt: null,
+    updatedAt: null,
+  };
+}
+
 function interaction(overrides: Partial<Interaction> = {}): Interaction {
   return {
     id: "interaction-1",
@@ -954,5 +987,456 @@ describe("FaceToFaceCompanion", () => {
     expect(
       screen.getByRole("button", { name: "Save notes and end interaction" }),
     ).toBeVisible();
+  });
+
+  it("ignores an initial interaction load that settles during the next interaction commit", async () => {
+    const first = interaction({
+      id: "interaction-a",
+      title: "Private interaction A sentinel",
+    });
+    const second = interaction({
+      id: "interaction-b",
+      title: "Interaction B",
+    });
+    const firstLoad = deferred<Response>();
+    const secondLoad = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/beta/capabilities")) {
+        return Promise.resolve(
+          jsonResponse({
+            featureFlags: {
+              aiCompanion: false,
+              aiDebrief: false,
+              recordingCapture: false,
+              visualEvidence: false,
+              liveInteractionIntelligence: false,
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/personal-workspace") && method === "GET") {
+        return Promise.resolve(jsonResponse(emptyWorkspace()));
+      }
+      if (url.endsWith("/interactions/interaction-a") && method === "GET") {
+        return firstLoad.promise;
+      }
+      if (url.endsWith("/interactions/interaction-b") && method === "GET") {
+        return secondLoad.promise;
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: `${method} ${url}` }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onInteractionChange = vi.fn();
+
+    const { rerender } = render(
+      <FaceToFaceCompanion
+        interactionId="interaction-a"
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/interactions/interaction-a"),
+        ),
+      ).toBe(true),
+    );
+
+    await act(async () => {
+      rerender(
+        <FaceToFaceCompanion
+          interactionId="interaction-b"
+          onInteractionChange={onInteractionChange}
+        />,
+      );
+      firstLoad.resolve(jsonResponse(first));
+      secondLoad.resolve(jsonResponse(second));
+      await Promise.all([firstLoad.promise, secondLoad.promise]);
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Interaction B" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Private interaction A sentinel"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(onInteractionChange).toHaveBeenCalledTimes(1);
+    expect(onInteractionChange).toHaveBeenLastCalledWith(second);
+  });
+
+  it("removes the previous interaction while the next interaction loads or fails", async () => {
+    const first = interaction({
+      id: "interaction-a",
+      title: "Private interaction A sentinel",
+    });
+    const second = interaction({
+      id: "interaction-b",
+      title: "Interaction B",
+    });
+    const secondLoad = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/beta/capabilities")) {
+        return Promise.resolve(
+          jsonResponse({
+            featureFlags: {
+              aiCompanion: false,
+              aiDebrief: false,
+              recordingCapture: false,
+              visualEvidence: false,
+              liveInteractionIntelligence: false,
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/personal-workspace") && method === "GET") {
+        return Promise.resolve(jsonResponse(emptyWorkspace()));
+      }
+      if (url.endsWith("/interactions/interaction-b") && method === "GET") {
+        return secondLoad.promise;
+      }
+      if (url.endsWith("/interactions/interaction-c") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "interaction_unavailable",
+              message: "Interaction C could not be loaded.",
+            },
+            503,
+          ),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: `${method} ${url}` }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onInteractionChange = vi.fn();
+
+    const { rerender } = render(
+      <FaceToFaceCompanion
+        interactionId="interaction-a"
+        initialInteraction={first}
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Private interaction A sentinel",
+      }),
+    ).toBeVisible();
+
+    rerender(
+      <FaceToFaceCompanion
+        interactionId="interaction-b"
+        initialInteraction={first}
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Private interaction A sentinel"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading notes & capture…",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Start interaction" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      secondLoad.resolve(jsonResponse(second));
+      await secondLoad.promise;
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Interaction B" }),
+    ).toBeVisible();
+    expect(onInteractionChange).toHaveBeenCalledTimes(1);
+    expect(onInteractionChange).toHaveBeenLastCalledWith(second);
+
+    rerender(
+      <FaceToFaceCompanion
+        interactionId="interaction-c"
+        initialInteraction={second}
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+    expect(screen.queryByText("Interaction B")).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Interaction C could not be loaded.",
+    );
+    expect(screen.queryByText("Interaction B")).not.toBeInTheDocument();
+  });
+
+  it("ignores a late completion from the previous interaction and targets the rendered session", async () => {
+    const first = interaction({
+      id: "interaction-a",
+      title: "Private interaction A sentinel",
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+    });
+    const second = interaction({
+      id: "interaction-b",
+      title: "Interaction B",
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+    });
+    const completedFirst = interaction({
+      ...first,
+      lifecycleStatus: "completed",
+      actualEndAt: "2026-08-15T03:00:00Z",
+    });
+    const completedSecond = interaction({
+      ...second,
+      lifecycleStatus: "completed",
+      actualEndAt: "2026-08-15T03:00:00Z",
+    });
+    const firstCompletion = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/beta/capabilities")) {
+        return Promise.resolve(
+          jsonResponse({
+            featureFlags: {
+              aiCompanion: false,
+              aiDebrief: false,
+              recordingCapture: false,
+              visualEvidence: false,
+              liveInteractionIntelligence: false,
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/personal-workspace") && method === "GET") {
+        return Promise.resolve(jsonResponse(emptyWorkspace()));
+      }
+      if (url.endsWith("/interactions/interaction-a/complete")) {
+        return firstCompletion.promise;
+      }
+      if (url.endsWith("/interactions/interaction-b/complete")) {
+        return Promise.resolve(jsonResponse(completedSecond));
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: `${method} ${url}` }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onInteractionChange = vi.fn();
+
+    const { rerender } = render(
+      <FaceToFaceCompanion
+        interactionId="interaction-a"
+        initialInteraction={first}
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "End interaction" }),
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/interactions/interaction-a/complete") &&
+            init?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+
+    await act(async () => {
+      rerender(
+        <FaceToFaceCompanion
+          interactionId="interaction-b"
+          initialInteraction={second}
+          onInteractionChange={onInteractionChange}
+        />,
+      );
+      firstCompletion.resolve(jsonResponse(completedFirst));
+      await firstCompletion.promise;
+    });
+    expect(
+      screen.queryByText("Private interaction A sentinel"),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Interaction B" }),
+    ).toBeVisible();
+
+    expect(onInteractionChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Interaction B" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Interaction completed/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+    await waitFor(() =>
+      expect(onInteractionChange).toHaveBeenCalledWith(completedSecond),
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/interactions/interaction-b/complete") &&
+          init?.method === "POST",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not apply a late marker to the next interaction and posts new markers to that interaction", async () => {
+    const first = interaction({
+      id: "interaction-a",
+      title: "Private interaction A sentinel",
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+    });
+    const second = interaction({
+      id: "interaction-b",
+      title: "Interaction B",
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+    });
+    const firstMarker = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/beta/capabilities")) {
+        return Promise.resolve(
+          jsonResponse({
+            featureFlags: {
+              aiCompanion: true,
+              aiDebrief: false,
+              recordingCapture: false,
+              visualEvidence: false,
+              liveInteractionIntelligence: false,
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/personal-workspace") && method === "GET") {
+        return Promise.resolve(jsonResponse(emptyWorkspace()));
+      }
+      if (url.endsWith("/companion/brief") && method === "GET") {
+        const requestedInteractionId = url.includes("interaction-a")
+          ? "interaction-a"
+          : "interaction-b";
+        return Promise.resolve(
+          jsonResponse({
+            ...completedBrief,
+            brief: {
+              ...completedBrief.brief,
+              interactionId: requestedInteractionId,
+              headline: `${requestedInteractionId} brief`,
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/companion/markers") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (
+        url.endsWith("/interactions/interaction-a/companion/markers") &&
+        method === "POST"
+      ) {
+        return firstMarker.promise;
+      }
+      if (
+        url.endsWith("/interactions/interaction-b/companion/markers") &&
+        method === "POST"
+      ) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              id: "marker-b",
+              interactionId: "interaction-b",
+              createdByUserId: "user-1",
+              markerType: "action_item",
+              recordingOffsetMs: null,
+              createdAt: "2026-08-15T02:05:00Z",
+            },
+            201,
+          ),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({ code: "unexpected", message: `${method} ${url}` }, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:interaction-a",
+      "passive",
+    );
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:interaction-b",
+      "passive",
+    );
+
+    const { rerender } = render(
+      <FaceToFaceCompanion
+        interactionId="interaction-a"
+        initialInteraction={first}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Add marker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Objection" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith(
+              "/interactions/interaction-a/companion/markers",
+            ) && init?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+
+    rerender(
+      <FaceToFaceCompanion
+        interactionId="interaction-b"
+        initialInteraction={second}
+      />,
+    );
+    expect(
+      screen.queryByText("Private interaction A sentinel"),
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      firstMarker.resolve(
+        jsonResponse(
+          {
+            id: "marker-a",
+            interactionId: "interaction-a",
+            createdByUserId: "user-1",
+            markerType: "objection",
+            recordingOffsetMs: 42_000,
+            createdAt: "2026-08-15T02:04:00Z",
+          },
+          201,
+        ),
+      );
+      await firstMarker.promise;
+    });
+    expect(screen.queryByText("Objection marked.")).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add marker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Action" }));
+    expect(await screen.findByText("Action Item marked.")).toBeVisible();
+    const secondMarkerCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith(
+          "/interactions/interaction-b/companion/markers",
+        ) && init?.method === "POST",
+    );
+    expect(JSON.parse(String(secondMarkerCall?.[1]?.body))).toMatchObject({
+      markerType: "action_item",
+      recordingOffsetMs: null,
+    });
   });
 });

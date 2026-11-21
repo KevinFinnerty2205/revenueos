@@ -11,7 +11,13 @@ import type {
   VisualEvidence,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
 import { LiveInteractionIntelligence } from "@/components/live-interaction-intelligence";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
@@ -79,13 +85,18 @@ function durationLabel(seconds: number | null): string {
 
 export function FaceToFaceCompanion({
   interactionId,
-  initialInteraction,
-  embedded = false,
-  onInteractionChange,
-  onOpenPreparation,
-  onOpenReview,
-  briefRefreshKey = 0,
-}: {
+  ...props
+}: FaceToFaceCompanionProps) {
+  return (
+    <FaceToFaceCompanionSession
+      key={interactionId}
+      interactionId={interactionId}
+      {...props}
+    />
+  );
+}
+
+interface FaceToFaceCompanionProps {
   interactionId: string;
   initialInteraction?: Interaction;
   embedded?: boolean;
@@ -93,7 +104,17 @@ export function FaceToFaceCompanion({
   onOpenPreparation?: () => void;
   onOpenReview?: () => void;
   briefRefreshKey?: number;
-}) {
+}
+
+function FaceToFaceCompanionSession({
+  interactionId,
+  initialInteraction,
+  embedded = false,
+  onInteractionChange,
+  onOpenPreparation,
+  onOpenReview,
+  briefRefreshKey = 0,
+}: FaceToFaceCompanionProps) {
   const seededInteraction =
     initialInteraction?.id === interactionId ? initialInteraction : null;
   const [interaction, setInteraction] = useState<Interaction | null>(
@@ -118,6 +139,7 @@ export function FaceToFaceCompanion({
   const [error, setError] = useState<string | null>(null);
   const [recordingActivity, setRecordingActivity] =
     useState<RecordingActivity | null>(null);
+  const sessionActiveRef = useRef(true);
   const elapsedSecondsRef = useRef(0);
   const liveNotesRevisionRef = useRef(0);
   const personalWorkspace = useConversationWorkspace({ interactionId });
@@ -144,6 +166,13 @@ export function FaceToFaceCompanion({
             : personalWorkspace.error
               ? personalWorkspace.error
               : "Private to you until you deliberately include something in review.";
+
+  useLayoutEffect(() => {
+    sessionActiveRef.current = true;
+    return () => {
+      sessionActiveRef.current = false;
+    };
+  }, []);
 
   const fetchCompanion = useCallback(async () => {
     let loadedCapabilities: Capabilities;
@@ -255,14 +284,14 @@ export function FaceToFaceCompanion({
     let cancelled = false;
     void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`)
       .then((loadedInteraction) => {
-        if (!cancelled) {
+        if (!cancelled && sessionActiveRef.current) {
           setInteraction(loadedInteraction);
           onInteractionChange?.(loadedInteraction);
           setError(null);
         }
       })
       .catch((requestError: unknown) => {
-        if (!cancelled) {
+        if (!cancelled && sessionActiveRef.current) {
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -271,7 +300,7 @@ export function FaceToFaceCompanion({
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && sessionActiveRef.current) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -293,6 +322,24 @@ export function FaceToFaceCompanion({
       current.includes(warning) ? current : [...current, warning],
     );
   }, []);
+
+  const handleRecordingActivityChange = useCallback(
+    (activity: RecordingActivity) => {
+      if (sessionActiveRef.current) setRecordingActivity(activity);
+    },
+    [],
+  );
+
+  const handleRecordingFinalized = useCallback(
+    (finalized: RecordingSession) => {
+      if (!sessionActiveRef.current) return;
+      setRecordings((current) => [
+        finalized,
+        ...current.filter((item) => item.id !== finalized.id),
+      ]);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (briefRefreshKey === 0 || companionAvailability !== "ready") return;
@@ -348,6 +395,7 @@ export function FaceToFaceCompanion({
           body: JSON.stringify({ actualStartAt: new Date().toISOString() }),
         },
       );
+      if (!sessionActiveRef.current) return;
       setInteraction(started);
       onInteractionChange?.(started);
       setMessage(
@@ -358,13 +406,14 @@ export function FaceToFaceCompanion({
           : "Interaction started. Private notes are ready; optional Companion controls remain unavailable.",
       );
     } catch (requestError: unknown) {
+      if (!sessionActiveRef.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The interaction could not be started.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActiveRef.current) setWorking(false);
     }
   }
 
@@ -372,20 +421,21 @@ export function FaceToFaceCompanion({
     setWorking(true);
     setError(null);
     try {
-      setBrief(
-        await apiRequest<PreInteractionBriefRequestResponse>(
-          `/api/v1/interactions/${interactionId}/companion/brief`,
-          { method: "POST", body: "{}" },
-        ),
+      const prepared = await apiRequest<PreInteractionBriefRequestResponse>(
+        `/api/v1/interactions/${interactionId}/companion/brief`,
+        { method: "POST", body: "{}" },
       );
+      if (!sessionActiveRef.current) return;
+      setBrief(prepared);
     } catch (requestError: unknown) {
+      if (!sessionActiveRef.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The brief could not be prepared.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActiveRef.current) setWorking(false);
     }
   }
 
@@ -407,17 +457,19 @@ export function FaceToFaceCompanion({
           }),
         },
       );
+      if (!sessionActiveRef.current) return;
       setMarkers((current) => [...current, marker]);
       setMessage(`${humanise(markerType)} marked.`);
       setShowMarkers(false);
     } catch (requestError: unknown) {
+      if (!sessionActiveRef.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The marker could not be saved.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActiveRef.current) setWorking(false);
     }
   }
 
@@ -429,15 +481,17 @@ export function FaceToFaceCompanion({
         `/api/v1/interactions/${interactionId}/companion/markers/${marker.id}`,
         { method: "DELETE" },
       );
+      if (!sessionActiveRef.current) return;
       setMarkers((current) => current.filter((item) => item.id !== marker.id));
     } catch (requestError: unknown) {
+      if (!sessionActiveRef.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The marker could not be removed.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActiveRef.current) setWorking(false);
     }
   }
 
@@ -454,6 +508,7 @@ export function FaceToFaceCompanion({
       if (personalWorkspace.dirtyFields.liveNotes) {
         const revisionAtSaveStart = liveNotesRevisionRef.current;
         const notesSaved = await personalWorkspace.save();
+        if (!sessionActiveRef.current) return;
         if (!notesSaved) {
           setError(
             "Your private notes could not be saved, so the interaction remains open. Resolve the note error and try again.",
@@ -474,6 +529,7 @@ export function FaceToFaceCompanion({
           body: JSON.stringify(callOutcome ? { callOutcome } : {}),
         },
       );
+      if (!sessionActiveRef.current) return;
       setInteraction(completed);
       onInteractionChange?.(completed);
       setMessage(
@@ -481,15 +537,18 @@ export function FaceToFaceCompanion({
           ? "Meeting ended. Choose an authorised capture path while the context is fresh."
           : "Interaction completed. Capture anything the recording missed.",
       );
-      applyLoaded(await fetchCompanion());
+      const loaded = await fetchCompanion();
+      if (!sessionActiveRef.current) return;
+      applyLoaded(loaded);
     } catch (requestError: unknown) {
+      if (!sessionActiveRef.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The interaction could not be completed.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActiveRef.current) setWorking(false);
     }
   }
 
@@ -700,13 +759,8 @@ export function FaceToFaceCompanion({
                 onElapsedSecondsChange={(seconds) => {
                   elapsedSecondsRef.current = seconds;
                 }}
-                onActivityChange={setRecordingActivity}
-                onFinalized={(finalized) => {
-                  setRecordings((current) => [
-                    finalized,
-                    ...current.filter((item) => item.id !== finalized.id),
-                  ]);
-                }}
+                onActivityChange={handleRecordingActivityChange}
+                onFinalized={handleRecordingFinalized}
               />
             </div>
           ) : null}

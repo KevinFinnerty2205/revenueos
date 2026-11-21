@@ -5,6 +5,11 @@
 The Interaction lifecycle remains the source of truth. The Companion derives
 `BEFORE`, `DURING` and `AFTER`; it does not persist a second phase field.
 
+Foreground Companion state is keyed to the canonical Interaction identifier.
+When that identity changes, the previous brief, markers, recording and capture
+state, and notices are unmounted during the layout commit. Delayed actions and
+outward callbacks from the previous Interaction cannot affect the new one.
+
 ```text
 planned --POST /start--> in_progress --POST /complete--> completed
    |                         |
