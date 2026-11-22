@@ -1007,6 +1007,7 @@ export interface CRMAvailability {
 }
 
 export interface CRMMember {
+  organisationId: string;
   userId: string;
   displayName: string;
   active: boolean;
@@ -1067,6 +1068,7 @@ export interface CRMCoreField {
 }
 
 export interface CRMRecord {
+  organisationId: string;
   entityType: CRMEntityType;
   entityId: string;
   title: string;

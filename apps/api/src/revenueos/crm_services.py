@@ -189,6 +189,7 @@ class CRMService:
     async def members(self) -> list[CRMMemberResponse]:
         return [
             CRMMemberResponse(
+                organisation_id=self.tenant.organisation_id,
                 user_id=item.user_id,
                 display_name=item.display_name,
                 active=item.active,
@@ -301,6 +302,7 @@ class CRMService:
             for item in await self.repository.history(self.tenant.organisation_id, entity_type, entity_id)
         ]
         return CRMRecordResponse(
+            organisation_id=self.tenant.organisation_id,
             entity_type=entity_type,
             entity_id=record.id,
             title=self._title(record),

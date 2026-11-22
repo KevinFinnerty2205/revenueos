@@ -1,11 +1,13 @@
 import type {
   Company,
   Contact,
+  CRMMember,
   Interaction,
   Opportunity,
   OpportunityListItem,
   ProviderCalendarEvent,
   ProviderCalendarEventListResponse,
+  Task,
   TenantEntityPage,
 } from "@revenueos/shared";
 
@@ -151,6 +153,8 @@ const providerCalendarMatchStates = new Set([
   "internal",
   "private",
 ]);
+const taskStatuses = new Set(["open", "in_progress", "completed", "cancelled"]);
+const taskPriorities = new Set(["low", "medium", "high", "urgent"]);
 
 function hasTenantIdentity(
   value: Record<string, unknown>,
@@ -255,6 +259,49 @@ export function isOpportunityListItemResponse(
     isNullableString(value.latestMeetingMomentum) &&
     isNullableString(value.latestNextBestAction)
   );
+}
+
+export function isTaskResponse(
+  value: unknown,
+  organisationId: string,
+): value is Task {
+  return (
+    isRecord(value) &&
+    hasTenantIdentity(value, organisationId) &&
+    isNullableString(value.companyId) &&
+    isNullableString(value.contactId) &&
+    isNullableString(value.opportunityId) &&
+    isString(value.title) &&
+    isNullableString(value.description) &&
+    isAllowed(value.status, taskStatuses) &&
+    isAllowed(value.priority, taskPriorities) &&
+    isNullableDate(value.dueAt) &&
+    isNullableString(value.assignedUserId) &&
+    isNonEmptyString(value.createdByUserId) &&
+    isDate(value.createdAt) &&
+    isDate(value.updatedAt)
+  );
+}
+
+export function decodeCRMMemberListResponse(
+  value: unknown,
+  organisationId: string,
+): CRMMember[] | null {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (member) =>
+        isRecord(member) &&
+        member.organisationId === organisationId &&
+        isNonEmptyString(member.userId) &&
+        isString(member.displayName) &&
+        typeof member.active === "boolean" &&
+        typeof member.canAssign === "boolean",
+    )
+  ) {
+    return null;
+  }
+  return value as CRMMember[];
 }
 
 export function isInteractionResponse(

@@ -3,14 +3,23 @@
 import type {
   Company,
   Contact,
-  CRMRecord,
-  EntityPage,
+  CRMEntityType,
   Opportunity,
-  CRMMember,
+  OpportunityListItem,
+  Task,
+  TenantEntityPage,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
 import {
   type BusinessEntityName,
@@ -18,6 +27,17 @@ import {
   entityLabels,
   humanise,
 } from "@/lib/business-entities";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
+import {
+  decodeCRMMemberListResponse,
+  decodeTenantPage,
+  isCompanyResponse,
+  isContactResponse,
+  isOpportunityListItemResponse,
+  isOpportunityResponse,
+  isRecord,
+  isTaskResponse,
+} from "@/lib/private-response-identity";
 
 type FieldKind =
   | "text"
@@ -48,6 +68,11 @@ interface FieldConfig {
 type ReferenceOptions = Partial<
   Record<NonNullable<FieldConfig["reference"]>, EntityOption[]>
 >;
+
+type CRMFieldAuthority =
+  "revenueos_authoritative" | "crm_authoritative" | "review_before_sync";
+type ReferenceRecord = Company | Contact | Opportunity | OpportunityListItem;
+type BusinessEntityRecord = Company | Contact | Opportunity | Task;
 
 const fields: Record<BusinessEntityName, FieldConfig[]> = {
   companies: [
@@ -228,12 +253,52 @@ export function BusinessEntityForm({
   entity,
   entityId,
   initialCompanyId,
-}: {
+}: BusinessEntityFormProps) {
+  const organisation = useVerifiedOrganisation();
+  if (organisation.status === "loading") {
+    return (
+      <section className="form-card" aria-busy="true">
+        <p role="status" className="text-sm text-slate-600">
+          Verifying your secure workspace…
+        </p>
+      </section>
+    );
+  }
+  if (organisation.status !== "available") {
+    return (
+      <section className="form-card border-rose-200 bg-rose-50" role="alert">
+        <p className="text-sm text-rose-900">
+          Your organisation could not be verified. This form is temporarily
+          unavailable.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <BusinessEntityFormSession
+      key={`${organisation.organisationId}:${entity}:${entityId ?? "new"}:${initialCompanyId ?? ""}`}
+      organisationId={organisation.organisationId}
+      entity={entity}
+      entityId={entityId}
+      initialCompanyId={initialCompanyId}
+    />
+  );
+}
+
+interface BusinessEntityFormProps {
   entity: BusinessEntityName;
   entityId?: string;
   initialCompanyId?: string;
-}) {
+}
+
+function BusinessEntityFormSession({
+  organisationId,
+  entity,
+  entityId,
+  initialCompanyId,
+}: BusinessEntityFormProps & { organisationId: string }) {
   const router = useRouter();
+  const sessionActive = useRef(true);
   const labels = entityLabels[entity];
   const isEditing = Boolean(entityId);
   const formFields = useMemo(() => fields[entity], [entity]);
@@ -265,6 +330,13 @@ export function BusinessEntityForm({
     new Set(),
   );
 
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
+
   const loadForm = useCallback(
     async (signal: AbortSignal) => {
       const referenceNames = [
@@ -280,12 +352,18 @@ export function BusinessEntityForm({
       const optionEntries = await Promise.all(
         referenceNames.map(async (reference) => {
           if (reference === "members") {
-            const members = await apiRequest<CRMMember[]>(
-              "/api/v1/crm/members",
-              {
-                signal,
-              },
+            const response = await apiRequest<unknown>("/api/v1/crm/members", {
+              signal,
+            });
+            const members = decodeCRMMemberListResponse(
+              response,
+              organisationId,
             );
+            if (!members) {
+              throw new Error(
+                "The member list could not be verified. Try loading the form again.",
+              );
+            }
             return [
               reference,
               members.map((member) => ({
@@ -301,12 +379,21 @@ export function BusinessEntityForm({
               })),
             ] as const;
           }
-          const page = await apiRequest<
-            EntityPage<Company | Contact | Opportunity>
-          >(`/api/v1/${reference}?pageSize=100`, { signal });
+          const response = await apiRequest<unknown>(
+            `/api/v1/${reference}?pageSize=100`,
+            { signal },
+          );
+          const page = decodeReferencePage(reference, response, organisationId);
+          if (!page) {
+            throw new Error(
+              "A relationship list could not be verified. Try loading the form again.",
+            );
+          }
           return [
             reference,
-            page.items.map((item) => optionFor(reference, item)),
+            page.items
+              .filter(isAvailableReferenceRecord)
+              .map((item) => optionFor(reference, item)),
           ] as const;
         }),
       );
@@ -316,26 +403,55 @@ export function BusinessEntityForm({
       let loadedUpdatedAt: string | null = null;
       let loadedReadOnlyFields: ReadonlySet<string> = new Set();
       if (entityId) {
-        const [record, crmRecord] = await Promise.all([
-          apiRequest<Record<string, unknown>>(`/api/v1/${entity}/${entityId}`, {
-            signal,
-          }),
+        const [recordResponse, crmRecordResponse] = await Promise.all([
+          apiRequest<unknown>(
+            `/api/v1/${entity}/${encodeURIComponent(entityId)}`,
+            { signal },
+          ),
           entity === "tasks"
             ? Promise.resolve(null)
-            : apiRequest<CRMRecord>(
-                `/api/v1/crm/records/${crmEntityType(entity)}/${entityId}`,
+            : apiRequest<unknown>(
+                `/api/v1/crm/records/${crmEntityType(entity)}/${encodeURIComponent(entityId)}`,
                 { signal },
               ),
         ]);
-        loadedValues = valuesForForm(record, formFields);
-        if (entity !== "tasks" && typeof record.updatedAt === "string") {
-          loadedUpdatedAt = record.updatedAt;
-        }
-        loadedReadOnlyFields = new Set(
-          Object.entries(crmRecord?.fieldAuthority ?? {})
-            .filter(([, authority]) => authority === "crm_authoritative")
-            .map(([field]) => camelCaseField(field)),
+        const record = decodeBusinessEntityResponse(
+          entity,
+          recordResponse,
+          organisationId,
         );
+        if (
+          !record ||
+          record.id !== entityId ||
+          !isActiveBusinessEntity(entity, record)
+        ) {
+          throw new Error(
+            "The requested record could not be verified. Try loading it again.",
+          );
+        }
+        loadedValues = valuesForForm(
+          record as unknown as Record<string, unknown>,
+          formFields,
+        );
+        if (entity !== "tasks") {
+          loadedUpdatedAt = record.updatedAt;
+          const fieldAuthority = decodeCRMFieldAuthority(
+            crmRecordResponse,
+            organisationId,
+            crmEntityType(entity),
+            entityId,
+          );
+          if (!fieldAuthority) {
+            throw new Error(
+              "The record authority could not be verified. Try loading it again.",
+            );
+          }
+          loadedReadOnlyFields = new Set(
+            Object.entries(fieldAuthority)
+              .filter(([, authority]) => authority === "crm_authoritative")
+              .map(([field]) => camelCaseField(field)),
+          );
+        }
       }
       const loadedOptions = Object.fromEntries(
         optionEntries,
@@ -354,10 +470,24 @@ export function BusinessEntityForm({
           ) {
             return null;
           }
-          const record = await apiRequest<Company | Contact | Opportunity>(
+          const response = await apiRequest<unknown>(
             `/api/v1/${reference}/${encodeURIComponent(selectedId)}`,
             { signal },
           );
+          const record = decodeExactReferenceRecord(
+            reference,
+            response,
+            organisationId,
+          );
+          if (
+            !record ||
+            record.id !== selectedId ||
+            !isAvailableReferenceRecord(record)
+          ) {
+            throw new Error(
+              "A linked record could not be verified. Try loading the form again.",
+            );
+          }
           return [reference, optionFor(reference, record)] as const;
         }),
       );
@@ -376,7 +506,7 @@ export function BusinessEntityForm({
         readOnlyFields: loadedReadOnlyFields,
       };
     },
-    [entity, entityId, formFields, initialCompanyId],
+    [entity, entityId, formFields, initialCompanyId, organisationId],
   );
 
   useEffect(() => {
@@ -437,19 +567,35 @@ export function BusinessEntityForm({
       if (entity !== "tasks" && entityId && expectedUpdatedAt) {
         payload.expectedUpdatedAt = expectedUpdatedAt;
       }
-      const saved = await apiRequest<{ id?: string }>(
-        `/api/v1/${entity}${entityId ? `/${entityId}` : ""}`,
+      const response = await apiRequest<unknown>(
+        `/api/v1/${entity}${entityId ? `/${encodeURIComponent(entityId)}` : ""}`,
         {
           method: entityId ? "PATCH" : "POST",
           body: JSON.stringify(payload),
         },
       );
+      if (!sessionActive.current) return;
+      const saved = decodeBusinessEntityResponse(
+        entity,
+        response,
+        organisationId,
+      );
+      if (
+        !saved ||
+        (entityId !== undefined && saved.id !== entityId) ||
+        !isActiveBusinessEntity(entity, saved)
+      ) {
+        throw new Error(
+          "The saved record could not be verified. Try saving it again.",
+        );
+      }
       router.push(
-        entity === "opportunities" && (entityId || saved.id)
-          ? `/opportunities/${entityId ?? saved.id}`
+        entity === "opportunities"
+          ? `/opportunities/${encodeURIComponent(saved.id)}`
           : `/${entity}`,
       );
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       if (
         requestError instanceof ApiClientError &&
         requestError.details?.entityId
@@ -457,8 +603,8 @@ export function BusinessEntityForm({
         const duplicateEntity = requestError.details.entityType;
         setDuplicateLink(
           duplicateEntity === "account"
-            ? `/companies/${requestError.details.entityId}`
-            : `/contacts/${requestError.details.entityId}`,
+            ? `/companies/${encodeURIComponent(requestError.details.entityId)}`
+            : `/contacts/${encodeURIComponent(requestError.details.entityId)}`,
         );
       }
       setSubmitError(
@@ -467,7 +613,7 @@ export function BusinessEntityForm({
           : "The record could not be saved.",
       );
     } finally {
-      setSubmitting(false);
+      if (sessionActive.current) setSubmitting(false);
     }
   }
 
@@ -679,7 +825,7 @@ function FormField({
 
 function optionFor(
   reference: Exclude<NonNullable<FieldConfig["reference"]>, "members">,
-  record: Company | Contact | Opportunity,
+  record: ReferenceRecord,
 ): EntityOption {
   if (reference === "companies") {
     const company = record as Company;
@@ -694,6 +840,110 @@ function optionFor(
   }
   const opportunity = record as Opportunity;
   return { value: opportunity.id, label: opportunity.name };
+}
+
+function isAvailableReferenceRecord(record: ReferenceRecord): boolean {
+  return record.archivedAt === null;
+}
+
+function decodeReferencePage(
+  reference: Exclude<NonNullable<FieldConfig["reference"]>, "members">,
+  value: unknown,
+  organisationId: string,
+): TenantEntityPage<ReferenceRecord> | null {
+  if (reference === "companies") {
+    return decodeTenantPage(value, organisationId, isCompanyResponse, {
+      expectedPage: 1,
+    });
+  }
+  if (reference === "contacts") {
+    return decodeTenantPage(value, organisationId, isContactResponse, {
+      expectedPage: 1,
+    });
+  }
+  return decodeTenantPage(
+    value,
+    organisationId,
+    isOpportunityListItemResponse,
+    { expectedPage: 1 },
+  );
+}
+
+function decodeExactReferenceRecord(
+  reference: Exclude<NonNullable<FieldConfig["reference"]>, "members">,
+  value: unknown,
+  organisationId: string,
+): Company | Contact | Opportunity | null {
+  if (reference === "companies") {
+    return isCompanyResponse(value, organisationId) ? value : null;
+  }
+  if (reference === "contacts") {
+    return isContactResponse(value, organisationId) ? value : null;
+  }
+  return isOpportunityResponse(value, organisationId) ? value : null;
+}
+
+function decodeBusinessEntityResponse(
+  entity: BusinessEntityName,
+  value: unknown,
+  organisationId: string,
+): BusinessEntityRecord | null {
+  if (entity === "companies") {
+    return isCompanyResponse(value, organisationId) ? value : null;
+  }
+  if (entity === "contacts") {
+    return isContactResponse(value, organisationId) ? value : null;
+  }
+  if (entity === "opportunities") {
+    return isOpportunityResponse(value, organisationId) ? value : null;
+  }
+  return isTaskResponse(value, organisationId) ? value : null;
+}
+
+function isActiveBusinessEntity(
+  entity: BusinessEntityName,
+  record: BusinessEntityRecord,
+): boolean {
+  return (
+    entity === "tasks" || ("archivedAt" in record && record.archivedAt === null)
+  );
+}
+
+const crmFieldAuthorities = new Set<CRMFieldAuthority>([
+  "revenueos_authoritative",
+  "crm_authoritative",
+  "review_before_sync",
+]);
+
+function decodeCRMFieldAuthority(
+  value: unknown,
+  organisationId: string,
+  expectedEntityType: CRMEntityType,
+  expectedEntityId: string,
+): Record<string, CRMFieldAuthority> | null {
+  if (
+    !isRecord(value) ||
+    value.organisationId !== organisationId ||
+    value.entityType !== expectedEntityType ||
+    value.entityId !== expectedEntityId ||
+    value.archivedAt !== null ||
+    !isRecord(value.fieldAuthority) ||
+    Array.isArray(value.fieldAuthority)
+  ) {
+    return null;
+  }
+  const entries = Object.entries(value.fieldAuthority);
+  if (
+    !entries.every(
+      ([field, authority]) =>
+        field.trim().length > 0 &&
+        typeof authority === "string" &&
+        crmFieldAuthorities.has(authority as CRMFieldAuthority),
+    )
+  ) {
+    return null;
+  }
+  return Object.fromEntries(entries) as Record<string, CRMFieldAuthority>;
 }
 
 function valuesForForm(

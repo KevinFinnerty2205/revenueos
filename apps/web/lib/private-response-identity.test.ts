@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  decodeCRMMemberListResponse,
   decodeProviderCalendarEventListResponse,
   decodeTenantPage,
   isCompanyResponse,
@@ -8,6 +9,7 @@ import {
   isOpportunityListItemResponse,
   isOpportunityResponse,
   isProviderCalendarEventResponse,
+  isTaskResponse,
 } from "@/lib/private-response-identity";
 
 const organisationId = "organisation-1";
@@ -118,6 +120,22 @@ const interaction = {
   ...timestamps,
 };
 
+const task = {
+  id: "task-1",
+  organisationId,
+  companyId: company.id,
+  contactId: contact.id,
+  opportunityId: opportunity.id,
+  title: "Confirm renewal plan",
+  description: null,
+  status: "open",
+  priority: "high",
+  dueAt: "2026-11-03T00:00:00Z",
+  assignedUserId: "user-1",
+  createdByUserId: "user-1",
+  ...timestamps,
+};
+
 const calendarEvent = {
   id: "calendar-event-1",
   organisationId,
@@ -211,6 +229,56 @@ describe("private response identity decoders", () => {
         organisationId,
       ),
     ).toBe(false);
+  });
+
+  it("validates complete Task responses and CRM member arrays", () => {
+    expect(isTaskResponse(task, organisationId)).toBe(true);
+    expect(
+      isTaskResponse(
+        { ...task, organisationId: "organisation-2" },
+        organisationId,
+      ),
+    ).toBe(false);
+    expect(
+      isTaskResponse({ ...task, priority: "unknown" }, organisationId),
+    ).toBe(false);
+    expect(
+      isTaskResponse({ ...task, createdByUserId: "" }, organisationId),
+    ).toBe(false);
+    const { updatedAt: _updatedAt, ...incompleteTask } = task;
+    expect(isTaskResponse(incompleteTask, organisationId)).toBe(false);
+
+    const members = [
+      {
+        organisationId,
+        userId: "user-1",
+        displayName: "Alex Morgan",
+        active: true,
+        canAssign: true,
+      },
+    ];
+    expect(decodeCRMMemberListResponse(members, organisationId)).toEqual(
+      members,
+    );
+    expect(
+      decodeCRMMemberListResponse(
+        [
+          ...members,
+          {
+            ...members[0],
+            userId: "user-2",
+            organisationId: "organisation-2",
+          },
+        ],
+        organisationId,
+      ),
+    ).toBeNull();
+    expect(
+      decodeCRMMemberListResponse(
+        [{ ...members[0], canAssign: "yes" }],
+        organisationId,
+      ),
+    ).toBeNull();
   });
 
   it("validates provider calendar events and list envelopes atomically", () => {

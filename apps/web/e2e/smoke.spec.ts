@@ -3681,7 +3681,15 @@ test("opportunity workspace persists an associated meeting and composes stored i
 
   await page.route("http://localhost:8000/api/v1/crm/members", async (route) =>
     route.fulfill({
-      json: [{ userId: "user-1", displayName: "Alex Morgan", active: true }],
+      json: [
+        {
+          organisationId: "organisation-1",
+          userId: "user-1",
+          displayName: "Alex Morgan",
+          active: true,
+          canAssign: true,
+        },
+      ],
     }),
   );
   await page.route(
@@ -3689,6 +3697,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
     async (route) => {
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           entityType: "opportunity",
           entityId: "opportunity-1",
           title: "Platform expansion",
@@ -3769,6 +3778,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
     async (route) => {
       await route.fulfill({
         json: {
+          organisationId: "organisation-1",
           items: [
             {
               id: "company-1",

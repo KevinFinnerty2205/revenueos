@@ -15,10 +15,13 @@ All routes require authenticated organisation membership. JSON uses camelCase al
 | `PUT .../custom-fields/{definitionId}`        | member + entitled | Strict typed value set/clear with optional optimistic concurrency             |
 | `POST .../archive` / `restore`                | admin + entitled  | Reversible canonical record lifecycle; archived records reject field mutation |
 
-Canonical Company/Contact/Opportunity endpoints remain the CRUD source of truth. Their list endpoints accept `includeArchived`; Company/Contact updates accept `expectedUpdatedAt`; Opportunity keeps its existing optimistic edit contract. Duplicate conflicts use `duplicate_company_domain` or `duplicate_contact_email` plus safe `details.entityType/entityId`. External-authoritative core-field writes return `crm_authoritative_field`.
+Canonical Company/Contact/Opportunity endpoints remain the CRUD source of truth. Their list endpoints accept `includeArchived`; Company/Contact updates accept `expectedUpdatedAt`; Opportunity keeps its existing optimistic edit contract. Exact CRM record responses carry the organisation identifier derived from verified tenant context, and clients require that identity together with the requested entity type and ID before adopting field authority. Duplicate conflicts use `duplicate_company_domain` or `duplicate_contact_email` plus safe `details.entityType/entityId`. External-authoritative core-field writes return `crm_authoritative_field`.
 
-Member options return `active: true` only when both the organisation membership
-and the underlying user are active. `canAssign` is true only for those active
+Member options include the organisation identifier derived from the verified tenant
+context; no browser-supplied organisation selects the result. Clients reject a
+non-empty mixed or wrong-organisation member list atomically before displaying private
+names or assignment choices. `active: true` is returned only when both the organisation
+membership and the underlying user are active. `canAssign` is true only for those active
 options and when the caller is an administrator or is assigning themselves.
 Company, Contact, Opportunity and Task assignment endpoints enforce the same
 rule server-side. Edit clients omit an unchanged owner or assignee so a historic

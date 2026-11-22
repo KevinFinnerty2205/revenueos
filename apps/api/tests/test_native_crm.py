@@ -84,6 +84,7 @@ def test_crm_configuration_custom_fields_history_activity_and_archive(app: FastA
     record = client.get(f"/api/v1/crm/records/account/{company_id}")
     assert record.status_code == 200, record.text
     body = record.json()
+    assert body["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert body["title"] == "Native CRM Account"
     assert body["ownerName"] == "Alex Morgan"
     assert {field["key"] for field in body["coreFields"]} >= {"website", "location", "status"}

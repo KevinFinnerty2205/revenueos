@@ -321,6 +321,7 @@ function crmRecord(entityType: "account" | "contact" | "opportunity") {
         ? "Jane Smith"
         : "National operations rollout";
   return {
+    organisationId: "organisation-flagship",
     entityType,
     entityId,
     title,
@@ -1692,9 +1693,11 @@ async function routeFlagship(page: Page) {
     if (path === "/api/v1/crm/members") {
       await fulfilJson(route, [
         {
+          organisationId: "organisation-flagship",
           userId: "user-flagship",
           displayName: "Alex Morgan",
           active: true,
+          canAssign: true,
         },
       ]);
       return;
