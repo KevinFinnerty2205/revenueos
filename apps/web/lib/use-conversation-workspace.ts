@@ -10,7 +10,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { ApiClientError, apiRequest } from "@/lib/api";
+import { decodeConversationWorkspaceResponse } from "@/lib/conversation-workspace-response";
 
 export type WorkspaceSaveState =
   "idle" | "saving" | "saved" | "failed" | "conflict";
@@ -69,6 +71,9 @@ const AUTHORITATIVE_EMPTY_VALUES = {
   enhancedNotes: "",
   followUpDraft: "",
 } as const;
+
+const SAFE_WORKSPACE_IDENTITY_ERROR =
+  "Your private conversation workspace response could not be verified. Your local changes are still safe.";
 
 const generationMetadataKeys = [
   "generationState",
@@ -213,6 +218,8 @@ function mergeGenerationMetadata(
 
 interface WorkspaceSession {
   interactionId: string;
+  organisationId: string;
+  ownerUserId: string;
   epoch: symbol;
 }
 
@@ -234,13 +241,29 @@ interface CommittedWorkspaceState {
   conflictRecovery: WorkspaceConflictRecovery;
 }
 
+interface InitialDefaultsBinding {
+  owner: {
+    interactionId: string;
+    organisationId: string;
+    ownerUserId: string;
+  } | null;
+  invalidated: boolean;
+}
+
 function sameWorkspaceSession(
   left: WorkspaceSession,
   right: WorkspaceSession,
 ): boolean {
   return (
-    left.interactionId === right.interactionId && left.epoch === right.epoch
+    left.interactionId === right.interactionId &&
+    left.organisationId === right.organisationId &&
+    left.ownerUserId === right.ownerUserId &&
+    left.epoch === right.epoch
   );
+}
+
+function workspacePath(session: WorkspaceSession): string {
+  return `/api/v1/interactions/${encodeURIComponent(session.interactionId)}/personal-workspace`;
 }
 
 export function useConversationWorkspace({
@@ -256,27 +279,82 @@ export function useConversationWorkspace({
   initialFollowUpDraft?: string;
   refreshKey?: number;
 }) {
+  const verifiedIdentity = useVerifiedOrganisation();
+  const identityAvailable = verifiedIdentity.status === "available";
+  const organisationId = identityAvailable
+    ? verifiedIdentity.organisationId
+    : "";
+  const ownerUserId = identityAvailable ? verifiedIdentity.userId : "";
   const renderSession = useMemo<WorkspaceSession>(
-    () => ({ interactionId, epoch: Symbol(interactionId) }),
-    [interactionId],
+    () => ({
+      interactionId,
+      organisationId,
+      ownerUserId,
+      epoch: Symbol(`${interactionId}:${organisationId}:${ownerUserId}`),
+    }),
+    [interactionId, organisationId, ownerUserId],
   );
   const activeSession = useRef<WorkspaceSession>(renderSession);
-  const [firstSession] = useState(() => ({
-    session: renderSession,
-    defaults: {
+  const [initialDefaults] = useState(() => ({
+    interactionId,
+    identityKey: verifiedIdentity.identityKey,
+    values: {
       liveNotes: initialLiveNotes,
       enhancedNotes: initialEnhancedNotes,
       followUpDraft: initialFollowUpDraft,
     },
   }));
-  const sessionDefaults = sameWorkspaceSession(
-    firstSession.session,
-    renderSession,
-  )
-    ? firstSession.defaults
-    : AUTHORITATIVE_EMPTY_VALUES;
+  const [initialDefaultsBinding, setInitialDefaultsBinding] =
+    useState<InitialDefaultsBinding>({ owner: null, invalidated: false });
+  let resolvedInitialDefaultsBinding = initialDefaultsBinding;
+  if (!initialDefaultsBinding.invalidated) {
+    if (
+      interactionId !== initialDefaults.interactionId ||
+      verifiedIdentity.identityKey !== initialDefaults.identityKey
+    ) {
+      resolvedInitialDefaultsBinding = {
+        ...initialDefaultsBinding,
+        invalidated: true,
+      };
+    } else if (identityAvailable) {
+      const candidate = { interactionId, organisationId, ownerUserId };
+      if (initialDefaultsBinding.owner === null) {
+        resolvedInitialDefaultsBinding = {
+          owner: candidate,
+          invalidated: false,
+        };
+      } else if (
+        initialDefaultsBinding.owner.interactionId !==
+          candidate.interactionId ||
+        initialDefaultsBinding.owner.organisationId !==
+          candidate.organisationId ||
+        initialDefaultsBinding.owner.ownerUserId !== candidate.ownerUserId
+      ) {
+        resolvedInitialDefaultsBinding = {
+          ...initialDefaultsBinding,
+          invalidated: true,
+        };
+      }
+    }
+  }
+  if (resolvedInitialDefaultsBinding !== initialDefaultsBinding) {
+    setInitialDefaultsBinding(resolvedInitialDefaultsBinding);
+  }
+  const sessionDefaults =
+    resolvedInitialDefaultsBinding.invalidated ||
+    interactionId !== initialDefaults.interactionId
+      ? AUTHORITATIVE_EMPTY_VALUES
+      : initialDefaults.values;
+  const defaultsOwner = resolvedInitialDefaultsBinding.owner;
+  const defaultsBelongToCurrentVerifiedIdentity =
+    identityAvailable &&
+    !resolvedInitialDefaultsBinding.invalidated &&
+    defaultsOwner !== null &&
+    defaultsOwner.interactionId === interactionId &&
+    defaultsOwner.organisationId === organisationId &&
+    defaultsOwner.ownerUserId === ownerUserId;
   const defaults = useRef({
-    ...firstSession.defaults,
+    ...initialDefaults.values,
   });
   useLayoutEffect(() => {
     activeSession.current = renderSession;
@@ -357,6 +435,15 @@ export function useConversationWorkspace({
   const sessionIsCurrent = useCallback((candidate: WorkspaceSession) => {
     return sameWorkspaceSession(activeSession.current, candidate);
   }, []);
+
+  const verifiedSessionIsCurrent = useCallback(
+    (candidate: WorkspaceSession) =>
+      identityAvailable &&
+      candidate.organisationId === organisationId &&
+      candidate.ownerUserId === ownerUserId &&
+      sessionIsCurrent(candidate),
+    [identityAvailable, organisationId, ownerUserId, sessionIsCurrent],
+  );
 
   const ownerIsCurrent = useCallback((candidate: WorkspaceSession) => {
     const owner = committedState.current.owner;
@@ -459,7 +546,7 @@ export function useConversationWorkspace({
 
   const loadForSession = useCallback(
     async (target: WorkspaceSession) => {
-      if (!sessionIsCurrent(target)) return false;
+      if (!verifiedSessionIsCurrent(target)) return false;
       const fallback = {
         liveNotes: defaults.current.liveNotes,
         enhancedNotes: defaults.current.enhancedNotes,
@@ -468,24 +555,32 @@ export function useConversationWorkspace({
       activeConflictRead.current?.controller.abort();
       activeConflictRead.current = null;
       conflictReadSequence.current += 1;
-      setStateOwnerSession(target);
-      valuesRevision.current = 0;
-      setWorkspace(null);
-      setValuesState({ ...fallback, followUpReviewed: false });
-      setBaseline({ ...fallback, followUpReviewed: false });
-      setSaveState("idle");
+      const hasVerifiedWorkspace =
+        ownerIsCurrent(target) && committedState.current.workspace !== null;
+      if (!hasVerifiedWorkspace) {
+        setStateOwnerSession(target);
+        valuesRevision.current = 0;
+        setWorkspace(null);
+        setValuesState({ ...fallback, followUpReviewed: false });
+        setBaseline({ ...fallback, followUpReviewed: false });
+        setSaveState("idle");
+        setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
+        setGenerationActionState("idle");
+        setGenerationError(null);
+      }
       setError(null);
-      setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
-      setGenerationActionState("idle");
-      setGenerationError(null);
       setLoading(true);
       const request = beginRead(target);
       try {
-        const response = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
-          { signal: request.controller.signal },
-        );
+        const payload = await apiRequest<unknown>(workspacePath(target), {
+          signal: request.controller.signal,
+        });
         if (!readIsCurrent(request)) return false;
+        const response = decodeConversationWorkspaceResponse(payload, target);
+        if (response === null) {
+          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
+          return false;
+        }
         return hydrate(target, response, fallback);
       } catch (reason: unknown) {
         if (!readIsCurrent(request)) return false;
@@ -499,13 +594,24 @@ export function useConversationWorkspace({
         finishRead(request);
       }
     },
-    [beginRead, finishRead, hydrate, readIsCurrent, sessionIsCurrent],
+    [
+      beginRead,
+      finishRead,
+      hydrate,
+      ownerIsCurrent,
+      readIsCurrent,
+      verifiedSessionIsCurrent,
+    ],
   );
 
   const refreshForSession = useCallback(
     async (target: WorkspaceSession) => {
       const requestStartState = committedState.current;
-      if (!ownerIsCurrent(target) || requestStartState.workspace === null) {
+      if (
+        !verifiedSessionIsCurrent(target) ||
+        !ownerIsCurrent(target) ||
+        requestStartState.workspace === null
+      ) {
         return loadForSession(target);
       }
       const saveAtStart = activeSaveToken.current;
@@ -519,11 +625,15 @@ export function useConversationWorkspace({
       setError(null);
       const request = beginRead(target);
       try {
-        const response = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
-          { signal: request.controller.signal },
-        );
+        const payload = await apiRequest<unknown>(workspacePath(target), {
+          signal: request.controller.signal,
+        });
         if (!readIsCurrent(request) || !ownerIsCurrent(target)) return false;
+        const response = decodeConversationWorkspaceResponse(payload, target);
+        if (response === null) {
+          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
+          return false;
+        }
         if (overlapsMutation) return false;
         const latestState = committedState.current;
         if (
@@ -574,25 +684,38 @@ export function useConversationWorkspace({
       loadForSession,
       ownerIsCurrent,
       readIsCurrent,
+      verifiedSessionIsCurrent,
     ],
   );
 
   const load = useCallback(async () => {
-    if (!sessionIsCurrent(renderSession)) return;
+    if (verifiedIdentity.status !== "available") {
+      verifiedIdentity.reload();
+      return;
+    }
+    if (!verifiedSessionIsCurrent(renderSession)) return;
     await loadForSession(renderSession);
-  }, [loadForSession, renderSession, sessionIsCurrent]);
+  }, [
+    loadForSession,
+    renderSession,
+    verifiedIdentity,
+    verifiedSessionIsCurrent,
+  ]);
 
   const refresh = useCallback(async () => {
-    if (!sessionIsCurrent(renderSession)) return;
+    if (!verifiedSessionIsCurrent(renderSession)) return;
     await refreshForSession(renderSession);
-  }, [refreshForSession, renderSession, sessionIsCurrent]);
+  }, [refreshForSession, renderSession, verifiedSessionIsCurrent]);
 
   const fetchLatestConflict = useCallback(
     async (
       submission: WorkspaceConflictSubmission,
       target: WorkspaceSession,
     ) => {
-      if (!ownerIsCurrent(target)) return false;
+      if (!verifiedSessionIsCurrent(target) || !ownerIsCurrent(target)) {
+        return false;
+      }
+      const previousRecovery = committedState.current.conflictRecovery;
       activeConflictRead.current?.controller.abort();
       const request: WorkspaceReadRequest = {
         ...target,
@@ -600,7 +723,7 @@ export function useConversationWorkspace({
         controller: new AbortController(),
       };
       activeConflictRead.current = request;
-      setConflictRecovery({
+      const loadingRecovery: WorkspaceConflictRecovery = {
         state: "loading",
         latestWorkspace: null,
         latestValues: null,
@@ -609,17 +732,34 @@ export function useConversationWorkspace({
         submittedFields: submission.fields,
         importFromBrowser: submission.importFromBrowser,
         error: null,
-      });
+      };
+      setConflictRecovery(loadingRecovery);
       try {
-        const latestWorkspace = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
-          { signal: request.controller.signal },
-        );
+        const payload = await apiRequest<unknown>(workspacePath(target), {
+          signal: request.controller.signal,
+        });
         if (
           activeConflictRead.current !== request ||
           request.controller.signal.aborted ||
           !ownerIsCurrent(target)
         ) {
+          return false;
+        }
+        const latestWorkspace = decodeConversationWorkspaceResponse(
+          payload,
+          target,
+        );
+        if (latestWorkspace === null) {
+          setConflictRecovery(
+            previousRecovery.state === "ready"
+              ? previousRecovery
+              : {
+                  ...loadingRecovery,
+                  state: "failed",
+                  error: SAFE_WORKSPACE_IDENTITY_ERROR,
+                },
+          );
+          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
           return false;
         }
         const latestValues = responseValues(
@@ -665,7 +805,7 @@ export function useConversationWorkspace({
         }
       }
     },
-    [ownerIsCurrent],
+    [ownerIsCurrent, verifiedSessionIsCurrent],
   );
 
   const loadLatestConflict = useCallback(async () => {
@@ -673,6 +813,7 @@ export function useConversationWorkspace({
     const snapshot = committedState.current;
     const recovery = snapshot.conflictRecovery;
     if (
+      !verifiedSessionIsCurrent(target) ||
       !ownerIsCurrent(target) ||
       snapshot.owner === null ||
       !sameWorkspaceSession(snapshot.owner, target) ||
@@ -691,9 +832,15 @@ export function useConversationWorkspace({
       },
       target,
     );
-  }, [fetchLatestConflict, ownerIsCurrent, renderSession]);
+  }, [
+    fetchLatestConflict,
+    ownerIsCurrent,
+    renderSession,
+    verifiedSessionIsCurrent,
+  ]);
 
   useEffect(() => {
+    if (!identityAvailable) return;
     const interactionChanged =
       loadedSession.current === null ||
       !sameWorkspaceSession(loadedSession.current, renderSession);
@@ -728,6 +875,7 @@ export function useConversationWorkspace({
       }
     };
   }, [
+    identityAvailable,
     interactionId,
     loadForSession,
     refreshForSession,
@@ -744,6 +892,7 @@ export function useConversationWorkspace({
       const target = renderSession;
       const snapshot = committedState.current;
       if (
+        !verifiedSessionIsCurrent(target) ||
         !ownerIsCurrent(target) ||
         snapshot.owner === null ||
         !sameWorkspaceSession(snapshot.owner, target) ||
@@ -771,26 +920,29 @@ export function useConversationWorkspace({
       setSaveState("saving");
       setError(null);
       try {
-        const response = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
-          {
-            method: "PUT",
-            body: JSON.stringify({
-              expectedLockVersion: snapshot.workspace.lockVersion,
-              liveNotes: merged.liveNotes,
-              enhancedNotes: merged.enhancedNotes,
-              followUpDraft: merged.followUpDraft,
-              followUpReviewed: merged.followUpReviewed,
-              generationFingerprint: snapshot.workspace.generationFingerprint,
-              importFromBrowser: options.importFromBrowser === true,
-            }),
-          },
-        );
+        const payload = await apiRequest<unknown>(workspacePath(target), {
+          method: "PUT",
+          body: JSON.stringify({
+            expectedLockVersion: snapshot.workspace.lockVersion,
+            liveNotes: merged.liveNotes,
+            enhancedNotes: merged.enhancedNotes,
+            followUpDraft: merged.followUpDraft,
+            followUpReviewed: merged.followUpReviewed,
+            generationFingerprint: snapshot.workspace.generationFingerprint,
+            importFromBrowser: options.importFromBrowser === true,
+          }),
+        });
         if (
           activeSaveToken.current !== token ||
           !operationIsCurrent(token) ||
           !ownerIsCurrent(target)
         ) {
+          return false;
+        }
+        const response = decodeConversationWorkspaceResponse(payload, target);
+        if (response === null) {
+          setSaveState("failed");
+          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
           return false;
         }
         const savedValues: WorkspaceValues = {
@@ -843,6 +995,7 @@ export function useConversationWorkspace({
       operationIsCurrent,
       ownerIsCurrent,
       renderSession,
+      verifiedSessionIsCurrent,
     ],
   );
 
@@ -851,6 +1004,7 @@ export function useConversationWorkspace({
     const snapshot = committedState.current;
     const recovery = snapshot.conflictRecovery;
     if (
+      !verifiedSessionIsCurrent(target) ||
       !ownerIsCurrent(target) ||
       snapshot.owner === null ||
       !sameWorkspaceSession(snapshot.owner, target) ||
@@ -870,7 +1024,7 @@ export function useConversationWorkspace({
     setGenerationError(null);
     setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
     return true;
-  }, [ownerIsCurrent, renderSession]);
+  }, [ownerIsCurrent, renderSession, verifiedSessionIsCurrent]);
 
   const saveReviewedConflict = useCallback(
     async (reviewed: Partial<WorkspaceValues> = {}) => {
@@ -882,6 +1036,7 @@ export function useConversationWorkspace({
       const submittedValues = recovery.submittedValues;
       const localValuesAtSubmission = recovery.localValuesAtSubmission;
       if (
+        !verifiedSessionIsCurrent(target) ||
         !ownerIsCurrent(target) ||
         snapshot.owner === null ||
         !sameWorkspaceSession(snapshot.owner, target) ||
@@ -929,26 +1084,30 @@ export function useConversationWorkspace({
         error: null,
       });
       try {
-        const response = await apiRequest<ConversationWorkspaceResponse>(
-          `/api/v1/interactions/${target.interactionId}/personal-workspace`,
-          {
-            method: "PUT",
-            body: JSON.stringify({
-              expectedLockVersion: latestWorkspace.lockVersion,
-              liveNotes: resolved.liveNotes,
-              enhancedNotes: resolved.enhancedNotes,
-              followUpDraft: resolved.followUpDraft,
-              followUpReviewed: resolved.followUpReviewed,
-              generationFingerprint: latestWorkspace.generationFingerprint,
-              importFromBrowser: recovery.importFromBrowser,
-            }),
-          },
-        );
+        const payload = await apiRequest<unknown>(workspacePath(target), {
+          method: "PUT",
+          body: JSON.stringify({
+            expectedLockVersion: latestWorkspace.lockVersion,
+            liveNotes: resolved.liveNotes,
+            enhancedNotes: resolved.enhancedNotes,
+            followUpDraft: resolved.followUpDraft,
+            followUpReviewed: resolved.followUpReviewed,
+            generationFingerprint: latestWorkspace.generationFingerprint,
+            importFromBrowser: recovery.importFromBrowser,
+          }),
+        });
         if (
           activeSaveToken.current !== token ||
           !operationIsCurrent(token) ||
           !ownerIsCurrent(target)
         ) {
+          return false;
+        }
+        const response = decodeConversationWorkspaceResponse(payload, target);
+        if (response === null) {
+          setSaveState("conflict");
+          setConflictRecovery(recovery);
+          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
           return false;
         }
         const savedValues: WorkspaceValues = {
@@ -1018,6 +1177,7 @@ export function useConversationWorkspace({
       operationIsCurrent,
       ownerIsCurrent,
       renderSession,
+      verifiedSessionIsCurrent,
     ],
   );
 
@@ -1025,6 +1185,7 @@ export function useConversationWorkspace({
     const target = renderSession;
     const snapshot = committedState.current;
     if (
+      !verifiedSessionIsCurrent(target) ||
       !ownerIsCurrent(target) ||
       snapshot.owner === null ||
       !sameWorkspaceSession(snapshot.owner, target) ||
@@ -1040,8 +1201,8 @@ export function useConversationWorkspace({
     setGenerationActionState("retrying");
     setGenerationError(null);
     try {
-      const response = await apiRequest<ConversationWorkspaceResponse>(
-        `/api/v1/interactions/${target.interactionId}/personal-workspace/generation/retry`,
+      const payload = await apiRequest<unknown>(
+        `${workspacePath(target)}/generation/retry`,
         { method: "POST" },
       );
       if (
@@ -1049,6 +1210,12 @@ export function useConversationWorkspace({
         !operationIsCurrent(token) ||
         !ownerIsCurrent(target)
       ) {
+        return false;
+      }
+      const response = decodeConversationWorkspaceResponse(payload, target);
+      if (response === null) {
+        setGenerationActionState("failed");
+        setGenerationError(SAFE_WORKSPACE_IDENTITY_ERROR);
         return false;
       }
       setWorkspace((current) =>
@@ -1084,6 +1251,7 @@ export function useConversationWorkspace({
     operationIsCurrent,
     ownerIsCurrent,
     renderSession,
+    verifiedSessionIsCurrent,
   ]);
 
   const applyGeneratedVersion = useCallback(async () => {
@@ -1091,6 +1259,7 @@ export function useConversationWorkspace({
     const snapshot = committedState.current;
     const workspaceAtStart = snapshot.workspace;
     if (
+      !verifiedSessionIsCurrent(target) ||
       !ownerIsCurrent(target) ||
       snapshot.owner === null ||
       !sameWorkspaceSession(snapshot.owner, target) ||
@@ -1109,8 +1278,8 @@ export function useConversationWorkspace({
     setGenerationError(null);
     const requestStartValues = snapshot.values;
     try {
-      const response = await apiRequest<ConversationWorkspaceResponse>(
-        `/api/v1/interactions/${target.interactionId}/personal-workspace/generation/apply`,
+      const payload = await apiRequest<unknown>(
+        `${workspacePath(target)}/generation/apply`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -1124,6 +1293,12 @@ export function useConversationWorkspace({
         !operationIsCurrent(token) ||
         !ownerIsCurrent(target)
       ) {
+        return false;
+      }
+      const response = decodeConversationWorkspaceResponse(payload, target);
+      if (response === null) {
+        setGenerationActionState("failed");
+        setGenerationError(SAFE_WORKSPACE_IDENTITY_ERROR);
         return false;
       }
       setWorkspace(response);
@@ -1186,15 +1361,19 @@ export function useConversationWorkspace({
     operationIsCurrent,
     ownerIsCurrent,
     renderSession,
+    verifiedSessionIsCurrent,
   ]);
 
   const stateBelongsToCurrentInteraction =
     stateOwnerSession !== null &&
     sameWorkspaceSession(stateOwnerSession, renderSession);
+  const safeValueDefaults = defaultsBelongToCurrentVerifiedIdentity
+    ? sessionDefaults
+    : AUTHORITATIVE_EMPTY_VALUES;
   const safeValues: WorkspaceValues = {
-    liveNotes: sessionDefaults.liveNotes,
-    enhancedNotes: sessionDefaults.enhancedNotes,
-    followUpDraft: sessionDefaults.followUpDraft,
+    liveNotes: safeValueDefaults.liveNotes,
+    enhancedNotes: safeValueDefaults.enhancedNotes,
+    followUpDraft: safeValueDefaults.followUpDraft,
     followUpReviewed: false,
   };
   const visibleValues = stateBelongsToCurrentInteraction ? values : safeValues;
@@ -1207,9 +1386,19 @@ export function useConversationWorkspace({
     workspace: stateBelongsToCurrentInteraction ? workspace : null,
     values: visibleValues,
     setValues,
-    loading: stateBelongsToCurrentInteraction ? loading : true,
+    loading:
+      verifiedIdentity.status === "loading"
+        ? true
+        : identityAvailable && stateBelongsToCurrentInteraction
+          ? loading
+          : identityAvailable,
     saveState: stateBelongsToCurrentInteraction ? saveState : "idle",
-    error: stateBelongsToCurrentInteraction ? error : null,
+    error:
+      verifiedIdentity.status === "unavailable"
+        ? SAFE_WORKSPACE_IDENTITY_ERROR
+        : stateBelongsToCurrentInteraction
+          ? error
+          : null,
     generationActionState: stateBelongsToCurrentInteraction
       ? generationActionState
       : "idle",

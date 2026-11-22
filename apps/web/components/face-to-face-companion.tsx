@@ -154,19 +154,21 @@ function FaceToFaceCompanionSession({
   };
   const liveNotesStatus = personalWorkspace.loading
     ? "Loading your private notes…"
-    : personalWorkspace.saveState === "saving"
-      ? "Saving private notes…"
-      : personalWorkspace.saveState === "saved"
-        ? personalWorkspace.dirtyFields.liveNotes
-          ? "An earlier note version was saved. Newer changes remain unsaved."
-          : "Private notes saved."
-        : personalWorkspace.saveState === "conflict"
-          ? "Another session saved a different version. Your local text is unchanged; compare both versions below."
-          : personalWorkspace.saveState === "failed"
-            ? "Private notes could not be saved. Your local text is still visible."
-            : personalWorkspace.error
-              ? personalWorkspace.error
-              : "Private to you until you deliberately include something in review.";
+    : personalWorkspace.workspace === null && personalWorkspace.error
+      ? "Private notes are temporarily unavailable. Try again before entering or saving notes."
+      : personalWorkspace.saveState === "saving"
+        ? "Saving private notes…"
+        : personalWorkspace.saveState === "saved"
+          ? personalWorkspace.dirtyFields.liveNotes
+            ? "An earlier note version was saved. Newer changes remain unsaved."
+            : "Private notes saved."
+          : personalWorkspace.saveState === "conflict"
+            ? "Another session saved a different version. Your local text is unchanged; compare both versions below."
+            : personalWorkspace.saveState === "failed"
+              ? "Private notes could not be saved. Your local text is still visible."
+              : personalWorkspace.error
+                ? personalWorkspace.error
+                : "Private to you until you deliberately include something in review.";
 
   useLayoutEffect(() => {
     sessionActiveRef.current = true;
@@ -583,6 +585,11 @@ function FaceToFaceCompanionSession({
     ? captureChoice
     : "passive";
   const showCanonicalNotes = phase === "BEFORE" || phase === "DURING";
+  const privateWorkspaceNeedsRecovery =
+    showCanonicalNotes &&
+    !personalWorkspace.loading &&
+    personalWorkspace.workspace === null &&
+    personalWorkspace.error !== null;
   const endLabel = personalWorkspace.dirtyFields.liveNotes
     ? interaction.interactionType === "online_meeting"
       ? "Save notes and end meeting"
@@ -655,6 +662,29 @@ function FaceToFaceCompanionSession({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {privateWorkspaceNeedsRecovery ? (
+        <section
+          role="alert"
+          aria-label="Private notes are temporarily unavailable"
+          className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-950"
+        >
+          <h2 className="text-base font-bold">
+            Private notes are temporarily unavailable
+          </h2>
+          <p className="mt-2 text-sm leading-6">
+            Try again to load this private workspace before entering or saving
+            notes.
+          </p>
+          <button
+            type="button"
+            className="secondary-button mt-3"
+            onClick={() => void personalWorkspace.reload()}
+          >
+            Try again
+          </button>
         </section>
       ) : null}
 

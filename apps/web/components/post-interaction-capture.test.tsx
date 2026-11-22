@@ -81,6 +81,8 @@ function privateWorkspaceController() {
   const controller = {
     workspace: {
       exists: true,
+      interactionId: "interaction-1",
+      organisationId: "organisation-1",
       ownerUserId: "user-1",
       lockVersion: 2,
       liveNotes: null,
@@ -1268,6 +1270,8 @@ describe("PostInteractionCapture", () => {
     const workspaceController = {
       workspace: {
         exists: true,
+        interactionId: "interaction-1",
+        organisationId: "organisation-1",
         ownerUserId: "user-1",
         lockVersion: 2,
         liveNotes: "Original rough note",

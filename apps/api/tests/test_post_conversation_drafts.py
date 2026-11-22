@@ -428,6 +428,9 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
     workspace_response = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
     assert workspace_response.status_code == 200
     first_workspace = workspace_response.json()
+    assert first_workspace["interactionId"] == interaction_id
+    assert first_workspace["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert first_workspace["ownerUserId"] == str(PRIMARY_USER_ID)
     assert first_workspace["generationState"] == "ready"
     assert first_workspace["generationTranscriptVersion"] == 1
     assert first_workspace["generationUpdateAvailable"] is True
@@ -461,6 +464,9 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
         },
     )
     assert edited.status_code == 200, edited.text
+    assert edited.json()["interactionId"] == interaction_id
+    assert edited.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert edited.json()["ownerUserId"] == str(PRIMARY_USER_ID)
 
     corrected = client.patch(
         f"/api/v1/meetings/{meeting['id']}/transcript",
@@ -511,6 +517,9 @@ def test_final_transcript_generates_one_private_draft_and_late_version_preserves
         },
     )
     assert applied.status_code == 200, applied.text
+    assert applied.json()["interactionId"] == interaction_id
+    assert applied.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert applied.json()["ownerUserId"] == str(PRIMARY_USER_ID)
     assert applied.json()["liveNotes"] == "My original private live notes"
     assert applied.json()["enhancedNotes"] != "My edited enhanced notes"
     assert applied.json()["generationUpdateAvailable"] is False
@@ -674,6 +683,9 @@ def test_failed_capability_waits_for_explicit_retry_before_replacement_job(
     initial_job_count, generation_id = asyncio.run(fail_capability_and_poll())
     retried = client.post(f"/api/v1/interactions/{interaction_id}/personal-workspace/generation/retry")
     assert retried.status_code == 200, retried.text
+    assert retried.json()["interactionId"] == str(interaction_id)
+    assert retried.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert retried.json()["ownerUserId"] == str(PRIMARY_USER_ID)
     assert retried.json()["generationState"] == "pending"
 
     async def assert_one_replacement_attempt() -> None:

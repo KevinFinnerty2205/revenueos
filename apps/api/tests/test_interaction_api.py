@@ -14,10 +14,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.beta_maintenance import _export_payload
 from revenueos.interaction_contracts import InteractionUpdate
+from revenueos.interaction_repositories import InteractionRepository
 from revenueos.interaction_services import InteractionService
 from revenueos.models import (
     CaptureSession,
     ConversationBriefingOutbox,
+    ConversationDraftGeneration,
+    ConversationUserWorkspace,
     Evidence,
     Interaction,
     InteractionIntelligenceSnapshot,
@@ -36,6 +39,8 @@ from .conftest import (
 )
 from .test_business_api import create_company, create_contact, create_opportunity
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
+
+PRIVATE_WORKSPACE_SENTINEL = "PRIVATE SENTINEL: this text must never reach an error response"
 
 
 def create_interaction(
@@ -73,6 +78,58 @@ def create_interaction(
     return response.json()
 
 
+def private_workspace_record(
+    interaction_id: UUID,
+    *,
+    organisation_id: UUID = PRIMARY_ORGANISATION_ID,
+    user_id: UUID = PRIMARY_USER_ID,
+) -> ConversationUserWorkspace:
+    return ConversationUserWorkspace(
+        id=uuid4(),
+        organisation_id=organisation_id,
+        interaction_id=interaction_id,
+        user_id=user_id,
+        live_notes=PRIVATE_WORKSPACE_SENTINEL,
+        enhanced_notes=PRIVATE_WORKSPACE_SENTINEL,
+        follow_up_draft=PRIVATE_WORKSPACE_SENTINEL,
+        follow_up_reviewed=False,
+        lock_version=7,
+    )
+
+
+def private_generation_record(
+    interaction_id: UUID,
+    *,
+    organisation_id: UUID = PRIMARY_ORGANISATION_ID,
+    user_id: UUID = PRIMARY_USER_ID,
+    status: str = "failed",
+) -> ConversationDraftGeneration:
+    return ConversationDraftGeneration(
+        id=uuid4(),
+        organisation_id=organisation_id,
+        interaction_id=interaction_id,
+        meeting_id=uuid4(),
+        transcript_version_id=uuid4(),
+        transcript_version=1,
+        user_id=user_id,
+        status=status,
+        source_fingerprint="a" * 64,
+        source_live_notes=PRIVATE_WORKSPACE_SENTINEL,
+        source_live_notes_fingerprint="b" * 64,
+        source_workspace_lock_version=7,
+        input_fingerprint="c" * 64,
+        draft_schema_version=1,
+        enhanced_notes=PRIVATE_WORKSPACE_SENTINEL if status == "ready" else None,
+        follow_up_draft=PRIVATE_WORKSPACE_SENTINEL if status == "ready" else None,
+        content_fingerprint="d" * 64 if status == "ready" else None,
+        attempt_count=1,
+        orchestration_attempt_count=1,
+        max_attempts=3,
+        failure_code="private_generation_failure" if status == "failed" else None,
+        completed_at=datetime.now(UTC) if status == "ready" else None,
+    )
+
+
 def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwrite(
     app: FastAPI,
     client: TestClient,
@@ -83,6 +140,8 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
     assert empty.status_code == 200
     assert empty.json() == {
         "exists": False,
+        "interactionId": interaction_id,
+        "organisationId": str(PRIMARY_ORGANISATION_ID),
         "ownerUserId": str(PRIMARY_USER_ID),
         "lockVersion": 0,
         "liveNotes": None,
@@ -115,6 +174,9 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         },
     )
     assert legacy_saved.status_code == 200, legacy_saved.text
+    assert legacy_saved.json()["interactionId"] == interaction_id
+    assert legacy_saved.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert legacy_saved.json()["ownerUserId"] == str(PRIMARY_USER_ID)
     assert legacy_saved.json()["liveNotes"] == legacy_notes
     assert client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace").json()["liveNotes"] == legacy_notes
 
@@ -131,11 +193,17 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         },
     )
     assert saved.status_code == 200, saved.text
+    assert saved.json()["interactionId"] == interaction_id
+    assert saved.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert saved.json()["ownerUserId"] == str(PRIMARY_USER_ID)
     assert saved.json()["lockVersion"] == 2
     assert saved.json()["importedFromBrowserAt"] is not None
 
     second_session = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
     assert second_session.status_code == 200
+    assert second_session.json()["interactionId"] == interaction_id
+    assert second_session.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert second_session.json()["ownerUserId"] == str(PRIMARY_USER_ID)
     assert second_session.json()["liveNotes"] == "Private notes typed while capture was active."
     assert second_session.json()["enhancedNotes"] == "Private edited notes from browser one."
     stale = client.put(
@@ -191,6 +259,9 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
     other_user_view = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
     assert other_user_view.status_code == 200
     assert other_user_view.json()["exists"] is False
+    assert other_user_view.json()["interactionId"] == interaction_id
+    assert other_user_view.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert other_user_view.json()["ownerUserId"] == str(same_org_user_id)
     other_user_saved = client.put(
         f"/api/v1/interactions/{interaction_id}/personal-workspace",
         json={
@@ -202,12 +273,18 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
         },
     )
     assert other_user_saved.status_code == 200, other_user_saved.text
+    assert other_user_saved.json()["interactionId"] == interaction_id
+    assert other_user_saved.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert other_user_saved.json()["ownerUserId"] == str(same_org_user_id)
     app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
     cross_tenant_view = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
     assert cross_tenant_view.status_code == 404
     app.dependency_overrides.pop(get_current_user, None)
 
     preserved = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+    assert preserved.json()["interactionId"] == interaction_id
+    assert preserved.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    assert preserved.json()["ownerUserId"] == str(PRIMARY_USER_ID)
     assert preserved.json()["enhancedNotes"] == "Private edited notes from browser one."
 
     async def export_for_owner() -> dict[str, object]:
@@ -226,6 +303,175 @@ def test_personal_workspace_persists_across_sessions_and_prevents_silent_overwri
     assert private_workspaces[0]["live_notes"] == "Private notes typed while capture was active."
     assert private_workspaces[0]["enhanced_notes"] == "Private edited notes from browser one."
     assert "Another member's private notes" not in str(exported)
+
+
+@pytest.mark.parametrize("record_kind", ["workspace", "generation"])
+@pytest.mark.parametrize("identity_field", ["interaction_id", "organisation_id", "user_id"])
+def test_personal_workspace_read_rejects_miswired_private_record_identity(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    record_kind: str,
+    identity_field: str,
+) -> None:
+    interaction = create_interaction(client, title="Fail-closed private workspace identity")
+    interaction_id = UUID(str(interaction["id"]))
+    record: ConversationUserWorkspace | ConversationDraftGeneration
+    if record_kind == "workspace":
+        record = private_workspace_record(interaction_id)
+    else:
+        record = private_generation_record(interaction_id)
+    mismatch = {
+        "interaction_id": uuid4(),
+        "organisation_id": SECONDARY_ORGANISATION_ID,
+        "user_id": SECONDARY_USER_ID,
+    }[identity_field]
+    setattr(record, identity_field, mismatch)
+
+    if record_kind == "workspace":
+
+        async def return_workspace(
+            *_args: object,
+            **_kwargs: object,
+        ) -> ConversationUserWorkspace:
+            assert isinstance(record, ConversationUserWorkspace)
+            return record
+
+        monkeypatch.setattr(
+            InteractionRepository,
+            "get_user_workspace",
+            return_workspace,
+        )
+    else:
+
+        async def return_generation(
+            *_args: object,
+            **_kwargs: object,
+        ) -> ConversationDraftGeneration:
+            assert isinstance(record, ConversationDraftGeneration)
+            return record
+
+        monkeypatch.setattr(
+            InteractionRepository,
+            "latest_draft_generation",
+            return_generation,
+        )
+
+    response = client.get(f"/api/v1/interactions/{interaction_id}/personal-workspace")
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "conversation_workspace_identity_mismatch"
+    assert response.json()["message"] == "The private conversation workspace could not be loaded safely."
+    assert PRIVATE_WORKSPACE_SENTINEL not in response.text
+    assert str(mismatch) not in response.text
+
+
+@pytest.mark.parametrize(
+    "operation,mismatch_source",
+    [
+        ("save", "workspace"),
+        ("save", "generation"),
+        ("retry", "generation"),
+        ("retry", "workspace"),
+        ("apply", "generation"),
+        ("apply", "workspace"),
+    ],
+)
+def test_personal_workspace_mutation_rejects_miswired_records_before_change(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    mismatch_source: str,
+) -> None:
+    interaction = create_interaction(client, title="Fail-closed private workspace mutation")
+    interaction_id = UUID(str(interaction["id"]))
+    generation_status = "ready" if operation == "apply" else "failed"
+    workspace = private_workspace_record(
+        uuid4() if mismatch_source == "workspace" else interaction_id,
+    )
+    generation = private_generation_record(
+        uuid4() if mismatch_source == "generation" else interaction_id,
+        status=generation_status,
+    )
+    workspace_before = (
+        workspace.lock_version,
+        workspace.live_notes,
+        workspace.enhanced_notes,
+        workspace.follow_up_draft,
+    )
+    generation_before = (
+        generation.status,
+        generation.failure_code,
+        generation.workspace_applied_at,
+    )
+
+    async def return_workspace(
+        *_args: object,
+        **_kwargs: object,
+    ) -> ConversationUserWorkspace:
+        return workspace
+
+    async def return_generation(
+        *_args: object,
+        **_kwargs: object,
+    ) -> ConversationDraftGeneration:
+        return generation
+
+    monkeypatch.setattr(
+        InteractionRepository,
+        "get_user_workspace",
+        return_workspace,
+    )
+    monkeypatch.setattr(
+        InteractionRepository,
+        "latest_draft_generation",
+        return_generation,
+    )
+    monkeypatch.setattr(
+        InteractionRepository,
+        "draft_generation_by_id",
+        return_generation,
+    )
+
+    if operation == "save":
+        response = client.put(
+            f"/api/v1/interactions/{interaction_id}/personal-workspace",
+            json={
+                "expectedLockVersion": workspace.lock_version,
+                "liveNotes": "A replacement that must not be applied.",
+                "enhancedNotes": None,
+                "followUpDraft": None,
+                "followUpReviewed": False,
+                "generationFingerprint": None,
+            },
+        )
+    elif operation == "retry":
+        response = client.post(
+            f"/api/v1/interactions/{interaction_id}/personal-workspace/generation/retry",
+        )
+    else:
+        response = client.post(
+            f"/api/v1/interactions/{interaction_id}/personal-workspace/generation/apply",
+            json={
+                "generationId": str(generation.id),
+                "expectedLockVersion": workspace.lock_version,
+            },
+        )
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "conversation_workspace_identity_mismatch"
+    assert response.json()["message"] == "The private conversation workspace could not be loaded safely."
+    assert PRIVATE_WORKSPACE_SENTINEL not in response.text
+    assert workspace_before == (
+        workspace.lock_version,
+        workspace.live_notes,
+        workspace.enhanced_notes,
+        workspace.follow_up_draft,
+    )
+    assert generation_before == (
+        generation.status,
+        generation.failure_code,
+        generation.workspace_applied_at,
+    )
 
 
 def test_interaction_search_matches_only_the_current_users_private_notes(

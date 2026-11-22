@@ -12,6 +12,16 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
 
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId: "organisation-1",
+    userId: "user-1",
+    identityKey: "organisation-1:user-1",
+    reload: vi.fn(),
+  }),
+}));
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -29,9 +39,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function emptyWorkspace() {
+function emptyWorkspace(interactionId = "interaction-1") {
   return {
     exists: false,
+    interactionId,
+    organisationId: "organisation-1",
     ownerUserId: "user-1",
     lockVersion: 0,
     liveNotes: null,
@@ -50,6 +62,11 @@ function emptyWorkspace() {
     importedFromBrowserAt: null,
     updatedAt: null,
   };
+}
+
+function emptyWorkspaceForUrl(url: string) {
+  const match = url.match(/\/interactions\/([^/]+)\/personal-workspace$/);
+  return emptyWorkspace(match ? decodeURIComponent(match[1]) : "interaction-1");
 }
 
 function interaction(overrides: Partial<Interaction> = {}): Interaction {
@@ -163,6 +180,7 @@ function installApi(
     personalWorkspaceConflictsOnce,
     personalWorkspaceSaveResponse,
     personalWorkspaceLoadResponse,
+    personalWorkspaceLoadResponses,
     briefResponses,
   }: {
     aiCompanionEnabled?: boolean;
@@ -178,14 +196,18 @@ function installApi(
     };
     personalWorkspaceSaveResponse?: Promise<Response>;
     personalWorkspaceLoadResponse?: Promise<Response>;
+    personalWorkspaceLoadResponses?: Response[];
     briefResponses?: PreInteractionBriefResponse[];
   } = {},
 ) {
   let currentInteraction = initialInteraction;
   let workspaceConflictReturned = false;
+  let workspaceLoadResponseIndex = 0;
   const markers: object[] = [];
   let privateWorkspace = {
     exists: false,
+    interactionId: "interaction-1",
+    organisationId: "organisation-1",
     ownerUserId: "user-1",
     lockVersion: 0,
     liveNotes: null as string | null,
@@ -289,6 +311,17 @@ function installApi(
       return Promise.resolve(jsonResponse([]));
     }
     if (url.endsWith("/personal-workspace") && method === "GET") {
+      if (personalWorkspaceLoadResponses?.length) {
+        const response =
+          personalWorkspaceLoadResponses[
+            Math.min(
+              workspaceLoadResponseIndex,
+              personalWorkspaceLoadResponses.length - 1,
+            )
+          ];
+        workspaceLoadResponseIndex += 1;
+        return Promise.resolve(response);
+      }
       return (
         personalWorkspaceLoadResponse ??
         Promise.resolve(jsonResponse(privateWorkspace))
@@ -868,6 +901,8 @@ describe("FaceToFaceCompanion", () => {
       resolveWorkspace(
         jsonResponse({
           exists: false,
+          interactionId: "interaction-1",
+          organisationId: "organisation-1",
           ownerUserId: "user-1",
           lockVersion: 0,
           liveNotes: null,
@@ -890,6 +925,102 @@ describe("FaceToFaceCompanion", () => {
       await pendingWorkspace;
     });
     await waitFor(() => expect(notes).toBeEnabled());
+  });
+
+  it("announces and retries an initial private-workspace load failure", async () => {
+    const fetchMock = installApi(interaction(), {
+      personalWorkspaceLoadResponses: [
+        jsonResponse(
+          {
+            code: "private_workspace_unavailable",
+            message: "Internal routing details must not be exposed.",
+          },
+          503,
+        ),
+        jsonResponse(emptyWorkspace()),
+      ],
+    });
+
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={interaction()}
+        embedded
+      />,
+    );
+
+    const notes = await screen.findByLabelText("Private live notes");
+    const recovery = await screen.findByRole("alert", {
+      name: "Private notes are temporarily unavailable",
+    });
+    expect(notes).toBeDisabled();
+    expect(recovery).toHaveTextContent(
+      "Try again to load this private workspace before entering or saving notes.",
+    );
+    expect(
+      screen.queryByText("Internal routing details must not be exposed."),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(notes).toBeEnabled());
+    expect(
+      screen.queryByRole("alert", {
+        name: "Private notes are temporarily unavailable",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/personal-workspace") &&
+          (init?.method ?? "GET") === "GET",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("keeps verified local notes mounted when a save response has foreign identity", async () => {
+    installApi(interaction(), {
+      personalWorkspaceSaveResponse: Promise.resolve(
+        jsonResponse({
+          ...emptyWorkspace(),
+          exists: true,
+          organisationId: "foreign-organisation",
+          lockVersion: 1,
+          liveNotes: "Foreign private note must not be displayed.",
+          updatedAt: "2026-08-15T03:00:00Z",
+        }),
+      ),
+    });
+
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={interaction()}
+        embedded
+      />,
+    );
+
+    const notes = await screen.findByLabelText("Private live notes");
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, {
+      target: { value: "Keep this verified local note visible." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save private notes" }));
+
+    expect(
+      await screen.findByText(
+        "Private notes could not be saved. Your local text is still visible.",
+      ),
+    ).toBeVisible();
+    expect(notes).toHaveValue("Keep this verified local note visible.");
+    expect(
+      screen.queryByDisplayValue("Foreign private note must not be displayed."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("alert", {
+        name: "Private notes are temporarily unavailable",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the interaction open when dirty private notes cannot be saved", async () => {
@@ -1072,6 +1203,8 @@ describe("FaceToFaceCompanion", () => {
       resolveSave(
         jsonResponse({
           exists: true,
+          interactionId: "interaction-1",
+          organisationId: "organisation-1",
           ownerUserId: "user-1",
           lockVersion: 1,
           liveNotes: "The note submitted when End was selected.",
@@ -1139,7 +1272,7 @@ describe("FaceToFaceCompanion", () => {
         );
       }
       if (url.endsWith("/personal-workspace") && method === "GET") {
-        return Promise.resolve(jsonResponse(emptyWorkspace()));
+        return Promise.resolve(jsonResponse(emptyWorkspaceForUrl(url)));
       }
       if (url.endsWith("/interactions/interaction-a") && method === "GET") {
         return firstLoad.promise;
@@ -1218,7 +1351,7 @@ describe("FaceToFaceCompanion", () => {
         );
       }
       if (url.endsWith("/personal-workspace") && method === "GET") {
-        return Promise.resolve(jsonResponse(emptyWorkspace()));
+        return Promise.resolve(jsonResponse(emptyWorkspaceForUrl(url)));
       }
       if (url.endsWith("/interactions/interaction-b") && method === "GET") {
         return secondLoad.promise;
@@ -1338,7 +1471,7 @@ describe("FaceToFaceCompanion", () => {
         );
       }
       if (url.endsWith("/personal-workspace") && method === "GET") {
-        return Promise.resolve(jsonResponse(emptyWorkspace()));
+        return Promise.resolve(jsonResponse(emptyWorkspaceForUrl(url)));
       }
       if (url.endsWith("/interactions/interaction-a/complete")) {
         return firstCompletion.promise;
@@ -1443,7 +1576,7 @@ describe("FaceToFaceCompanion", () => {
         );
       }
       if (url.endsWith("/personal-workspace") && method === "GET") {
-        return Promise.resolve(jsonResponse(emptyWorkspace()));
+        return Promise.resolve(jsonResponse(emptyWorkspaceForUrl(url)));
       }
       if (url.endsWith("/companion/brief") && method === "GET") {
         const requestedInteractionId = url.includes("interaction-a")

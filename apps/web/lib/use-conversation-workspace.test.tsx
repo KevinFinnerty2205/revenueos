@@ -2,6 +2,20 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 
+const verifiedIdentity = vi.hoisted(() => ({
+  state: {
+    status: "available" as "available" | "loading" | "unavailable",
+    organisationId: "organisation-1" as string | null,
+    userId: "user-1" as string | null,
+    identityKey: "session-1",
+    reload: vi.fn(),
+  },
+}));
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => verifiedIdentity.state,
+}));
+
 function response(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -26,6 +40,8 @@ function deferred<T>() {
 
 const savedWorkspace = {
   exists: true,
+  interactionId: "interaction-1",
+  organisationId: "organisation-1",
   ownerUserId: "user-1",
   lockVersion: 4,
   liveNotes: "Notes retained if media capture stops",
@@ -45,9 +61,425 @@ const savedWorkspace = {
   updatedAt: "2026-10-31T00:00:00Z",
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  verifiedIdentity.state = {
+    status: "available",
+    organisationId: "organisation-1",
+    userId: "user-1",
+    identityKey: "session-1",
+    reload: vi.fn(),
+  };
+  vi.unstubAllGlobals();
+});
 
 describe("useConversationWorkspace", () => {
+  it("keeps private defaults hidden until the first identity is verified, then binds them to that session", async () => {
+    verifiedIdentity.state = {
+      status: "loading",
+      organisationId: null,
+      userId: null,
+      identityKey: "session-1",
+      reload: vi.fn(),
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      response({
+        ...savedWorkspace,
+        exists: false,
+        lockVersion: 0,
+        liveNotes: null,
+        enhancedNotes: null,
+        followUpDraft: null,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ tick: _tick }) =>
+        useConversationWorkspace({
+          interactionId: "interaction-1",
+          initialEnhancedNotes: "First verified enhanced default",
+          initialFollowUpDraft: "First verified follow-up default",
+        }),
+      { initialProps: { tick: 0 } },
+    );
+
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.values.enhancedNotes).toBe("");
+    expect(result.current.values.followUpDraft).toBe("");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    verifiedIdentity.state = {
+      status: "available",
+      organisationId: "organisation-1",
+      userId: "user-1",
+      identityKey: "session-1",
+      reload: vi.fn(),
+    };
+    rerender({ tick: 1 });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.enhancedNotes).toBe(
+      "First verified enhanced default",
+    );
+    expect(result.current.values.followUpDraft).toBe(
+      "First verified follow-up default",
+    );
+  });
+
+  it("never binds pending private defaults to a replacement external session", async () => {
+    verifiedIdentity.state = {
+      status: "loading",
+      organisationId: null,
+      userId: null,
+      identityKey: "session-a",
+      reload: vi.fn(),
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      response({
+        ...savedWorkspace,
+        exists: false,
+        organisationId: "organisation-2",
+        ownerUserId: "user-2",
+        lockVersion: 0,
+        liveNotes: null,
+        enhancedNotes: null,
+        followUpDraft: null,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ tick: _tick }) =>
+        useConversationWorkspace({
+          interactionId: "interaction-1",
+          initialEnhancedNotes: "Session A private enhanced notes",
+          initialFollowUpDraft: "Session A private follow-up",
+        }),
+      { initialProps: { tick: 0 } },
+    );
+
+    expect(result.current.values.enhancedNotes).toBe("");
+    verifiedIdentity.state = {
+      status: "loading",
+      organisationId: null,
+      userId: null,
+      identityKey: "session-b",
+      reload: vi.fn(),
+    };
+    rerender({ tick: 1 });
+    expect(result.current.values.enhancedNotes).toBe("");
+
+    verifiedIdentity.state = {
+      status: "available",
+      organisationId: "organisation-2",
+      userId: "user-2",
+      identityKey: "session-b",
+      reload: vi.fn(),
+    };
+    rerender({ tick: 2 });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.enhancedNotes).toBe("");
+    expect(result.current.values.followUpDraft).toBe("");
+    expect(result.current.values.enhancedNotes).not.toContain("Session A");
+  });
+
+  it("redacts the verified workspace synchronously while a same-mounted identity changes", async () => {
+    const replacementWorkspace = {
+      ...savedWorkspace,
+      organisationId: "organisation-2",
+      ownerUserId: "user-2",
+      liveNotes: "Replacement user's private note",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(response(replacementWorkspace));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ tick: _tick }) =>
+        useConversationWorkspace({
+          interactionId: "interaction-1",
+          initialEnhancedNotes: "Original user's private default",
+        }),
+      { initialProps: { tick: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(savedWorkspace.liveNotes);
+
+    verifiedIdentity.state = {
+      status: "loading",
+      organisationId: null,
+      userId: null,
+      identityKey: "session-1",
+      reload: vi.fn(),
+    };
+    rerender({ tick: 1 });
+
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.values.liveNotes).toBe("");
+    expect(result.current.values.enhancedNotes).toBe("");
+
+    verifiedIdentity.state = {
+      status: "available",
+      organisationId: "organisation-2",
+      userId: "user-2",
+      identityKey: "session-2",
+      reload: vi.fn(),
+    };
+    rerender({ tick: 2 });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.values.liveNotes).toBe(
+      replacementWorkspace.liveNotes,
+    );
+    expect(result.current.values.enhancedNotes).not.toContain("Original user");
+  });
+
+  it("retries identity verification before loading a private workspace", async () => {
+    const reloadIdentity = vi.fn();
+    verifiedIdentity.state = {
+      status: "unavailable",
+      organisationId: null,
+      userId: null,
+      identityKey: "session-1",
+      reload: reloadIdentity,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response(savedWorkspace));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, rerender } = renderHook(
+      ({ tick: _tick }) =>
+        useConversationWorkspace({ interactionId: "interaction-1" }),
+      { initialProps: { tick: 0 } },
+    );
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toMatch(/could not be verified/i);
+    await act(async () => result.current.reload());
+    expect(reloadIdentity).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    verifiedIdentity.state = {
+      status: "available",
+      organisationId: "organisation-1",
+      userId: "user-1",
+      identityKey: "session-1",
+      reload: reloadIdentity,
+    };
+    rerender({ tick: 1 });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBeNull();
+    expect(result.current.values.liveNotes).toBe(savedWorkspace.liveNotes);
+  });
+
+  it.each([
+    ["interaction", { interactionId: "interaction-foreign" }],
+    ["organisation", { organisationId: "organisation-foreign" }],
+    ["owner", { ownerUserId: "user-foreign" }],
+  ])(
+    "rejects a wrong %s on the initial private read",
+    async (_case, mismatch) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          response({
+            ...savedWorkspace,
+            ...mismatch,
+            liveNotes: "FOREIGN INITIAL SENTINEL",
+            lockVersion: 99,
+          }),
+        ),
+      );
+      const { result } = renderHook(() =>
+        useConversationWorkspace({
+          interactionId: "interaction-1",
+          initialLiveNotes: "Trusted local default",
+        }),
+      );
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.workspace).toBeNull();
+      expect(result.current.values.liveNotes).toBe("Trusted local default");
+      expect(result.current.values.liveNotes).not.toContain("FOREIGN");
+      expect(result.current.error).toMatch(/could not be verified/i);
+    },
+  );
+
+  it("keeps verified local state when a refresh returns a foreign interaction", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...savedWorkspace,
+          interactionId: "interaction-foreign",
+          lockVersion: 99,
+          liveNotes: "FOREIGN REFRESH SENTINEL",
+          generationState: "failed",
+          generationRetryAvailable: true,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Unsaved local refresh edit",
+      }));
+    });
+
+    await act(async () => result.current.refresh());
+    expect(result.current.values.liveNotes).toBe("Unsaved local refresh edit");
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.workspace?.generationState).toBe("ready");
+    expect(result.current.error).toMatch(/could not be verified/i);
+  });
+
+  it("returns false and preserves edits when a save returns a foreign organisation", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...savedWorkspace,
+          organisationId: "organisation-foreign",
+          lockVersion: 99,
+          liveNotes: "FOREIGN SAVE SENTINEL",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Unsaved local save edit",
+      }));
+    });
+
+    await act(async () => expect(await result.current.save()).toBe(false));
+    expect(result.current.saveState).toBe("failed");
+    expect(result.current.values.liveNotes).toBe("Unsaved local save edit");
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.error).toMatch(/could not be verified/i);
+  });
+
+  it("retains a retryable local conflict when the conflict read returns a foreign owner", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...savedWorkspace,
+          ownerUserId: "user-foreign",
+          lockVersion: 99,
+          liveNotes: "FOREIGN CONFLICT SENTINEL",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      expect(
+        await result.current.save({ liveNotes: "Submitted local conflict" }),
+      ).toBe(false);
+    });
+    expect(result.current.saveState).toBe("conflict");
+    expect(result.current.values.liveNotes).toBe(savedWorkspace.liveNotes);
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "failed",
+      latestWorkspace: null,
+      submittedValues: { liveNotes: "Submitted local conflict" },
+      error: expect.stringMatching(/could not be verified/i),
+    });
+  });
+
+  it("does not adopt a foreign generation-retry response", async () => {
+    const retryable = {
+      ...savedWorkspace,
+      generationState: "failed" as const,
+      generationRetryAvailable: true,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(retryable))
+      .mockResolvedValueOnce(
+        response({
+          ...retryable,
+          interactionId: "interaction-foreign",
+          lockVersion: 99,
+          generationState: "pending",
+          generationRetryAvailable: false,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () =>
+      expect(await result.current.retryGeneration()).toBe(false),
+    );
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.workspace?.generationState).toBe("failed");
+    expect(result.current.workspace?.generationRetryAvailable).toBe(true);
+    expect(result.current.generationError).toMatch(/could not be verified/i);
+  });
+
+  it("does not adopt a foreign generated-version apply response", async () => {
+    const applicable = {
+      ...savedWorkspace,
+      generationId: "generation-2",
+      generationUpdateAvailable: true,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(applicable))
+      .mockResolvedValueOnce(
+        response({
+          ...applicable,
+          organisationId: "organisation-foreign",
+          lockVersion: 99,
+          enhancedNotes: "FOREIGN APPLY SENTINEL",
+          generationUpdateAvailable: false,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () =>
+      expect(await result.current.applyGeneratedVersion()).toBe(false),
+    );
+    expect(result.current.values.enhancedNotes).toBe(
+      savedWorkspace.enhancedNotes,
+    );
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.workspace?.generationUpdateAvailable).toBe(true);
+    expect(result.current.generationError).toMatch(/could not be verified/i);
+  });
+
   it("prefers durable user edits over regenerated defaults and saves with a lock version", async () => {
     const fetchMock = vi
       .fn()
@@ -334,6 +766,68 @@ describe("useConversationWorkspace", () => {
     });
     expect(result.current.saveState).toBe("saved");
     expect(result.current.conflictRecovery.state).toBe("idle");
+  });
+
+  it("preserves a ready conflict when its reviewed save returns a foreign workspace", async () => {
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Verified latest server note",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response(
+          {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...latestWorkspace,
+          organisationId: "organisation-foreign",
+          lockVersion: 99,
+          liveNotes: "FOREIGN REVIEWED SAVE SENTINEL",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: "Local reviewed conflict note",
+      }));
+    });
+    await act(async () => {
+      expect(await result.current.save()).toBe(false);
+    });
+    expect(result.current.conflictRecovery.state).toBe("ready");
+
+    await act(async () => {
+      expect(await result.current.saveReviewedConflict()).toBe(false);
+    });
+    expect(result.current.saveState).toBe("conflict");
+    expect(result.current.values.liveNotes).toBe(
+      "Local reviewed conflict note",
+    );
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "ready",
+      latestWorkspace: {
+        lockVersion: 5,
+        liveNotes: "Verified latest server note",
+      },
+      submittedValues: { liveNotes: "Local reviewed conflict note" },
+    });
+    expect(result.current.error).toMatch(/could not be verified/i);
   });
 
   it("preserves browser-import provenance through reviewed conflict recovery", async () => {
@@ -1191,6 +1685,7 @@ describe("useConversationWorkspace", () => {
     const interactionB = deferred<Response>();
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 9,
       liveNotes: null,
       enhancedNotes: null,
@@ -1203,7 +1698,9 @@ describe("useConversationWorkspace", () => {
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...savedWorkspace, interactionId: "interaction-a" }),
+      )
       .mockImplementationOnce(() => interactionB.promise)
       .mockResolvedValueOnce(response(savedB));
     vi.stubGlobal("fetch", fetchMock);
@@ -1286,6 +1783,7 @@ describe("useConversationWorkspace", () => {
     const interactionBReads: Array<ReturnType<typeof deferred<Response>>> = [];
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 8,
       liveNotes: "Interaction B notes",
       enhancedNotes: "Interaction B enhanced notes",
@@ -1296,7 +1794,9 @@ describe("useConversationWorkspace", () => {
         return Promise.resolve(response(workspaceB));
       }
       if (String(input).includes("interaction-a")) {
-        return Promise.resolve(response(savedWorkspace));
+        return Promise.resolve(
+          response({ ...savedWorkspace, interactionId: "interaction-a" }),
+        );
       }
       const read = deferred<Response>();
       interactionBReads.push(read);
@@ -1339,6 +1839,7 @@ describe("useConversationWorkspace", () => {
     const interactionA = deferred<Response>();
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 8,
       liveNotes: "Interaction B remains authoritative",
     };
@@ -1357,7 +1858,11 @@ describe("useConversationWorkspace", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
 
-    await act(async () => interactionA.resolve(response(savedWorkspace)));
+    await act(async () =>
+      interactionA.resolve(
+        response({ ...savedWorkspace, interactionId: "interaction-a" }),
+      ),
+    );
     expect(result.current.values.liveNotes).toBe(workspaceB.liveNotes);
     expect(result.current.workspace?.lockVersion).toBe(8);
   });
@@ -1367,12 +1872,15 @@ describe("useConversationWorkspace", () => {
     const secondInteractionA = deferred<Response>();
     const refreshedA = {
       ...savedWorkspace,
+      interactionId: "interaction-a",
       lockVersion: 10,
       liveNotes: "Fresh A notes after returning",
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...savedWorkspace, interactionId: "interaction-a" }),
+      )
       .mockImplementationOnce(() => interactionB.promise)
       .mockImplementationOnce(() => secondInteractionA.promise);
     vi.stubGlobal("fetch", fetchMock);
@@ -1405,6 +1913,7 @@ describe("useConversationWorkspace", () => {
       interactionB.resolve(
         response({
           ...savedWorkspace,
+          interactionId: "interaction-b",
           lockVersion: 99,
           liveNotes: "Late B text",
         }),
@@ -1418,6 +1927,7 @@ describe("useConversationWorkspace", () => {
     const saveB = deferred<Response>();
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 11,
       liveNotes: "Interaction B notes",
       enhancedNotes: "Interaction B enhanced notes",
@@ -1430,7 +1940,9 @@ describe("useConversationWorkspace", () => {
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...savedWorkspace, interactionId: "interaction-a" }),
+      )
       .mockImplementationOnce(() => saveA.promise)
       .mockResolvedValueOnce(response(workspaceB))
       .mockImplementationOnce(() => saveB.promise);
@@ -1473,6 +1985,7 @@ describe("useConversationWorkspace", () => {
       saveA.resolve(
         response({
           ...savedWorkspace,
+          interactionId: "interaction-a",
           lockVersion: 5,
           liveNotes: "Saved A notes",
         }),
@@ -1502,12 +2015,15 @@ describe("useConversationWorkspace", () => {
     const conflictA = deferred<Response>();
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 15,
       liveNotes: "Private B notes",
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...savedWorkspace, interactionId: "interaction-a" }),
+      )
       .mockResolvedValueOnce(
         response(
           {
@@ -1538,6 +2054,7 @@ describe("useConversationWorkspace", () => {
       conflictA.resolve(
         response({
           ...savedWorkspace,
+          interactionId: "interaction-a",
           lockVersion: 6,
           liveNotes: "Latest A conflict text",
         }),
@@ -1552,11 +2069,13 @@ describe("useConversationWorkspace", () => {
   it("keeps retained conflict actions bound to their original interaction", async () => {
     const latestA = {
       ...savedWorkspace,
+      interactionId: "interaction-a",
       lockVersion: 5,
       liveNotes: "Latest private A conflict text",
     };
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 15,
       liveNotes: "Private B notes",
       enhancedNotes: "Private B enhanced notes",
@@ -1569,7 +2088,9 @@ describe("useConversationWorkspace", () => {
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...savedWorkspace, interactionId: "interaction-a" }),
+      )
       .mockResolvedValueOnce(
         response(
           {
@@ -1636,11 +2157,13 @@ describe("useConversationWorkspace", () => {
     const retryA = deferred<Response>();
     const retryableA = {
       ...savedWorkspace,
+      interactionId: "interaction-a",
       generationState: "failed" as const,
       generationRetryAvailable: true,
     };
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 20,
       liveNotes: "B remains visible after A retry",
     };
@@ -1682,11 +2205,13 @@ describe("useConversationWorkspace", () => {
     const applyA = deferred<Response>();
     const applicableA = {
       ...savedWorkspace,
+      interactionId: "interaction-a",
       generationId: "generation-2",
       generationUpdateAvailable: true,
     };
     const workspaceB = {
       ...savedWorkspace,
+      interactionId: "interaction-b",
       lockVersion: 21,
       enhancedNotes: "B enhanced notes stay visible",
     };
