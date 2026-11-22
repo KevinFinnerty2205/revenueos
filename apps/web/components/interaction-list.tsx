@@ -3,16 +3,17 @@
 import type {
   Company,
   Contact,
-  EntityPage,
   Interaction,
   InteractionLifecycleStatus,
   InteractionType,
+  TenantEntityPage,
 } from "@revenueos/shared";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import { InteractionCard } from "@/components/interaction-card";
 import { ProviderCalendarContext } from "@/components/microsoft-calendar-context";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
@@ -20,6 +21,12 @@ import {
   interactionStatuses,
   interactionTypes,
 } from "@/lib/interactions";
+import {
+  decodeTenantPage,
+  isCompanyResponse,
+  isContactResponse,
+  isInteractionResponse,
+} from "@/lib/private-response-identity";
 
 type AccountSummary = Pick<
   Company,
@@ -27,7 +34,43 @@ type AccountSummary = Pick<
 >;
 
 export function InteractionList() {
-  const [result, setResult] = useState<EntityPage<Interaction> | null>(null);
+  const organisation = useVerifiedOrganisation();
+  if (organisation.status === "loading") {
+    return (
+      <p role="status" className="rounded-2xl bg-white p-6 text-slate-600">
+        Verifying your secure workspace…
+      </p>
+    );
+  }
+  if (organisation.status !== "available") {
+    return (
+      <section
+        className="rounded-2xl border border-red-200 bg-red-50 p-6"
+        role="alert"
+      >
+        <p className="text-sm text-red-900">
+          Your organisation could not be verified. Conversations are temporarily
+          unavailable.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <InteractionListSession
+      key={organisation.organisationId}
+      organisationId={organisation.organisationId}
+    />
+  );
+}
+
+function InteractionListSession({
+  organisationId,
+}: {
+  organisationId: string;
+}) {
+  const [result, setResult] = useState<TenantEntityPage<Interaction> | null>(
+    null,
+  );
   const [companies, setCompanies] = useState<Company[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,44 +87,60 @@ export function InteractionList() {
   const [interactionStatus, setInteractionStatus] = useState<
     InteractionLifecycleStatus | ""
   >("");
+  const queryRevision = useRef(0);
+  const verifiedCompaniesRef = useRef<Company[]>([]);
+  const verifiedContactsRef = useRef<Contact[]>([]);
+  const contextQueryIdentityRef = useRef<string | null>(null);
+  const queryIdentity = JSON.stringify([
+    organisationId,
+    search,
+    interactionType,
+    interactionStatus,
+  ]);
 
   useEffect(() => {
+    const revision = queryRevision.current;
+    const preserveVerifiedContext =
+      contextQueryIdentityRef.current === queryIdentity;
     const controller = new AbortController();
     const parameters = interactionParameters(
       search,
       interactionType,
       interactionStatus,
     );
-    Promise.all([
-      apiRequest<EntityPage<Interaction>>(
-        "/api/v1/interactions?" + parameters.toString(),
-        { signal: controller.signal },
-      ),
-      apiRequest<EntityPage<Company>>("/api/v1/companies?pageSize=100", {
+    const interactionRequest = apiRequest<unknown>(
+      "/api/v1/interactions?" + parameters.toString(),
+      { signal: controller.signal },
+    );
+    const contextPageRequests = Promise.allSettled([
+      apiRequest<unknown>("/api/v1/companies?pageSize=100", {
         signal: controller.signal,
       }),
-      apiRequest<EntityPage<Contact>>("/api/v1/contacts?pageSize=100", {
+      apiRequest<unknown>("/api/v1/contacts?pageSize=100", {
         signal: controller.signal,
       }),
-    ])
-      .then(async ([interactions, companyPage, contactPage]) => {
-        const context = await hydrateLinkedContext(
-          interactions.items,
-          companyPage.items,
-          contactPage.items,
-          controller.signal,
+    ]);
+
+    void (async () => {
+      let interactions: TenantEntityPage<Interaction>;
+      try {
+        const response = await interactionRequest;
+        const decoded = decodeTenantPage(
+          response,
+          organisationId,
+          isInteractionResponse,
+          { expectedPage: 1 },
         );
-        if (controller.signal.aborted) return;
-        setResult(interactions);
-        setCompanies(context.companies);
-        setContacts(context.contacts);
-        setLoadedAt(Date.now());
-        setLoadMoreError(null);
-      })
-      .catch((requestError: unknown) => {
+        if (decoded === null) {
+          throw new Error("Conversations could not be loaded.");
+        }
+        interactions = decoded;
+      } catch (requestError: unknown) {
         if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
+          controller.signal.aborted ||
+          revision !== queryRevision.current ||
+          (requestError instanceof DOMException &&
+            requestError.name === "AbortError")
         ) {
           return;
         }
@@ -90,12 +149,111 @@ export function InteractionList() {
             ? requestError.message
             : "Conversations could not be loaded.",
         );
-      })
-      .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [interactionStatus, interactionType, retryKey, search]);
+        return;
+      }
+
+      if (controller.signal.aborted || revision !== queryRevision.current)
+        return;
+      setResult(interactions);
+      if (!preserveVerifiedContext) {
+        verifiedCompaniesRef.current = [];
+        verifiedContactsRef.current = [];
+        setCompanies([]);
+        setContacts([]);
+      }
+      contextQueryIdentityRef.current = queryIdentity;
+      setLoadedAt(Date.now());
+      setLoadMoreError(null);
+      setError(null);
+      setLoading(false);
+
+      try {
+        const [companyPageResult, contactPageResult] =
+          await contextPageRequests;
+        if (controller.signal.aborted || revision !== queryRevision.current)
+          return;
+        const companyPage =
+          companyPageResult.status === "fulfilled"
+            ? decodeTenantPage(
+                companyPageResult.value,
+                organisationId,
+                isCompanyResponse,
+                { expectedPage: 1 },
+              )
+            : null;
+        const contactPage =
+          contactPageResult.status === "fulfilled"
+            ? decodeTenantPage(
+                contactPageResult.value,
+                organisationId,
+                isContactResponse,
+                { expectedPage: 1 },
+              )
+            : null;
+        const initialCompanies = companyPage
+          ? mergeById(
+              verifiedCompaniesRef.current,
+              companyPage.items.filter(
+                (company) => company.archivedAt === null,
+              ),
+            )
+          : preserveVerifiedContext
+            ? verifiedCompaniesRef.current
+            : [];
+        const initialContacts = contactPage
+          ? mergeById(
+              verifiedContactsRef.current,
+              contactPage.items.filter(
+                (contact) => contact.archivedAt === null,
+              ),
+            )
+          : preserveVerifiedContext
+            ? verifiedContactsRef.current
+            : [];
+        if (companyPage !== null) {
+          verifiedCompaniesRef.current = initialCompanies;
+          setCompanies(initialCompanies);
+        }
+        if (contactPage !== null) {
+          verifiedContactsRef.current = initialContacts;
+          setContacts(initialContacts);
+        }
+        const context = await hydrateLinkedContext(
+          interactions.items,
+          initialCompanies,
+          initialContacts,
+          organisationId,
+          controller.signal,
+        );
+        if (controller.signal.aborted || revision !== queryRevision.current)
+          return;
+        setCompanies((current) => {
+          const next = mergeById(current, context.companies);
+          verifiedCompaniesRef.current = next;
+          return next;
+        });
+        setContacts((current) => {
+          const next = mergeById(current, context.contacts);
+          verifiedContactsRef.current = next;
+          return next;
+        });
+      } catch {
+        // Context labels are optional; the generic labels remain usable.
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (queryRevision.current === revision) queryRevision.current += 1;
+    };
+  }, [
+    interactionStatus,
+    interactionType,
+    organisationId,
+    queryIdentity,
+    retryKey,
+    search,
+  ]);
 
   const companiesById = useMemo(
     () => new Map(companies.map((company) => [company.id, company])),
@@ -141,18 +299,23 @@ export function InteractionList() {
     event.preventDefault();
     beginReload();
     setSearch(searchDraft.trim());
+    setRetryKey((value) => value + 1);
   }
 
   function beginReload() {
+    queryRevision.current += 1;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
     setLoadMoreError(null);
   }
 
   async function loadMore() {
     if (!result || result.page >= result.pages || loadingMore) return;
+    const revision = queryRevision.current;
     setLoadingMore(true);
     setLoadMoreError(null);
+    let nextPage: TenantEntityPage<Interaction>;
     try {
       const parameters = interactionParameters(
         search,
@@ -160,16 +323,20 @@ export function InteractionList() {
         interactionStatus,
         result.page + 1,
       );
-      const nextPage = await apiRequest<EntityPage<Interaction>>(
+      const response = await apiRequest<unknown>(
         "/api/v1/interactions?" + parameters.toString(),
       );
-      const context = await hydrateLinkedContext(
-        nextPage.items,
-        companies,
-        contacts,
+      const decoded = decodeTenantPage(
+        response,
+        organisationId,
+        isInteractionResponse,
+        { expectedPage: result.page + 1 },
       );
-      setCompanies(context.companies);
-      setContacts(context.contacts);
+      if (decoded === null) {
+        throw new Error("More conversations could not be loaded.");
+      }
+      nextPage = decoded;
+      if (revision !== queryRevision.current) return;
       setLoadedAt(Date.now());
       setResult((current) =>
         current
@@ -179,15 +346,40 @@ export function InteractionList() {
             }
           : nextPage,
       );
+      setLoadingMore(false);
     } catch (requestError: unknown) {
+      if (revision !== queryRevision.current) return;
       setLoadMoreError(
         requestError instanceof Error
           ? requestError.message
           : "More conversations could not be loaded.",
       );
-    } finally {
       setLoadingMore(false);
+      return;
     }
+
+    void hydrateLinkedContext(
+      nextPage.items,
+      companies,
+      contacts,
+      organisationId,
+    )
+      .then((context) => {
+        if (revision !== queryRevision.current) return;
+        setCompanies((current) => {
+          const next = mergeById(current, context.companies);
+          verifiedCompaniesRef.current = next;
+          return next;
+        });
+        setContacts((current) => {
+          const next = mergeById(current, context.contacts);
+          verifiedContactsRef.current = next;
+          return next;
+        });
+      })
+      .catch(() => {
+        // Context labels are optional; the appended conversations remain usable.
+      });
   }
 
   return (
@@ -215,7 +407,10 @@ export function InteractionList() {
       </header>
 
       {!loading && !error && result ? (
-        <ProviderCalendarContext interactions={result.items} />
+        <ProviderCalendarContext
+          interactions={result.items}
+          organisationId={organisationId}
+        />
       ) : null}
 
       <form
@@ -337,7 +532,7 @@ export function InteractionList() {
                       className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-semibold text-slate-800 hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                       href={
                         "/conversations/accounts/" +
-                        company.id +
+                        encodeURIComponent(company.id) +
                         "#conversations"
                       }
                     >
@@ -485,6 +680,7 @@ async function hydrateLinkedContext(
   interactions: Interaction[],
   companies: Company[],
   contacts: Contact[],
+  organisationId: string,
   signal?: AbortSignal,
 ): Promise<{ companies: Company[]; contacts: Contact[] }> {
   const knownCompanyIds = new Set(companies.map((company) => company.id));
@@ -503,24 +699,56 @@ async function hydrateLinkedContext(
         .filter((value): value is string => Boolean(value)),
     ),
   ].filter((contactId) => !knownContactIds.has(contactId));
-  const [linkedCompanies, linkedContacts] = await Promise.all([
-    Promise.all(
-      missingCompanyIds.map((companyId) =>
-        apiRequest<Company>(
+  const [companyResults, contactResults] = await Promise.all([
+    Promise.allSettled(
+      missingCompanyIds.map(async (companyId) => ({
+        requestedId: companyId,
+        value: await apiRequest<unknown>(
           "/api/v1/companies/" + encodeURIComponent(companyId),
           signal ? { signal } : undefined,
         ),
-      ),
+      })),
     ),
-    Promise.all(
-      missingContactIds.map((contactId) =>
-        apiRequest<Contact>(
+    Promise.allSettled(
+      missingContactIds.map(async (contactId) => ({
+        requestedId: contactId,
+        value: await apiRequest<unknown>(
           "/api/v1/contacts/" + encodeURIComponent(contactId),
           signal ? { signal } : undefined,
         ),
-      ),
+      })),
     ),
   ]);
+  const invalidCompanyPayload = companyResults.some(
+    (result) =>
+      result.status === "fulfilled" &&
+      (!isCompanyResponse(result.value.value, organisationId) ||
+        result.value.value.id !== result.value.requestedId ||
+        result.value.value.archivedAt !== null),
+  );
+  const invalidContactPayload = contactResults.some(
+    (result) =>
+      result.status === "fulfilled" &&
+      (!isContactResponse(result.value.value, organisationId) ||
+        result.value.value.id !== result.value.requestedId ||
+        result.value.value.archivedAt !== null),
+  );
+  const linkedCompanies = invalidCompanyPayload
+    ? []
+    : companyResults.flatMap((result) =>
+        result.status === "fulfilled" &&
+        isCompanyResponse(result.value.value, organisationId)
+          ? [result.value.value]
+          : [],
+      );
+  const linkedContacts = invalidContactPayload
+    ? []
+    : contactResults.flatMap((result) =>
+        result.status === "fulfilled" &&
+        isContactResponse(result.value.value, organisationId)
+          ? [result.value.value]
+          : [],
+      );
   return {
     companies: mergeById(companies, linkedCompanies),
     contacts: mergeById(contacts, linkedContacts),
@@ -580,7 +808,11 @@ function AccountConversationCard({
           <h3 className="text-xl font-semibold text-slate-950">
             <Link
               className="rounded underline-offset-4 group-hover:underline focus:outline-none focus:ring-2 focus:ring-brand-focus"
-              href={"/conversations/accounts/" + company.id + "#conversations"}
+              href={
+                "/conversations/accounts/" +
+                encodeURIComponent(company.id) +
+                "#conversations"
+              }
             >
               {company.name}
             </Link>
@@ -602,7 +834,7 @@ function AccountConversationCard({
           </p>
           <Link
             className="mt-1 block font-semibold text-slate-950 underline-offset-4 hover:underline"
-            href={"/conversations/" + highlighted.id}
+            href={"/conversations/" + encodeURIComponent(highlighted.id)}
           >
             {highlighted.title}
           </Link>
@@ -615,7 +847,11 @@ function AccountConversationCard({
       ) : null}
       <Link
         className="mt-5 inline-flex text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
-        href={"/conversations/accounts/" + company.id + "#conversations"}
+        href={
+          "/conversations/accounts/" +
+          encodeURIComponent(company.id) +
+          "#conversations"
+        }
       >
         View conversations and notes
       </Link>

@@ -1411,6 +1411,10 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
             assert invited.match_state == "review_required"
             assert ambiguous.contact_id is None
             assert ambiguous.match_state == "review_required"
+            calendar_listing = await service.list_calendar_events(limit=10)
+            assert calendar_listing.organisation_id == PRIMARY_ORGANISATION_ID
+            assert calendar_listing.items
+            assert all(item.organisation_id == PRIMARY_ORGANISATION_ID for item in calendar_listing.items)
             interaction = Interaction(
                 id=uuid.uuid4(),
                 organisation_id=PRIMARY_ORGANISATION_ID,
@@ -1426,8 +1430,10 @@ def test_calendar_sync_is_idempotent_private_safe_and_does_not_guess_opportunity
             session.add(interaction)
             await session.flush()
             linked = await service.link_interaction(customer.id, interaction.id)
+            assert linked.organisation_id == PRIMARY_ORGANISATION_ID
             assert linked.interaction_id == interaction.id
             unlinked = await service.link_interaction(customer.id, None)
+            assert unlinked.organisation_id == PRIMARY_ORGANISATION_ID
             assert unlinked.interaction_id is None
             with pytest.raises(
                 PublicAPIError,

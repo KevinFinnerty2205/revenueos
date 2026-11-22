@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  decodeProviderCalendarEventListResponse,
   decodeTenantPage,
   isCompanyResponse,
   isContactResponse,
   isInteractionResponse,
+  isOpportunityListItemResponse,
+  isOpportunityResponse,
+  isProviderCalendarEventResponse,
 } from "@/lib/private-response-identity";
 
 const organisationId = "organisation-1";
@@ -42,6 +46,44 @@ const contact = {
   ...timestamps,
 };
 
+const opportunityBase = {
+  id: "opportunity-1",
+  organisationId,
+  companyId: company.id,
+  name: "Northstar renewal",
+  stage: "proposal",
+  status: "open",
+  estimatedValue: "125000.50",
+  currency: "AUD",
+  expectedCloseDate: "2027-02-28",
+  ownerUserId: "user-1",
+  description: "Renewal and expansion",
+  archivedAt: null,
+  pipelineId: "pipeline-1",
+  pipelineStageId: "pipeline-stage-1",
+  stageEnteredAt: "2026-11-01T00:00:00Z",
+  stageTrackingStartedAt: "2026-10-01T00:00:00Z",
+  actualCloseDate: null,
+  outcomeReason: null,
+  outcomeProvenance: null,
+  ...timestamps,
+};
+
+const opportunity = {
+  ...opportunityBase,
+  outcomeNote: null,
+};
+
+const opportunityListItem = {
+  ...opportunityBase,
+  companyName: company.name,
+  ownerName: "Alex Morgan",
+  latestMeetingId: null,
+  latestMeetingDate: null,
+  latestMeetingMomentum: null,
+  latestNextBestAction: null,
+};
+
 const interaction = {
   id: "interaction-1",
   organisationId,
@@ -74,6 +116,26 @@ const interaction = {
   briefState: "completed",
   briefGeneratedAt: "2026-11-01T01:00:00Z",
   ...timestamps,
+};
+
+const calendarEvent = {
+  id: "calendar-event-1",
+  organisationId,
+  title: "Discovery",
+  startAt: "2026-11-02T00:00:00Z",
+  endAt: "2026-11-02T01:00:00Z",
+  providerTimezone: "Australia/Sydney",
+  attendeeEmails: ["buyer@example.test"],
+  location: null,
+  onlineMeetingUrl: "https://meet.example.test/discovery",
+  sensitivity: "normal",
+  state: "active",
+  matchState: "matched",
+  contactId: contact.id,
+  companyId: company.id,
+  opportunityId: opportunity.id,
+  interactionId: interaction.id,
+  lastSyncedAt: "2026-11-01T01:00:00Z",
 };
 
 describe("private response identity decoders", () => {
@@ -117,6 +179,140 @@ describe("private response identity decoders", () => {
         organisationId,
       ),
     ).toBe(false);
+  });
+
+  it("validates the distinct complete Opportunity response contracts", () => {
+    expect(isOpportunityResponse(opportunity, organisationId)).toBe(true);
+    expect(
+      isOpportunityResponse(
+        { ...opportunity, organisationId: "organisation-2" },
+        organisationId,
+      ),
+    ).toBe(false);
+    expect(
+      isOpportunityResponse(
+        { ...opportunity, outcomeNote: undefined },
+        organisationId,
+      ),
+    ).toBe(false);
+
+    expect(
+      isOpportunityListItemResponse(opportunityListItem, organisationId),
+    ).toBe(true);
+    expect(
+      isOpportunityListItemResponse(
+        { ...opportunityListItem, organisationId: "organisation-2" },
+        organisationId,
+      ),
+    ).toBe(false);
+    expect(
+      isOpportunityListItemResponse(
+        { ...opportunityListItem, latestMeetingMomentum: undefined },
+        organisationId,
+      ),
+    ).toBe(false);
+  });
+
+  it("validates provider calendar events and list envelopes atomically", () => {
+    expect(isProviderCalendarEventResponse(calendarEvent, organisationId)).toBe(
+      true,
+    );
+    expect(
+      isProviderCalendarEventResponse(
+        { ...calendarEvent, organisationId: "organisation-2" },
+        organisationId,
+      ),
+    ).toBe(false);
+    expect(
+      isProviderCalendarEventResponse(
+        { ...calendarEvent, attendeeEmails: [null] },
+        organisationId,
+      ),
+    ).toBe(false);
+
+    const list = {
+      organisationId,
+      items: [calendarEvent],
+      total: 1,
+    };
+    expect(
+      decodeProviderCalendarEventListResponse(list, organisationId),
+    ).toEqual(list);
+    expect(
+      decodeProviderCalendarEventListResponse(
+        {
+          ...list,
+          items: [
+            calendarEvent,
+            {
+              ...calendarEvent,
+              id: "calendar-event-2",
+              organisationId: "organisation-2",
+            },
+          ],
+          total: 2,
+        },
+        organisationId,
+      ),
+    ).toBeNull();
+    expect(
+      decodeProviderCalendarEventListResponse(
+        { ...list, organisationId: "organisation-2" },
+        organisationId,
+      ),
+    ).toBeNull();
+  });
+
+  it("decodes Opportunity tenant pages atomically, including empty pages", () => {
+    const page = {
+      organisationId,
+      items: [opportunityListItem],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      pages: 1,
+    };
+    expect(
+      decodeTenantPage(page, organisationId, isOpportunityListItemResponse, {
+        expectedPage: 1,
+      }),
+    ).toEqual(page);
+    expect(
+      decodeTenantPage(
+        {
+          ...page,
+          items: [
+            opportunityListItem,
+            {
+              ...opportunityListItem,
+              id: "opportunity-2",
+              organisationId: "organisation-2",
+            },
+          ],
+          total: 2,
+        },
+        organisationId,
+        isOpportunityListItemResponse,
+        { expectedPage: 1 },
+      ),
+    ).toBeNull();
+
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      pages: 0,
+    };
+    expect(
+      decodeTenantPage(
+        emptyPage,
+        organisationId,
+        isOpportunityListItemResponse,
+        { expectedPage: 1 },
+      ),
+    ).toEqual(emptyPage);
   });
 
   it("rejects a tenant page atomically when one complete item is invalid", () => {

@@ -201,7 +201,11 @@ class GoogleSyncService:
         await self._require_module_read("core")
         connection_ids = await self._visible_connection_ids()
         if not connection_ids:
-            return ProviderCalendarEventListResponse(items=[], total=0)
+            return ProviderCalendarEventListResponse(
+                organisation_id=self.tenant.organisation_id,
+                items=[],
+                total=0,
+            )
         values = await self.session.scalars(
             select(ProviderCalendarEvent)
             .where(
@@ -214,7 +218,11 @@ class GoogleSyncService:
             .limit(limit)
         )
         items = [self._calendar_response(item) for item in values.all()]
-        return ProviderCalendarEventListResponse(items=items, total=len(items))
+        return ProviderCalendarEventListResponse(
+            organisation_id=self.tenant.organisation_id,
+            items=items,
+            total=len(items),
+        )
 
     async def link_interaction(
         self,
@@ -1118,6 +1126,7 @@ class GoogleSyncService:
     def _calendar_response(item: ProviderCalendarEvent) -> ProviderCalendarEventResponse:
         return ProviderCalendarEventResponse(
             id=item.id,
+            organisation_id=item.organisation_id,
             title=item.title,
             start_at=item.start_at,
             end_at=item.end_at,

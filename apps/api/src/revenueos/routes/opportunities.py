@@ -8,7 +8,7 @@ from revenueos.business_contracts import (
     OpportunityCreate,
     OpportunityResponse,
     OpportunityUpdate,
-    Page,
+    TenantPage,
 )
 from revenueos.business_dependencies import get_business_service
 from revenueos.business_services import BusinessService
@@ -25,7 +25,7 @@ from revenueos.revenue_brain_reasoning_contracts import (
     RevenueBrainReasoningRequestResponse,
     RevenueBrainReasoningResponse,
 )
-from revenueos.routes.business import page_response
+from revenueos.routes.business import tenant_page_response
 
 router = APIRouter(prefix="/api/v1/opportunities", tags=["opportunities"])
 Service = Annotated[BusinessService, Depends(get_business_service)]
@@ -39,7 +39,7 @@ ReasoningService = Annotated[
 ]
 
 
-@router.get("", response_model=Page[OpportunityListItemResponse])
+@router.get("", response_model=TenantPage[OpportunityListItemResponse])
 async def list_opportunities(
     service: WorkspaceService,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -60,7 +60,7 @@ async def list_opportunities(
     ] = "updated_at",
     sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "desc",
     include_archived: Annotated[bool, Query(alias="includeArchived")] = False,
-) -> Page[OpportunityListItemResponse]:
+) -> TenantPage[OpportunityListItemResponse]:
     result = await service.list_opportunities(
         page=page,
         page_size=page_size,
@@ -72,7 +72,13 @@ async def list_opportunities(
         sort_order=sort_order,
         include_archived=include_archived,
     )
-    return page_response(result, OpportunityListItemResponse, page=page, page_size=page_size)
+    return tenant_page_response(
+        result,
+        OpportunityListItemResponse,
+        organisation_id=service.tenant.organisation_id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)

@@ -92,16 +92,19 @@ ReDoc. JSON fields use camel case; database and Python fields use snake case.
 
 `GET /api/v1/me` is the browser's authoritative internal organisation identity.
 Protected browser reads do not infer tenant identity from an external session key or
-from a requested entity. Company, Contact and Interaction collection responses carry
-that exact internal UUID as `organisationId`, including empty pages, and every item
-must carry the same value. Consumers decode response bodies from `unknown`, reject a
-page atomically if the envelope, requested page or any item fails identity/schema
-validation, and retain only the last already-verified state. The reusable web surface
-is `VerifiedOrganisationProvider`/`useVerifiedOrganisation` plus the generic
-`decodeTenantPage` and exported Company, Contact and Interaction item decoders. A new
-tenant-owned collection should extend that item-decoder pattern and use the same
-envelope before it is consumed in protected UI; adding other product collections is
-not part of this contract change.
+from a requested entity. Company, Contact, Interaction and Opportunity collection
+responses carry that exact internal UUID as `organisationId`, including empty pages,
+and every item must carry the same value. Consumers decode response bodies from
+`unknown`, reject a page atomically if the envelope, requested page or any item fails
+identity/schema validation, and retain only the last already-verified state. The
+reusable web surface is `VerifiedOrganisationProvider`/`useVerifiedOrganisation`
+plus the generic `decodeTenantPage` and exported Company, Contact and Interaction
+item decoders. Opportunity exposes separate exact-record and collection-item
+decoders because the collection adds display and latest-meeting fields while omitting
+the exact response's private outcome note. A new tenant-owned collection should
+extend that item-decoder pattern and use the same envelope before it is consumed in
+protected UI. This Opportunity change only hardens the existing collection contract;
+it adds no CRM feature or workflow.
 
 ## Engage Campaigns
 

@@ -282,6 +282,7 @@ def test_relationship_and_enum_filters(client: TestClient) -> None:
     assert [item["firstName"] for item in contacts.json()["items"]] == ["Filtered"]
     assert contacts.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert [item["name"] for item in opportunities.json()["items"]] == ["Filtered Deal"]
+    assert opportunities.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert [item["id"] for item in tasks.json()["items"]] == [task_id]
 
 
@@ -366,6 +367,7 @@ def test_cross_tenant_records_are_not_visible_or_mutable(
     )
     app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user)
     other_company_id = str(create_company(client, name="Other Tenant Company")["id"])
+    create_opportunity(client, other_company_id, name="Other Tenant Opportunity")
     app.dependency_overrides.pop(get_current_user)
 
     response = client.get("/api/v1/companies")
@@ -376,6 +378,10 @@ def test_cross_tenant_records_are_not_visible_or_mutable(
     assert contacts.status_code == 200
     assert contacts.json()["items"] == []
     assert contacts.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
+    opportunities = client.get("/api/v1/opportunities")
+    assert opportunities.status_code == 200
+    assert opportunities.json()["items"] == []
+    assert opportunities.json()["organisationId"] == str(PRIMARY_ORGANISATION_ID)
     assert client.get(f"/api/v1/companies/{other_company_id}").status_code == 404
     assert (
         client.patch(

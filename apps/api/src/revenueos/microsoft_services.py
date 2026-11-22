@@ -194,7 +194,11 @@ class MicrosoftSyncService:
         await self._require_module_read("core")
         connection_ids = await self._visible_connection_ids()
         if not connection_ids:
-            return MicrosoftCalendarEventListResponse(items=[], total=0)
+            return MicrosoftCalendarEventListResponse(
+                organisation_id=self.tenant.organisation_id,
+                items=[],
+                total=0,
+            )
         values = await self.session.scalars(
             select(ProviderCalendarEvent)
             .where(
@@ -207,7 +211,11 @@ class MicrosoftSyncService:
             .limit(limit)
         )
         items = [self._calendar_response(item) for item in values.all()]
-        return MicrosoftCalendarEventListResponse(items=items, total=len(items))
+        return MicrosoftCalendarEventListResponse(
+            organisation_id=self.tenant.organisation_id,
+            items=items,
+            total=len(items),
+        )
 
     async def link_interaction(
         self,
@@ -983,6 +991,7 @@ class MicrosoftSyncService:
     def _calendar_response(item: ProviderCalendarEvent) -> MicrosoftCalendarEventResponse:
         return MicrosoftCalendarEventResponse(
             id=item.id,
+            organisation_id=item.organisation_id,
             title=item.title,
             start_at=item.start_at,
             end_at=item.end_at,

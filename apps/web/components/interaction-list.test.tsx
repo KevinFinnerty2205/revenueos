@@ -1,6 +1,24 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InteractionList } from "@/components/interaction-list";
+
+const organisationId = "organisation-1";
+const verifiedOrganisation = vi.hoisted(() => ({
+  state: {
+    status: "available" as "available" | "loading" | "unavailable",
+    organisationId: "organisation-1" as string | null,
+  },
+}));
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => verifiedOrganisation.state,
+}));
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -9,14 +27,25 @@ function jsonResponse(body: object, status = 200): Response {
   });
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 const interactionPage = {
+  organisationId,
   items: [
     {
       id: "interaction-1",
       organisationId: "organisation-1",
       companyId: "company-1",
       opportunityId: null,
+      contactId: null,
       meetingId: "meeting-1",
+      eventId: null,
       interactionType: "online_meeting",
       lifecycleStatus: "planned",
       title: "Acme discovery",
@@ -26,6 +55,17 @@ const interactionPage = {
       actualEndAt: null,
       timezone: "Australia/Sydney",
       creationOrigin: "meeting_compatibility",
+      callDirection: null,
+      callOutcome: null,
+      meetingPlatform: "microsoft_teams",
+      meetingUrl: null,
+      externalMeetingId: null,
+      captureSource: null,
+      ingestionState: null,
+      durationSeconds: null,
+      captureMethods: [],
+      intelligenceState: "not_ready",
+      recordingAvailable: false,
       createdByUserId: "user-1",
       briefState: "completed",
       briefGeneratedAt: "2026-07-26T00:00:00Z",
@@ -40,7 +80,23 @@ const interactionPage = {
 };
 
 const companyPage = {
-  items: [{ id: "company-1", name: "Acme Australia" }],
+  organisationId,
+  items: [
+    {
+      id: "company-1",
+      organisationId,
+      name: "Acme Australia",
+      website: null,
+      industry: null,
+      location: null,
+      employeeCount: null,
+      status: "active",
+      ownerUserId: "user-1",
+      archivedAt: null,
+      createdAt: "2026-07-26T00:00:00Z",
+      updatedAt: "2026-07-26T00:00:00Z",
+    },
+  ],
   page: 1,
   pageSize: 100,
   total: 1,
@@ -48,12 +104,23 @@ const companyPage = {
 };
 
 const contactPage = {
+  organisationId,
   items: [
     {
       id: "contact-1",
+      organisationId,
       companyId: "company-1",
       firstName: "Jordan",
       lastName: "Lee",
+      email: null,
+      phone: null,
+      jobTitle: null,
+      linkedinUrl: null,
+      status: "active",
+      ownerUserId: "user-1",
+      archivedAt: null,
+      createdAt: "2026-07-26T00:00:00Z",
+      updatedAt: "2026-07-26T00:00:00Z",
     },
   ],
   page: 1,
@@ -63,7 +130,201 @@ const contactPage = {
 };
 
 describe("InteractionList", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId,
+    };
+    vi.unstubAllGlobals();
+  });
+
+  it("waits for verified organisation context before loading private conversations", () => {
+    verifiedOrganisation.state = {
+      status: "loading",
+      organisationId: null,
+    };
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionList />);
+
+    expect(screen.getByText("Verifying your secure workspace…")).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when organisation context is unavailable", () => {
+    verifiedOrganisation.state = {
+      status: "unavailable",
+      organisationId: null,
+    };
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionList />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your organisation could not be verified.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { caseName: "wrong organisation envelope", mixedItem: false },
+    { caseName: "mixed-organisation items", mixedItem: true },
+  ])(
+    "atomically rejects an interaction page with $caseName",
+    async ({ mixedItem }) => {
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(
+            jsonResponse({
+              ...interactionPage,
+              organisationId: mixedItem ? organisationId : "organisation-other",
+              items: mixedItem
+                ? [
+                    interactionPage.items[0],
+                    {
+                      ...interactionPage.items[0],
+                      id: "foreign-interaction",
+                      organisationId: "organisation-other",
+                    },
+                  ]
+                : [
+                    {
+                      ...interactionPage.items[0],
+                      organisationId: "organisation-other",
+                    },
+                  ],
+              total: mixedItem ? 2 : 1,
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(companyPage));
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<InteractionList />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Conversations could not be loaded.",
+      );
+      expect(
+        screen.queryByRole("link", { name: "Acme discovery" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("rejects a wrong-organisation exact context response", async () => {
+    const linkedPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          companyId: "company-foreign",
+          title: "Foreign context conversation",
+        },
+      ],
+    };
+    const emptyContextPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(jsonResponse(linkedPage));
+        }
+        if (path.endsWith("/api/v1/companies/company-foreign")) {
+          return Promise.resolve(
+            jsonResponse({
+              ...companyPage.items[0],
+              id: "company-foreign",
+              organisationId: "organisation-other",
+              name: "Foreign account name",
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(emptyContextPage));
+      }),
+    );
+
+    render(<InteractionList />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Linked account" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Foreign account name")).not.toBeInTheDocument();
+  });
+
+  it("starts a fresh directory session when the verified organisation changes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        const activeOrganisationId =
+          verifiedOrganisation.state.organisationId ?? organisationId;
+        if (path.includes("/interactions")) {
+          return Promise.resolve(
+            jsonResponse({
+              ...interactionPage,
+              organisationId: activeOrganisationId,
+              items: [
+                {
+                  ...interactionPage.items[0],
+                  id: `interaction-${activeOrganisationId}`,
+                  organisationId: activeOrganisationId,
+                  companyId: null,
+                  title:
+                    activeOrganisationId === organisationId
+                      ? "Old organisation conversation"
+                      : "New organisation conversation",
+                },
+              ],
+            }),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({
+            organisationId: activeOrganisationId,
+            items: [],
+            page: 1,
+            pageSize: 100,
+            total: 0,
+            pages: 0,
+          }),
+        );
+      }),
+    );
+
+    const { rerender } = render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Old organisation conversation",
+      }),
+    ).toBeVisible();
+
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: "organisation-2",
+    };
+    rerender(<InteractionList />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "New organisation conversation",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Old organisation conversation"),
+    ).not.toBeInTheDocument();
+  });
 
   it("renders an account-first directory with deterministic account navigation", async () => {
     vi.stubGlobal(
@@ -109,6 +370,63 @@ describe("InteractionList", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("encodes response-derived account and conversation route segments", async () => {
+    const unsafeCompanyId = "company/unsafe?tab=bad#fragment";
+    const unsafeInteractionId = "interaction/unsafe?view=bad#fragment";
+    const encodedInteractionPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: unsafeInteractionId,
+          companyId: unsafeCompanyId,
+          title: "Encoded route conversation",
+        },
+      ],
+    };
+    const encodedCompanyPage = {
+      ...companyPage,
+      items: [
+        {
+          ...companyPage.items[0],
+          id: unsafeCompanyId,
+          name: "Encoded route account",
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(jsonResponse(encodedInteractionPage));
+        }
+        if (path.includes("/contacts")) {
+          return Promise.resolve(jsonResponse(contactPage));
+        }
+        if (path.includes("/integrations/")) {
+          return Promise.resolve(jsonResponse({ items: [] }));
+        }
+        return Promise.resolve(jsonResponse(encodedCompanyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+
+    expect(
+      await screen.findByRole("link", { name: "Encoded route conversation" }),
+    ).toHaveAttribute(
+      "href",
+      `/conversations/${encodeURIComponent(unsafeInteractionId)}`,
+    );
+    expect(
+      screen.getAllByRole("link", { name: "Encoded route account" })[0],
+    ).toHaveAttribute(
+      "href",
+      `/conversations/accounts/${encodeURIComponent(unsafeCompanyId)}#conversations`,
+    );
+  });
+
   it("applies accessible filters and presents a useful empty state", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) =>
       Promise.resolve(
@@ -152,14 +470,16 @@ describe("InteractionList", () => {
 
   it("hydrates accounts outside the first company page and appends filtered result pages", async () => {
     const emptyPage = {
+      organisationId,
       items: [],
       page: 1,
       pageSize: 100,
-      total: 0,
-      pages: 0,
+      total: 100,
+      pages: 1,
     };
     const firstFilteredPage = {
       ...interactionPage,
+      pageSize: 1,
       items: [
         {
           ...interactionPage.items[0],
@@ -199,12 +519,23 @@ describe("InteractionList", () => {
       }
       if (path.includes("/companies/company-101")) {
         return Promise.resolve(
-          jsonResponse({ id: "company-101", name: "Outside Page One" }),
+          jsonResponse({
+            ...companyPage.items[0],
+            id: "company-101",
+            name: "Outside Page One",
+          }),
         );
       }
       if (path.includes("/companies/company-102")) {
         return Promise.resolve(
-          jsonResponse({ id: "company-102", name: "Outside Page Two" }),
+          jsonResponse(
+            {
+              code: "persistence_unavailable",
+              message: "Companies are temporarily unavailable.",
+              requestId: "request-page-two",
+            },
+            503,
+          ),
         );
       }
       return Promise.resolve(jsonResponse(emptyPage));
@@ -232,11 +563,15 @@ describe("InteractionList", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Outside Page Two" }),
+      await screen.findByRole("link", { name: "Second paged call" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Linked account" }),
     ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Outside Page One" }),
     ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([input]) => {
         const path = String(input);
@@ -247,6 +582,931 @@ describe("InteractionList", () => {
         );
       }),
     ).toBe(true);
+  });
+
+  it("preserves fast page-two context when page-one enrichment finishes later", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    const firstPage = {
+      ...interactionPage,
+      pageSize: 1,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "slow-context-conversation",
+          companyId: "company-slow",
+          title: "Slow context conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const secondPage = {
+      ...firstPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "fast-context-conversation",
+          companyId: "company-fast",
+          title: "Fast context conversation",
+        },
+      ],
+      page: 2,
+    };
+    const slowCompany = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(
+            jsonResponse(path.includes("page=2") ? secondPage : firstPage),
+          );
+        }
+        if (path.includes("?pageSize=100")) {
+          return Promise.resolve(jsonResponse(emptyPage));
+        }
+        if (path.includes("/companies/company-slow")) {
+          return slowCompany.promise;
+        }
+        if (path.includes("/companies/company-fast")) {
+          return Promise.resolve(
+            jsonResponse({
+              ...companyPage.items[0],
+              id: "company-fast",
+              name: "Fast Account",
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("link", { name: "Slow context conversation" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Fast Account" }),
+    ).toBeVisible();
+
+    slowCompany.resolve(
+      jsonResponse({
+        ...companyPage.items[0],
+        id: "company-slow",
+        name: "Slow Account",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Slow Account" }),
+    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Fast Account" })).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("preserves page-two exact context when the page-one context list arrives later", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 0,
+      pages: 0,
+    };
+    const firstPage = {
+      ...interactionPage,
+      pageSize: 1,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "late-list-conversation",
+          companyId: "company-page-one",
+          title: "Late list conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const secondPage = {
+      ...firstPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "exact-page-two-conversation",
+          companyId: "company-page-two",
+          title: "Exact page-two conversation",
+        },
+      ],
+      page: 2,
+    };
+    const pageOneCompanies = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(
+            jsonResponse(path.includes("page=2") ? secondPage : firstPage),
+          );
+        }
+        if (path.includes("/companies?pageSize=100")) {
+          return pageOneCompanies.promise;
+        }
+        if (path.includes("/contacts?pageSize=100")) {
+          return Promise.resolve(jsonResponse(emptyPage));
+        }
+        if (path.includes("/companies/company-page-two")) {
+          return Promise.resolve(
+            jsonResponse({
+              ...companyPage.items[0],
+              id: "company-page-two",
+              name: "Page Two Exact Account",
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("link", { name: "Late list conversation" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Page Two Exact Account" }),
+    ).toBeVisible();
+
+    pageOneCompanies.resolve(
+      jsonResponse({
+        ...companyPage,
+        items: [
+          {
+            ...companyPage.items[0],
+            id: "company-page-one",
+            name: "Page One Listed Account",
+          },
+        ],
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Page One Listed Account" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Page Two Exact Account" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("rejects a wrong-organisation next page while preserving verified results", async () => {
+    const firstPage = {
+      ...interactionPage,
+      pageSize: 1,
+      total: 2,
+      pages: 2,
+    };
+    const foreignSecondPage = {
+      ...firstPage,
+      organisationId: "organisation-other",
+      page: 2,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "foreign-page-two",
+          organisationId: "organisation-other",
+          title: "Foreign page two conversation",
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(
+            jsonResponse(
+              path.includes("page=2") ? foreignSecondPage : firstPage,
+            ),
+          );
+        }
+        if (path.includes("/contacts")) {
+          return Promise.resolve(jsonResponse(contactPage));
+        }
+        return Promise.resolve(jsonResponse(companyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "Acme Australia" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "More conversations could not be loaded.",
+    );
+    expect(screen.getByRole("link", { name: "Acme discovery" })).toBeVisible();
+    expect(
+      screen.queryByText("Foreign page two conversation"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("retains verified context when the same query reload gets an invalid context page", async () => {
+    let companyPageReads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/interactions")) {
+        return Promise.resolve(jsonResponse(interactionPage));
+      }
+      if (path.includes("/companies?pageSize=100")) {
+        companyPageReads += 1;
+        return Promise.resolve(
+          jsonResponse(
+            companyPageReads === 1
+              ? companyPage
+              : {
+                  ...companyPage,
+                  organisationId: "organisation-other",
+                  items: [
+                    {
+                      ...companyPage.items[0],
+                      organisationId: "organisation-other",
+                      name: "Foreign replacement account",
+                    },
+                  ],
+                },
+          ),
+        );
+      }
+      if (path.includes("/contacts")) {
+        return Promise.resolve(jsonResponse(contactPage));
+      }
+      return Promise.resolve(jsonResponse({ items: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "Acme Australia" }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => expect(companyPageReads).toBe(2));
+    expect(
+      screen.getByRole("heading", { name: "Acme Australia" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Foreign replacement account"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reloads when the current search is explicitly submitted again", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    let interactionReads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          interactionReads += 1;
+          return Promise.resolve(
+            jsonResponse({
+              ...interactionPage,
+              items: [
+                {
+                  ...interactionPage.items[0],
+                  id: "same-query-" + interactionReads,
+                  companyId: null,
+                  title:
+                    interactionReads === 1
+                      ? "Original conversation"
+                      : "Reloaded conversation",
+                },
+              ],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "Original conversation" }),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Reloaded conversation" }),
+    ).toBeVisible();
+    expect(interactionReads).toBe(2);
+    expect(
+      screen.queryByRole("heading", { name: "Original conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale pagination success after the active filter changes", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    const firstPage = {
+      ...interactionPage,
+      pageSize: 1,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "original-filter-conversation",
+          companyId: null,
+          title: "Original filter conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const filteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "active-filter-conversation",
+          companyId: null,
+          interactionType: "phone_call",
+          title: "Active filter conversation",
+        },
+      ],
+    };
+    const stalePage = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("page=2")) return stalePage.promise;
+          if (path.includes("interactionType=phone_call")) {
+            return Promise.resolve(jsonResponse(filteredPage));
+          }
+          return Promise.resolve(jsonResponse(firstPage));
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Original filter conversation",
+      }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Active filter conversation",
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      stalePage.resolve(
+        jsonResponse({
+          ...firstPage,
+          page: 2,
+          items: [
+            {
+              ...interactionPage.items[0],
+              id: "stale-page-conversation",
+              companyId: null,
+              title: "Stale page conversation",
+            },
+          ],
+        }),
+      );
+      await stalePage.promise;
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Active filter conversation" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Stale page conversation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Load more conversations" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale pagination failure after the active filter changes", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    const firstPage = {
+      ...interactionPage,
+      pageSize: 1,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "failure-filter-conversation",
+          companyId: null,
+          title: "Failure filter conversation",
+        },
+      ],
+      total: 2,
+      pages: 2,
+    };
+    const filteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "failure-active-conversation",
+          companyId: null,
+          interactionType: "phone_call",
+          title: "Failure active conversation",
+        },
+      ],
+    };
+    const stalePage = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("page=2")) return stalePage.promise;
+          if (path.includes("interactionType=phone_call")) {
+            return Promise.resolve(jsonResponse(filteredPage));
+          }
+          return Promise.resolve(jsonResponse(firstPage));
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Failure filter conversation",
+      }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Failure active conversation",
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      stalePage.resolve(
+        jsonResponse(
+          {
+            code: "persistence_unavailable",
+            message: "The stale page failed.",
+            requestId: "request-stale-page",
+          },
+          503,
+        ),
+      );
+      await stalePage.promise;
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Failure active conversation",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale initial failure after the active filter changes", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    const filteredPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "current-filter-conversation",
+          companyId: null,
+          interactionType: "phone_call",
+          title: "Current filter conversation",
+        },
+      ],
+    };
+    const staleInitial = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("interactionType=phone_call")) {
+            return Promise.resolve(jsonResponse(filteredPage));
+          }
+          return staleInitial.promise;
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    fireEvent.change(screen.getByLabelText("Filter by type"), {
+      target: { value: "phone_call" },
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Current filter conversation",
+      }),
+    ).toBeVisible();
+
+    await act(async () => {
+      staleInitial.resolve(
+        jsonResponse(
+          {
+            code: "persistence_unavailable",
+            message: "The stale initial request failed.",
+            requestId: "request-stale-initial",
+          },
+          503,
+        ),
+      );
+      await staleInitial.promise;
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Current filter conversation",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not let optional page context block later conversation pages", async () => {
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    const firstPage = {
+      ...interactionPage,
+      pageSize: 1,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "first-page-conversation",
+          companyId: null,
+          title: "First page conversation",
+        },
+      ],
+      total: 3,
+      pages: 3,
+    };
+    const secondPage = {
+      ...firstPage,
+      page: 2,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "second-page-conversation",
+          companyId: "company-slow-page",
+          title: "Second page conversation",
+        },
+      ],
+    };
+    const thirdPage = {
+      ...firstPage,
+      page: 3,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "third-page-conversation",
+          companyId: null,
+          title: "Third page conversation",
+        },
+      ],
+    };
+    const slowCompany = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          if (path.includes("page=3")) {
+            return Promise.resolve(jsonResponse(thirdPage));
+          }
+          if (path.includes("page=2")) {
+            return Promise.resolve(jsonResponse(secondPage));
+          }
+          return Promise.resolve(jsonResponse(firstPage));
+        }
+        if (path.includes("?pageSize=100")) {
+          return Promise.resolve(jsonResponse(emptyPage));
+        }
+        if (path.includes("/companies/company-slow-page")) {
+          return slowCompany.promise;
+        }
+        return Promise.resolve(jsonResponse(emptyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "First page conversation" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("link", { name: "Second page conversation" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Linked account" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more conversations" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Third page conversation" }),
+    ).toBeVisible();
+
+    slowCompany.resolve(
+      jsonResponse({
+        ...companyPage.items[0],
+        id: "company-slow-page",
+        name: "Eventually loaded account",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Eventually loaded account",
+      }),
+    ).toBeVisible();
+  });
+
+  it("keeps conversations usable when context collections and exact lookups fail", async () => {
+    const resilientPage = {
+      ...interactionPage,
+      items: [
+        interactionPage.items[0],
+        {
+          ...interactionPage.items[0],
+          id: "general-1",
+          companyId: null,
+          contactId: "contact-missing",
+          meetingId: null,
+          interactionType: "phone_call",
+          title: "Unassigned call",
+        },
+      ],
+      total: 2,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/interactions")) {
+        return Promise.resolve(jsonResponse(resilientPage));
+      }
+      if (
+        path.includes("/companies?pageSize=100") ||
+        path.includes("/contacts?pageSize=100")
+      ) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "persistence_unavailable",
+              message: "Context is temporarily unavailable.",
+              requestId: "request-context",
+            },
+            503,
+          ),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse(
+          {
+            code: "not_found",
+            message: "The linked record was not found.",
+            requestId: "request-missing",
+          },
+          404,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionList />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Linked account" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Acme discovery" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Unassigned call" }),
+    ).toBeVisible();
+    expect(screen.getByText("Linked contact")).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps context sources independent and atomically rejects an invalid exact batch", async () => {
+    const mixedPage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "good-company-conversation",
+          companyId: "company-good",
+          title: "Known account conversation",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "missing-company-conversation",
+          companyId: "company-missing",
+          title: "Missing account conversation",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "archived-company-conversation",
+          companyId: "company-archived",
+          title: "Archived account conversation",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "good-contact-conversation",
+          companyId: null,
+          contactId: "contact-good",
+          interactionType: "phone_call",
+          title: "Known contact call",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "missing-contact-conversation",
+          companyId: null,
+          contactId: "contact-missing",
+          interactionType: "phone_call",
+          title: "Missing contact call",
+        },
+        {
+          ...interactionPage.items[0],
+          id: "archived-contact-conversation",
+          companyId: null,
+          contactId: "contact-archived",
+          interactionType: "phone_call",
+          title: "Archived contact call",
+        },
+      ],
+      total: 6,
+    };
+    const emptyPage = {
+      organisationId,
+      items: [],
+      page: 1,
+      pageSize: 100,
+      total: 100,
+      pages: 1,
+    };
+    const mixedFetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.includes("/interactions")) {
+        return Promise.resolve(jsonResponse(mixedPage));
+      }
+      if (path.includes("?pageSize=100")) {
+        return Promise.resolve(jsonResponse(emptyPage));
+      }
+      if (path.includes("/companies/company-good")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...companyPage.items[0],
+            id: "company-good",
+            name: "Good Account",
+          }),
+        );
+      }
+      if (path.includes("/companies/company-archived")) {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              code: "not_found",
+              message: "The company was not found.",
+              requestId: "request-archived-company",
+            },
+            404,
+          ),
+        );
+      }
+      if (path.includes("/contacts/contact-good")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...contactPage.items[0],
+            id: "contact-good",
+            firstName: "Good",
+            lastName: "Contact",
+          }),
+        );
+      }
+      if (path.includes("/contacts/contact-archived")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...contactPage.items[0],
+            id: "contact-archived",
+            firstName: "Archived",
+            lastName: "Contact Name",
+            archivedAt: "2026-07-26T00:00:00Z",
+          }),
+        );
+      }
+      if (path.includes("/contacts/contact-missing")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...contactPage.items[0],
+            id: "contact-from-another-request",
+            firstName: "Wrong",
+            lastName: "Contact Name",
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse(
+          {
+            code: "not_found",
+            message: "The linked record was not found.",
+            requestId: "request-mixed",
+          },
+          404,
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", mixedFetchMock);
+
+    render(<InteractionList />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Good Account" }),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        mixedFetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/contacts/contact-good"),
+        ),
+      ).toBe(true),
+    );
+    expect(screen.queryByText("Good Contact")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("heading", { name: "Linked account" }),
+    ).toHaveLength(2);
+    expect(screen.getAllByText("Linked contact")).toHaveLength(3);
+    expect(screen.queryByText("Archived Account Name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Archived Contact Name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Wrong Contact Name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows a safe error and supports retry", async () => {
@@ -308,6 +1568,7 @@ describe("InteractionList", () => {
           recordingAvailable: true,
         },
       ],
+      total: 2,
     };
     vi.stubGlobal(
       "fetch",

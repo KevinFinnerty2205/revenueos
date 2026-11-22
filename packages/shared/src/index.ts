@@ -3439,6 +3439,7 @@ export interface ProviderSyncStatus {
 
 export interface ProviderCalendarEvent {
   id: string;
+  organisationId: string;
   title: string;
   startAt: string;
   endAt: string;
@@ -3458,6 +3459,7 @@ export interface ProviderCalendarEvent {
 }
 
 export interface ProviderCalendarEventListResponse {
+  organisationId: string;
   items: ProviderCalendarEvent[];
   total: number;
 }
