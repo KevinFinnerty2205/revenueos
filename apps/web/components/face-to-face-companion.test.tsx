@@ -12,14 +12,18 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
 
-vi.mock("@/components/verified-organisation-context", () => ({
-  useVerifiedOrganisation: () => ({
-    status: "available",
-    organisationId: "organisation-1",
-    userId: "user-1",
+const verifiedOrganisation = vi.hoisted(() => ({
+  state: {
+    status: "available" as "available" | "loading" | "unavailable",
+    organisationId: "organisation-1" as string | null,
+    userId: "user-1" as string | null,
     identityKey: "organisation-1:user-1",
     reload: vi.fn(),
-  }),
+  },
+}));
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => verifiedOrganisation.state,
 }));
 
 function jsonResponse(body: object, status = 200): Response {
@@ -182,6 +186,9 @@ function installApi(
     personalWorkspaceLoadResponse,
     personalWorkspaceLoadResponses,
     briefResponses,
+    interactionLoadResponses,
+    startResponses,
+    completeResponses,
   }: {
     aiCompanionEnabled?: boolean;
     liveInteractionIntelligenceEnabled?: boolean;
@@ -198,11 +205,17 @@ function installApi(
     personalWorkspaceLoadResponse?: Promise<Response>;
     personalWorkspaceLoadResponses?: Response[];
     briefResponses?: PreInteractionBriefResponse[];
+    interactionLoadResponses?: object[];
+    startResponses?: object[];
+    completeResponses?: object[];
   } = {},
 ) {
   let currentInteraction = initialInteraction;
   let workspaceConflictReturned = false;
   let workspaceLoadResponseIndex = 0;
+  let interactionLoadResponseIndex = 0;
+  let startResponseIndex = 0;
+  let completeResponseIndex = 0;
   const markers: object[] = [];
   let privateWorkspace = {
     exists: false,
@@ -389,21 +402,54 @@ function installApi(
       return Promise.resolve(jsonResponse(privateWorkspace));
     }
     if (url.endsWith("/start") && method === "POST") {
-      currentInteraction = interaction({
+      if (startResponses?.length) {
+        const response =
+          startResponses[
+            Math.min(startResponseIndex, startResponses.length - 1)
+          ];
+        startResponseIndex += 1;
+        return Promise.resolve(jsonResponse(response));
+      }
+      currentInteraction = {
+        ...currentInteraction,
         lifecycleStatus: "in_progress",
         actualStartAt: "2026-08-15T02:00:00Z",
-      });
+        actualEndAt: null,
+        updatedAt: "2026-08-15T02:00:00Z",
+      };
       return Promise.resolve(jsonResponse(currentInteraction));
     }
     if (url.endsWith("/complete") && method === "POST") {
-      currentInteraction = interaction({
+      if (completeResponses?.length) {
+        const response =
+          completeResponses[
+            Math.min(completeResponseIndex, completeResponses.length - 1)
+          ];
+        completeResponseIndex += 1;
+        return Promise.resolve(jsonResponse(response));
+      }
+      currentInteraction = {
+        ...currentInteraction,
         lifecycleStatus: "completed",
-        actualStartAt: "2026-08-15T02:00:00Z",
+        actualStartAt:
+          currentInteraction.actualStartAt ?? "2026-08-15T02:00:00Z",
         actualEndAt: "2026-08-15T03:00:00Z",
-      });
+        updatedAt: "2026-08-15T03:00:00Z",
+      };
       return Promise.resolve(jsonResponse(currentInteraction));
     }
     if (url.endsWith("/interactions/interaction-1") && method === "GET") {
+      if (interactionLoadResponses?.length) {
+        const response =
+          interactionLoadResponses[
+            Math.min(
+              interactionLoadResponseIndex,
+              interactionLoadResponses.length - 1,
+            )
+          ];
+        interactionLoadResponseIndex += 1;
+        return Promise.resolve(jsonResponse(response));
+      }
       return Promise.resolve(jsonResponse(currentInteraction));
     }
     return Promise.resolve(
@@ -417,6 +463,11 @@ function installApi(
 describe("FaceToFaceCompanion", () => {
   afterEach(() => {
     window.sessionStorage.clear();
+    verifiedOrganisation.state.status = "available";
+    verifiedOrganisation.state.organisationId = "organisation-1";
+    verifiedOrganisation.state.userId = "user-1";
+    verifiedOrganisation.state.identityKey = "organisation-1:user-1";
+    verifiedOrganisation.state.reload.mockClear();
     vi.unstubAllGlobals();
   });
 
@@ -487,6 +538,262 @@ describe("FaceToFaceCompanion", () => {
     ).toMatchObject({
       liveNotes: "Finance will confirm the signer on Friday.",
     });
+  });
+
+  it("rejects an exact interaction load with foreign identity", async () => {
+    const foreignInteraction = interaction({
+      id: "interaction-from-another-tab",
+      title: "Private foreign interaction sentinel",
+    });
+    const validInteraction = interaction({
+      title: "Verified interaction after retry",
+    });
+    const onInteractionChange = vi.fn();
+    installApi(interaction(), {
+      interactionLoadResponses: [foreignInteraction, validInteraction],
+    });
+
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "The interaction response did not match this conversation. Try again.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Private foreign interaction sentinel"),
+    ).not.toBeInTheDocument();
+    expect(onInteractionChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Verified interaction after retry",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Private foreign interaction sentinel"),
+    ).not.toBeInTheDocument();
+    expect(onInteractionChange).toHaveBeenCalledTimes(1);
+    expect(onInteractionChange).toHaveBeenCalledWith(validInteraction);
+  });
+
+  it("preserves verified notes and retries after an invalid start response", async () => {
+    const initialInteraction = interaction();
+    const invalidStarted = interaction({
+      organisationId: "organisation-from-another-session",
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+      title: "Private foreign start sentinel",
+    });
+    const validStarted = interaction({
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+    });
+    const onInteractionChange = vi.fn();
+    installApi(initialInteraction, {
+      startResponses: [invalidStarted, validStarted],
+    });
+
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+        onInteractionChange={onInteractionChange}
+      />,
+    );
+
+    const liveNotes = await screen.findByLabelText("Private live notes");
+    await waitFor(() => expect(liveNotes).toBeEnabled());
+    fireEvent.change(liveNotes, {
+      target: { value: "Keep this private start note mounted." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start interaction" }));
+
+    expect(
+      await screen.findByText(
+        "The interaction response did not match this conversation. Try again.",
+      ),
+    ).toBeVisible();
+    expect(liveNotes).toHaveValue("Keep this private start note mounted.");
+    expect(
+      screen.getByRole("button", { name: "Start interaction" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Private foreign start sentinel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Interaction started\./i),
+    ).not.toBeInTheDocument();
+    expect(onInteractionChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start interaction" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "How should Companion help?",
+      }),
+    ).toBeVisible();
+    expect(liveNotes).toHaveValue("Keep this private start note mounted.");
+    expect(onInteractionChange).toHaveBeenCalledTimes(1);
+    expect(onInteractionChange).toHaveBeenCalledWith(validStarted);
+  });
+
+  it("preserves verified notes and skips refresh after an invalid completion", async () => {
+    const initialInteraction = interaction({
+      lifecycleStatus: "in_progress",
+      actualStartAt: "2026-08-15T02:00:00Z",
+    });
+    const invalidCompleted = interaction({
+      id: "interaction-from-another-tab",
+      lifecycleStatus: "completed",
+      actualStartAt: "2026-08-15T02:00:00Z",
+      actualEndAt: "2026-08-15T03:00:00Z",
+      title: "Private foreign completion sentinel",
+    });
+    const validCompleted = interaction({
+      lifecycleStatus: "completed",
+      actualStartAt: "2026-08-15T02:00:00Z",
+      actualEndAt: "2026-08-15T03:00:00Z",
+    });
+    const onInteractionChange = vi.fn();
+    const fetchMock = installApi(initialInteraction, {
+      aiCompanionEnabled: false,
+      completeResponses: [invalidCompleted, validCompleted],
+    });
+
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+        onInteractionChange={onInteractionChange}
+        embedded
+      />,
+    );
+
+    const liveNotes = await screen.findByLabelText("Private live notes");
+    await waitFor(() => expect(liveNotes).toBeEnabled());
+    fireEvent.change(liveNotes, {
+      target: { value: "Keep this private completion note mounted." },
+    });
+    const end = await screen.findByRole("button", {
+      name: "Save notes and end interaction",
+    });
+    fireEvent.click(end);
+
+    expect(
+      await screen.findByText(
+        "The interaction response did not match this conversation. Try again.",
+      ),
+    ).toBeVisible();
+    expect(liveNotes).toHaveValue("Keep this private completion note mounted.");
+    expect(
+      screen.getByRole("button", { name: "End interaction" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Private foreign completion sentinel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Interaction completed\./i),
+    ).not.toBeInTheDocument();
+    expect(onInteractionChange).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/beta/capabilities"),
+      ),
+    ).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Conversation ended" }),
+    ).toBeVisible();
+    expect(onInteractionChange).toHaveBeenCalledTimes(1);
+    expect(onInteractionChange).toHaveBeenCalledWith(validCompleted);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          String(input).endsWith("/beta/capabilities"),
+        ),
+      ).toHaveLength(2),
+    );
+  });
+
+  it("synchronously redacts the prior session when verified identity changes", async () => {
+    const initialInteraction = interaction({
+      title: "Private prior identity sentinel",
+    });
+    installApi(initialInteraction);
+
+    const { rerender } = render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Private prior identity sentinel",
+      }),
+    ).toBeVisible();
+
+    verifiedOrganisation.state.status = "loading";
+    verifiedOrganisation.state.organisationId = null;
+    verifiedOrganisation.state.userId = null;
+    verifiedOrganisation.state.identityKey = "session-2";
+    rerender(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Private prior identity sentinel"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Verifying access to notes & capture…",
+    );
+
+    verifiedOrganisation.state.status = "unavailable";
+    rerender(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+    expect(
+      screen.queryByText("Private prior identity sentinel"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(verifiedOrganisation.state.reload).toHaveBeenCalledTimes(1);
+
+    verifiedOrganisation.state.status = "available";
+    verifiedOrganisation.state.organisationId = "organisation-2";
+    verifiedOrganisation.state.userId = "user-2";
+    verifiedOrganisation.state.identityKey = "organisation-2:user-2";
+    rerender(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Private prior identity sentinel"),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "The interaction response did not match this conversation. Try again.",
+      ),
+    ).toBeVisible();
   });
 
   it("rejects initial preparation guidance from another interaction", async () => {
@@ -728,7 +1035,7 @@ describe("FaceToFaceCompanion", () => {
     "keeps private notes usable when the $endpoint request fails",
     async ({ endpoint, warning }) => {
       window.sessionStorage.setItem(
-        "revenueos:companion:capture-choice:interaction-1",
+        "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
         "passive",
       );
       const initialInteraction = interaction({
@@ -830,7 +1137,7 @@ describe("FaceToFaceCompanion", () => {
         resolveCapabilities = resolve;
       });
       window.sessionStorage.setItem(
-        "revenueos:companion:capture-choice:interaction-1",
+        "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
         "passive",
       );
       const initialInteraction = interaction({
@@ -1627,11 +1934,11 @@ describe("FaceToFaceCompanion", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     window.sessionStorage.setItem(
-      "revenueos:companion:capture-choice:interaction-a",
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-a",
       "passive",
     );
     window.sessionStorage.setItem(
-      "revenueos:companion:capture-choice:interaction-b",
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-b",
       "passive",
     );
 

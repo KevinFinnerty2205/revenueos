@@ -8,7 +8,9 @@ import { ConversationMemory } from "@/components/conversation-memory";
 import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
 import { InteractionDetail } from "@/components/interaction-detail";
 import { PreInteractionBrief } from "@/components/pre-interaction-brief";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { apiRequest } from "@/lib/api";
+import { decodeInteractionResponse } from "@/lib/interaction-response-identity";
 import { formatInteractionDate } from "@/lib/interactions";
 
 export type ConversationView = "prepare" | "capture" | "review" | "history";
@@ -26,6 +28,8 @@ type ConversationLoadState =
   | { status: "failed"; message: string };
 
 const conversationLoadFailure = "This conversation could not be loaded.";
+const conversationUpdateFailure =
+  "Notes & capture returned an unexpected conversation update. Your verified conversation and private notes are unchanged.";
 
 export function ConversationWorkspace({
   interactionId,
@@ -34,11 +38,33 @@ export function ConversationWorkspace({
   interactionId: string;
   initialView?: ConversationView;
 }) {
+  const verifiedOrganisation = useVerifiedOrganisation();
+  if (verifiedOrganisation.status === "loading") {
+    return <p role="status">Verifying your secure workspace…</p>;
+  }
+  if (verifiedOrganisation.status !== "available") {
+    return (
+      <section role="alert" className="form-card">
+        <p>
+          Your identity could not be verified. This conversation is temporarily
+          unavailable.
+        </p>
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          onClick={verifiedOrganisation.reload}
+        >
+          Try again
+        </button>
+      </section>
+    );
+  }
   return (
     <ConversationWorkspaceSession
-      key={interactionId}
+      key={`${interactionId}:${verifiedOrganisation.organisationId}:${verifiedOrganisation.userId}:${verifiedOrganisation.identityKey}`}
       interactionId={interactionId}
       initialView={initialView}
+      organisationId={verifiedOrganisation.organisationId}
     />
   );
 }
@@ -46,9 +72,11 @@ export function ConversationWorkspace({
 function ConversationWorkspaceSession({
   interactionId,
   initialView,
+  organisationId,
 }: {
   interactionId: string;
   initialView?: ConversationView;
+  organisationId: string;
 }) {
   const [loadState, setLoadState] = useState<ConversationLoadState>({
     status: "loading",
@@ -57,6 +85,9 @@ function ConversationWorkspaceSession({
   const [opened, setOpened] = useState<Set<ConversationView>>(new Set());
   const [briefRefreshKey, setBriefRefreshKey] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
+  const [interactionWarning, setInteractionWarning] = useState<string | null>(
+    null,
+  );
   const active = useRef(true);
   const requestSequence = useRef(0);
 
@@ -77,19 +108,27 @@ function ConversationWorkspaceSession({
       requestSequence.current === request &&
       !controller.signal.aborted;
 
-    void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`, {
-      signal: controller.signal,
-    })
+    void apiRequest<unknown>(
+      `/api/v1/interactions/${encodeURIComponent(interactionId)}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then((loaded) => {
         if (!requestIsCurrent()) return;
-        if (loaded.id !== interactionId) {
+        const decoded = decodeInteractionResponse(loaded, {
+          interactionId,
+          organisationId,
+        });
+        if (decoded === null) {
           setLoadState({
             status: "failed",
             message: conversationLoadFailure,
           });
           return;
         }
-        setLoadState({ status: "available", interaction: loaded });
+        setInteractionWarning(null);
+        setLoadState({ status: "available", interaction: decoded });
         const hash = window.location.hash;
         const selected =
           initialView ??
@@ -97,10 +136,10 @@ function ConversationWorkspaceSession({
             ? "prepare"
             : ["#debrief", "#enhanced-notes", "#follow-up"].includes(hash)
               ? "review"
-              : loaded.lifecycleStatus === "completed"
+              : decoded.lifecycleStatus === "completed"
                 ? "review"
-                : loaded.lifecycleStatus === "in_progress" ||
-                    loaded.interactionType === "manual_interaction"
+                : decoded.lifecycleStatus === "in_progress" ||
+                    decoded.interactionType === "manual_interaction"
                   ? "capture"
                   : "prepare");
         setView(selected);
@@ -120,7 +159,7 @@ function ConversationWorkspaceSession({
         requestSequence.current += 1;
       }
     };
-  }, [initialView, interactionId, retryKey]);
+  }, [initialView, interactionId, organisationId, retryKey]);
 
   function select(next: ConversationView) {
     setView(next);
@@ -131,12 +170,19 @@ function ConversationWorkspaceSession({
     window.history.replaceState(window.history.state, "", url);
   }
 
-  function updateInteraction(next: Interaction) {
-    if (next.id !== interactionId) {
-      setLoadState({ status: "failed", message: conversationLoadFailure });
+  function updateInteraction(next: unknown) {
+    if (loadState.status !== "available") return;
+    const decoded = decodeInteractionResponse(next, {
+      interactionId,
+      organisationId,
+      baseline: loadState.interaction,
+    });
+    if (decoded === null) {
+      setInteractionWarning(conversationUpdateFailure);
       return;
     }
-    setLoadState({ status: "available", interaction: next });
+    setInteractionWarning(null);
+    setLoadState({ status: "available", interaction: decoded });
   }
 
   if (loadState.status !== "available") {
@@ -197,6 +243,15 @@ function ConversationWorkspaceSession({
           </a>
         ) : null}
       </header>
+
+      {interactionWarning ? (
+        <p
+          role="alert"
+          className="rounded-xl bg-red-50 p-4 text-sm text-red-900"
+        >
+          {interactionWarning}
+        </p>
+      ) : null}
 
       <nav
         aria-label="Conversation sections"

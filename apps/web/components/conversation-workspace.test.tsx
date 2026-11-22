@@ -22,6 +22,23 @@ const state = vi.hoisted(() => ({
   reviewLoaded: vi.fn<(value: ReviewSeedLoad) => void>(),
 }));
 
+const verifiedOrganisation = vi.hoisted(() => ({
+  state: {
+    status: "available" as "available" | "loading" | "unavailable",
+    organisationId: "organisation-1" as string | null,
+    userId: "user-1" as string | null,
+    identityKey: "external-session-one",
+  },
+  reload: vi.fn(),
+}));
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    ...verifiedOrganisation.state,
+    reload: verifiedOrganisation.reload,
+  }),
+}));
+
 vi.mock("@/components/beta-feature-gate", () => ({
   BetaFeatureGate: ({
     children,
@@ -73,13 +90,16 @@ vi.mock("@/components/interaction-detail", () => ({
 vi.mock("@/components/face-to-face-companion", () => ({
   FaceToFaceCompanion: ({
     interactionId,
+    initialInteraction,
     onInteractionChange,
     briefRefreshKey,
   }: {
     interactionId: string;
+    initialInteraction?: Interaction;
     onInteractionChange: (value: Interaction) => void;
     briefRefreshKey: number;
   }) => {
+    const current = initialInteraction ?? interaction({ id: interactionId });
     useEffect(() => () => state.stopped(), []);
     return (
       <div>
@@ -92,11 +112,11 @@ vi.mock("@/components/face-to-face-companion", () => ({
           type="button"
           onClick={() =>
             onInteractionChange({
-              id: interactionId,
-              title: "Discovery",
-              companyId: "company-1",
+              ...current,
               lifecycleStatus: "completed",
-            } as Interaction)
+              actualEndAt: "2026-11-22T01:00:00Z",
+              updatedAt: "2026-11-22T01:00:00Z",
+            })
           }
         >
           End call
@@ -105,11 +125,15 @@ vi.mock("@/components/face-to-face-companion", () => ({
           type="button"
           onClick={() =>
             onInteractionChange({
+              ...current,
               id: "foreign-interaction",
+              organisationId: "organisation-foreign",
               title: "Foreign conversation",
               companyId: "company-foreign",
               lifecycleStatus: "completed",
-            } as Interaction)
+              actualEndAt: "2026-11-22T01:00:00Z",
+              updatedAt: "2026-11-22T01:00:00Z",
+            })
           }
         >
           Emit mismatched interaction
@@ -129,21 +153,59 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function interaction(overrides: Partial<Interaction> = {}): Interaction {
+  return {
+    id: "call-1",
+    organisationId: "organisation-1",
+    companyId: "company-1",
+    opportunityId: null,
+    contactId: null,
+    meetingId: null,
+    eventId: null,
+    title: "Discovery",
+    interactionType: "online_meeting",
+    lifecycleStatus: "planned",
+    scheduledStartAt: null,
+    scheduledEndAt: null,
+    actualStartAt: null,
+    actualEndAt: null,
+    timezone: "Australia/Sydney",
+    creationOrigin: "manual",
+    callDirection: null,
+    callOutcome: null,
+    meetingPlatform: "zoom",
+    meetingUrl: "https://meeting.example.test/discovery",
+    externalMeetingId: null,
+    captureSource: null,
+    ingestionState: null,
+    durationSeconds: null,
+    captureMethods: [],
+    intelligenceState: "not_ready",
+    recordingAvailable: false,
+    createdByUserId: "user-1",
+    briefState: "not_generated",
+    briefGeneratedAt: null,
+    createdAt: "2026-11-22T00:00:00Z",
+    updatedAt: "2026-11-22T00:00:00Z",
+    ...overrides,
+  };
+}
+
 function response(
-  lifecycleStatus = "planned",
+  lifecycleStatus: Interaction["lifecycleStatus"] = "planned",
   id = "call-1",
   title = "Discovery",
+  overrides: Partial<Interaction> = {},
 ) {
   return new Response(
-    JSON.stringify({
-      id,
-      title,
-      companyId: "company-1",
-      interactionType: "online_meeting",
-      lifecycleStatus,
-      actualStartAt: null,
-      scheduledStartAt: null,
-    }),
+    JSON.stringify(
+      interaction({
+        id,
+        title,
+        lifecycleStatus,
+        ...overrides,
+      }),
+    ),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 }
@@ -151,9 +213,99 @@ function response(
 describe("ConversationWorkspace", () => {
   afterEach(() => {
     state.aiCompanionEnabled = true;
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: "organisation-1",
+      userId: "user-1",
+      identityKey: "external-session-one",
+    };
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     window.history.replaceState({}, "", "/");
+  });
+
+  it("shows only generic identity verification and recovery states", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    verifiedOrganisation.state = {
+      status: "loading",
+      organisationId: null,
+      userId: null,
+      identityKey: "external-session-pending",
+    };
+
+    const rendered = render(<ConversationWorkspace interactionId="call-1" />);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Verifying your secure workspace",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    verifiedOrganisation.state = {
+      status: "unavailable",
+      organisationId: null,
+      userId: null,
+      identityKey: "external-session-pending",
+    };
+    rendered.rerender(<ConversationWorkspace interactionId="call-1" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your identity could not be verified.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(verifiedOrganisation.reload).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("synchronously redacts the previous conversation when verified identity changes", async () => {
+    const nextIdentityConversation = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response("planned", "call-1", "Organisation one conversation"),
+      )
+      .mockReturnValueOnce(nextIdentityConversation.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rendered = render(<ConversationWorkspace interactionId="call-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open notes & capture" }),
+    );
+    fireEvent.change(screen.getByLabelText("Private rough notes"), {
+      target: { value: "Organisation one private note" },
+    });
+
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: "organisation-2",
+      userId: "user-2",
+      identityKey: "external-session-two",
+    };
+    rendered.rerender(<ConversationWorkspace interactionId="call-1" />);
+
+    expect(
+      screen.queryByRole("heading", { name: "Organisation one conversation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Organisation one private note"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading conversation",
+    );
+
+    await act(async () => {
+      nextIdentityConversation.resolve(
+        response("planned", "call-1", "Organisation two conversation", {
+          organisationId: "organisation-2",
+          createdByUserId: "user-2",
+        }),
+      );
+      await nextIdentityConversation.promise;
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "Organisation two conversation",
+      }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("keeps capture and unsaved notes mounted while moving between sections", async () => {
@@ -201,18 +353,12 @@ describe("ConversationWorkspace", () => {
       "fetch",
       vi.fn(() =>
         Promise.resolve(
-          new Response(
-            JSON.stringify({
-              id: "call-1",
-              title: "Event notes",
-              companyId: null,
-              interactionType: "manual_interaction",
-              lifecycleStatus: "planned",
-              actualStartAt: null,
-              scheduledStartAt: null,
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          ),
+          response("planned", "call-1", "Event notes", {
+            companyId: null,
+            interactionType: "manual_interaction",
+            meetingPlatform: null,
+            meetingUrl: null,
+          }),
         ),
       ),
     );
@@ -366,7 +512,51 @@ describe("ConversationWorkspace", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("fails closed on a mismatched child update and retries the requested conversation", async () => {
+  it("fails closed on a conversation response from another organisation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          response("planned", "call-1", "Foreign organisation", {
+            organisationId: "organisation-foreign",
+          }),
+        ),
+      ),
+    );
+
+    render(<ConversationWorkspace interactionId="call-1" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This conversation could not be loaded.",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Foreign organisation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("fails closed on a malformed conversation response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          response("planned", "call-1", "Malformed conversation", {
+            createdAt: "not-a-date",
+          }),
+        ),
+      ),
+    );
+
+    render(<ConversationWorkspace interactionId="call-1" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This conversation could not be loaded.",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Malformed conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves verified conversation state and private notes when a child update is rejected", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(response("planned", "call-1", "Conversation A")),
     );
@@ -377,25 +567,38 @@ describe("ConversationWorkspace", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Open notes & capture" }),
     );
+    fireEvent.change(screen.getByLabelText("Private rough notes"), {
+      target: { value: "Keep this private draft" },
+    });
     fireEvent.click(
       screen.getByRole("button", { name: "Emit mismatched interaction" }),
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "This conversation could not be loaded.",
+      "Your verified conversation and private notes are unchanged.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Conversation A" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Private rough notes")).toHaveValue(
+      "Keep this private draft",
     );
     expect(
       screen.queryByRole("heading", { name: "Foreign conversation" }),
     ).not.toBeInTheDocument();
+    expect(state.stopped).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading conversation",
-    );
+    fireEvent.click(screen.getByRole("button", { name: "End call" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "Conversation A" }),
+      screen.getByRole("heading", { name: "Conversation A" }),
     ).toBeVisible();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Review & follow-up" }));
+    expect(
+      await screen.findByText("Review seed call-1 · completed"),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("ignores a late successful response from the previous conversation", async () => {

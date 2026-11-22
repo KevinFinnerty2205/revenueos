@@ -28,8 +28,10 @@ import {
 } from "@/components/recording-foundation";
 import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { ConversationWorkspaceConflictRecovery } from "@/components/conversation-workspace-conflict-recovery";
+import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { decodeInteractionResponse } from "@/lib/interaction-response-identity";
 import { formatInteractionDate } from "@/lib/interactions";
 import { assertPreInteractionBriefIdentity } from "@/lib/pre-interaction-brief-identity";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
@@ -67,14 +69,21 @@ const LIVE_NOTE_CONFLICT_FIELDS = [
   },
 ] as const;
 
+const INTERACTION_RESPONSE_ERROR =
+  "The interaction response did not match this conversation. Try again.";
+
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? `${prefix}-${crypto.randomUUID()}`
     : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function captureStorageKey(interactionId: string): string {
-  return `revenueos:companion:capture-choice:${interactionId}`;
+function captureStorageKey(
+  interactionId: string,
+  organisationId: string,
+  userId: string,
+): string {
+  return `revenueos:companion:capture-choice:${organisationId}:${userId}:${interactionId}`;
 }
 
 function durationLabel(seconds: number | null): string {
@@ -88,10 +97,42 @@ export function FaceToFaceCompanion({
   interactionId,
   ...props
 }: FaceToFaceCompanionProps) {
+  const verifiedIdentity = useVerifiedOrganisation();
+
+  if (verifiedIdentity.status === "loading") {
+    return <p role="status">Verifying access to notes &amp; capture…</p>;
+  }
+  if (verifiedIdentity.status !== "available") {
+    return (
+      <section
+        role="alert"
+        className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-950"
+      >
+        <p>Notes &amp; capture are temporarily unavailable.</p>
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          onClick={verifiedIdentity.reload}
+        >
+          Try again
+        </button>
+      </section>
+    );
+  }
+
+  const sessionKey = [
+    interactionId,
+    verifiedIdentity.organisationId,
+    verifiedIdentity.userId,
+    verifiedIdentity.identityKey,
+  ].join(":");
+
   return (
     <FaceToFaceCompanionSession
-      key={interactionId}
+      key={sessionKey}
       interactionId={interactionId}
+      organisationId={verifiedIdentity.organisationId}
+      userId={verifiedIdentity.userId}
       {...props}
     />
   );
@@ -107,17 +148,26 @@ interface FaceToFaceCompanionProps {
   briefRefreshKey?: number;
 }
 
+interface FaceToFaceCompanionSessionProps extends FaceToFaceCompanionProps {
+  organisationId: string;
+  userId: string;
+}
+
 function FaceToFaceCompanionSession({
   interactionId,
+  organisationId,
+  userId,
   initialInteraction,
   embedded = false,
   onInteractionChange,
   onOpenPreparation,
   onOpenReview,
   briefRefreshKey = 0,
-}: FaceToFaceCompanionProps) {
-  const seededInteraction =
-    initialInteraction?.id === interactionId ? initialInteraction : null;
+}: FaceToFaceCompanionSessionProps) {
+  const seededInteraction = decodeInteractionResponse(initialInteraction, {
+    interactionId,
+    organisationId,
+  });
   const [interaction, setInteraction] = useState<Interaction | null>(
     seededInteraction,
   );
@@ -135,6 +185,7 @@ function FaceToFaceCompanionSession({
   const [showMarkers, setShowMarkers] = useState(false);
   const [showVisuals, setShowVisuals] = useState(false);
   const [loading, setLoading] = useState(seededInteraction === null);
+  const [interactionLoadRetryKey, setInteractionLoadRetryKey] = useState(0);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -276,20 +327,29 @@ function FaceToFaceCompanionSession({
       setCompanionAvailability(loaded.availability);
       setCompanionWarnings(loaded.warnings);
       const stored = window.sessionStorage.getItem(
-        captureStorageKey(interactionId),
+        captureStorageKey(interactionId, organisationId, userId),
       );
       if (stored === "recording" || stored === "passive") {
         setCaptureChoice(stored);
       }
     },
-    [interactionId],
+    [interactionId, organisationId, userId],
   );
 
   useEffect(() => {
     if (seededInteraction) return;
     let cancelled = false;
-    void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`)
-      .then((loadedInteraction) => {
+    void apiRequest<unknown>(
+      `/api/v1/interactions/${encodeURIComponent(interactionId)}`,
+    )
+      .then((payload) => {
+        const loadedInteraction = decodeInteractionResponse(payload, {
+          interactionId,
+          organisationId,
+        });
+        if (loadedInteraction === null) {
+          throw new Error(INTERACTION_RESPONSE_ERROR);
+        }
         if (!cancelled && sessionActiveRef.current) {
           setInteraction(loadedInteraction);
           onInteractionChange?.(loadedInteraction);
@@ -311,7 +371,13 @@ function FaceToFaceCompanionSession({
     return () => {
       cancelled = true;
     };
-  }, [interactionId, onInteractionChange, seededInteraction]);
+  }, [
+    interactionId,
+    interactionLoadRetryKey,
+    onInteractionChange,
+    organisationId,
+    seededInteraction,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -383,7 +449,10 @@ function FaceToFaceCompanionSession({
 
   function chooseCapture(choice: Exclude<CaptureChoice, "undecided">) {
     setCaptureChoice(choice);
-    window.sessionStorage.setItem(captureStorageKey(interactionId), choice);
+    window.sessionStorage.setItem(
+      captureStorageKey(interactionId, organisationId, userId),
+      choice,
+    );
     setMessage(
       choice === "passive"
         ? "Passive Companion is active. Oryntela is not recording or listening."
@@ -394,17 +463,29 @@ function FaceToFaceCompanionSession({
   }
 
   async function startInteraction() {
+    if (interaction === null) return;
+    const baseline = interaction;
     setWorking(true);
     setError(null);
     try {
-      const started = await apiRequest<Interaction>(
-        `/api/v1/interactions/${interactionId}/start`,
+      const payload = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/start`,
         {
           method: "POST",
           body: JSON.stringify({ actualStartAt: new Date().toISOString() }),
         },
       );
       if (!sessionActiveRef.current) return;
+      const started = decodeInteractionResponse(payload, {
+        interactionId,
+        organisationId,
+        baseline,
+        expectedLifecycleStatus: "in_progress",
+      });
+      if (started === null) {
+        setError(INTERACTION_RESPONSE_ERROR);
+        return;
+      }
       setInteraction(started);
       onInteractionChange?.(started);
       setMessage(
@@ -512,6 +593,8 @@ function FaceToFaceCompanionSession({
       );
       return;
     }
+    if (interaction === null) return;
+    const baseline = interaction;
     setWorking(true);
     setError(null);
     try {
@@ -532,14 +615,24 @@ function FaceToFaceCompanionSession({
           return;
         }
       }
-      const completed = await apiRequest<Interaction>(
-        `/api/v1/interactions/${interactionId}/complete`,
+      const payload = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/complete`,
         {
           method: "POST",
           body: JSON.stringify(callOutcome ? { callOutcome } : {}),
         },
       );
       if (!sessionActiveRef.current) return;
+      const completed = decodeInteractionResponse(payload, {
+        interactionId,
+        organisationId,
+        baseline,
+        expectedLifecycleStatus: "completed",
+      });
+      if (completed === null) {
+        setError(INTERACTION_RESPONSE_ERROR);
+        return;
+      }
       setInteraction(completed);
       onInteractionChange?.(completed);
       setMessage(
@@ -565,9 +658,20 @@ function FaceToFaceCompanionSession({
   if (loading) return <p role="status">Loading notes & capture…</p>;
   if (!interaction) {
     return (
-      <div role="alert" className="rounded-2xl bg-red-50 p-5 text-red-900">
-        {error ?? "The interaction was not found."}
-      </div>
+      <section role="alert" className="rounded-2xl bg-red-50 p-5 text-red-900">
+        <p>{error ?? "The interaction was not found."}</p>
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          onClick={() => {
+            setError(null);
+            setLoading(true);
+            setInteractionLoadRetryKey((current) => current + 1);
+          }}
+        >
+          Try again
+        </button>
+      </section>
     );
   }
 
