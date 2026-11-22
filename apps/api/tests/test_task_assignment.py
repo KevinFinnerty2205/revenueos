@@ -23,6 +23,7 @@ from revenueos.models import (
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
     PRIMARY_USER_ID,
+    SECONDARY_ORGANISATION_ID,
     SECONDARY_USER_ID,
     TEST_DB_URL,
 )
@@ -41,6 +42,20 @@ def _primary_identity(role: str) -> AuthenticatedUser:
         organisation_name="Example Revenue Team",
         organisation_slug="example-revenue-team",
         role="admin" if role == "admin" else "member",
+        auth_mode="mock",
+    )
+
+
+def _secondary_identity() -> AuthenticatedUser:
+    return AuthenticatedUser(
+        user_id=SECONDARY_USER_ID,
+        external_auth_id="user_other_001",
+        display_name="Other User",
+        email="other@example.test",
+        organisation_id=SECONDARY_ORGANISATION_ID,
+        organisation_name="Other Revenue Team",
+        organisation_slug="other-revenue-team",
+        role="admin",
         auth_mode="mock",
     )
 
@@ -134,11 +149,13 @@ def test_admin_peer_member_self_peer_denial_and_unassign(
     assert members.status_code == 200, members.text
     peer = next(item for item in members.json() if item["userId"] == str(active_peer_member))
     assert peer == {
+        "organisationId": str(PRIMARY_ORGANISATION_ID),
         "userId": str(active_peer_member),
         "displayName": "Casey Nguyen",
         "active": True,
         "canAssign": True,
     }
+    assert {item["organisationId"] for item in members.json()} == {str(PRIMARY_ORGANISATION_ID)}
 
     admin_assignment = client.post(
         "/api/v1/tasks",
@@ -185,6 +202,33 @@ def test_admin_peer_member_self_peer_denial_and_unassign(
         )
         assert peer_denial.status_code == 403, peer_denial.text
         assert peer_denial.json()["code"] == "forbidden_owner_assignment"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_member_options_are_bound_to_the_verified_organisation(
+    app: FastAPI,
+    client: TestClient,
+    active_peer_member: UUID,
+) -> None:
+    primary_members = client.get("/api/v1/crm/members")
+    assert primary_members.status_code == 200, primary_members.text
+    assert str(active_peer_member) in {item["userId"] for item in primary_members.json()}
+    assert {item["organisationId"] for item in primary_members.json()} == {str(PRIMARY_ORGANISATION_ID)}
+
+    app.dependency_overrides[get_current_user] = _secondary_identity
+    try:
+        secondary_members = client.get("/api/v1/crm/members")
+        assert secondary_members.status_code == 200, secondary_members.text
+        assert secondary_members.json() == [
+            {
+                "organisationId": str(SECONDARY_ORGANISATION_ID),
+                "userId": str(SECONDARY_USER_ID),
+                "displayName": "Other User",
+                "active": True,
+                "canAssign": True,
+            }
+        ]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

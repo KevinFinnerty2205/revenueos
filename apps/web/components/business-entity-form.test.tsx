@@ -9,12 +9,197 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BusinessEntityForm } from "@/components/business-entity-form";
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
+const verifiedOrganisation = vi.hoisted(() => ({
+  state: {
+    status: "available" as "loading" | "available" | "unavailable",
+    organisationId: "org-1" as string | null,
+  },
+}));
+
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => verifiedOrganisation.state,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
 }));
 
-function jsonResponse(body: object, status = 200): Response {
+const organisationId = "org-1";
+const timestamp = "2026-07-24T10:00:00Z";
+
+function companyResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "company-1",
+    organisationId,
+    name: "Acme Australia",
+    website: null,
+    industry: null,
+    location: null,
+    employeeCount: null,
+    status: "active",
+    ownerUserId: "user-1",
+    archivedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  };
+}
+
+function contactResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "contact-1",
+    organisationId,
+    companyId: "company-1",
+    firstName: "Jordan",
+    lastName: "Lee",
+    email: null,
+    phone: null,
+    jobTitle: null,
+    linkedinUrl: null,
+    status: "active",
+    ownerUserId: "user-1",
+    archivedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  };
+}
+
+function opportunityResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "opportunity-1",
+    organisationId,
+    companyId: null,
+    name: "Expansion",
+    stage: "discovery",
+    status: "open",
+    estimatedValue: null,
+    currency: null,
+    expectedCloseDate: null,
+    ownerUserId: "user-1",
+    description: null,
+    archivedAt: null,
+    pipelineId: null,
+    pipelineStageId: null,
+    stageEnteredAt: null,
+    stageTrackingStartedAt: null,
+    actualCloseDate: null,
+    outcomeReason: null,
+    outcomeNote: null,
+    outcomeProvenance: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  };
+}
+
+function opportunityListItemResponse(overrides: Record<string, unknown> = {}) {
+  const { outcomeNote: _outcomeNote, ...opportunity } = opportunityResponse();
+  return {
+    ...opportunity,
+    companyName: null,
+    ownerName: "Alex Morgan",
+    latestMeetingId: null,
+    latestMeetingDate: null,
+    latestMeetingMomentum: null,
+    latestNextBestAction: null,
+    ...overrides,
+  };
+}
+
+function taskResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "task-1",
+    organisationId,
+    companyId: null,
+    contactId: null,
+    opportunityId: null,
+    title: "Follow up",
+    description: null,
+    status: "open",
+    priority: "medium",
+    dueAt: null,
+    assignedUserId: null,
+    createdByUserId: "user-1",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  };
+}
+
+function crmMember(overrides: Record<string, unknown> = {}) {
+  return {
+    organisationId,
+    userId: "user-1",
+    displayName: "Alex Morgan",
+    active: true,
+    canAssign: true,
+    ...overrides,
+  };
+}
+
+function crmRecordResponse(
+  entityType: "account" | "contact" | "opportunity",
+  entityId: string,
+  fieldAuthority: Record<string, string> = {},
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    organisationId,
+    entityType,
+    entityId,
+    archivedAt: null,
+    fieldAuthority,
+    ...overrides,
+  };
+}
+
+function completeEntity(value: unknown, listItem = false): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const id = typeof record.id === "string" ? record.id : "";
+  if ("firstName" in record || id.startsWith("contact-")) {
+    return contactResponse(record);
+  }
+  if ("priority" in record || id.startsWith("task-")) {
+    return taskResponse(record);
+  }
+  if ("stage" in record || id.startsWith("opportunity-")) {
+    return listItem
+      ? opportunityListItemResponse(record)
+      : opportunityResponse(record);
+  }
+  if ("name" in record || id.startsWith("company-")) {
+    return companyResponse(record);
+  }
+  return value;
+}
+
+function completeResponseBody(body: unknown): unknown {
+  if (Array.isArray(body)) {
+    return body.map((item) =>
+      item && typeof item === "object" && "userId" in item
+        ? crmMember(item as Record<string, unknown>)
+        : completeEntity(item),
+    );
+  }
+  if (!body || typeof body !== "object") return body;
+  const record = body as Record<string, unknown>;
+  if (Array.isArray(record.items) && "page" in record && "pageSize" in record) {
+    return {
+      organisationId,
+      ...record,
+      items: record.items.map((item) => completeEntity(item, true)),
+    };
+  }
+  return completeEntity(body);
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return rawJsonResponse(completeResponseBody(body), status);
+}
+
+function rawJsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -49,6 +234,10 @@ const emptyPage = {
 describe("BusinessEntityForm", () => {
   afterEach(() => {
     router.push.mockReset();
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId,
+    };
     vi.unstubAllGlobals();
   });
 
@@ -83,6 +272,38 @@ describe("BusinessEntityForm", () => {
       status: "prospect",
     });
     expect(router.push).toHaveBeenCalledWith("/companies");
+  });
+
+  it("encodes a duplicate record ID as one route segment", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rawJsonResponse([]))
+      .mockResolvedValueOnce(
+        rawJsonResponse(
+          {
+            code: "duplicate_record",
+            message: "A matching account already exists.",
+            requestId: "request-1",
+            details: {
+              entityType: "account",
+              entityId: "company/one?private=true",
+            },
+          },
+          409,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="companies" />);
+    fireEvent.change(await screen.findByLabelText(/account name/i), {
+      target: { value: "Acme Australia" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(
+      await screen.findByRole("link", { name: "Open existing record" }),
+    ).toHaveAttribute("href", "/companies/company%2Fone%3Fprivate%3Dtrue");
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it("loads an existing opportunity into the edit form", async () => {
@@ -128,7 +349,9 @@ describe("BusinessEntityForm", () => {
           archivedAt: null,
         }),
       )
-      .mockResolvedValueOnce(jsonResponse({ fieldAuthority: {} }));
+      .mockResolvedValueOnce(
+        jsonResponse(crmRecordResponse("opportunity", "opportunity-1")),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -381,6 +604,14 @@ describe("BusinessEntityForm", () => {
 
   it.each([
     {
+      label: "from another organisation",
+      exactRecord: companyResponse({
+        id: "company-target",
+        organisationId: "org-2",
+        name: "Foreign Account",
+      }),
+    },
+    {
       label: "mismatched",
       exactRecord: {
         id: "company-other",
@@ -418,7 +649,7 @@ describe("BusinessEntityForm", () => {
                   archivedAt: null,
                 },
               ],
-              total: 2,
+              total: 101,
               pages: 2,
             }),
           );
@@ -758,7 +989,9 @@ describe("BusinessEntityForm", () => {
         );
       }
       if (url.endsWith("/api/v1/crm/records/account/company-1")) {
-        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+        return Promise.resolve(
+          jsonResponse(crmRecordResponse("account", "company-1")),
+        );
       }
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -847,7 +1080,9 @@ describe("BusinessEntityForm", () => {
       if (init?.method === "PATCH")
         return Promise.resolve(jsonResponse({ id: "contact-1" }));
       if (url.includes("/api/v1/crm/records/contact/contact-1"))
-        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+        return Promise.resolve(
+          jsonResponse(crmRecordResponse("contact", "contact-1")),
+        );
       return Promise.resolve(
         jsonResponse({
           id: "contact-1",
@@ -910,7 +1145,9 @@ describe("BusinessEntityForm", () => {
       if (url.includes("/api/v1/crm/members"))
         return Promise.resolve(jsonResponse([]));
       if (url.includes("/api/v1/crm/records/contact/contact-1"))
-        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+        return Promise.resolve(
+          jsonResponse(crmRecordResponse("contact", "contact-1")),
+        );
       return Promise.resolve(
         jsonResponse({
           id: "contact-1",
@@ -955,7 +1192,11 @@ describe("BusinessEntityForm", () => {
         return Promise.resolve(jsonResponse([]));
       if (url.includes("/api/v1/crm/records/contact/contact-1"))
         return Promise.resolve(
-          jsonResponse({ fieldAuthority: { first_name: "crm_authoritative" } }),
+          jsonResponse(
+            crmRecordResponse("contact", "contact-1", {
+              first_name: "crm_authoritative",
+            }),
+          ),
         );
       if (init?.method === "PATCH")
         return Promise.resolve(jsonResponse({ id: "contact-1" }));
@@ -1137,7 +1378,7 @@ describe("BusinessEntityForm", () => {
             industry: "Account A private industry",
             location: null,
             employeeCount: null,
-            ownerUserId: null,
+            ownerUserId: "user-1",
             status: "active",
             updatedAt: "2026-10-01T00:00:00Z",
             archivedAt: null,
@@ -1148,7 +1389,14 @@ describe("BusinessEntityForm", () => {
         return companyBLoad.promise;
       }
       if (url.includes("/api/v1/crm/records/account/")) {
-        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+        return Promise.resolve(
+          jsonResponse(
+            crmRecordResponse(
+              "account",
+              url.endsWith("company-a") ? "company-a" : "company-b",
+            ),
+          ),
+        );
       }
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -1182,7 +1430,7 @@ describe("BusinessEntityForm", () => {
           industry: "Services",
           location: "Sydney",
           employeeCount: 25,
-          ownerUserId: null,
+          ownerUserId: "user-1",
           status: "active",
           updatedAt: "2026-11-21T00:00:00Z",
           archivedAt: null,
@@ -1217,6 +1465,14 @@ describe("BusinessEntityForm", () => {
 
   it.each([
     {
+      label: "from another organisation",
+      record: companyResponse({
+        id: "company-b",
+        organisationId: "org-2",
+        name: "Foreign Account B private name",
+      }),
+    },
+    {
       label: "mismatched",
       record: {
         id: "company-a",
@@ -1244,7 +1500,9 @@ describe("BusinessEntityForm", () => {
           return Promise.resolve(jsonResponse(record));
         }
         if (url.endsWith("/api/v1/crm/records/account/company-b")) {
-          return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+          return Promise.resolve(
+            jsonResponse(crmRecordResponse("account", "company-b")),
+          );
         }
         throw new Error(`Unexpected request: ${url}`);
       });
@@ -1261,4 +1519,351 @@ describe("BusinessEntityForm", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("does not request private form data until the organisation is verified", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    verifiedOrganisation.state = {
+      status: "loading",
+      organisationId: null,
+    };
+
+    const { rerender } = render(<BusinessEntityForm entity="companies" />);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Verifying your secure workspace",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    verifiedOrganisation.state = {
+      status: "unavailable",
+      organisationId: null,
+    };
+    rerender(<BusinessEntityForm entity="companies" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "organisation could not be verified",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "wrong envelope organisation",
+      page: {
+        organisationId: "org-2",
+        items: [companyResponse()],
+        page: 1,
+        pageSize: 100,
+        total: 1,
+        pages: 1,
+      },
+    },
+    {
+      label: "one foreign item",
+      page: {
+        organisationId,
+        items: [
+          companyResponse(),
+          companyResponse({ id: "company-2", organisationId: "org-2" }),
+        ],
+        page: 1,
+        pageSize: 100,
+        total: 2,
+        pages: 1,
+      },
+    },
+  ])("rejects a $label reference page atomically", async ({ page }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(rawJsonResponse([]));
+        }
+        if (url.includes("/api/v1/companies?pageSize=100")) {
+          return Promise.resolve(rawJsonResponse(page));
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<BusinessEntityForm entity="opportunities" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "relationship list could not be verified",
+    );
+    expect(screen.queryByText("Acme Australia")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create opportunity" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rejects a mixed-organisation CRM member list atomically", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(
+            rawJsonResponse([
+              crmMember(),
+              crmMember({ userId: "user-2", organisationId: "org-2" }),
+            ]),
+          );
+        }
+        if (url.includes("?pageSize=100")) {
+          return Promise.resolve(
+            rawJsonResponse({ ...emptyPage, organisationId }),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<BusinessEntityForm entity="tasks" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "member list could not be verified",
+    );
+    expect(screen.queryByText("Alex Morgan")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      label: "wrong organisation",
+      response: crmRecordResponse(
+        "account",
+        "company-1",
+        {},
+        {
+          organisationId: "org-2",
+        },
+      ),
+    },
+    {
+      label: "wrong entity type",
+      response: crmRecordResponse("contact", "company-1"),
+    },
+    {
+      label: "wrong entity ID",
+      response: crmRecordResponse("account", "company-2"),
+    },
+    {
+      label: "archived record",
+      response: crmRecordResponse(
+        "account",
+        "company-1",
+        {},
+        {
+          archivedAt: timestamp,
+        },
+      ),
+    },
+    {
+      label: "invalid authority",
+      response: crmRecordResponse("account", "company-1", {
+        name: "external_wins",
+      }),
+    },
+  ])("rejects CRM authority with $label", async ({ response }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(rawJsonResponse([]));
+        }
+        if (url.endsWith("/api/v1/companies/company-1")) {
+          return Promise.resolve(jsonResponse(companyResponse()));
+        }
+        if (url.endsWith("/api/v1/crm/records/account/company-1")) {
+          return Promise.resolve(rawJsonResponse(response));
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<BusinessEntityForm entity="companies" entityId="company-1" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "record authority could not be verified",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Save account" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      label: "wrong organisation",
+      response: companyResponse({ organisationId: "org-2" }),
+    },
+    {
+      label: "an invalid created ID",
+      response: companyResponse({ id: "" }),
+    },
+    {
+      label: "an incomplete body",
+      response: { id: "company-1", organisationId },
+    },
+  ])(
+    "rejects a successful create response with $label",
+    async ({ response }) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url.includes("/api/v1/crm/members")) {
+            return Promise.resolve(rawJsonResponse([]));
+          }
+          if (init?.method === "POST") {
+            return Promise.resolve(rawJsonResponse(response, 201));
+          }
+          throw new Error(`Unexpected request: ${url}`);
+        }),
+      );
+
+      render(<BusinessEntityForm entity="companies" />);
+      fireEvent.change(await screen.findByLabelText(/account name/i), {
+        target: { value: "Invalid save response" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "saved record could not be verified",
+      );
+      expect(router.push).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      label: "wrong organisation",
+      response: companyResponse({ organisationId: "org-2" }),
+    },
+    {
+      label: "wrong record ID",
+      response: companyResponse({ id: "company-2" }),
+    },
+    {
+      label: "archived record",
+      response: companyResponse({ archivedAt: timestamp }),
+    },
+  ])("rejects a successful edit response with $label", async ({ response }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(rawJsonResponse([]));
+        }
+        if (init?.method === "PATCH") {
+          return Promise.resolve(rawJsonResponse(response));
+        }
+        if (url.endsWith("/api/v1/companies/company-1")) {
+          return Promise.resolve(jsonResponse(companyResponse()));
+        }
+        if (url.endsWith("/api/v1/crm/records/account/company-1")) {
+          return Promise.resolve(
+            rawJsonResponse(crmRecordResponse("account", "company-1")),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<BusinessEntityForm entity="companies" entityId="company-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save account" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "saved record could not be verified",
+    );
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("encodes a verified created Opportunity ID as one route segment", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crm/members")) {
+          return Promise.resolve(rawJsonResponse([]));
+        }
+        if (url.includes("/api/v1/companies?pageSize=100")) {
+          return Promise.resolve(
+            rawJsonResponse({ ...emptyPage, organisationId }),
+          );
+        }
+        if (init?.method === "POST") {
+          return Promise.resolve(
+            rawJsonResponse(
+              opportunityResponse({ id: "opportunity/one?private=true" }),
+              201,
+            ),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    render(<BusinessEntityForm entity="opportunities" />);
+    fireEvent.change(await screen.findByLabelText(/Opportunity name/i), {
+      target: { value: "Encoded route" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create opportunity" }));
+
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(
+        "/opportunities/opportunity%2Fone%3Fprivate%3Dtrue",
+      ),
+    );
+  });
+
+  it("does not navigate when an organisation changes during a save", async () => {
+    const save = deferred<Response>();
+    let memberReads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/v1/crm/members")) {
+        memberReads += 1;
+        return Promise.resolve(rawJsonResponse([]));
+      }
+      if (init?.method === "POST") return save.promise;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<BusinessEntityForm entity="companies" />);
+    fireEvent.change(await screen.findByLabelText(/account name/i), {
+      target: { value: "Organisation A draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "POST"),
+      ).toBe(true),
+    );
+
+    verifiedOrganisation.state = {
+      status: "available",
+      organisationId: "org-2",
+    };
+    rerender(<BusinessEntityForm entity="companies" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading form");
+
+    await act(async () => {
+      save.resolve(
+        rawJsonResponse(companyResponse({ name: "Organisation A draft" }), 201),
+      );
+      await save.promise;
+    });
+
+    expect(await screen.findByLabelText(/account name/i)).toHaveValue("");
+    expect(
+      screen.queryByDisplayValue("Organisation A draft"),
+    ).not.toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalled();
+    expect(memberReads).toBe(2);
+  });
 });

@@ -67,6 +67,7 @@ class CRMSettingsUpdate(APIModel):
 
 
 class CRMMemberResponse(APIModel):
+    organisation_id: UUID
     user_id: UUID
     display_name: str
     active: bool
@@ -181,6 +182,7 @@ class CRMCoreFieldResponse(APIModel):
 
 
 class CRMRecordResponse(APIModel):
+    organisation_id: UUID
     entity_type: CRMEntityType
     entity_id: UUID
     title: str

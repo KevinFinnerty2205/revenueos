@@ -15,6 +15,8 @@ Settings → CRM first shows the current availability and a plain-language choic
 
 The record header shows identity, owner, mode and archive state. A compact overview shows five to seven core fields. Externally managed fields display “CRM controlled · read-only”; review-before-sync fields display their review state. Edit is a focused page, not permanently live inline controls. Entitled administrators can archive after confirmation and restore; archived records cannot be edited.
 
+Create and edit forms are keyed to the currently verified organisation. They remain in an accessible loading or unavailable state until that identity is known, and a later organisation change replaces the whole form session so draft values and late save responses cannot cross that boundary. Relationship and member choices are adopted only after the complete response is verified for the active organisation; a malformed, mixed-organisation or wrong-organisation response fails the form atomically. Exact edited records, off-page relationship records, CRM field authority and successful save responses must likewise match the active organisation and requested record identity before any private value is displayed or navigation occurs.
+
 Custom fields sit behind a labelled **CRM details** disclosure after the core overview, in a responsive two-column grid and as one column on narrow screens. Their type controls use native labels/input semantics. When entitlement is removed, values remain visible and controls become read-only. Activity remains visible customer-work context from existing sources; Record history uses a separate disclosure with a human-readable field diff, actor, source and time.
 
 ## Duplicate and failure UX

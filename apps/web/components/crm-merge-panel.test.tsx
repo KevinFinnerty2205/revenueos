@@ -7,6 +7,7 @@ const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
 const record: CRMRecord = {
+  organisationId: "00000000-0000-4000-8000-000000000002",
   entityType: "account",
   entityId: "00000000-0000-4000-8000-000000000001",
   title: "Duplicate account",
