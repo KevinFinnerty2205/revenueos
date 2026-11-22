@@ -390,8 +390,15 @@ See [AI Debrief](ai-debrief.md).
 
 The active organisation and user are server-derived. Reads and writes repeat
 both predicates under forced owner RLS, and a stale `expectedLockVersion` returns
-a conflict instead of overwriting another session. Automatic generation pins the
-current final transcript version and, when nonblank and no longer than 20,000
+a conflict instead of overwriting another session. Every successful workspace
+response carries the canonical `interactionId`, `organisationId` and
+`ownerUserId`. The service verifies those identities on stored workspace and
+generation records before mutation and again before response construction. An
+internal mismatch fails closed with the safe
+`conversation_workspace_identity_mismatch` code and no private content; browser
+clients must decode and match the complete envelope before adopting text or
+version metadata. Automatic generation pins the current final transcript version
+and, when nonblank and no longer than 20,000
 characters, one owner-private personal-note snapshot. The workspace API retains
 its existing 100,000-character field limit: a longer saved note is preserved and
 the generation proceeds transcript-only rather than truncating or cancelling it.

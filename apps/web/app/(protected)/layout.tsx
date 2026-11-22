@@ -20,7 +20,7 @@ export default async function ProtectedLayout({
     if (!isRouteAccessAllowed(configured)) redirect("/sign-in");
     return (
       <VerifiedOrganisationProvider
-        identityKey={configured.organisation?.id ?? "mock-organisation"}
+        identityKey={`${configured.organisation?.id ?? "mock-organisation"}:${configured.user?.id ?? "mock-user"}`}
       >
         <AppShell authState={configured}>{children}</AppShell>
       </VerifiedOrganisationProvider>
@@ -53,7 +53,9 @@ export default async function ProtectedLayout({
 
   return (
     <ApiAuthBridge>
-      <VerifiedOrganisationProvider identityKey={session.orgId}>
+      <VerifiedOrganisationProvider
+        identityKey={`${session.orgId}:${session.userId}`}
+      >
         <AppShell authState={clerkState}>{children}</AppShell>
       </VerifiedOrganisationProvider>
     </ApiAuthBridge>

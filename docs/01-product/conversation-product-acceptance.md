@@ -88,6 +88,9 @@ their data.
 
 Live notes are authenticated organisation-and-user private data. They remain
 separate from shared intelligence, the transcript and generated enhanced notes.
+Every private workspace response identifies the exact conversation, organisation
+and authenticated owner; the browser rejects mismatches before adopting content
+or changing persistence state.
 Optimistic locking prevents another session from silently replacing the user's
 workspace. A reviewed conflict save uses the latest lock and carries forward newer
 unrelated private enhanced-note and follow-up fields.

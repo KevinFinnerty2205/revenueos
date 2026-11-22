@@ -590,9 +590,15 @@ test("interaction timeline supports deliberate creation and completion without i
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/personal-workspace")) {
+        const requestedInteractionId = path.split("/").at(-2);
+        if (!requestedInteractionId) {
+          throw new Error("Missing interaction id for private workspace.");
+        }
         await route.fulfill({
           json: {
             exists: true,
+            interactionId: requestedInteractionId,
+            organisationId: "organisation-1",
             ownerUserId: "user-1",
             lockVersion: 2,
             liveNotes:
@@ -1080,6 +1086,8 @@ test("a presentation supports browser image upload, explicit review and intellig
         await route.fulfill({
           json: {
             exists: false,
+            interactionId: "interaction-visual",
+            organisationId: "organisation-1",
             ownerUserId: "user-1",
             lockVersion: 0,
             liveNotes: "",
@@ -1087,7 +1095,7 @@ test("a presentation supports browser image upload, explicit review and intellig
             followUpDraft: "",
             followUpReviewed: false,
             generationFingerprint: null,
-            generationState: "not_available",
+            generationState: "not_started",
             generationId: null,
             generationTranscriptVersion: null,
             generationPersonalNotesState: "not_included",

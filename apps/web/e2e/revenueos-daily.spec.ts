@@ -3,7 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 const interactionId = "interaction-daily";
 
 function meResponse() {
-  return { organisation: { id: "organisation-1" } };
+  return {
+    organisation: { id: "organisation-1" },
+    user: { id: "user-1" },
+  };
 }
 
 function dailyResponse(overrides: Record<string, unknown> = {}) {
@@ -298,6 +301,8 @@ test("reviewing a private follow-up removes only its metadata from Home", async 
     "Private sentinel: send the founder the agreed implementation summary.";
   let workspace = {
     exists: true,
+    interactionId: "interaction-private-follow-up",
+    organisationId: "organisation-1",
     ownerUserId: "user-1",
     lockVersion: 3,
     liveNotes: "",

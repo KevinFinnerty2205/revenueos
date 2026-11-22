@@ -13,6 +13,16 @@ import {
   useConversationWorkspace,
 } from "@/lib/use-conversation-workspace";
 
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId: "organisation-1",
+    userId: "user-1",
+    identityKey: "organisation-1:user-1",
+    reload: vi.fn(),
+  }),
+}));
+
 function response(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -37,6 +47,8 @@ function deferred<T>() {
 
 const readyWorkspace = {
   exists: true,
+  interactionId: "interaction-1",
+  organisationId: "organisation-1",
   ownerUserId: "user-1",
   lockVersion: 4,
   liveNotes: "Finance needs the implementation sequence before approval.",
@@ -556,7 +568,9 @@ describe("ConversationNotesReview", () => {
     const interactionB = deferred<Response>();
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(readyWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...readyWorkspace, interactionId: "interaction-a" }),
+      )
       .mockImplementationOnce(() => interactionB.promise);
     vi.stubGlobal("fetch", fetchMock);
     const { rerender } = render(
@@ -596,6 +610,7 @@ describe("ConversationNotesReview", () => {
       interactionB.resolve(
         response({
           ...readyWorkspace,
+          interactionId: "interaction-b",
           lockVersion: 7,
           liveNotes: "Interaction B private notes",
           enhancedNotes: "Interaction B enhanced notes",

@@ -164,6 +164,8 @@ class ConversationDraftGenerationApply(APIModel):
 
 class ConversationWorkspaceResponse(APIModel):
     exists: bool
+    interaction_id: UUID
+    organisation_id: UUID
     owner_user_id: UUID
     lock_version: int
     live_notes: str | None = None

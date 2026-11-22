@@ -72,6 +72,14 @@ test("online meeting offers deliberate audio capture and persists transcript imp
   let interaction: Record<string, unknown> = { ...baseInteraction };
   let imported = false;
 
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        organisation: { id: "organisation-1" },
+        user: { id: "user-1" },
+      },
+    });
+  });
   await page.route(
     "http://localhost:8000/api/v1/beta/capabilities",
     async (route) => {
@@ -120,6 +128,8 @@ test("online meeting offers deliberate audio capture and persists transcript imp
         await route.fulfill({
           json: {
             exists: false,
+            interactionId: "interaction-online",
+            organisationId: "organisation-1",
             ownerUserId: "user-1",
             lockVersion: 0,
             liveNotes: "",
@@ -127,7 +137,7 @@ test("online meeting offers deliberate audio capture and persists transcript imp
             followUpDraft: "",
             followUpReviewed: false,
             generationFingerprint: null,
-            generationState: "not_available",
+            generationState: "not_started",
             generationId: null,
             generationTranscriptVersion: null,
             generationPersonalNotesState: "not_included",

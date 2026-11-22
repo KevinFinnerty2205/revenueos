@@ -22,6 +22,16 @@ import type {
 } from "@revenueos/shared";
 import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
 
+vi.mock("@/components/verified-organisation-context", () => ({
+  useVerifiedOrganisation: () => ({
+    status: "available",
+    organisationId: "organisation-1",
+    userId: "user-1",
+    identityKey: "organisation-1:user-1",
+    reload: vi.fn(),
+  }),
+}));
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -1623,6 +1633,8 @@ describe("MeetingIntelligenceWorkspace", () => {
   it("preserves persisted review status on unchanged saves and failed reviews", async () => {
     const reviewedWorkspace = {
       exists: true,
+      interactionId: "interaction-1",
+      organisationId: "organisation-1",
       ownerUserId: "user-1",
       lockVersion: 2,
       liveNotes: "",
@@ -1718,12 +1730,23 @@ describe("MeetingIntelligenceWorkspace", () => {
         return Promise.resolve(
           jsonResponse({
             exists: true,
+            interactionId: "interaction-1",
+            organisationId: "organisation-1",
             ownerUserId: "user-1",
             lockVersion: 2,
+            liveNotes: null,
             enhancedNotes: null,
             followUpDraft: "Keep my reviewed private wording.",
             followUpReviewed: true,
             generationFingerprint: null,
+            generationState: "not_started",
+            generationId: null,
+            generationTranscriptVersion: null,
+            generationPersonalNotesState: "not_included",
+            generationFailureCode: null,
+            generationRetryAvailable: false,
+            generationUpdateAvailable: false,
+            generationCompletedAt: null,
             importedFromBrowserAt: null,
             updatedAt: "2026-10-31T00:00:00Z",
           }),
@@ -1787,6 +1810,8 @@ describe("MeetingIntelligenceWorkspace", () => {
     };
     const privateA = {
       exists: true,
+      interactionId: "interaction-a",
+      organisationId: "organisation-1",
       ownerUserId: "user-1",
       lockVersion: 2,
       liveNotes: "Private A rough notes",
@@ -1807,6 +1832,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     };
     const privateB = {
       ...privateA,
+      interactionId: "interaction-b",
       lockVersion: 7,
       liveNotes: "Private B rough notes",
       enhancedNotes: "Private B enhanced notes",
@@ -1932,6 +1958,8 @@ describe("MeetingIntelligenceWorkspace", () => {
   it("reviews a stale browser import without losing provenance or newer private fields", async () => {
     const initialWorkspace = {
       exists: true,
+      interactionId: "interaction-1",
+      organisationId: "organisation-1",
       ownerUserId: "user-1",
       lockVersion: 2,
       liveNotes: "Earlier rough notes",

@@ -186,6 +186,8 @@ const interaction: Interaction = {
 
 const generatedWorkspace = {
   exists: true,
+  interactionId: "interaction-1",
+  organisationId: "organisation-1",
   ownerUserId: "user-1",
   lockVersion: 3,
   liveNotes: "Original live notes",

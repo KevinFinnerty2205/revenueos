@@ -34,6 +34,8 @@ test("account history opens one CRM-independent conversation workspace and prese
   };
   let workspace = {
     exists: false,
+    interactionId: "conversation-proof",
+    organisationId: "organisation-proof",
     ownerUserId: "owner-proof",
     lockVersion: 0,
     liveNotes: "",
@@ -41,7 +43,7 @@ test("account history opens one CRM-independent conversation workspace and prese
     followUpDraft: "",
     followUpReviewed: false,
     generationFingerprint: null,
-    generationState: "not_available",
+    generationState: "not_started",
     generationId: null,
     generationTranscriptVersion: null,
     generationPersonalNotesState: "not_included",
@@ -74,7 +76,10 @@ test("account history opens one CRM-independent conversation workspace and prese
 
     if (path === "/api/v1/me") {
       await route.fulfill({
-        json: { organisation: { id: "organisation-proof" } },
+        json: {
+          organisation: { id: "organisation-proof" },
+          user: { id: "owner-proof" },
+        },
       });
       return;
     }
@@ -377,7 +382,10 @@ test("account history survives unavailable contact enrichment", async ({
 
     if (pathname === "/api/v1/me") {
       await route.fulfill({
-        json: { organisation: { id: "organisation-proof" } },
+        json: {
+          organisation: { id: "organisation-proof" },
+          user: { id: "owner-proof" },
+        },
       });
       return;
     }
@@ -531,6 +539,8 @@ test("a CRM-free private note saves and reloads when AI Companion is disabled", 
   };
   let workspace = {
     exists: false,
+    interactionId: "private-note-proof",
+    organisationId: "organisation-proof",
     ownerUserId: "owner-proof",
     lockVersion: 0,
     liveNotes: "",
@@ -555,6 +565,15 @@ test("a CRM-free private note saves and reloads when AI Companion is disabled", 
     const path = new URL(request.url()).pathname;
     requests.push(`${request.method()} ${path}`);
 
+    if (path === "/api/v1/me") {
+      await route.fulfill({
+        json: {
+          organisation: { id: "organisation-proof" },
+          user: { id: "owner-proof" },
+        },
+      });
+      return;
+    }
     if (path === "/api/v1/beta/capabilities") {
       await route.fulfill({
         json: {

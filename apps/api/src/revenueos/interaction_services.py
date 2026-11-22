@@ -115,12 +115,14 @@ class InteractionService:
             interaction_id,
             self.tenant.user_id,
         )
+        self._verified_workspace_response_identity(interaction_id, workspace, None)
         generation = await self.repository.latest_draft_generation(
             self.tenant.organisation_id,
             interaction_id,
             self.tenant.user_id,
         )
-        return self._workspace_response(workspace, generation)
+        self._verified_workspace_response_identity(interaction_id, workspace, generation)
+        return self._workspace_response(interaction_id, workspace, generation)
 
     async def save_personal_workspace(
         self,
@@ -134,6 +136,13 @@ class InteractionService:
             self.tenant.user_id,
             for_update=True,
         )
+        self._verified_workspace_response_identity(interaction_id, workspace, None)
+        generation = await self.repository.latest_draft_generation(
+            self.tenant.organisation_id,
+            interaction_id,
+            self.tenant.user_id,
+        )
+        self._verified_workspace_response_identity(interaction_id, workspace, generation)
         if workspace is None:
             if request.expected_lock_version != 0:
                 raise self._workspace_conflict()
@@ -174,16 +183,11 @@ class InteractionService:
         try:
             await self.session.flush()
             await self.session.refresh(workspace)
-            generation = await self.repository.latest_draft_generation(
-                self.tenant.organisation_id,
-                interaction_id,
-                self.tenant.user_id,
-            )
             await self.session.commit()
         except IntegrityError as exc:
             await self.session.rollback()
             raise self._workspace_conflict() from exc
-        return self._workspace_response(workspace, generation)
+        return self._workspace_response(interaction_id, workspace, generation)
 
     async def retry_personal_workspace_generation(
         self,
@@ -202,6 +206,21 @@ class InteractionService:
                 "No post-conversation draft generation is available to retry.",
                 404,
             )
+        self._verified_workspace_response_identity(interaction_id, None, generation)
+        try:
+            workspace = await self.repository.get_user_workspace(
+                self.tenant.organisation_id,
+                interaction_id,
+                self.tenant.user_id,
+            )
+        except SQLAlchemyError as exc:
+            await self.session.rollback()
+            raise PublicAPIError(
+                "conversation_draft_retry_failed",
+                "The post-conversation draft retry could not be queued.",
+                500,
+            ) from exc
+        self._verified_workspace_response_identity(interaction_id, workspace, generation)
         if generation.status != "failed":
             raise PublicAPIError(
                 "conversation_draft_generation_not_retryable",
@@ -226,11 +245,6 @@ class InteractionService:
             else None
         )
         try:
-            workspace = await self.repository.get_user_workspace(
-                self.tenant.organisation_id,
-                interaction_id,
-                self.tenant.user_id,
-            )
             await self.session.commit()
         except SQLAlchemyError as exc:
             await self.session.rollback()
@@ -239,7 +253,7 @@ class InteractionService:
                 "The post-conversation draft retry could not be queued.",
                 500,
             ) from exc
-        return self._workspace_response(workspace, generation)
+        return self._workspace_response(interaction_id, workspace, generation)
 
     async def apply_personal_workspace_generation(
         self,
@@ -254,7 +268,14 @@ class InteractionService:
             request.generation_id,
             for_update=True,
         )
-        if generation is None or generation.status != "ready":
+        if generation is None:
+            raise PublicAPIError(
+                "conversation_draft_generation_not_ready",
+                "The selected post-conversation draft version is not ready.",
+                409,
+            )
+        self._verified_workspace_response_identity(interaction_id, None, generation)
+        if generation.status != "ready":
             raise PublicAPIError(
                 "conversation_draft_generation_not_ready",
                 "The selected post-conversation draft version is not ready.",
@@ -269,6 +290,7 @@ class InteractionService:
             self.tenant.user_id,
             for_update=True,
         )
+        self._verified_workspace_response_identity(interaction_id, workspace, generation)
         if workspace is None:
             if request.expected_lock_version != 0:
                 raise self._workspace_conflict()
@@ -286,7 +308,7 @@ class InteractionService:
             workspace.generation_fingerprint == generation.content_fingerprint
             and generation.workspace_applied_at is not None
         ):
-            return self._workspace_response(workspace, generation)
+            return self._workspace_response(interaction_id, workspace, generation)
         else:
             workspace.lock_version += 1
         workspace.enhanced_notes = generation.enhanced_notes
@@ -302,7 +324,7 @@ class InteractionService:
         except IntegrityError as exc:
             await self.session.rollback()
             raise self._workspace_conflict() from exc
-        return self._workspace_response(workspace, generation)
+        return self._workspace_response(interaction_id, workspace, generation)
 
     async def get_interaction(self, interaction_id: UUID) -> InteractionRecord:
         record = await self.repository.get_interaction(self.tenant.organisation_id, interaction_id)
@@ -1002,9 +1024,17 @@ class InteractionService:
 
     def _workspace_response(
         self,
+        interaction_id: UUID,
         workspace: ConversationUserWorkspace | None,
         generation: ConversationDraftGeneration | None = None,
     ) -> ConversationWorkspaceResponse:
+        response_interaction_id, response_organisation_id, response_owner_user_id = (
+            self._verified_workspace_response_identity(
+                interaction_id,
+                workspace,
+                generation,
+            )
+        )
         generation_state: Literal["not_started", "pending", "processing", "failed", "ready"]
         if generation is None:
             generation_state = "not_started"
@@ -1041,7 +1071,9 @@ class InteractionService:
         if workspace is None:
             return ConversationWorkspaceResponse(
                 exists=False,
-                owner_user_id=self.tenant.user_id,
+                interaction_id=response_interaction_id,
+                organisation_id=response_organisation_id,
+                owner_user_id=response_owner_user_id,
                 lock_version=0,
                 generation_state=generation_state,
                 generation_id=generation_id,
@@ -1054,7 +1086,9 @@ class InteractionService:
             )
         return ConversationWorkspaceResponse(
             exists=True,
-            owner_user_id=workspace.user_id,
+            interaction_id=response_interaction_id,
+            organisation_id=response_organisation_id,
+            owner_user_id=response_owner_user_id,
             lock_version=workspace.lock_version,
             live_notes=workspace.live_notes,
             enhanced_notes=workspace.enhanced_notes,
@@ -1073,6 +1107,42 @@ class InteractionService:
             generation_completed_at=generation_completed_at,
         )
 
+    def _verified_workspace_response_identity(
+        self,
+        interaction_id: UUID,
+        workspace: ConversationUserWorkspace | None,
+        generation: ConversationDraftGeneration | None,
+    ) -> tuple[UUID, UUID, UUID]:
+        expected_identity = (
+            interaction_id,
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+        )
+        for record in (workspace, generation):
+            if record is None:
+                continue
+            record_identity = (
+                record.interaction_id,
+                record.organisation_id,
+                record.user_id,
+            )
+            if record_identity != expected_identity:
+                raise self._workspace_identity_mismatch()
+
+        if workspace is not None:
+            return (
+                workspace.interaction_id,
+                workspace.organisation_id,
+                workspace.user_id,
+            )
+        if generation is not None:
+            return (
+                generation.interaction_id,
+                generation.organisation_id,
+                generation.user_id,
+            )
+        return expected_identity
+
     @staticmethod
     def _draft_text_changed(previous: str | None, current: str | None) -> bool:
         return (previous or "") != (current or "")
@@ -1083,4 +1153,12 @@ class InteractionService:
             "conversation_workspace_conflict",
             "This conversation draft changed in another session. Reload before saving so no work is overwritten.",
             409,
+        )
+
+    @staticmethod
+    def _workspace_identity_mismatch() -> PublicAPIError:
+        return PublicAPIError(
+            "conversation_workspace_identity_mismatch",
+            "The private conversation workspace could not be loaded safely.",
+            500,
         )

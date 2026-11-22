@@ -1375,6 +1375,8 @@ export interface BriefingPreviewResponse {
 
 export interface ConversationWorkspaceResponse {
   exists: boolean;
+  interactionId: string;
+  organisationId: string;
   ownerUserId: string;
   lockVersion: number;
   liveNotes: string | null;
