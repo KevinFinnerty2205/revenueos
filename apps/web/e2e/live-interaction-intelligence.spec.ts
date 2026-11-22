@@ -137,6 +137,14 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
   let live = liveResponse("available");
   let markers: Array<Record<string, unknown>> = [];
 
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        organisation: { id: "organisation-1" },
+        user: { id: "user-1" },
+      },
+    });
+  });
   await page.route(
     "http://localhost:8000/api/v1/beta/capabilities",
     async (route) => {

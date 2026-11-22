@@ -197,13 +197,18 @@ Every step needs loading, empty, permission-denied, offline, partial, failed,
 expired and deleted states. Completed evidence remains usable when another source
 fails. Retry is bounded and explicit.
 
-- Client-side navigation between interactions hides the previous interaction
-  immediately. The top-level conversation workspace owns loading, failure, view
-  and preparation-refresh state by the requested interaction, while detail loads,
-  child updates, transcript imports and lifecycle mutations stay bound to that
-  same session. Transcript-history lists are accepted atomically only when every
-  item matches the requested interaction; any response with another interaction
-  identity fails closed without changing the visible lifecycle.
+- Client-side navigation and verified identity changes hide the previous
+  interaction immediately. The browser session is keyed by the requested
+  interaction, verified organisation, verified user and external identity key.
+  The top-level conversation workspace owns loading, failure, view and
+  preparation-refresh state for that session. Exact loads, child updates and
+  start/complete responses are fully decoded before adoption and must retain the
+  canonical relationship, type, origin and creator anchors. An invalid response
+  fails closed without replacing the last verified lifecycle, active section or
+  private local edits; the mounted workspace shows a generic accessible warning
+  and can accept a later valid update without a hard refresh. Transcript-history
+  lists are accepted atomically only when every item matches the requested
+  interaction.
 - use semantic headings, form labels, live regions and native controls;
 - make start/stop and recording state screen-reader clear;
 - provide captions/transcripts when available and a text debrief alternative;
