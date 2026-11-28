@@ -190,7 +190,7 @@ test("private notes support a reviewed stale-browser merge without replacing new
     await expect(firstNotes).toHaveValue("");
     await expect(secondNotes).toHaveValue("");
 
-    const committedText = "Committed note from the first browser session.";
+    const committedText = "  Committed note from the first browser session.\n";
     const staleLocalText =
       "Unsaved local note from the stale second browser session.";
     await firstNotes.fill(committedText);
@@ -309,6 +309,16 @@ test("private notes support a reviewed stale-browser merge without replacing new
       followUpReviewed: true,
       lockVersion: latestBeforeConflict.lockVersion + 1,
     });
+    await expect(
+      secondPage.getByText("Private notes saved.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      secondPage.getByRole("heading", {
+        name: "Private notes changed in another session",
+        exact: true,
+      }),
+    ).toBeHidden();
+    await expect(secondNotes).toHaveValue(reviewedText);
 
     await secondPage.reload();
     await expect(secondPage.getByLabel("Private live notes")).toHaveValue(
