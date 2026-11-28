@@ -53,8 +53,9 @@ receives a narrow activity projection from the recording component:
 - elapsed seconds; and
 - current recording session.
 
-The interaction cannot complete while recording is active, finalisation is in
-progress or audio remains queued in the current tab. A backend rule separately
+The interaction cannot complete while audio permissions are pending, recording
+is active, finalisation is in progress, or audio remains queued in the current
+tab. These checks also run after a pending private-note save. A backend rule separately
 rejects a second active recording session for the same tenant Interaction.
 
 ## Marker state

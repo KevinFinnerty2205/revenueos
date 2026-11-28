@@ -79,6 +79,10 @@ describe("validateVisualEvidenceListForInteraction", () => {
         interactionId,
       ),
     ).toEqual([unprocessed, visual]);
+    const sqliteVisual = { ...visual, createdAt: "2026-08-15T02:04:00" };
+    expect(
+      validateVisualEvidenceListForInteraction([sqliteVisual], interactionId),
+    ).toEqual([sqliteVisual]);
   });
 
   it.each([

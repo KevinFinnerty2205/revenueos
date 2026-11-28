@@ -120,6 +120,10 @@ describe("recording session identity", () => {
     expect(
       decodeRecordingSessionsForInteraction([session], "interaction-1"),
     ).toEqual([session]);
+    const sqliteSession = { ...session, createdAt: "2026-08-15T00:00:00" };
+    expect(
+      decodeRecordingSessionForInteraction(sqliteSession, "interaction-1"),
+    ).toBe(sqliteSession);
     for (const list of [
       { sessions: [session] },
       [session, null],
@@ -131,7 +135,7 @@ describe("recording session identity", () => {
       [session, { ...session, id: "recording-2" }],
       [{ ...session, transcriptionStatus: undefined }],
       [{ ...session, durationSeconds: "60" }],
-      [{ ...session, createdAt: "2026-08-15T00:00:00" }],
+      [{ ...session, createdAt: "2026-08-15" }],
       [{ ...session, finalMimeType: "audio/mp4" }],
     ]) {
       expect(() =>

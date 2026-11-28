@@ -12,8 +12,10 @@ import type {
   RecordingSession,
   VisualEvidence,
 } from "@revenueos/shared";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
+import type { RecordingActivity } from "@/components/recording-foundation";
 
 const verifiedOrganisation = vi.hoisted(() => ({
   state: {
@@ -28,6 +30,30 @@ const verifiedOrganisation = vi.hoisted(() => ({
 vi.mock("@/components/verified-organisation-context", () => ({
   useVerifiedOrganisation: () => verifiedOrganisation.state,
 }));
+
+const recorderStub = vi.hoisted(() => ({
+  enabled: false,
+  activity: undefined as ((value: RecordingActivity) => void) | undefined,
+}));
+
+vi.mock(import("@/components/recording-foundation"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    RecordingFoundation(
+      props: ComponentProps<typeof original.RecordingFoundation>,
+    ) {
+      if (!recorderStub.enabled)
+        return <original.RecordingFoundation {...props} />;
+      recorderStub.activity = props.onActivityChange;
+      return (
+        <button type="button" disabled={props.startDisabled}>
+          Start recording
+        </button>
+      );
+    },
+  };
+});
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -532,6 +558,8 @@ function installApi(
 
 describe("FaceToFaceCompanion", () => {
   afterEach(() => {
+    recorderStub.enabled = false;
+    recorderStub.activity = undefined;
     window.sessionStorage.clear();
     verifiedOrganisation.state.status = "available";
     verifiedOrganisation.state.organisationId = "organisation-1";
@@ -1758,6 +1786,73 @@ describe("FaceToFaceCompanion", () => {
         name: "Fill the gaps while they are fresh",
       }),
     ).toBeVisible();
+  });
+
+  it("holds completion on an uncertain recorder update, including while a note save is pending", async () => {
+    recorderStub.enabled = true;
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
+      "recording",
+    );
+    const save = deferred<Response>();
+    const fetchMock = installApi(
+      interaction({ lifecycleStatus: "in_progress" }),
+      {
+        personalWorkspaceSaveResponse: save.promise,
+      },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+    const start = await screen.findByRole("button", {
+      name: "Start recording",
+    });
+    const foreignActivity: RecordingActivity = {
+      state: "ready",
+      active: false,
+      blocksInteractionCompletion: false,
+      elapsedSeconds: 0,
+      recording: { ...priorRecording, interactionId: "foreign-conversation" },
+    };
+    act(() => recorderStub.activity?.(foreignActivity));
+    expect(
+      screen.getByRole("button", { name: "End interaction" }),
+    ).toBeDisabled();
+    act(() => recorderStub.activity?.({ ...foreignActivity, recording: null }));
+    expect(
+      screen.getByRole("button", { name: "End interaction" }),
+    ).toBeEnabled();
+
+    const noteText = "Hand over the release checklist.";
+    const notes = screen.getByLabelText("Private live notes");
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, { target: { value: noteText } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save notes and end interaction" }),
+    );
+    expect(start).toBeDisabled();
+    act(() => recorderStub.activity?.(foreignActivity));
+    await act(async () =>
+      save.resolve(
+        jsonResponse({
+          ...emptyWorkspace(),
+          exists: true,
+          lockVersion: 1,
+          liveNotes: noteText,
+          enhancedNotes: "",
+          followUpDraft: "",
+          updatedAt: "2026-08-15T03:00:00Z",
+        }),
+      ),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /before ending the interaction/,
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/complete"),
+      ),
+    ).toBe(false);
+    expect(notes).toHaveValue(noteText);
   });
 
   it("keeps a newer note edit open when it changes during save-before-end", async () => {

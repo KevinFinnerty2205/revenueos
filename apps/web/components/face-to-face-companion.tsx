@@ -86,6 +86,8 @@ const MARKER_MUTATION_WARNING =
   "The marker change could not be confirmed. Refresh markers to check what was saved.";
 const RECORDING_RESPONSE_WARNING =
   "Updated recording details could not be verified. Your private notes remain available.";
+const RECORDING_COMPLETION_WARNING =
+  "Finish recording setup and any queued upload before ending the interaction.";
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -208,6 +210,7 @@ function FaceToFaceCompanionSession({
   const [recordingActivity, setRecordingActivity] =
     useState<RecordingActivity | null>(null);
   const sessionActiveRef = useRef(true);
+  const recordingBlocksCompletion = useRef(false);
   const elapsedSecondsRef = useRef(0);
   const liveNotesRevisionRef = useRef(0);
   const personalWorkspace = useConversationWorkspace({ interactionId });
@@ -432,15 +435,16 @@ function FaceToFaceCompanionSession({
             interactionId,
           );
         }
+        recordingBlocksCompletion.current =
+          activity.blocksInteractionCompletion;
         setRecordingActivity(activity);
       } catch {
         // Keep a completion guard until a later verified activity update can clear it.
+        recordingBlocksCompletion.current = true;
         setRecordingActivity((current) => ({
           ...activity,
           active: activity.active || current?.active === true,
-          blocksInteractionCompletion:
-            activity.blocksInteractionCompletion ||
-            current?.blocksInteractionCompletion === true,
+          blocksInteractionCompletion: true,
           recording: current?.recording ?? null,
         }));
         appendCompanionWarning(RECORDING_RESPONSE_WARNING);
@@ -614,17 +618,11 @@ function FaceToFaceCompanionSession({
         markerType,
         recordingOffsetMs,
       });
-      const existing = markers.find(({ id }) => id === marker.id);
-      if (
-        existing &&
-        (existing.createdByUserId !== marker.createdByUserId ||
-          existing.markerType !== marker.markerType ||
-          existing.recordingOffsetMs !== marker.recordingOffsetMs ||
-          existing.createdAt !== marker.createdAt)
-      ) {
-        throw new Error(MARKER_MUTATION_WARNING);
-      }
-      if (!existing) setMarkers((current) => [...current, marker]);
+      setMarkers((current) =>
+        current.some(({ id }) => id === marker.id)
+          ? current.map((item) => (item.id === marker.id ? marker : item))
+          : [...current, marker],
+      );
       setMessage(`${humanise(markerType)} marked.`);
       setShowMarkers(false);
     } catch {
@@ -683,10 +681,8 @@ function FaceToFaceCompanionSession({
   }
 
   async function endInteraction(callOutcome?: CallOutcome) {
-    if (recordingActivity?.blocksInteractionCompletion) {
-      setError(
-        "Stop and finish the recording upload before ending the interaction.",
-      );
+    if (recordingBlocksCompletion.current) {
+      setError(RECORDING_COMPLETION_WARNING);
       return;
     }
     if (interaction === null) return;
@@ -710,6 +706,10 @@ function FaceToFaceCompanionSession({
           );
           return;
         }
+      }
+      if (recordingBlocksCompletion.current) {
+        setError(RECORDING_COMPLETION_WARNING);
+        return;
       }
       const payload = await apiRequest<unknown>(
         `/api/v1/interactions/${encodeURIComponent(interactionId)}/complete`,
@@ -992,6 +992,7 @@ function FaceToFaceCompanionSession({
                 interactionId={interactionId}
                 interactionType={interaction.interactionType}
                 lifecycleStatus={interaction.lifecycleStatus}
+                startDisabled={working}
                 showTranscript={false}
                 fallbackHref="#companion-controls"
                 fallbackLabel="Continue with passive Companion"

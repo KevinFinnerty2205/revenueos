@@ -43,7 +43,7 @@ function hasIdentifier(value: unknown): value is string {
 function isDate(value: unknown): boolean {
   return (
     typeof value === "string" &&
-    /(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value) &&
     Number.isFinite(Date.parse(value))
   );
 }
