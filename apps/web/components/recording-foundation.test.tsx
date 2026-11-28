@@ -5,6 +5,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { RecordingSession } from "@revenueos/shared";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   reconcileProgressiveTranscriptEvents,
@@ -83,11 +85,30 @@ const baseRecording = {
   transcriptionAttempts: 0,
   failureCode: null,
   autoIntelligenceStatus: "disabled",
-  sessionExpiresAt: "2026-08-16T00:00:00Z",
+  sessionExpiresAt: "2099-08-16T00:00:00Z",
   providerMode: "mock",
   externalProcessing: false,
   createdAt: "2026-08-15T00:00:00Z",
   updatedAt: "2026-08-15T00:00:00Z",
+} satisfies RecordingSession;
+
+const stoppedRecording: RecordingSession = {
+  ...baseRecording,
+  lifecycleStatus: "uploading",
+  startedAt: "2026-08-15T00:00:00Z",
+  stoppedAt: "2026-08-15T00:01:00Z",
+  durationSeconds: 60,
+};
+
+const verifiedChunk = {
+  id: "chunk-1",
+  recordingSessionId: baseRecording.id,
+  sequenceNumber: 0,
+  uploadState: "verified",
+  byteSize: 5,
+  checksumSha256: "a".repeat(64),
+  createdAt: "2026-08-15T00:00:00Z",
+  uploadedAt: "2026-08-15T00:00:50Z",
 };
 
 class FakeMediaRecorder {
@@ -1030,7 +1051,9 @@ describe("RecordingFoundation", () => {
             );
           }
           if (url.endsWith("/cancel") && method === "POST") {
-            return Promise.resolve(new Response(null, { status: 204 }));
+            return Promise.resolve(
+              jsonResponse({ ...baseRecording, lifecycleStatus: "cancelled" }),
+            );
           }
           return Promise.resolve(
             jsonResponse({ code: "unexpected", message: url }, 500),
@@ -1956,8 +1979,12 @@ describe("RecordingFoundation", () => {
   });
 
   it("restores verified chunks and retries finalisation after an interrupted upload", async () => {
-    installSupportedBrowser(() => Promise.reject(new Error("not requested")));
+    const microphone = vi.fn(() => Promise.reject(new Error("not requested")));
+    installSupportedBrowser(microphone);
+    const onFinalized = vi.fn();
+    const onRecoveryResolved = vi.fn();
     let finalized = false;
+    let attempts = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
@@ -1965,26 +1992,25 @@ describe("RecordingFoundation", () => {
         return Promise.resolve(
           jsonResponse([
             {
-              ...baseRecording,
+              ...stoppedRecording,
               lifecycleStatus: finalized ? "uploaded" : "uploading",
               durationSeconds: 60,
-              finalMimeType: "audio/webm",
+              finalMimeType: finalized ? "audio/webm" : null,
               chunkCount: 1,
             },
           ]),
         );
       }
       if (url.endsWith("/chunks")) {
-        return Promise.resolve(
-          jsonResponse([{ sequenceNumber: 0, uploadState: "verified" }]),
-        );
+        return Promise.resolve(jsonResponse([verifiedChunk]));
       }
       if (url.endsWith("/finalize")) {
-        finalized = true;
+        attempts += 1;
+        finalized = attempts > 1;
         return Promise.resolve(
           jsonResponse({
-            ...baseRecording,
-            lifecycleStatus: "uploaded",
+            ...stoppedRecording,
+            lifecycleStatus: finalized ? "uploaded" : "uploading",
             durationSeconds: 60,
             finalMimeType: "audio/webm",
             chunkCount: 1,
@@ -2017,14 +2043,28 @@ describe("RecordingFoundation", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(
-      <RecordingFoundation
-        interactionId="interaction-1"
-        interactionType="face_to_face_meeting"
-        lifecycleStatus="planned"
-      />,
+      <StrictMode>
+        <RecordingFoundation
+          interactionId="interaction-1"
+          interactionType="face_to_face_meeting"
+          lifecycleStatus="in_progress"
+          recoveryRecording={stoppedRecording}
+          onFinalized={onFinalized}
+          onRecoveryResolved={onRecoveryResolved}
+        />
+      </StrictMode>,
     );
 
-    expect(await screen.findByText(/recording was interrupted/i)).toBeVisible();
+    expect(screen.getByText(/finish it there/i)).toBeVisible();
+    expect(microphone).not.toHaveBeenCalled();
+    expect(onFinalized).not.toHaveBeenCalled();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Retry finalisation" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The recording response did not match this interaction.",
+    );
+    expect(onRecoveryResolved).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Retry finalisation" }));
     expect(
       await screen.findByText(
@@ -2035,5 +2075,177 @@ describe("RecordingFoundation", () => {
       expect.stringContaining("/finalize"),
       expect.objectContaining({ method: "POST" }),
     );
+    expect(onFinalized).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: stoppedRecording.id,
+        lifecycleStatus: "uploaded",
+      }),
+    );
+    expect(onRecoveryResolved).toHaveBeenCalledTimes(1);
+    expect(microphone).not.toHaveBeenCalled();
+  });
+
+  it("preserves restored details through a bad chunk refresh and requires a complete verified list before retrying finalisation", async () => {
+    const microphone = vi.fn(() => Promise.reject(new Error("not requested")));
+    installSupportedBrowser(microphone);
+    const onActivityChange = vi.fn();
+    const chunks = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([verifiedChunk]))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { ...verifiedChunk, recordingSessionId: "foreign-recording" },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([{ ...verifiedChunk, sequenceNumber: 2 }]),
+      )
+      .mockResolvedValueOnce(jsonResponse([verifiedChunk]));
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/recordings"))
+        return Promise.resolve(jsonResponse([stoppedRecording]));
+      if (url.endsWith("/chunks")) return chunks();
+      return Promise.resolve(jsonResponse({ featureFlags: {} }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RecordingFoundation
+        interactionId={stoppedRecording.interactionId}
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        recoveryRecording={stoppedRecording}
+        onActivityChange={onActivityChange}
+      />,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Retry finalisation" }),
+    ).toBeEnabled();
+    const refresh = screen.getByRole("button", {
+      name: "Refresh recording status",
+    });
+    fireEvent.click(refresh);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The saved recording chunks could not be verified.",
+    );
+    expect(screen.getByText("1 secure chunk uploaded")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Retry finalisation" }),
+    ).not.toBeInTheDocument();
+    expect(onActivityChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ blocksInteractionCompletion: true }),
+    );
+
+    fireEvent.click(refresh);
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Retry finalisation" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(refresh);
+    expect(
+      await screen.findByRole("button", { name: "Retry finalisation" }),
+    ).toBeEnabled();
+    expect(microphone).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        /\/(start|stop|cancel|finalize)$/u.test(String(input)),
+      ),
+    ).toBe(false);
+  });
+
+  it("requires an exact cancellation acknowledgement before releasing the recovery block", async () => {
+    const onRecoveryResolved = vi.fn();
+    const onActivityChange = vi.fn();
+    const cancel = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...stoppedRecording,
+          id: "other-recording",
+          lifecycleStatus: "cancelled",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...stoppedRecording, lifecycleStatus: "cancelled" }),
+      );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/recordings"))
+          return Promise.resolve(jsonResponse([stoppedRecording]));
+        if (url.endsWith("/chunks")) return Promise.resolve(jsonResponse([]));
+        if (url.endsWith("/cancel")) return cancel();
+        return Promise.resolve(jsonResponse({ featureFlags: {} }));
+      }),
+    );
+    render(
+      <RecordingFoundation
+        interactionId={stoppedRecording.interactionId}
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        recoveryRecording={stoppedRecording}
+        onActivityChange={onActivityChange}
+        onRecoveryResolved={onRecoveryResolved}
+      />,
+    );
+    const cancelButton = await screen.findByRole("button", {
+      name: "Cancel recording",
+    });
+    await waitFor(() => expect(cancelButton).toBeEnabled());
+    fireEvent.click(cancelButton);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The recording response did not match this interaction.",
+    );
+    expect(onRecoveryResolved).not.toHaveBeenCalled();
+    expect(onActivityChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ blocksInteractionCompletion: true }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
+    await waitFor(() => expect(onRecoveryResolved).toHaveBeenCalledOnce());
+    expect(onRecoveryResolved).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: stoppedRecording.id,
+        lifecycleStatus: "cancelled",
+      }),
+    );
+    expect(onActivityChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ blocksInteractionCompletion: false }),
+    );
+  });
+
+  it("notifies Companion of verified absence when another tab removes the known recording", async () => {
+    const onRecoveryListVerified = vi.fn();
+    const onActivityChange = vi.fn();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/recordings")) return Promise.resolve(jsonResponse([]));
+      return Promise.resolve(jsonResponse({ featureFlags: {} }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RecordingFoundation
+        interactionId={stoppedRecording.interactionId}
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        recoveryRecording={stoppedRecording}
+        onActivityChange={onActivityChange}
+        onRecoveryListVerified={onRecoveryListVerified}
+      />,
+    );
+    await waitFor(() =>
+      expect(onRecoveryListVerified).toHaveBeenCalledWith([]),
+    );
+    expect(onActivityChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        blocksInteractionCompletion: false,
+        recording: null,
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Cancel recording" }),
+    ).not.toBeInTheDocument();
   });
 });

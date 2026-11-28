@@ -13,7 +13,8 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from httpx import Response
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.auth import get_current_user
@@ -218,6 +219,112 @@ def test_recording_creation_is_consent_gated_idempotent_and_tenant_scoped(
     hidden = recording_client.get(f"/api/v1/interactions/{interaction_id}/recordings/{created['id']}")
     assert hidden.status_code == 404
     recording_app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("completion_path", ["conversation", "interaction_edit", "meeting_edit"])
+def test_interaction_completion_waits_for_live_capture_but_allows_stopped_upload(
+    recording_client: TestClient,
+    completion_path: str,
+) -> None:
+    meeting = create_meeting(recording_client, title="Live recording at completion")
+    interaction_id = str(meeting["interactionId"])
+    interaction_path = f"/api/v1/interactions/{interaction_id}"
+    meeting_path = f"/api/v1/meetings/{meeting['id']}"
+    started = recording_client.post(f"{interaction_path}/start", json={"actualStartAt": "2026-08-01T10:00:00+10:00"})
+    assert started.status_code == 200, started.text
+    recording_id = str(_create_recording(recording_client, interaction_id)["id"])
+    _start(recording_client, interaction_id, recording_id)
+    _start(recording_client, interaction_id, recording_id)
+
+    def end_conversation() -> Response:
+        if completion_path == "interaction_edit":
+            return recording_client.patch(interaction_path, json={"lifecycleStatus": "completed"})
+        if completion_path == "meeting_edit":
+            return recording_client.patch(meeting_path, json={"status": "completed"})
+        return recording_client.post(f"{interaction_path}/complete", json={})
+
+    blocked = end_conversation()
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "live_recording_in_progress"
+    assert blocked.json()["message"] == (
+        "Finish recording in its original tab or cancel the interrupted recording before ending this conversation."
+    )
+    unchanged = recording_client.get(interaction_path).json()
+    assert unchanged["lifecycleStatus"] == "in_progress"
+    assert unchanged["actualEndAt"] is None
+    assert recording_client.get(meeting_path).json()["status"] == "scheduled"
+    assert (
+        recording_client.get(f"{interaction_path}/recordings/{recording_id}").json()["lifecycleStatus"] == "recording"
+    )
+
+    _stop(recording_client, interaction_id, recording_id)
+    ended = end_conversation()
+    assert ended.status_code == 200, ended.text
+    assert recording_client.get(interaction_path).json()["lifecycleStatus"] == "completed"
+    assert recording_client.get(meeting_path).json()["status"] == "completed"
+    _upload_chunk(recording_client, interaction_id, recording_id, 0, b"\x1aE\xdf\xa3synthetic")
+    finalized = _finalize(recording_client, interaction_id, recording_id, last_sequence_number=0)
+    assert isinstance(finalized, Response)
+    assert finalized.status_code == 200
+    assert finalized.json()["lifecycleStatus"] == "uploaded"
+
+
+@pytest.mark.parametrize("terminal_status", ["completed", "cancelled"])
+def test_precreated_live_recording_cannot_start_after_interaction_ends(
+    recording_client: TestClient,
+    terminal_status: str,
+) -> None:
+    meeting = create_meeting(recording_client, title="Interaction ends before recording starts")
+    interaction_id = str(meeting["interactionId"])
+    path = f"/api/v1/interactions/{interaction_id}"
+    recording_id = str(_create_recording(recording_client, interaction_id)["id"])
+    recording_path = f"{path}/recordings/{recording_id}"
+    if terminal_status == "completed":
+        assert recording_client.post(f"{path}/complete", json={}).status_code == 200
+    else:
+        assert recording_client.patch(path, json={"lifecycleStatus": "cancelled"}).status_code == 200
+
+    started = recording_client.post(f"{recording_path}/start", json={"idempotencyKey": "late-start"})
+    assert started.status_code == 409
+    assert started.json()["code"] == "interaction_not_recordable"
+    assert recording_client.get(recording_path).json()["lifecycleStatus"] == "created"
+    assert recording_client.get(path).json()["lifecycleStatus"] == terminal_status
+    cancelled = recording_client.post(f"{recording_path}/cancel", json={"idempotencyKey": "cancel-interrupted"})
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["lifecycleStatus"] == "cancelled"
+
+
+def test_expired_or_unrelated_live_recording_does_not_block_completion(recording_client: TestClient) -> None:
+    first = create_meeting(recording_client, title="Recording that will expire")
+    interaction_id = str(first["interactionId"])
+    recording_id = str(_create_recording(recording_client, interaction_id)["id"])
+    _start(recording_client, interaction_id, recording_id)
+
+    unrelated = create_meeting(recording_client, title="Unrelated interaction")
+    unrelated_path = f"/api/v1/interactions/{unrelated['interactionId']}"
+    assert recording_client.post(f"{unrelated_path}/complete", json={}).status_code == 200
+
+    async def expire_recording() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with factory() as session, session.begin():
+                await session.execute(
+                    update(RecordingSession)
+                    .where(
+                        RecordingSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                        RecordingSession.interaction_id == UUID(interaction_id),
+                        RecordingSession.id == UUID(recording_id),
+                    )
+                    .values(session_expires_at=datetime.now(UTC) - timedelta(minutes=1))
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(expire_recording())
+    path = f"/api/v1/interactions/{interaction_id}"
+    assert recording_client.post(f"{path}/complete", json={}).status_code == 200
+    assert recording_client.get(f"{path}/recordings/{recording_id}").json()["lifecycleStatus"] == "recording"
 
 
 def test_authorised_phone_recording_import_preserves_source_and_reuses_batch_transcription(

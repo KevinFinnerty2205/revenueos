@@ -290,7 +290,25 @@ class RecordingService:
     ) -> RecordingSessionResponse:
         del request
         self.beta.require_feature("recordingCapture")
+        # Conversation completion uses the same parent lock. Hold it before the
+        # recording lock so a newly armed live recording cannot race an End.
+        interaction = await self.repository.get_interaction(
+            self.tenant.organisation_id,
+            interaction_id,
+            for_update=True,
+        )
+        if interaction is None:
+            raise PublicAPIError("recording_not_found", "The requested recording was not found.", 404)
         recording = await self._require_recording(interaction_id, recording_id, for_update=True, mutate=True)
+        if recording.recording_type == "live_audio_recording":
+            if interaction.lifecycle_status == "completed":
+                raise PublicAPIError(
+                    "interaction_not_recordable",
+                    "A completed interaction cannot start a new live recording. Upload authorised audio instead.",
+                    409,
+                )
+            if interaction.lifecycle_status == "cancelled":
+                raise PublicAPIError("interaction_not_recordable", "A cancelled interaction cannot be recorded.", 409)
         self._ensure_session_active(recording)
         if recording.lifecycle_status in {"recording", "uploading"}:
             return self._response(recording)

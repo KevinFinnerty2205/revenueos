@@ -36,13 +36,16 @@ import {
 import {
   assertRecordingChunkCompletionIdentity,
   assertRecordingChunkUploadIdentity,
+  verifyRestoredRecordingChunks,
   type RecordingChunkCompletion,
 } from "@/lib/recording-chunk-upload";
 import {
+  decodeRecordingSessionForInteraction,
+  decodeRecordingSessionsForInteraction,
+  isUnfinishedBrowserRecording,
   RecordingSessionIdentityError,
   validateCreatedRecordingSession,
   validateRecordingSession,
-  validateRecordingSessionsForInteraction,
   validateRecordingTranscription,
 } from "@/lib/recording-session-identity";
 
@@ -58,6 +61,33 @@ const CANCELLABLE_RECORDING_STATES = new Set<
   RecordingSession["lifecycleStatus"]
 >(["created", "recording", "uploading", "failed"]);
 const MAX_VISIBLE_PROGRESSIVE_ITEMS = 120;
+
+function isUnfinishedUpload(recording: RecordingSession): boolean {
+  return ["created", "recording", "uploading"].includes(
+    recording.lifecycleStatus,
+  );
+}
+
+function isFinalizedUpload(recording: RecordingSession): boolean {
+  return ["uploaded", "transcribing", "completed"].includes(
+    recording.lifecycleStatus,
+  );
+}
+
+function validateFinalizedRecording(
+  value: unknown,
+  current: RecordingSession,
+): RecordingSession {
+  const finalised = validateRecordingSession(
+    decodeRecordingSessionForInteraction(value, current.interactionId),
+    current,
+    { finalMimeState: "finalised" },
+  );
+  if (!isFinalizedUpload(finalised)) {
+    throw new RecordingSessionIdentityError();
+  }
+  return finalised;
+}
 
 export function reconcileProgressiveTranscriptEvents(
   current: readonly ProgressiveTranscriptEvent[],
@@ -285,6 +315,9 @@ export function RecordingFoundation({
   onActivityChange,
   onElapsedSecondsChange,
   onFinalized,
+  recoveryRecording,
+  onRecoveryResolved,
+  onRecoveryListVerified,
   liveNotes,
   onLiveNotesChange,
   onSaveLiveNotes,
@@ -302,6 +335,9 @@ export function RecordingFoundation({
   onActivityChange?: (activity: RecordingActivity) => void;
   onElapsedSecondsChange?: (seconds: number) => void;
   onFinalized?: (recording: RecordingSession) => void;
+  recoveryRecording?: RecordingSession;
+  onRecoveryResolved?: (recording: RecordingSession) => void;
+  onRecoveryListVerified?: (recordings: RecordingSession[]) => void;
   liveNotes?: string;
   onLiveNotesChange?: (value: string) => void;
   onSaveLiveNotes?: () => void;
@@ -309,8 +345,12 @@ export function RecordingFoundation({
   liveNotesStatus?: string | null;
   showLiveNotes?: boolean;
 }) {
-  const [state, setState] = useState<RecorderState>("checking");
-  const [recording, setRecording] = useState<RecordingSession | null>(null);
+  const [state, setState] = useState<RecorderState>(
+    recoveryRecording ? "interrupted" : "checking",
+  );
+  const [recording, setRecording] = useState<RecordingSession | null>(
+    recoveryRecording ?? null,
+  );
   const [transcription, setTranscription] =
     useState<RecordingTranscription | null>(null);
   const [consentConfirmed, setConsentConfirmed] = useState(false);
@@ -345,10 +385,22 @@ export function RecordingFoundation({
   const [progressiveTranscriptEvents, setProgressiveTranscriptEvents] =
     useState<ProgressiveTranscriptEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [historyNeedsRetry, setHistoryNeedsRetry] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [restoredLastSequence, setRestoredLastSequence] = useState<
+    number | null
+  >(null);
+  const [cancelling, setCancelling] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioCaptureRef = useRef<BrowserAudioCaptureSession | null>(null);
   const unsubscribeCaptureRef = useRef<(() => void) | null>(null);
-  const recordingRef = useRef<RecordingSession | null>(null);
+  const recordingRef = useRef<RecordingSession | null>(
+    recoveryRecording ?? null,
+  );
+  const recoveryRecordingRef = useRef(recoveryRecording);
+  const recoveryRecordingId = recoveryRecording?.id;
+  const idleStateRef = useRef<"ready" | "unsupported">("unsupported");
+  const resolutionPendingRef = useRef(false);
   const mimeTypeRef = useRef<string | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const pausedAtRef = useRef<number | null>(null);
@@ -377,79 +429,131 @@ export function RecordingFoundation({
     null,
   );
 
+  useLayoutEffect(() => {
+    recoveryRecordingRef.current = recoveryRecording;
+  }, [recoveryRecording]);
+
+  useLayoutEffect(
+    () => () => loadAbortControllerRef.current?.abort(),
+    [interactionId, recoveryRecordingId],
+  );
+
   const load = useCallback(async () => {
+    const prior = recordingRef.current;
+    if (recorderActiveRef.current && prior && isUnfinishedUpload(prior)) return;
     const generation = loadGenerationRef.current + 1;
     loadGenerationRef.current = generation;
     loadAbortControllerRef.current?.abort();
     const controller = new AbortController();
     loadAbortControllerRef.current = controller;
+    const expected =
+      recoveryRecordingRef.current ??
+      (prior && isUnfinishedUpload(prior) ? prior : null);
     const isCurrent = () =>
       mountedRef.current &&
       !controller.signal.aborted &&
       loadGenerationRef.current === generation;
 
+    setHistoryLoading(true);
+    setRestoredLastSequence(null);
     try {
-      const recordings = validateRecordingSessionsForInteraction(
-        await apiRequest<RecordingSession[]>(
-          `/api/v1/interactions/${interactionId}/recordings`,
-          { signal: controller.signal },
-        ),
+      const basePath = `/api/v1/interactions/${encodeURIComponent(interactionId)}/recordings`;
+      const recordings = decodeRecordingSessionsForInteraction(
+        await apiRequest<unknown>(basePath, { signal: controller.signal }),
         interactionId,
       );
       if (!isCurrent()) return;
-      const latest = recordings[0] ?? null;
-      setRecording(latest);
-      recordingRef.current = latest;
-      if (!latest) {
+      const restored = expected
+        ? recordings.find((item) => item.id === expected.id)
+        : undefined;
+      if (restored && expected) {
+        validateRecordingSession(restored, expected, {
+          finalMimeState: isFinalizedUpload(restored) ? "finalised" : "either",
+        });
+      }
+      const latest =
+        (restored && isUnfinishedUpload(restored) ? restored : null) ??
+        recordings.find((item) => isUnfinishedBrowserRecording(item)) ??
+        restored ??
+        recordings[0] ??
+        null;
+      if (latest?.id !== prior?.id) {
+        setUploadedChunks(0);
+        nextSequenceRef.current = 0;
+      }
+      const available =
+        latest &&
+        ["cancelled", "deleting", "deleted"].includes(latest.lifecycleStatus)
+          ? null
+          : latest;
+      setRecording(available);
+      recordingRef.current = available;
+      if (
+        expected ||
+        (!locallyStartedSessionRef.current &&
+          available &&
+          isUnfinishedBrowserRecording(available))
+      ) {
+        onRecoveryListVerified?.(recordings);
+      }
+      setHistoryNeedsRetry(false);
+      if (!available) {
         setTranscription(null);
         transcriptionRecordingIdRef.current = null;
+        setElapsedSeconds(0);
+        if (expected) {
+          locallyStartedSessionRef.current = false;
+          pendingChunksRef.current.clear();
+          setPendingChunkCount(0);
+        }
+        setState(idleStateRef.current);
         setError(null);
         return;
       }
       if (
         ["uploaded", "transcribing", "completed", "failed"].includes(
-          latest.lifecycleStatus,
+          available.lifecycleStatus,
         )
       ) {
-        if (transcriptionRecordingIdRef.current !== latest.id) {
+        if (transcriptionRecordingIdRef.current !== available.id) {
           setTranscription(null);
           transcriptionRecordingIdRef.current = null;
         }
         setState("processing");
         const response = await apiRequest<RecordingTranscription>(
-          `/api/v1/interactions/${interactionId}/recordings/${latest.id}/transcription`,
+          `${basePath}/${encodeURIComponent(available.id)}/transcription`,
           { signal: controller.signal },
         );
         if (!isCurrent()) return;
-        const transcript = validateRecordingTranscription(response, latest.id);
+        const transcript = validateRecordingTranscription(
+          response,
+          available.id,
+        );
         setTranscription(transcript);
-        transcriptionRecordingIdRef.current = latest.id;
+        transcriptionRecordingIdRef.current = available.id;
         setState(
           transcript.status === "completed" ? "completed" : "processing",
         );
         setError(null);
-      } else if (
-        ["created", "recording", "uploading"].includes(latest.lifecycleStatus)
-      ) {
+      } else if (isUnfinishedUpload(available)) {
         setTranscription(null);
         transcriptionRecordingIdRef.current = null;
         setState("interrupted");
-        const chunks = await apiRequest<
-          Array<{ sequenceNumber: number; uploadState: string }>
-        >(
-          `/api/v1/interactions/${interactionId}/recordings/${latest.id}/chunks`,
+        setElapsedSeconds(available.durationSeconds ?? 0);
+        const chunks = await apiRequest<unknown>(
+          `${basePath}/${encodeURIComponent(available.id)}/chunks`,
           { signal: controller.signal },
         );
         if (!isCurrent()) return;
-        const verified = chunks.filter(
-          (chunk) => chunk.uploadState === "verified",
+        const { verifiedCount, lastVerifiedSequence } =
+          verifyRestoredRecordingChunks(chunks, available.id);
+        if (!recorderActiveRef.current) cancelledRef.current = false;
+        setUploadedChunks(verifiedCount);
+        setRestoredLastSequence(
+          available.durationSeconds && available.durationSeconds > 0
+            ? lastVerifiedSequence
+            : null,
         );
-        setUploadedChunks(verified.length);
-        nextSequenceRef.current =
-          verified.length === 0
-            ? 0
-            : Math.max(...verified.map((chunk) => chunk.sequenceNumber)) + 1;
-        setElapsedSeconds(latest.durationSeconds ?? 0);
         setError(null);
       } else {
         setTranscription(null);
@@ -458,6 +562,14 @@ export function RecordingFoundation({
       }
     } catch (requestError: unknown) {
       if (!isCurrent()) return;
+      if (
+        idleStateRef.current === "unsupported" &&
+        !recordingRef.current &&
+        !expected
+      ) {
+        return;
+      }
+      setHistoryNeedsRetry(true);
       if (requestError instanceof RecordingSessionIdentityError) {
         setTranscription(null);
         transcriptionRecordingIdRef.current = null;
@@ -470,9 +582,10 @@ export function RecordingFoundation({
     } finally {
       if (loadAbortControllerRef.current === controller) {
         loadAbortControllerRef.current = null;
+        if (isCurrent()) setHistoryLoading(false);
       }
     }
-  }, [interactionId]);
+  }, [interactionId, onRecoveryListVerified]);
 
   useEffect(() => {
     let cancelled = false;
@@ -494,27 +607,21 @@ export function RecordingFoundation({
       const supported =
         support.microphoneOnly &&
         selectSupportedRecordingMimeType(globalThis.MediaRecorder) !== null;
-      if (!supported) {
-        if (!cancelled) setState("unsupported");
-      } else if (!cancelled) {
-        setState("ready");
+      if (cancelled) return;
+      idleStateRef.current = supported ? "ready" : "unsupported";
+      if (
+        !supported &&
+        !recordingRef.current &&
+        !recoveryRecordingRef.current
+      ) {
+        setState("unsupported");
       }
-      try {
-        await load();
-      } catch (requestError: unknown) {
-        if (!cancelled) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Recordings could not be loaded.",
-          );
-        }
-      }
+      await load();
     });
     return () => {
       cancelled = true;
     };
-  }, [interactionType, load]);
+  }, [interactionType, load, recoveryRecordingId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -665,11 +772,23 @@ export function RecordingFoundation({
       state,
       active,
       blocksInteractionCompletion:
-        active || state === "requesting_permission" || pendingChunkCount > 0,
+        active ||
+        cancelling ||
+        state === "requesting_permission" ||
+        pendingChunkCount > 0 ||
+        (recording !== null && isUnfinishedBrowserRecording(recording)),
       elapsedSeconds,
       recording,
     });
-  }, [elapsedSeconds, onActivityChange, pendingChunkCount, recording, state]);
+  }, [
+    cancelling,
+    elapsedSeconds,
+    onActivityChange,
+    pendingChunkCount,
+    recording,
+    recoveryRecordingId,
+    state,
+  ]);
 
   useEffect(() => {
     onElapsedSecondsChange?.(elapsedSeconds);
@@ -677,6 +796,7 @@ export function RecordingFoundation({
 
   useEffect(() => {
     mountedRef.current = true;
+    cancelledRef.current = false;
     const pendingChunks = pendingChunksRef.current;
     return () => {
       mountedRef.current = false;
@@ -893,7 +1013,7 @@ export function RecordingFoundation({
   }
 
   async function start() {
-    if (startDisabled) return;
+    if (startDisabled || recoveryRecordingRef.current || historyLoading) return;
     if (!consentConfirmed) {
       setError("Confirm consent and authority before recording.");
       return;
@@ -1278,13 +1398,15 @@ export function RecordingFoundation({
       if (captureUploadCancelled(captureGeneration)) return;
       setRecording(stopped);
       recordingRef.current = stopped;
-      const finalized = validateRecordingSession(
-        await apiRequest<RecordingSession>(
+      const lastSequence = nextSequenceRef.current - 1;
+      setRestoredLastSequence(lastSequence >= 0 ? lastSequence : null);
+      const finalized = validateFinalizedRecording(
+        await apiRequest<unknown>(
           `/api/v1/interactions/${interactionId}/recordings/${current.id}/finalize`,
           {
             method: "POST",
             body: JSON.stringify({
-              lastSequenceNumber: nextSequenceRef.current - 1,
+              lastSequenceNumber: lastSequence,
               durationSeconds,
               finalMimeType: normaliseMimeType(
                 mimeTypeRef.current ?? "audio/webm",
@@ -1294,7 +1416,6 @@ export function RecordingFoundation({
           },
         ),
         stopped,
-        { finalMimeState: "finalised" },
       );
       if (captureUploadCancelled(captureGeneration)) return;
       setRecording(finalized);
@@ -1324,23 +1445,30 @@ export function RecordingFoundation({
   async function retryFinalization() {
     const captureGeneration = captureGenerationRef.current;
     const current = recordingRef.current;
+    const lastSequence = restoredLastSequence;
     if (
       captureUploadCancelled(captureGeneration) ||
+      resolutionPendingRef.current ||
+      historyLoading ||
       !current ||
       current.lifecycleStatus !== "uploading" ||
-      nextSequenceRef.current === 0
+      lastSequence === null ||
+      lastSequence < 0 ||
+      pendingChunksRef.current.size > 0 ||
+      !isUnfinishedBrowserRecording(current)
     )
       return;
+    resolutionPendingRef.current = true;
     setState("uploading");
     setError(null);
     try {
-      const finalized = validateRecordingSession(
-        await apiRequest<RecordingSession>(
+      const finalized = validateFinalizedRecording(
+        await apiRequest<unknown>(
           `/api/v1/interactions/${interactionId}/recordings/${current.id}/finalize`,
           {
             method: "POST",
             body: JSON.stringify({
-              lastSequenceNumber: nextSequenceRef.current - 1,
+              lastSequenceNumber: lastSequence,
               durationSeconds:
                 current.durationSeconds ?? Math.max(1, elapsedSeconds),
               finalMimeType: current.finalMimeType ?? current.expectedMimeType,
@@ -1349,22 +1477,26 @@ export function RecordingFoundation({
           },
         ),
         current,
-        { finalMimeState: "finalised" },
       );
       if (captureUploadCancelled(captureGeneration)) return;
       setRecording(finalized);
       recordingRef.current = finalized;
       locallyStartedSessionRef.current = false;
       setState("processing");
+      onFinalized?.(finalized);
+      onRecoveryResolved?.(finalized);
       await load();
     } catch (requestError: unknown) {
       if (captureUploadCancelled(captureGeneration)) return;
       setState("failed");
+      setHistoryNeedsRetry(true);
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The recording upload could not be finalised.",
       );
+    } finally {
+      resolutionPendingRef.current = false;
     }
   }
 
@@ -1380,11 +1512,24 @@ export function RecordingFoundation({
   }
 
   async function cancel() {
+    if (resolutionPendingRef.current) return;
+    resolutionPendingRef.current = true;
+    setCancelling(true);
+    try {
+      await cancelRecording();
+    } finally {
+      resolutionPendingRef.current = false;
+      if (mountedRef.current) setCancelling(false);
+    }
+  }
+
+  async function cancelRecording() {
     cancelledRef.current = true;
     captureGenerationRef.current += 1;
     loadGenerationRef.current += 1;
     loadAbortControllerRef.current?.abort();
     loadAbortControllerRef.current = null;
+    setHistoryLoading(false);
     activeChunkAbortControllerRef.current?.abort();
     activeChunkAbortControllerRef.current = null;
     setError(null);
@@ -1406,19 +1551,32 @@ export function RecordingFoundation({
     const current = recordingRef.current;
     if (current) {
       try {
-        await apiRequest(
-          `/api/v1/interactions/${interactionId}/recordings/${current.id}/cancel`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              idempotencyKey: requestKey("recording-cancel"),
-            }),
-          },
+        const cancelled = validateRecordingSession(
+          decodeRecordingSessionForInteraction(
+            await apiRequest<unknown>(
+              `/api/v1/interactions/${encodeURIComponent(interactionId)}/recordings/${encodeURIComponent(current.id)}/cancel`,
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  idempotencyKey: requestKey("recording-cancel"),
+                }),
+              },
+            ),
+            interactionId,
+          ),
+          current,
         );
+        if (!mountedRef.current) return;
+        if (cancelled.lifecycleStatus !== "cancelled") {
+          throw new RecordingSessionIdentityError();
+        }
         locallyStartedSessionRef.current = false;
+        onRecoveryResolved?.(cancelled);
       } catch (requestError: unknown) {
         if (!mountedRef.current) return;
         setState("failed");
+        setRestoredLastSequence(null);
+        setHistoryNeedsRetry(true);
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -1432,13 +1590,25 @@ export function RecordingFoundation({
     setRecording(null);
     setElapsedSeconds(0);
     setUploadedChunks(0);
+    setRestoredLastSequence(null);
+    setHistoryNeedsRetry(false);
     pendingChunksRef.current.clear();
     setPendingChunkCount(0);
     setConsentConfirmed(false);
-    setState("ready");
+    setState(idleStateRef.current);
   }
 
   const active = ["recording", "paused", "uploading"].includes(state);
+  const pendingBrowserRecording =
+    recording !== null && isUnfinishedBrowserRecording(recording);
+  const recovering = recoveryRecording !== undefined || state === "interrupted";
+  const canRetryFinalization =
+    !historyLoading &&
+    !cancelling &&
+    pendingChunkCount === 0 &&
+    recording?.lifecycleStatus === "uploading" &&
+    restoredLastSequence !== null &&
+    pendingBrowserRecording;
   const canCancel =
     active ||
     (recording !== null &&
@@ -1467,18 +1637,22 @@ export function RecordingFoundation({
             id="recording-foundation-title"
             className="mt-1 text-2xl font-semibold text-slate-950"
           >
-            Record interaction
+            {recovering ? "Recover recording" : "Record interaction"}
           </h2>
         </div>
-        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">
-          Keep this page open
-        </span>
+        {!recovering ? (
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">
+            Keep this page open
+          </span>
+        ) : null}
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">
-        Browser recording may stop if this page closes, your device locks, or
-        the browser moves to the background. Completed chunks can be retried
-        until the session expires.
-      </p>
+      {!recovering ? (
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          Browser recording may stop if this page closes, your device locks, or
+          the browser moves to the background. Completed chunks can be retried
+          until the session expires.
+        </p>
+      ) : null}
 
       {showLiveNotes ? (
         <ConversationLiveNotes
@@ -1526,7 +1700,8 @@ export function RecordingFoundation({
         </div>
       ) : (
         <>
-          {state === "ready" || (state === "failed" && !recording) ? (
+          {(state === "ready" || (state === "failed" && !recording)) &&
+          !recoveryRecording ? (
             <>
               {interactionType === "online_meeting" ? (
                 <fieldset className="mt-5 rounded-xl border border-slate-200 p-4">
@@ -1610,9 +1785,11 @@ export function RecordingFoundation({
               role="status"
               className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
             >
-              This recording was interrupted. Verified chunks are still
-              available. If stopping had completed, retry finalisation;
-              otherwise cancel this session and start again.
+              An unfinished recording was found. If it is still recording in the
+              original tab, finish it there. The microphone is off in this tab.
+              {recording?.lifecycleStatus === "uploading"
+                ? " You can finalise here once all saved chunks are verified."
+                : null}
             </p>
           ) : null}
 
@@ -1697,11 +1874,13 @@ export function RecordingFoundation({
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            {(state === "ready" || state === "failed") && !recording ? (
+            {(state === "ready" || state === "failed") &&
+            !recording &&
+            !recoveryRecording ? (
               <button
                 type="button"
                 className="primary-button min-h-12 px-6"
-                disabled={startDisabled || !consentConfirmed}
+                disabled={startDisabled || historyLoading || !consentConfirmed}
                 onClick={() => void start()}
               >
                 {interactionType === "online_meeting"
@@ -1739,8 +1918,7 @@ export function RecordingFoundation({
               </button>
             ) : null}
             {(state === "interrupted" || state === "failed") &&
-            recording?.lifecycleStatus === "uploading" &&
-            uploadedChunks > 0 ? (
+            canRetryFinalization ? (
               <button
                 type="button"
                 className="primary-button min-h-12 px-6"
@@ -1763,9 +1941,21 @@ export function RecordingFoundation({
               <button
                 type="button"
                 className="secondary-button min-h-12 px-6"
+                disabled={cancelling || historyLoading}
                 onClick={() => void cancel()}
               >
                 Cancel recording
+              </button>
+            ) : null}
+            {(state === "interrupted" || historyNeedsRetry) &&
+            state !== "processing" ? (
+              <button
+                type="button"
+                className="secondary-button min-h-12 px-6"
+                disabled={cancelling || historyLoading || active}
+                onClick={() => void load()}
+              >
+                Refresh recording status
               </button>
             ) : null}
             {state === "processing" ? (

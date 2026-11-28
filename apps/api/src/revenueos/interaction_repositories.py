@@ -309,7 +309,7 @@ class InteractionRepository:
             )
         )
         if for_update:
-            statement = statement.with_for_update(of=Interaction)
+            statement = statement.with_for_update(of=Interaction).execution_options(populate_existing=True)
         row = (await self.session.execute(statement)).one_or_none()
         if row is None:
             return None

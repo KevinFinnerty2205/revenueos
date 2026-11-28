@@ -55,8 +55,17 @@ receives a narrow activity projection from the recording component:
 
 The interaction cannot complete while audio permissions are pending, recording
 is active, finalisation is in progress, or audio remains queued in the current
-tab. These checks also run after a pending private-note save. A backend rule separately
-rejects a second active recording session for the same tenant Interaction.
+tab. These checks also run after a pending private-note save. A verified, unexpired
+unfinished recording opens recovery controls even in a passive tab. Recovery
+keeps private notes editable and requires a deliberate action to finalise or
+cancel the recording. Refresh reads the current session again when another tab
+finishes it or recovery data could not be verified.
+
+The API serialises live recording start and conversation completion. Completion
+rejects an unexpired recording that is still capturing for that Interaction,
+including when it started in another tab after the current page loaded. On
+that conflict, the Companion attempts to refresh recording state without
+interrupting private notes.
 
 ## Marker state
 
