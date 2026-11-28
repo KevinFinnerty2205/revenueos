@@ -49,7 +49,6 @@ from revenueos.models import (
     LiveInteractionSession,
     LiveProcessingWindow,
     Meeting,
-    PreInteractionBrief,
     ProvisionalSignal,
     RevenueBrainInteractionSnapshot,
     Transcript,
@@ -820,24 +819,19 @@ def test_live_response_and_dismiss_child_substitutions_fail_closed(
     assert wrong_progress.status_code == 500
     assert wrong_progress.json()["code"] == "live_intelligence_identity_mismatch"
 
-    async def substituted_brief(
+    async def missing_bound_brief(
         repository: LiveIntelligenceRepository,
         organisation_id: UUID,
         requested_interaction_id: UUID,
         requested_brief_id: UUID,
-    ) -> PreInteractionBrief:
-        del repository, requested_interaction_id
-        return PreInteractionBrief(
-            id=requested_brief_id,
-            organisation_id=organisation_id,
-            interaction_id=uuid4(),
-        )
+    ) -> None:
+        del repository, organisation_id, requested_interaction_id, requested_brief_id
 
     with monkeypatch.context() as scoped:
-        scoped.setattr(LiveIntelligenceRepository, "brief_by_id", substituted_brief)
-        wrong_brief = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
-    assert wrong_brief.status_code == 500
-    assert wrong_brief.json()["code"] == "live_intelligence_identity_mismatch"
+        scoped.setattr(LiveIntelligenceRepository, "brief_by_id", missing_bound_brief)
+        missing_brief = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert missing_brief.status_code == 500
+    assert missing_brief.json()["code"] == "live_intelligence_identity_mismatch"
 
     requested_signal_id = uuid4()
 

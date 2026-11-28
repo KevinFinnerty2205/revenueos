@@ -373,7 +373,9 @@ class LiveInteractionIntelligenceService:
             if live_session.brief_id is not None
             else None
         )
-        if brief is not None:
+        if live_session.brief_id is not None:
+            if brief is None:
+                raise self._identity_mismatch()
             self._require_brief_identity(
                 interaction_id,
                 brief,
@@ -697,7 +699,9 @@ class LiveInteractionIntelligenceService:
             self._require_signal_identity(live_session, signal)
         for item in progress:
             self._require_progress_identity(live_session, item)
-        if brief is not None:
+        if live_session.brief_id is not None:
+            if brief is None:
+                raise self._identity_mismatch()
             self._require_brief_identity(
                 interaction.id,
                 brief,
