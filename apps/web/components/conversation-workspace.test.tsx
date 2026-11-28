@@ -439,11 +439,13 @@ describe("ConversationWorkspace", () => {
       id: "call-1",
       lifecycleStatus: "completed",
     });
-    expect(state.reviewLoaded).toHaveBeenLastCalledWith({
-      interactionId: "call-2",
-      id: "call-2",
-      lifecycleStatus: "completed",
-    });
+    await waitFor(() =>
+      expect(state.reviewLoaded).toHaveBeenLastCalledWith({
+        interactionId: "call-2",
+        id: "call-2",
+        lifecycleStatus: "completed",
+      }),
+    );
     expect(
       state.reviewLoaded.mock.calls.every(
         ([loaded]) => loaded.interactionId === loaded.id,
