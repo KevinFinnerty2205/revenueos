@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from revenueos.errors import PublicAPIError
 from revenueos.recording_contracts import RecordingLifecycleStatus
+from revenueos.recording_repositories import RecordingRepository
 
 ALLOWED_RECORDING_TRANSITIONS: dict[RecordingLifecycleStatus, frozenset[RecordingLifecycleStatus]] = {
     "created": frozenset({"recording", "uploading", "cancelled", "deleting"}),
@@ -15,6 +21,22 @@ ALLOWED_RECORDING_TRANSITIONS: dict[RecordingLifecycleStatus, frozenset[Recordin
     "deleting": frozenset({"deleted"}),
     "deleted": frozenset(),
 }
+
+
+async def require_live_recording_finished(
+    session: AsyncSession,
+    organisation_id: UUID,
+    interaction_id: UUID,
+) -> None:
+    """Check for live capture under the caller's Interaction row lock."""
+    if await RecordingRepository(session).has_live_recording_in_progress(
+        organisation_id, interaction_id, datetime.now(UTC)
+    ):
+        raise PublicAPIError(
+            "live_recording_in_progress",
+            "Finish recording in its original tab or cancel the interrupted recording before ending this conversation.",
+            409,
+        )
 
 
 def transition_recording(

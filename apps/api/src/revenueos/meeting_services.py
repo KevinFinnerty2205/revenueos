@@ -8,7 +8,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.business_repositories import PageResult
-from revenueos.domain import InteractionAuditAction, MeetingAuditAction, MeetingAuditEntityType
+from revenueos.domain import (
+    InteractionAuditAction,
+    InteractionLifecycleStatus,
+    MeetingAuditAction,
+    MeetingAuditEntityType,
+)
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_compatibility import (
     interaction_status_for_meeting,
@@ -38,6 +43,7 @@ from revenueos.models import (
     TranscriptVersion,
 )
 from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
+from revenueos.recording_lifecycle import require_live_recording_finished
 from revenueos.tenant import TenantContext
 
 
@@ -411,6 +417,13 @@ class MeetingService(_MeetingDomainService):
                     "invalid_lifecycle_transition",
                     f"An interaction cannot move from {interaction.lifecycle_status} to {target_status}.",
                     409,
+                )
+            if (
+                target_status == InteractionLifecycleStatus.COMPLETED.value
+                and interaction.lifecycle_status != InteractionLifecycleStatus.COMPLETED.value
+            ):
+                await require_live_recording_finished(
+                    self.repository.session, self.tenant.organisation_id, interaction.id
                 )
         meeting.updated_by = self.tenant.user_id
         self._apply_values(meeting, values)

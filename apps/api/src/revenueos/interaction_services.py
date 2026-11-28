@@ -53,6 +53,7 @@ from revenueos.models import (
 )
 from revenueos.online_meeting_provider import UnsafeMeetingReference, normalize_meeting_reference
 from revenueos.progressive_transcription_registry import ProgressiveTranscriptionRegistry
+from revenueos.recording_lifecycle import require_live_recording_finished
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.interactions")
@@ -468,6 +469,11 @@ class InteractionService:
         retire_progressive_sessions = values.get("lifecycle_status") == InteractionLifecycleStatus.CANCELLED.value
         if "lifecycle_status" in values:
             self._require_transition(interaction.lifecycle_status, values["lifecycle_status"])
+            if (
+                values["lifecycle_status"] == InteractionLifecycleStatus.COMPLETED.value
+                and interaction.lifecycle_status != InteractionLifecycleStatus.COMPLETED.value
+            ):
+                await require_live_recording_finished(self.session, self.tenant.organisation_id, interaction.id)
         company_id = values.get("company_id", interaction.company_id)
         opportunity_id = values.get("opportunity_id", interaction.opportunity_id)
         contact_id = values.get("contact_id", interaction.contact_id)
@@ -678,6 +684,7 @@ class InteractionService:
         if interaction.lifecycle_status == InteractionLifecycleStatus.COMPLETED.value:
             return record
         self._require_transition(interaction.lifecycle_status, InteractionLifecycleStatus.COMPLETED.value)
+        await require_live_recording_finished(self.session, self.tenant.organisation_id, interaction.id)
         actual_end_at = request.actual_end_at or datetime.now(UTC)
         if interaction.actual_start_at is not None and actual_end_at < self._aware(interaction.actual_start_at):
             raise PublicAPIError("invalid_time_range", "actualEndAt cannot be before actualStartAt.", 422)

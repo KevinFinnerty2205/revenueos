@@ -28,7 +28,7 @@ import {
 import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { ConversationWorkspaceConflictRecovery } from "@/components/conversation-workspace-conflict-recovery";
 import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
-import { apiRequest } from "@/lib/api";
+import { ApiClientError, apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import {
   validateCreatedInteractionMarker,
@@ -41,6 +41,8 @@ import { assertPreInteractionBriefIdentity } from "@/lib/pre-interaction-brief-i
 import {
   decodeRecordingSessionForInteraction,
   decodeRecordingSessionsForInteraction,
+  isUnfinishedBrowserRecording,
+  validateRecordingSession,
 } from "@/lib/recording-session-identity";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
 import { validateVisualEvidenceListForInteraction } from "@/lib/visual-evidence-identity";
@@ -88,6 +90,8 @@ const RECORDING_RESPONSE_WARNING =
   "Updated recording details could not be verified. Your private notes remain available.";
 const RECORDING_COMPLETION_WARNING =
   "Finish recording setup and any queued upload before ending the interaction.";
+const RECORDING_RECOVERY_WARNING =
+  "Finish recording in its original tab or resolve the interrupted recording before ending this conversation.";
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -191,6 +195,8 @@ function FaceToFaceCompanionSession({
   const [brief, setBrief] = useState<PreInteractionBriefResponse | null>(null);
   const [markers, setMarkers] = useState<InteractionMarker[]>([]);
   const [recordings, setRecordings] = useState<RecordingSession[]>([]);
+  const [recordingClock, setRecordingClock] = useState(() => Date.now());
+  const [recordingRefreshNeeded, setRecordingRefreshNeeded] = useState(false);
   const [visualCount, setVisualCount] = useState(0);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [companionAvailability, setCompanionAvailability] =
@@ -209,6 +215,15 @@ function FaceToFaceCompanionSession({
   const [error, setError] = useState<string | null>(null);
   const [recordingActivity, setRecordingActivity] =
     useState<RecordingActivity | null>(null);
+  const recordingEnabled = capabilities?.featureFlags.recordingCapture === true;
+  const recoveryRecording =
+    recordingEnabled &&
+    interaction?.lifecycleStatus === "in_progress" &&
+    interaction.interactionType !== "phone_call"
+      ? (recordings.find((recording) =>
+          isUnfinishedBrowserRecording(recording, recordingClock),
+        ) ?? null)
+      : null;
   const sessionActiveRef = useRef(true);
   const recordingBlocksCompletion = useRef(false);
   const elapsedSecondsRef = useRef(0);
@@ -246,6 +261,35 @@ function FaceToFaceCompanionSession({
       sessionActiveRef.current = false;
     };
   }, []);
+
+  const loadRecordings = useCallback(async () => {
+    const response = await apiRequest<unknown>(
+      `/api/v1/interactions/${encodeURIComponent(interactionId)}/recordings`,
+    );
+    return decodeRecordingSessionsForInteraction(response, interactionId);
+  }, [interactionId]);
+
+  const adoptRecordings = useCallback((verified: RecordingSession[]) => {
+    setRecordings(verified);
+    setRecordingClock(Date.now());
+    setRecordingRefreshNeeded(false);
+    if (
+      !verified.some((recording) => isUnfinishedBrowserRecording(recording))
+    ) {
+      setError((current) =>
+        current === RECORDING_RECOVERY_WARNING ? null : current,
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!recoveryRecording) return;
+    const interval = window.setInterval(
+      () => setRecordingClock(Date.now()),
+      15_000,
+    );
+    return () => window.clearInterval(interval);
+  }, [recoveryRecording]);
 
   const fetchCompanion = useCallback(async () => {
     let loadedCapabilities: Capabilities;
@@ -292,10 +336,7 @@ function FaceToFaceCompanionSession({
           (response) => validateInteractionMarkers(response, interactionId),
         ),
         loadedCapabilities.featureFlags.recordingCapture === true
-          ? apiRequest<unknown>(`${interactionPath}/recordings`).then(
-              (response) =>
-                decodeRecordingSessionsForInteraction(response, interactionId),
-            )
+          ? loadRecordings()
           : Promise.resolve<RecordingSession[]>([]),
         loadedCapabilities.featureFlags.visualEvidence === true
           ? apiRequest<unknown>(`${interactionPath}/visual-evidence`).then(
@@ -341,7 +382,7 @@ function FaceToFaceCompanionSession({
       capabilities: loadedCapabilities,
       warnings,
     };
-  }, [interactionId]);
+  }, [interactionId, loadRecordings]);
 
   const applyLoaded = useCallback(
     (loaded: Awaited<ReturnType<typeof fetchCompanion>>) => {
@@ -351,7 +392,7 @@ function FaceToFaceCompanionSession({
         setMarkersAvailable(loaded.markersAvailable);
       }
       setMarkersNeedRefresh(loaded.markers === null);
-      if (loaded.recordings !== null) setRecordings(loaded.recordings);
+      if (loaded.recordings !== null) adoptRecordings(loaded.recordings);
       if (loaded.visualCount !== null) setVisualCount(loaded.visualCount);
       setCapabilities(loaded.capabilities);
       setCompanionAvailability(loaded.availability);
@@ -363,7 +404,7 @@ function FaceToFaceCompanionSession({
         setCaptureChoice(stored);
       }
     },
-    [interactionId, organisationId, userId],
+    [adoptRecordings, interactionId, organisationId, userId],
   );
 
   useEffect(() => {
@@ -466,12 +507,72 @@ function FaceToFaceCompanionSession({
           verified,
           ...current.filter((item) => item.id !== verified.id),
         ]);
+        setRecordingClock(Date.now());
       } catch {
         appendCompanionWarning(RECORDING_RESPONSE_WARNING);
       }
     },
     [appendCompanionWarning, interactionId],
   );
+
+  const handleRecoveryResolved = useCallback(
+    (recording: RecordingSession) => {
+      if (!sessionActiveRef.current || recoveryRecording === null) return;
+      try {
+        const resolved = validateRecordingSession(
+          decodeRecordingSessionForInteraction(recording, interactionId),
+          recoveryRecording,
+        );
+        if (
+          !["uploaded", "transcribing", "completed", "cancelled"].includes(
+            resolved.lifecycleStatus,
+          )
+        )
+          return;
+        setRecordings((current) =>
+          current.map((item) =>
+            item.id === recoveryRecording.id ? resolved : item,
+          ),
+        );
+        setRecordingClock(Date.now());
+        setError((current) =>
+          current === RECORDING_RECOVERY_WARNING ? null : current,
+        );
+        setCaptureChoice((current) =>
+          current === "undecided" ? "passive" : current,
+        );
+      } catch {
+        appendCompanionWarning(RECORDING_RESPONSE_WARNING);
+      }
+    },
+    [appendCompanionWarning, interactionId, recoveryRecording],
+  );
+
+  const handleRecoveryListVerified = useCallback(
+    (verified: RecordingSession[]) => {
+      if (!sessionActiveRef.current) return;
+      adoptRecordings(verified);
+      if (
+        !verified.some((recording) => isUnfinishedBrowserRecording(recording))
+      ) {
+        setCaptureChoice((current) =>
+          current === "undecided" ? "passive" : current,
+        );
+      }
+    },
+    [adoptRecordings],
+  );
+
+  async function refreshRecordingStatus() {
+    try {
+      const verified = await loadRecordings();
+      if (sessionActiveRef.current) adoptRecordings(verified);
+    } catch {
+      if (!sessionActiveRef.current) return;
+      setRecordingRefreshNeeded(true);
+      appendCompanionWarning(RECORDING_RESPONSE_WARNING);
+    }
+  }
 
   useEffect(() => {
     if (briefRefreshKey === 0 || companionAvailability !== "ready") return;
@@ -681,6 +782,10 @@ function FaceToFaceCompanionSession({
   }
 
   async function endInteraction(callOutcome?: CallOutcome) {
+    if (recoveryRecording && isUnfinishedBrowserRecording(recoveryRecording)) {
+      setError(RECORDING_RECOVERY_WARNING);
+      return;
+    }
     if (recordingBlocksCompletion.current) {
       setError(RECORDING_COMPLETION_WARNING);
       return;
@@ -741,11 +846,20 @@ function FaceToFaceCompanionSession({
       applyLoaded(loaded);
     } catch (requestError: unknown) {
       if (!sessionActiveRef.current) return;
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "The interaction could not be completed.",
-      );
+      if (
+        requestError instanceof ApiClientError &&
+        requestError.code === "live_recording_in_progress" &&
+        recordingEnabled
+      ) {
+        setError(RECORDING_RECOVERY_WARNING);
+        await refreshRecordingStatus();
+      } else {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "The interaction could not be completed.",
+        );
+      }
     } finally {
       if (sessionActiveRef.current) setWorking(false);
     }
@@ -777,13 +891,17 @@ function FaceToFaceCompanionSession({
       : interaction.lifecycleStatus === "in_progress"
         ? "DURING"
         : "AFTER";
-  const recordingEnabled = capabilities?.featureFlags.recordingCapture === true;
   const visualEnabled = capabilities?.featureFlags.visualEvidence === true;
   const latestRecording = recordings[0] ?? null;
   const canUseBrowserRecording = interaction.interactionType !== "phone_call";
-  const effectiveCaptureChoice = canUseBrowserRecording
-    ? captureChoice
-    : "passive";
+  const recordingBlocksEnd =
+    recordingActivity?.blocksInteractionCompletion === true ||
+    recoveryRecording !== null;
+  const effectiveCaptureChoice = recordingBlocksEnd
+    ? "recording"
+    : canUseBrowserRecording
+      ? captureChoice
+      : "passive";
   const showCanonicalNotes = phase === "BEFORE" || phase === "DURING";
   const privateWorkspaceNeedsRecovery =
     showCanonicalNotes &&
@@ -808,7 +926,7 @@ function FaceToFaceCompanionSession({
     (personalWorkspace.dirtyFields.liveNotes &&
       (personalWorkspace.loading ||
         personalWorkspace.saveState === "saving")) ||
-    recordingActivity?.blocksInteractionCompletion === true;
+    recordingBlocksEnd;
 
   return (
     <div className="mx-auto max-w-3xl pb-12">
@@ -863,6 +981,22 @@ function FaceToFaceCompanionSession({
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {phase === "DURING" && recordingRefreshNeeded && !recoveryRecording ? (
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          disabled={working}
+          onClick={() => {
+            setWorking(true);
+            void refreshRecordingStatus().finally(() => {
+              if (sessionActiveRef.current) setWorking(false);
+            });
+          }}
+        >
+          Refresh recording status
+        </button>
       ) : null}
 
       {companionAvailability === "ready" && markersNeedRefresh ? (
@@ -983,8 +1117,9 @@ function FaceToFaceCompanionSession({
             />
           ) : null}
 
-          {companionAvailability === "ready" &&
-          effectiveCaptureChoice === "recording" &&
+          {(recordingBlocksEnd ||
+            (companionAvailability === "ready" &&
+              effectiveCaptureChoice === "recording")) &&
           recordingEnabled &&
           canUseBrowserRecording ? (
             <div className="mt-5">
@@ -992,7 +1127,10 @@ function FaceToFaceCompanionSession({
                 interactionId={interactionId}
                 interactionType={interaction.interactionType}
                 lifecycleStatus={interaction.lifecycleStatus}
-                startDisabled={working}
+                startDisabled={working || recordingBlocksEnd}
+                recoveryRecording={recoveryRecording ?? undefined}
+                onRecoveryResolved={handleRecoveryResolved}
+                onRecoveryListVerified={handleRecoveryListVerified}
                 showTranscript={false}
                 fallbackHref="#companion-controls"
                 fallbackLabel="Continue with passive Companion"
@@ -1055,6 +1193,7 @@ function FaceToFaceCompanionSession({
               }
               endLabel={endLabel}
               endDisabled={endDisabled}
+              recordingBlocksEnd={recordingBlocksEnd}
             />
           ) : null}
 
@@ -1572,6 +1711,7 @@ function CompanionControls({
   onDeleteMarker,
   onEnd,
   endDisabled,
+  recordingBlocksEnd,
   endLabel,
 }: {
   markers: InteractionMarker[];
@@ -1585,6 +1725,7 @@ function CompanionControls({
   onDeleteMarker(marker: InteractionMarker): void;
   onEnd(): void;
   endDisabled: boolean;
+  recordingBlocksEnd: boolean;
   endLabel: string;
 }) {
   return (
@@ -1621,7 +1762,7 @@ function CompanionControls({
           {endLabel}
         </button>
       </div>
-      {endDisabled ? (
+      {recordingBlocksEnd ? (
         <p className="mt-3 text-sm text-amber-900">
           Finish the recording and any queued upload before ending.
         </p>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import cast
 from uuid import UUID
 
@@ -37,7 +37,7 @@ class RecordingRepository:
             Interaction.deleted_at.is_(None),
         )
         if for_update:
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         return cast(
             Interaction | None,
             await self.session.scalar(statement),
@@ -143,6 +143,28 @@ class RecordingRepository:
                 .order_by(RecordingSession.created_at.desc(), RecordingSession.id.desc())
                 .limit(1)
             ),
+        )
+
+    async def has_live_recording_in_progress(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        now: datetime,
+    ) -> bool:
+        return (
+            await self.session.scalar(
+                select(RecordingSession.id)
+                .where(
+                    RecordingSession.organisation_id == organisation_id,
+                    RecordingSession.interaction_id == interaction_id,
+                    RecordingSession.recording_type == "live_audio_recording",
+                    RecordingSession.lifecycle_status == "recording",
+                    RecordingSession.session_expires_at > now,
+                    RecordingSession.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+            is not None
         )
 
     async def find_chunk(

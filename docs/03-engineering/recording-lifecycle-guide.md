@@ -25,6 +25,14 @@ Impossible transitions such as `completed → recording`, `cancelled → complet
 `deleted → transcribing` return a product-safe conflict. Services lock the session
 for finalisation/claim/result persistence. Lifecycle events are metadata only.
 
-Interrupted browsers read current sessions and verified chunk manifests. An
-`uploading` session can retry finalisation; a still-`recording` session cannot claim
-background survival and should be cancelled/restarted if capture was lost.
+Interrupted browsers read the current session and verify that saved chunks belong
+to that exact recording. An unexpired `uploading` session can retry finalisation
+when the saved chunks are all verified and contiguous from sequence zero. If a
+session is still `recording` in its original tab, stop it there. If its capture
+was interrupted, the user can explicitly cancel the session.
+
+The recording start and Interaction completion paths lock the same parent
+Interaction. A browser cannot start live capture on a completed or cancelled
+Interaction. Completion requires any unexpired live capture to stop first.
+Previously stopped uploads and authorised recording imports can still finish
+after the Interaction completes.

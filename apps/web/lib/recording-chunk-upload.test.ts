@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertRecordingChunkCompletionIdentity,
   assertRecordingChunkUploadIdentity,
+  verifyRestoredRecordingChunks,
   type RecordingChunkCompletion,
 } from "@/lib/recording-chunk-upload";
 
@@ -90,5 +91,54 @@ describe("assertRecordingChunkUploadIdentity", () => {
         { id: chunk.id, ...expected },
       ),
     ).toThrow("The recording upload could not be verified. Try again.");
+  });
+});
+
+describe("verifyRestoredRecordingChunks", () => {
+  const secondChunk = {
+    ...completedChunk,
+    id: "chunk-2",
+    sequenceNumber: 1,
+  };
+
+  it("requires a complete contiguous nonempty verified sequence, regardless of response order", () => {
+    expect(
+      verifyRestoredRecordingChunks(
+        [secondChunk, completedChunk],
+        expected.recordingSessionId,
+      ),
+    ).toEqual({ verifiedCount: 2, lastVerifiedSequence: 1 });
+    expect(
+      verifyRestoredRecordingChunks([], expected.recordingSessionId),
+    ).toEqual({ verifiedCount: 0, lastVerifiedSequence: null });
+    expect(
+      verifyRestoredRecordingChunks([secondChunk], expected.recordingSessionId),
+    ).toEqual({ verifiedCount: 1, lastVerifiedSequence: null });
+    expect(
+      verifyRestoredRecordingChunks(
+        [
+          completedChunk,
+          { ...secondChunk, uploadState: "pending", uploadedAt: null },
+        ],
+        expected.recordingSessionId,
+      ),
+    ).toEqual({ verifiedCount: 1, lastVerifiedSequence: null });
+  });
+
+  it.each([
+    { ...secondChunk, recordingSessionId: "another-recording" },
+    { ...secondChunk, id: completedChunk.id },
+    { ...secondChunk, sequenceNumber: completedChunk.sequenceNumber },
+    { ...secondChunk, byteSize: 0 },
+    { ...secondChunk, checksumSha256: undefined },
+    { ...secondChunk, uploadState: "finalised" },
+    { ...secondChunk, uploadedAt: null },
+  ])("rejects a wholly unverified response", (invalidChunk) => {
+    expect(() =>
+      verifyRestoredRecordingChunks(
+        [completedChunk, invalidChunk],
+        expected.recordingSessionId,
+      ),
+    ).toThrow("The saved recording chunks could not be verified.");
   });
 });

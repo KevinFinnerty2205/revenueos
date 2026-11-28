@@ -36,6 +36,17 @@ export class RecordingSessionIdentityError extends Error {
   }
 }
 
+export function isUnfinishedBrowserRecording(
+  recording: RecordingSession,
+  now = Date.now(),
+): boolean {
+  return (
+    recording.recordingType === "live_audio_recording" &&
+    ["created", "recording", "uploading"].includes(recording.lifecycleStatus) &&
+    Date.parse(recording.sessionExpiresAt) > now
+  );
+}
+
 function hasIdentifier(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }

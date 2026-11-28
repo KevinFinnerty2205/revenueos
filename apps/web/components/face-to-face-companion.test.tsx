@@ -34,6 +34,9 @@ vi.mock("@/components/verified-organisation-context", () => ({
 const recorderStub = vi.hoisted(() => ({
   enabled: false,
   activity: undefined as ((value: RecordingActivity) => void) | undefined,
+  resolve: undefined as ((recording: RecordingSession) => void) | undefined,
+  verifyList: undefined as
+    ((recordings: RecordingSession[]) => void) | undefined,
 }));
 
 vi.mock(import("@/components/recording-foundation"), async (importOriginal) => {
@@ -46,6 +49,8 @@ vi.mock(import("@/components/recording-foundation"), async (importOriginal) => {
       if (!recorderStub.enabled)
         return <original.RecordingFoundation {...props} />;
       recorderStub.activity = props.onActivityChange;
+      recorderStub.resolve = props.onRecoveryResolved;
+      recorderStub.verifyList = props.onRecoveryListVerified;
       return (
         <button type="button" disabled={props.startDisabled}>
           Start recording
@@ -168,6 +173,15 @@ const priorRecording: RecordingSession = {
   externalProcessing: false,
   createdAt: "2026-08-15T02:01:00Z",
   updatedAt: "2026-08-15T02:03:00Z",
+};
+
+const interruptedRecording: RecordingSession = {
+  ...priorRecording,
+  lifecycleStatus: "uploading",
+  finalMimeType: null,
+  uploadCompletedAt: null,
+  transcriptionStatus: "disabled",
+  sessionExpiresAt: "2099-08-16T00:00:00Z",
 };
 
 const priorPhoto: VisualEvidence = {
@@ -560,6 +574,8 @@ describe("FaceToFaceCompanion", () => {
   afterEach(() => {
     recorderStub.enabled = false;
     recorderStub.activity = undefined;
+    recorderStub.resolve = undefined;
+    recorderStub.verifyList = undefined;
     window.sessionStorage.clear();
     verifiedOrganisation.state.status = "available";
     verifiedOrganisation.state.organisationId = "organisation-1";
@@ -1892,6 +1908,143 @@ describe("FaceToFaceCompanion", () => {
       ),
     ).toBe(false);
     expect(notes).toHaveValue(noteText);
+  });
+
+  it("recovers an unfinished recording in a passive tab without losing private notes", async () => {
+    recorderStub.enabled = true;
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
+      "passive",
+    );
+    const fetchMock = installApi(
+      interaction({ lifecycleStatus: "in_progress" }),
+      {
+        captureResponse: (url) =>
+          url.endsWith("/recordings")
+            ? jsonResponse([interruptedRecording])
+            : undefined,
+      },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+
+    expect(
+      await screen.findByRole("button", { name: "Start recording" }),
+    ).toBeDisabled();
+    const notes = screen.getByLabelText("Private live notes");
+    const noteText = "Follow up about the pilot timeline.";
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, { target: { value: noteText } });
+    const end = screen.getByRole("button", {
+      name: "Save notes and end interaction",
+    });
+    expect(end).toBeDisabled();
+
+    act(() =>
+      recorderStub.resolve?.({
+        ...priorRecording,
+        captureSessionId: "foreign-capture",
+      }),
+    );
+    expect(end).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/complete"),
+      ),
+    ).toBe(false);
+
+    act(() =>
+      recorderStub.activity?.({
+        state: "uploading",
+        active: true,
+        blocksInteractionCompletion: true,
+        elapsedSeconds: 60,
+        recording: interruptedRecording,
+      }),
+    );
+    act(() => recorderStub.resolve?.(priorRecording));
+    expect(end).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Start recording" }),
+    ).toBeVisible();
+    act(() =>
+      recorderStub.activity?.({
+        state: "processing",
+        active: false,
+        blocksInteractionCompletion: false,
+        elapsedSeconds: 60,
+        recording: priorRecording,
+      }),
+    );
+    expect(end).toBeEnabled();
+    expect(notes).toHaveValue(noteText);
+    expect(
+      screen.getByRole("heading", { name: "No recording or listening" }),
+    ).toBeVisible();
+    fireEvent.click(end);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Fill the gaps while they are fresh",
+      }),
+    ).toBeVisible();
+  });
+
+  it("refreshes recording recovery after another tab prevents completion and the first lookup fails", async () => {
+    recorderStub.enabled = true;
+    let readingCount = 0;
+    let blockedOnce = false;
+    const fetchMock = installApi(
+      interaction({ lifecycleStatus: "in_progress" }),
+      {
+        captureResponse: (url, method) => {
+          if (url.endsWith("/recordings")) {
+            readingCount += 1;
+            if (readingCount === 1) return jsonResponse([]);
+            if (readingCount === 2) return jsonResponse({ items: [] });
+            return jsonResponse([interruptedRecording]);
+          }
+          if (url.endsWith("/complete") && method === "POST" && !blockedOnce) {
+            blockedOnce = true;
+            return jsonResponse(
+              {
+                code: "live_recording_in_progress",
+                message: "A recording is in progress.",
+              },
+              409,
+            );
+          }
+          return undefined;
+        },
+      },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue without recording" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+
+    const retry = await screen.findByRole("button", {
+      name: "Refresh recording status",
+    });
+    fireEvent.click(retry);
+    expect(
+      await screen.findByRole("button", { name: "Start recording" }),
+    ).toBeDisabled();
+    const end = screen.getByRole("button", { name: "End interaction" });
+    expect(end).toBeDisabled();
+
+    act(() => recorderStub.verifyList?.([]));
+    expect(end).toBeEnabled();
+    fireEvent.click(end);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Fill the gaps while they are fresh",
+      }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/complete"),
+      ),
+    ).toHaveLength(2);
   });
 
   it("keeps a newer note edit open when it changes during save-before-end", async () => {
