@@ -33,6 +33,18 @@ database has unique trigger/window keys. A concurrent or retrying poll cannot cr
 a second equivalent signal. A provider failure records only a safe code, moves the
 session to `failed` and leaves final intelligence untouched.
 
+Every browser response carries the canonical Interaction and organisation
+identities, including availability responses with no live session. The browser
+checks them against the active Conversation workspace and checks the session ID
+once a live session is established. It validates the bounded signal and progress
+payload before showing it. An invalid response leaves the last verified live
+state visible and gives the user a way to retry a failed load.
+
+Explicit actions take precedence over polling. The browser discards older
+responses after an enable, disable, dismiss or reconciliation action begins and
+stops polling when the Interaction ends. A dismissal must be confirmed for the
+requested signal, and reconciliation must return an explicit final comparison.
+
 This implementation uses bounded synchronous work from the polling request. It does
 not introduce WebSockets, a broker, Redis, Celery or another worker. A future
 external provider would need separately approved timeout, unknown-outcome and claim

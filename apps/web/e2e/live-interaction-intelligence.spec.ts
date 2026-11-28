@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const interactionId = "interaction-live";
+const stoppedLiveMessage =
+  "Live Intelligence is stopped and its provisional state is frozen for final review.";
 
 const plannedInteraction = {
   id: interactionId,
@@ -79,6 +81,8 @@ function liveResponse(
   const active = state !== "available";
   const signals = options.processed ? [buyingSignal, riskSignal] : [];
   return {
+    interactionId,
+    organisationId: plannedInteraction.organisationId,
     availability: "available",
     state,
     safeMessage:
@@ -125,8 +129,8 @@ function liveResponse(
       ? { confirmed: 1, revised: 0, unsupported: 1, unresolved: 0 }
       : null,
     generatedAt: options.processed ? "2026-08-15T01:16:00Z" : null,
-    updatedAt: "2026-08-15T01:16:00Z",
-    nextPollSeconds: 1,
+    updatedAt: active ? "2026-08-15T01:16:00Z" : null,
+    nextPollSeconds: 5,
   };
 }
 
@@ -135,6 +139,7 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
 }) => {
   let interaction: Record<string, unknown> = { ...plannedInteraction };
   let live = liveResponse("available");
+  let liveIdentityAvailable = false;
   let markers: Array<Record<string, unknown>> = [];
 
   await page.route("http://localhost:8000/api/v1/me", async (route) => {
@@ -239,7 +244,14 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
         return;
       }
       if (path.endsWith("/live-intelligence")) {
-        await route.fulfill({ json: live });
+        const json = !liveIdentityAvailable
+          ? {
+              ...live,
+              organisationId: "different-organisation",
+              safeMessage: "Foreign Live Intelligence fixture",
+            }
+          : live;
+        await route.fulfill({ json });
         return;
       }
       if (path.endsWith("/start")) {
@@ -257,6 +269,13 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
           lifecycleStatus: "completed",
           actualEndAt: "2026-08-15T02:00:00Z",
         };
+        if (live.state === "active") {
+          live = {
+            ...live,
+            state: "completed",
+            safeMessage: stoppedLiveMessage,
+          };
+        }
         await route.fulfill({ json: interaction });
         return;
       }
@@ -265,6 +284,22 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
   );
 
   await page.goto(`/conversations/${interactionId}/workspace`);
+  const liveRetry = page.getByRole("button", {
+    name: "Try again",
+    exact: true,
+  });
+  await expect(liveRetry).toBeVisible();
+  await expect(page.getByText("Foreign Live Intelligence fixture")).toHaveCount(
+    0,
+  );
+  if (process.env.CAPTURE_LIVE_IDENTITY_RECOVERY_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/live-intelligence-identity-recovery.png",
+      fullPage: true,
+    });
+  }
+  liveIdentityAvailable = true;
+  await liveRetry.click();
   await expect(page.getByText("Live Intelligence is available")).toBeVisible();
   await page.getByRole("button", { name: "Start interaction" }).click();
   await page
@@ -280,7 +315,7 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
   ).toBeVisible();
   await expect(
     companion.getByText("Agree the rollout plan. — Possibly addressed"),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 12_000 });
   await expect(companion.getByText("Possible buying signal")).toBeVisible();
   await expect(companion.getByText("Possible risk")).toBeVisible();
   await expect(
@@ -310,6 +345,7 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
   await expect(savedMarker).toBeVisible();
   await expect(notes).toBeEnabled();
   await page.getByRole("button", { name: "End interaction" }).click();
+  await expect(companion.getByText(stoppedLiveMessage)).toBeVisible();
   await page
     .getByRole("button", { name: "Compare with final intelligence" })
     .click();

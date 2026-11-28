@@ -48,12 +48,14 @@ from revenueos.live_intelligence_provider import (
 from revenueos.live_intelligence_repositories import LiveIntelligenceRepository
 from revenueos.models import (
     Interaction,
+    InteractionIntelligenceSnapshot,
     LiveBriefProgress,
     LiveInteractionSession,
     LiveProcessingWindow,
     PreInteractionBrief,
     ProvisionalSignal,
     TranscriptSegment,
+    TranscriptVersion,
 )
 from revenueos.tenant import TenantContext
 
@@ -88,6 +90,7 @@ class LiveInteractionIntelligenceService:
         self.repository = LiveIntelligenceRepository(session)
         self.beta = BetaService(session, tenant, settings)
         self.provider = provider or create_live_signal_provider(settings)
+        self._verified_session_sources: set[tuple[UUID, UUID, UUID]] = set()
 
     async def get(self, interaction_id: UUID) -> LiveIntelligenceResponse:
         interaction = await self._interaction(interaction_id)
@@ -95,6 +98,8 @@ class LiveInteractionIntelligenceService:
             self.tenant.organisation_id,
             interaction_id,
         )
+        if live_session is not None:
+            self._require_session_identity(interaction_id, live_session)
         return await self._response(interaction, live_session)
 
     async def start(
@@ -110,6 +115,8 @@ class LiveInteractionIntelligenceService:
             for_update=True,
         )
         if existing is not None:
+            self._require_session_identity(interaction_id, existing)
+            await self._require_session_source_identity(interaction_id, existing)
             if existing.status in {"active", "processing"}:
                 return await self._response(interaction, existing)
             raise PublicAPIError(
@@ -139,6 +146,7 @@ class LiveInteractionIntelligenceService:
                 "No authorised progressive transcript source is available. Use the post-interaction Debrief instead.",
                 409,
             )
+        self._require_transcript_identity(interaction_id, transcript)
         if self.provider.uses_external_provider and not request.external_processing_acknowledged:
             raise PublicAPIError(
                 "external_processing_acknowledgement_required",
@@ -155,6 +163,8 @@ class LiveInteractionIntelligenceService:
                 429,
             )
         brief = await self.repository.latest_brief(self.tenant.organisation_id, interaction_id)
+        if brief is not None:
+            self._require_brief_identity(interaction_id, brief)
         now = datetime.now(UTC)
         live_session = LiveInteractionSession(
             id=uuid.uuid4(),
@@ -176,6 +186,9 @@ class LiveInteractionIntelligenceService:
         )
         self.session.add(live_session)
         await self.session.flush()
+        self._verified_session_sources.add(
+            (live_session.id, live_session.interaction_id, live_session.transcript_version_id)
+        )
         for item in self._brief_items(brief):
             self.session.add(
                 LiveBriefProgress(
@@ -263,6 +276,12 @@ class LiveInteractionIntelligenceService:
             live_session.id,
             request.idempotency_key,
         )
+        if replay is not None:
+            self._require_window_identity(
+                live_session,
+                replay,
+                trigger_idempotency_key=request.idempotency_key,
+            )
         failed_replay = replay if replay is not None and replay.status == "failed" else None
         if replay is not None and failed_replay is None:
             return self._process_response(
@@ -277,6 +296,8 @@ class LiveInteractionIntelligenceService:
             overlap=self.settings.private_beta_live_window_overlap_segments,
             limit=self.settings.private_beta_live_window_segments,
         )
+        for segment in segments:
+            self._require_segment_identity(live_session, segment)
         if failed_replay is not None:
             window = [
                 item
@@ -330,12 +351,40 @@ class LiveInteractionIntelligenceService:
                 live_session.id,
                 window_fingerprint,
             )
+            if duplicate is not None:
+                self._require_window_identity(
+                    live_session,
+                    duplicate,
+                    window_fingerprint=window_fingerprint,
+                )
         if duplicate is not None and duplicate.status != "failed":
             return self._process_response(
                 await self._response(interaction, live_session),
                 processed=duplicate.status in {"completed", "no_signal"},
                 new_segment_count=len(new_in_window),
             )
+
+        brief = (
+            await self.repository.brief_by_id(
+                self.tenant.organisation_id,
+                interaction_id,
+                live_session.brief_id,
+            )
+            if live_session.brief_id is not None
+            else None
+        )
+        if brief is not None:
+            self._require_brief_identity(
+                interaction_id,
+                brief,
+                brief_id=live_session.brief_id,
+            )
+        existing_signals = await self.repository.list_signals(
+            self.tenant.organisation_id,
+            live_session.id,
+        )
+        for signal in existing_signals:
+            self._require_signal_identity(live_session, signal)
 
         now = datetime.now(UTC)
         if duplicate is not None:
@@ -392,25 +441,8 @@ class LiveInteractionIntelligenceService:
                         )
                         for item in window
                     ),
-                    brief_items=tuple(
-                        self._brief_items(
-                            await self.repository.brief_by_id(
-                                self.tenant.organisation_id,
-                                live_session.brief_id,
-                            )
-                            if live_session.brief_id is not None
-                            else None
-                        )
-                    ),
-                    existing_signal_fingerprints=tuple(
-                        item.signal_fingerprint
-                        for item in (
-                            await self.repository.list_signals(
-                                self.tenant.organisation_id,
-                                live_session.id,
-                            )
-                        )[:100]
-                    ),
+                    brief_items=tuple(self._brief_items(brief)),
+                    existing_signal_fingerprints=tuple(item.signal_fingerprint for item in existing_signals[:100]),
                 )
             )
             async with self.session.begin_nested():
@@ -422,6 +454,9 @@ class LiveInteractionIntelligenceService:
                 signal_count = detected_count + updated_count
                 await self._apply_progress(live_session, provider_output.brief_progress)
         except Exception as exc:
+            if isinstance(exc, PublicAPIError) and exc.code == "live_intelligence_identity_mismatch":
+                await self.session.rollback()
+                raise
             error_code = exc.code if isinstance(exc, ProviderError) else "live_provider_failure"
             processing_window.status = "failed"
             processing_window.failure_code = error_code
@@ -496,6 +531,7 @@ class LiveInteractionIntelligenceService:
         )
         if signal is None:
             raise PublicAPIError("live_signal_not_found", "The requested provisional signal was not found.", 404)
+        self._require_signal_identity(live_session, signal, signal_id=signal_id)
         if signal.lifecycle_status == "dismissed":
             return await self._response(interaction, live_session)
         if signal.lifecycle_status in {"superseded", "expired"}:
@@ -538,6 +574,10 @@ class LiveInteractionIntelligenceService:
             live_session.id,
             for_update=True,
         )
+        if final_intelligence is not None:
+            self._require_final_intelligence_identity(interaction_id, final_intelligence)
+        for signal in signals:
+            self._require_signal_identity(live_session, signal)
         final_items = self._final_items(final_intelligence.content_json if final_intelligence is not None else None)
         counts = {"confirmed": 0, "revised": 0, "unsupported": 0, "unresolved": 0}
         for signal in signals:
@@ -574,9 +614,14 @@ class LiveInteractionIntelligenceService:
         interaction: Interaction,
         live_session: LiveInteractionSession | None,
     ) -> LiveIntelligenceResponse:
+        self._require_interaction_identity(interaction.id, interaction)
+        if live_session is not None:
+            self._require_session_identity(interaction.id, live_session)
         interval = self.settings.private_beta_live_processing_interval_seconds
         if not self.settings.feature_live_interaction_intelligence_enabled:
             return LiveIntelligenceResponse(
+                interaction_id=interaction.id,
+                organisation_id=self.tenant.organisation_id,
                 availability="disabled",
                 state="disabled",
                 safe_message="Live Intelligence is disabled for this workspace. Post-interaction Debrief remains available.",
@@ -595,12 +640,16 @@ class LiveInteractionIntelligenceService:
                 self.tenant.organisation_id,
                 interaction.id,
             )
+            if source is not None:
+                self._require_transcript_identity(interaction.id, source)
             available = (
                 interaction.lifecycle_status in {"planned", "in_progress"}
                 and interaction.interaction_type in SUPPORTED_LIVE_INTERACTION_TYPES
                 and source is not None
             )
             return LiveIntelligenceResponse(
+                interaction_id=interaction.id,
+                organisation_id=self.tenant.organisation_id,
                 availability="available" if available else "unavailable",
                 state="available" if available else "unavailable",
                 safe_message=(
@@ -619,6 +668,14 @@ class LiveInteractionIntelligenceService:
                 next_poll_seconds=interval,
             )
         await self.session.refresh(live_session)
+        self._require_session_identity(interaction.id, live_session)
+        source_identity = (
+            live_session.id,
+            live_session.interaction_id,
+            live_session.transcript_version_id,
+        )
+        if source_identity not in self._verified_session_sources:
+            await self._require_session_source_identity(interaction.id, live_session)
         signals = await self.repository.list_signals(
             self.tenant.organisation_id,
             live_session.id,
@@ -628,10 +685,24 @@ class LiveInteractionIntelligenceService:
             live_session.id,
         )
         brief = (
-            await self.repository.brief_by_id(self.tenant.organisation_id, live_session.brief_id)
+            await self.repository.brief_by_id(
+                self.tenant.organisation_id,
+                interaction.id,
+                live_session.brief_id,
+            )
             if live_session.brief_id is not None
             else None
         )
+        for signal in signals:
+            self._require_signal_identity(live_session, signal)
+        for item in progress:
+            self._require_progress_identity(live_session, item)
+        if brief is not None:
+            self._require_brief_identity(
+                interaction.id,
+                brief,
+                brief_id=live_session.brief_id,
+            )
         labels = {(item.item_type, item.item_index): item.text for item in self._brief_items(brief)}
         progress_responses = [
             LiveBriefProgressResponse(
@@ -684,6 +755,8 @@ class LiveInteractionIntelligenceService:
             ),
         )
         return LiveIntelligenceResponse(
+            interaction_id=interaction.id,
+            organisation_id=self.tenant.organisation_id,
             availability="available",
             state=public_state,
             safe_message=safe_message,
@@ -715,6 +788,11 @@ class LiveInteractionIntelligenceService:
                 signal_fingerprint,
             )
             if existing is not None:
+                self._require_signal_identity(
+                    live_session,
+                    existing,
+                    signal_fingerprint=signal_fingerprint,
+                )
                 if existing.lifecycle_status in {"dismissed", "superseded", "expired"}:
                     continue
                 existing.lifecycle_status = "updated"
@@ -728,6 +806,12 @@ class LiveInteractionIntelligenceService:
                 live_session.id,
                 subject_fingerprint,
             )
+            if prior is not None:
+                self._require_signal_identity(
+                    live_session,
+                    prior,
+                    subject_fingerprint=subject_fingerprint,
+                )
             signal = ProvisionalSignal(
                 id=uuid.uuid4(),
                 organisation_id=self.tenant.organisation_id,
@@ -772,6 +856,12 @@ class LiveInteractionIntelligenceService:
             )
             if progress is None:
                 continue
+            self._require_progress_identity(
+                live_session,
+                progress,
+                item_type=detection.item_type,
+                item_index=detection.item_index,
+            )
             progress.progress_status = detection.progress_status
             progress.source_sequence_end = detection.source_sequence_end
 
@@ -828,6 +918,7 @@ class LiveInteractionIntelligenceService:
         )
         if interaction is None:
             raise PublicAPIError("interaction_not_found", "The requested interaction was not found.", 404)
+        self._require_interaction_identity(interaction_id, interaction)
         return interaction
 
     async def _require_session(
@@ -847,7 +938,175 @@ class LiveInteractionIntelligenceService:
                 "Live Intelligence has not been enabled for this interaction.",
                 409,
             )
+        self._require_session_identity(interaction_id, live_session)
+        await self._require_session_source_identity(interaction_id, live_session)
         return live_session
+
+    def _require_interaction_identity(
+        self,
+        interaction_id: UUID,
+        interaction: Interaction,
+    ) -> None:
+        if (
+            interaction.organisation_id,
+            interaction.id,
+        ) != (
+            self.tenant.organisation_id,
+            interaction_id,
+        ):
+            raise self._identity_mismatch()
+
+    def _require_session_identity(
+        self,
+        interaction_id: UUID,
+        live_session: LiveInteractionSession,
+    ) -> None:
+        if (
+            live_session.organisation_id != self.tenant.organisation_id
+            or live_session.interaction_id != interaction_id
+            or live_session.source_kind != "progressive_transcript"
+        ):
+            raise self._identity_mismatch()
+
+    def _require_transcript_identity(
+        self,
+        interaction_id: UUID,
+        transcript: TranscriptVersion,
+        *,
+        transcript_version_id: UUID | None = None,
+    ) -> None:
+        if (
+            transcript.organisation_id != self.tenant.organisation_id
+            or transcript.interaction_id != interaction_id
+            or (transcript_version_id is not None and transcript.id != transcript_version_id)
+            or transcript.source != "progressive"
+            or transcript.status not in {"provisional", "final"}
+            or transcript.deleted_at is not None
+        ):
+            raise self._identity_mismatch()
+
+    async def _require_session_source_identity(
+        self,
+        interaction_id: UUID,
+        live_session: LiveInteractionSession,
+    ) -> None:
+        transcript = await self.repository.transcript_by_id(
+            self.tenant.organisation_id,
+            interaction_id,
+            live_session.transcript_version_id,
+        )
+        if transcript is None:
+            raise self._identity_mismatch()
+        self._require_transcript_identity(
+            interaction_id,
+            transcript,
+            transcript_version_id=live_session.transcript_version_id,
+        )
+        self._verified_session_sources.add(
+            (live_session.id, live_session.interaction_id, live_session.transcript_version_id)
+        )
+
+    def _require_brief_identity(
+        self,
+        interaction_id: UUID,
+        brief: PreInteractionBrief,
+        *,
+        brief_id: UUID | None = None,
+    ) -> None:
+        if (
+            brief.organisation_id != self.tenant.organisation_id
+            or brief.interaction_id != interaction_id
+            or (brief_id is not None and brief.id != brief_id)
+        ):
+            raise self._identity_mismatch()
+
+    def _require_segment_identity(
+        self,
+        live_session: LiveInteractionSession,
+        segment: TranscriptSegment,
+    ) -> None:
+        if (
+            segment.organisation_id,
+            segment.transcript_version_id,
+        ) != (
+            self.tenant.organisation_id,
+            live_session.transcript_version_id,
+        ):
+            raise self._identity_mismatch()
+
+    def _require_window_identity(
+        self,
+        live_session: LiveInteractionSession,
+        window: LiveProcessingWindow,
+        *,
+        trigger_idempotency_key: str | None = None,
+        window_fingerprint: str | None = None,
+    ) -> None:
+        if (
+            window.organisation_id != self.tenant.organisation_id
+            or window.live_session_id != live_session.id
+            or (trigger_idempotency_key is not None and window.trigger_idempotency_key != trigger_idempotency_key)
+            or (window_fingerprint is not None and window.window_fingerprint != window_fingerprint)
+        ):
+            raise self._identity_mismatch()
+
+    def _require_signal_identity(
+        self,
+        live_session: LiveInteractionSession,
+        signal: ProvisionalSignal,
+        *,
+        signal_id: UUID | None = None,
+        signal_fingerprint: str | None = None,
+        subject_fingerprint: str | None = None,
+    ) -> None:
+        if (
+            signal.organisation_id != self.tenant.organisation_id
+            or signal.interaction_id != live_session.interaction_id
+            or signal.live_session_id != live_session.id
+            or signal.transcript_version_id != live_session.transcript_version_id
+            or (signal_id is not None and signal.id != signal_id)
+            or (signal_fingerprint is not None and signal.signal_fingerprint != signal_fingerprint)
+            or (subject_fingerprint is not None and signal.subject_fingerprint != subject_fingerprint)
+        ):
+            raise self._identity_mismatch()
+
+    def _require_progress_identity(
+        self,
+        live_session: LiveInteractionSession,
+        progress: LiveBriefProgress,
+        *,
+        item_type: str | None = None,
+        item_index: int | None = None,
+    ) -> None:
+        if (
+            progress.organisation_id != self.tenant.organisation_id
+            or progress.live_session_id != live_session.id
+            or (item_type is not None and progress.item_type != item_type)
+            or (item_index is not None and progress.item_index != item_index)
+        ):
+            raise self._identity_mismatch()
+
+    def _require_final_intelligence_identity(
+        self,
+        interaction_id: UUID,
+        final_intelligence: InteractionIntelligenceSnapshot,
+    ) -> None:
+        if (
+            final_intelligence.organisation_id,
+            final_intelligence.interaction_id,
+        ) != (
+            self.tenant.organisation_id,
+            interaction_id,
+        ):
+            raise self._identity_mismatch()
+
+    @staticmethod
+    def _identity_mismatch() -> PublicAPIError:
+        return PublicAPIError(
+            "live_intelligence_identity_mismatch",
+            "Live Intelligence could not be loaded safely.",
+            500,
+        )
 
     def _require_bound_provider(self, live_session: LiveInteractionSession) -> None:
         """Fail closed if runtime configuration differs from session consent."""

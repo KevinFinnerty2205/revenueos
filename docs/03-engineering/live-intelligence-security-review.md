@@ -4,7 +4,7 @@
 
 | Risk                             | Current control                                                                                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cross-tenant live stream         | trusted auth tenant context, explicit repository predicates, composite tenant FKs and forced RLS                                                                          |
+| Cross-tenant live stream         | trusted auth tenant context, explicit repository predicates, composite tenant FKs, forced RLS and browser verification of Interaction, organisation and session anchors   |
 | Feature bypass                   | server-side `liveInteractionIntelligence` check; both live flags default off                                                                                              |
 | Unauthorised capture             | start requires an existing authorised progressive transcript; it grants no recording permission                                                                           |
 | External disclosure              | deterministic no-network default; gated OpenAI adapter, durable per-session provider/acknowledgement binding and fail-closed configuration checks; activation remains off |
@@ -14,7 +14,7 @@
 | Seller/customer confusion        | controlled speaker roles; customer-intent categories require customer attribution                                                                                         |
 | Unknown speaker                  | conservative category allowlist and visible `speaker_uncertain` label                                                                                                     |
 | Prompt/transcript injection      | text is data; strict no-action detector contract and tests for injection phrases                                                                                          |
-| Browser polling                  | bounded cadence, one in-flight client request, idempotent server processing and safe errors                                                                               |
+| Browser polling                  | bounded cadence, one in-flight poll, stale-response rejection after user actions or Interaction completion, idempotent server processing and safe errors                   |
 | Completion race                  | completion locks and freezes active/processing live state in the lifecycle transaction                                                                                    |
 | Provisional leakage              | separate tables/contracts; no live write path to final snapshots, Opportunity Workspace or Revenue Brain                                                                  |
 | Sensitive logs                   | allowlisted identifiers/counts/codes only; no statements, transcripts, names, objectives, questions or provider payloads                                                  |

@@ -830,6 +830,12 @@ zero-finding source. Safe errors contain a code, message and request ID.
 
 All routes derive tenant context from verified authentication. Process accepts only a
 bounded idempotency key; transcript version, cursor and windows are server-owned.
+Each successful response carries canonical `interactionId` and `organisationId`.
+An existing live session also supplies its `sessionId`. An unavailable or disabled
+response still carries the requested Interaction and tenant identity, with a null
+session. The web client requires these fields before it displays provisional state.
+An internal identity mismatch returns the safe `live_intelligence_identity_mismatch`
+error before any provisional content from the mismatched record is returned.
 Public responses contain no raw transcript, internal fingerprints or provider data.
 The feature flag defaults off and unavailable sources return a Debrief fallback.
 
