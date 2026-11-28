@@ -61,6 +61,12 @@ keeps private notes editable and requires a deliberate action to finalise or
 cancel the recording. Refresh reads the current session again when another tab
 finishes it or recovery data could not be verified.
 
+Normal same-tab workspace links pause navigation while this tab records, holds
+queued audio or finishes an upload. The user can finish or explicitly cancel
+from **Notes & capture**. The browser also receives a page-exit warning while
+this work is pending. A verified stopped upload with no remaining local audio
+stays recoverable if the tab leaves before finalisation succeeds.
+
 The API serialises live recording start and conversation completion. Completion
 rejects an unexpired recording that is still capturing for that Interaction,
 including when it started in another tab after the current page loaded. On

@@ -48,6 +48,7 @@ import {
   validateRecordingSession,
   validateRecordingTranscription,
 } from "@/lib/recording-session-identity";
+import { useRecordingNavigationGuard } from "@/lib/use-recording-navigation-guard";
 
 const MIME_PREFERENCES = [
   "audio/webm;codecs=opus",
@@ -418,6 +419,7 @@ export function RecordingFoundation({
   const interruptionHandledRef = useRef(false);
   const mountedRef = useRef(true);
   const locallyStartedSessionRef = useRef(false);
+  const verifiedStoppedRecordingIdRef = useRef<string | null>(null);
   const teardownCancellationStartedRef = useRef(false);
   const teardownCancellationKeyRef = useRef<string | null>(null);
   const activeChunkAbortControllerRef = useRef<AbortController | null>(null);
@@ -666,19 +668,13 @@ export function RecordingFoundation({
     return () => clearInterval(poll);
   }, [load, recording]);
 
-  useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => {
-      if (
-        ["recording", "paused", "uploading"].includes(state) ||
-        pendingChunkCount > 0
-      ) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [pendingChunkCount, state]);
+  useRecordingNavigationGuard(
+    ["requesting_permission", "recording", "paused", "uploading"].includes(
+      state,
+    ) ||
+      pendingChunkCount > 0 ||
+      cancelling,
+  );
 
   const releaseWakeLock = useCallback(async (updateState = true) => {
     const sentinel = wakeLockRef.current;
@@ -823,9 +819,17 @@ export function RecordingFoundation({
       progressiveCaptureRef.current = null;
       if (progressiveCapture) void progressiveCapture.cancel("capture_ended");
       const current = recordingRef.current;
-      if (current && locallyStartedSessionRef.current) {
+      const recoverableStop =
+        current !== null &&
+        current.id === verifiedStoppedRecordingIdRef.current &&
+        current.lifecycleStatus === "uploading" &&
+        isUnfinishedBrowserRecording(current) &&
+        pendingChunks.size === 0;
+      // The server can recover a verified stop with no remaining browser bytes.
+      if (current && locallyStartedSessionRef.current && !recoverableStop) {
         cancelServerSessionOnTeardown(current);
       }
+      verifiedStoppedRecordingIdRef.current = null;
       locallyStartedSessionRef.current = false;
       recordingRef.current = null;
       pendingChunks.clear();
@@ -1034,6 +1038,7 @@ export function RecordingFoundation({
     activeChunkAbortControllerRef.current = null;
     cancelledRef.current = false;
     locallyStartedSessionRef.current = false;
+    verifiedStoppedRecordingIdRef.current = null;
     teardownCancellationStartedRef.current = false;
     teardownCancellationKeyRef.current = requestKey("recording-unmount-cancel");
     captureInterruptedRef.current = false;
@@ -1382,15 +1387,18 @@ export function RecordingFoundation({
       }
       const durationSeconds = measuredElapsedSeconds();
       const stopped = validateRecordingSession(
-        await apiRequest<RecordingSession>(
-          `/api/v1/interactions/${interactionId}/recordings/${current.id}/stop`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              durationSeconds,
-              idempotencyKey: requestKey("recording-stop"),
-            }),
-          },
+        decodeRecordingSessionForInteraction(
+          await apiRequest<unknown>(
+            `/api/v1/interactions/${interactionId}/recordings/${current.id}/stop`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                durationSeconds,
+                idempotencyKey: requestKey("recording-stop"),
+              }),
+            },
+          ),
+          interactionId,
         ),
         current,
         { finalMimeState: "not_finalised" },
@@ -1399,6 +1407,14 @@ export function RecordingFoundation({
       setRecording(stopped);
       recordingRef.current = stopped;
       const lastSequence = nextSequenceRef.current - 1;
+      if (
+        stopped.lifecycleStatus === "uploading" &&
+        stopped.stoppedAt !== null &&
+        stopped.durationSeconds === durationSeconds &&
+        lastSequence >= 0
+      ) {
+        verifiedStoppedRecordingIdRef.current = stopped.id;
+      }
       setRestoredLastSequence(lastSequence >= 0 ? lastSequence : null);
       const finalized = validateFinalizedRecording(
         await apiRequest<unknown>(

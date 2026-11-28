@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { RecordingSession } from "@revenueos/shared";
+import Link from "next/link";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -1552,8 +1553,14 @@ describe("RecordingFoundation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
   });
 
-  it("keeps the validated stopped session retryable when finalisation returns a foreign response", async () => {
-    installSupportedBrowser(() => Promise.resolve(microphoneStream()));
+  it("preserves a verified stopped session through unmount after a bad finalisation response", async () => {
+    const stopTrack = vi.fn();
+    const microphone = vi.fn(() =>
+      Promise.resolve(microphoneStream(stopTrack)),
+    );
+    installSupportedBrowser(microphone);
+    const navigationWarning = vi.fn();
+    vi.stubGlobal("alert", navigationWarning);
     vi.stubGlobal("crypto", {
       randomUUID: vi.fn(() => "request-id"),
       subtle: {
@@ -1571,6 +1578,9 @@ describe("RecordingFoundation", () => {
       transcriptionStatus: "queued",
     };
     let reservedChunk: Record<string, unknown> | null = null;
+    let storedRecording: RecordingSession | null = null;
+    let finalisationAttempts = 0;
+    const chunkVerification = deferred<Response>();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
@@ -1582,7 +1592,9 @@ describe("RecordingFoundation", () => {
         );
       }
       if (url.endsWith("/recordings") && method === "GET") {
-        return Promise.resolve(jsonResponse([]));
+        return Promise.resolve(
+          jsonResponse(storedRecording ? [storedRecording] : []),
+        );
       }
       if (url.endsWith("/recordings") && method === "POST") {
         return Promise.resolve(jsonResponse(baseRecording, 201));
@@ -1616,29 +1628,48 @@ describe("RecordingFoundation", () => {
         return Promise.resolve(new Response(null, { status: 204 }));
       }
       if (url.endsWith("/complete") && method === "POST") {
-        return Promise.resolve(
-          jsonResponse({
-            ...reservedChunk,
-            uploadState: "verified",
-            uploadedAt: "2026-08-15T00:01:00Z",
-          }),
-        );
+        return chunkVerification.promise;
       }
       if (url.endsWith("/stop") && method === "POST") {
+        const requested = JSON.parse(String(init?.body)) as {
+          durationSeconds: number;
+        };
+        storedRecording = {
+          ...stoppedRecording,
+          durationSeconds: requested.durationSeconds,
+        };
+        return Promise.resolve(jsonResponse(storedRecording));
+      }
+      if (url.endsWith("/chunks") && method === "GET") {
         return Promise.resolve(
-          jsonResponse({ ...baseRecording, lifecycleStatus: "uploading" }),
+          jsonResponse([
+            {
+              ...reservedChunk,
+              uploadState: "verified",
+              uploadedAt: "2026-08-15T00:01:00Z",
+            },
+          ]),
         );
       }
       if (url.endsWith("/finalize") && method === "POST") {
-        return Promise.resolve(jsonResponse(foreignFinalized));
+        finalisationAttempts += 1;
+        if (finalisationAttempts === 1 || !storedRecording) {
+          return Promise.resolve(jsonResponse(foreignFinalized));
+        }
+        storedRecording = {
+          ...storedRecording,
+          lifecycleStatus: "uploaded",
+          finalMimeType: "audio/webm",
+          transcriptionStatus: "queued",
+        };
+        return Promise.resolve(jsonResponse(storedRecording));
+      }
+      if (url.endsWith("/transcription")) {
+        return Promise.resolve(jsonResponse(transcriptionResponse()));
       }
       if (url.endsWith("/cancel") && method === "POST") {
-        return Promise.resolve(
-          jsonResponse({
-            ...baseRecording,
-            lifecycleStatus: "cancelled",
-          }),
-        );
+        storedRecording = { ...baseRecording, lifecycleStatus: "cancelled" };
+        return Promise.resolve(jsonResponse(storedRecording));
       }
       return Promise.resolve(
         jsonResponse({ code: "unexpected", message: url }, 500),
@@ -1646,18 +1677,42 @@ describe("RecordingFoundation", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
-      <RecordingFoundation
-        interactionId="interaction-1"
-        interactionType="face_to_face_meeting"
-        lifecycleStatus="in_progress"
-        onFinalized={onFinalized}
-      />,
+    const firstPage = render(
+      <>
+        <Link href="/conversations">Back to conversations</Link>
+        <RecordingFoundation
+          interactionId="interaction-1"
+          interactionType="face_to_face_meeting"
+          lifecycleStatus="in_progress"
+          onFinalized={onFinalized}
+        />
+      </>,
     );
     fireEvent.click(await screen.findByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
     expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Stop and upload" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/complete"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(
+      fireEvent.click(
+        screen.getByRole("link", { name: "Back to conversations" }),
+      ),
+    ).toBe(false);
+    expect(navigationWarning).toHaveBeenCalledOnce();
+    await act(async () => {
+      chunkVerification.resolve(
+        jsonResponse({
+          ...reservedChunk,
+          uploadState: "verified",
+          uploadedAt: "2026-08-15T00:01:00Z",
+        }),
+      );
+    });
 
     expect(
       await screen.findByRole("button", { name: "Retry finalisation" }),
@@ -1674,6 +1729,32 @@ describe("RecordingFoundation", () => {
         String(input).endsWith("/finalize"),
       ),
     ).toHaveLength(1);
+
+    await act(async () => firstPage.unmount());
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/cancel")),
+    ).toBe(false);
+
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
+        lifecycleStatus="in_progress"
+        onFinalized={onFinalized}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Retry finalisation" }),
+    );
+    expect(await screen.findByText("Transcription is complete.")).toBeVisible();
+    expect(onFinalized).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        id: stoppedRecording.id,
+        lifecycleStatus: "uploaded",
+      }),
+    );
+    expect(microphone).toHaveBeenCalledTimes(1);
   });
 
   it("prepares progressive capture before synchronously arming it with the batch recorder", async () => {
