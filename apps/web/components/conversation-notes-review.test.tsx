@@ -191,6 +191,121 @@ describe("ConversationNotesReview", () => {
     ).toBeVisible();
   });
 
+  it("reloads a stale generated-version choice before a new deliberate apply", async () => {
+    const applicable = { ...readyWorkspace, generationUpdateAvailable: true };
+    const latest = {
+      ...applicable,
+      lockVersion: 5,
+      liveNotes: "Rough notes saved in another tab",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(applicable))
+      .mockResolvedValueOnce(
+        response({ code: "conversation_workspace_conflict" }, 409),
+      )
+      .mockResolvedValueOnce(response(latest))
+      .mockResolvedValueOnce(
+        response({
+          ...latest,
+          lockVersion: 6,
+          generationUpdateAvailable: false,
+          enhancedNotes: "The newly applied notes",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewHarness />);
+
+    const apply = await screen.findByRole("button", {
+      name: "Use generated version 1",
+    });
+    fireEvent.click(apply);
+    const refresh = await screen.findByRole("button", {
+      name: "Load latest saved draft",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Check status" }),
+    ).not.toBeInTheDocument();
+    expect(apply).toBeDisabled();
+    fireEvent.click(refresh);
+    await waitFor(() => expect(apply).toBeEnabled());
+    expect(screen.getByLabelText("Your rough notes (original)")).toHaveValue(
+      latest.liveNotes,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2]?.[0]).toMatch(/personal-workspace$/);
+
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Enhanced conversation notes")).toHaveValue(
+        "The newly applied notes",
+      ),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
+      generationId: applicable.generationId,
+      expectedLockVersion: latest.lockVersion,
+    });
+  });
+
+  it("preserves text entered while applying for comparison with the latest saved draft", async () => {
+    const pendingApply = deferred<Response>();
+    const applicable = { ...readyWorkspace, generationUpdateAvailable: true };
+    const latest = {
+      ...applicable,
+      lockVersion: 5,
+      enhancedNotes: "Newer notes saved in another tab",
+      followUpDraft: "A separately saved follow-up",
+    };
+    const localEdit =
+      "A new enhanced-note edit made while the request was pending";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(applicable))
+      .mockImplementationOnce(() => pendingApply.promise)
+      .mockResolvedValueOnce(response(latest))
+      .mockResolvedValueOnce(
+        response({ ...latest, lockVersion: 6, enhancedNotes: localEdit }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewHarness />);
+
+    const apply = await screen.findByRole("button", {
+      name: "Use generated version 1",
+    });
+    fireEvent.click(apply);
+    expect(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+    const enhanced = screen.getByLabelText("Enhanced conversation notes");
+    fireEvent.change(enhanced, { target: { value: localEdit } });
+    await act(async () => {
+      pendingApply.resolve(
+        response({ code: "conversation_workspace_conflict" }, 409),
+      );
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Load latest saved draft" }),
+    );
+
+    expect(
+      await screen.findByLabelText("Latest saved enhanced notes"),
+    ).toHaveValue(latest.enhancedNotes);
+    expect(enhanced).toHaveValue(localEdit);
+    expect(apply).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save reviewed changes" }),
+    );
+    await waitFor(() => expect(apply).toBeEnabled());
+
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body)),
+    ).toMatchObject({
+      expectedLockVersion: latest.lockVersion,
+      enhancedNotes: localEdit,
+      followUpDraft: latest.followUpDraft,
+    });
+    expect(enhanced).toHaveValue(localEdit);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("preserves a reviewed follow-up when saving unchanged text", async () => {
     const reviewedWorkspace = {
       ...readyWorkspace,
@@ -337,6 +452,54 @@ describe("ConversationNotesReview", () => {
     ).toBeDisabled();
   });
 
+  it("discovers the first generated draft after opening review before preparation begins", async () => {
+    const pendingRefresh = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          ...readyWorkspace,
+          lockVersion: 3,
+          enhancedNotes: null,
+          followUpDraft: null,
+          generationFingerprint: null,
+          generationState: "not_started",
+          generationId: null,
+          generationTranscriptVersion: null,
+          generationPersonalNotesState: "not_included",
+          generationCompletedAt: null,
+        }),
+      )
+      .mockImplementationOnce(() => pendingRefresh.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewHarness />);
+
+    expect(
+      await screen.findByText(
+        /No automatic transcript version has been prepared yet/i,
+      ),
+    ).toBeVisible();
+    const enhanced = screen.getByLabelText("Enhanced conversation notes");
+    expect(enhanced).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+
+    await act(async () => {
+      pendingRefresh.resolve(response(readyWorkspace));
+    });
+    expect(
+      await screen.findByText(
+        /Your private draft for transcript version 1 is ready/i,
+      ),
+    ).toBeVisible();
+    expect(enhanced).toHaveValue(readyWorkspace.enhancedNotes);
+    expect(screen.getByLabelText("Private follow-up draft")).toHaveValue(
+      readyWorkspace.followUpDraft,
+    );
+    expect(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("checks generation status without replacing a dirty enhanced-note edit", async () => {
     const pending = {
       ...readyWorkspace,
@@ -417,6 +580,7 @@ describe("ConversationNotesReview", () => {
     expect(
       await screen.findByLabelText("Latest saved enhanced notes"),
     ).toHaveValue("Latest saved wording from the other session.");
+    expect(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
     fireEvent.click(
       screen.getByRole("button", {
         name: "Use latest saved version",

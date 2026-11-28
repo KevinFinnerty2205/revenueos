@@ -75,6 +75,14 @@ latest workspace and lock, overlays only the reviewed local fields and therefore
 does not replace newer unrelated enhanced-note or follow-up fields. A second
 conflict repeats the comparison rather than forcing an overwrite.
 
+A conflict while choosing a generated version gives the user **Load latest saved
+draft** in the review panel. The refresh verifies the private workspace before
+updating it. Local edits made while the request was pending stay visible for
+comparison. The user must choose the generated version again after recovery.
+The review panel also offers **Check status** before the first draft appears and
+after earlier generations settle. It can discover later work in place and
+preserves unsaved private edits.
+
 Deterministic conversation search may match the authenticated owner's live notes,
 enhanced notes and follow-up draft through a correlated lookup that repeats the
 organisation, interaction and user predicates. Results remain ordinary conversation

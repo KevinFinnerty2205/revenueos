@@ -315,7 +315,10 @@ function installApi(
     interactionLoadResponses?: object[];
     startResponses?: object[];
     completeResponses?: object[];
-    captureResponse?: (url: string, method: string) => Response | undefined;
+    captureResponse?: (
+      url: string,
+      method: string,
+    ) => Response | Promise<Response> | undefined;
   } = {},
 ) {
   let currentInteraction = initialInteraction;
@@ -2084,6 +2087,7 @@ describe("FaceToFaceCompanion", () => {
       ).toBe(true),
     );
 
+    expect(liveNotes).toBeEnabled();
     fireEvent.change(liveNotes, {
       target: { value: "A newer note typed before the save finished." },
     });
@@ -2131,6 +2135,83 @@ describe("FaceToFaceCompanion", () => {
       screen.getByRole("button", { name: "Save notes and end interaction" }),
     ).toBeVisible();
   });
+
+  it.each(["failed", "mismatched"] as const)(
+    "protects private notes during completion and restores editing after a %s response",
+    async (outcome) => {
+      const active = interaction({
+        lifecycleStatus: "in_progress",
+        actualStartAt: "2026-08-15T02:00:00Z",
+      });
+      const pendingCompletion = deferred<Response>();
+      const fetchMock = installApi(active, {
+        captureResponse: (url, method) =>
+          url.endsWith("/complete") && method === "POST"
+            ? pendingCompletion.promise
+            : undefined,
+      });
+      render(<FaceToFaceCompanion interactionId="interaction-1" />);
+
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Continue without recording",
+        }),
+      );
+      const liveNotes = screen.getByLabelText("Private live notes");
+      const saveNotes = screen.getByRole("button", {
+        name: "Save private notes",
+      });
+      await waitFor(() => expect(liveNotes).toBeEnabled());
+      fireEvent.change(liveNotes, {
+        target: { value: "Keep the review window in the follow-up." },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save notes and end interaction" }),
+      );
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining("/complete"),
+          expect.objectContaining({ method: "POST" }),
+        ),
+      );
+
+      expect(liveNotes).toBeDisabled();
+      expect(saveNotes).toBeDisabled();
+      expect(liveNotes).toHaveValue("Keep the review window in the follow-up.");
+      expect(screen.getByText("Ending the conversation…")).toBeVisible();
+
+      await act(async () => {
+        pendingCompletion.resolve(
+          outcome === "failed"
+            ? jsonResponse(
+                {
+                  code: "completion_unavailable",
+                  message: "This conversation could not be ended.",
+                },
+                422,
+              )
+            : jsonResponse({
+                ...active,
+                organisationId: "other-organisation",
+                lifecycleStatus: "completed",
+                actualEndAt: "2026-08-15T03:00:00Z",
+              }),
+        );
+      });
+
+      expect(await screen.findByRole("alert")).toBeVisible();
+      expect(liveNotes).toBeEnabled();
+      expect(saveNotes).toBeEnabled();
+      expect(liveNotes).toHaveValue("Keep the review window in the follow-up.");
+      fireEvent.change(liveNotes, {
+        target: { value: "Updated after the completion attempt." },
+      });
+      expect(liveNotes).toHaveValue("Updated after the completion attempt.");
+      expect(
+        screen.getByRole("button", { name: "Save notes and end interaction" }),
+      ).toBeEnabled();
+    },
+  );
 
   it("ignores an initial interaction load that settles during the next interaction commit", async () => {
     const first = interaction({

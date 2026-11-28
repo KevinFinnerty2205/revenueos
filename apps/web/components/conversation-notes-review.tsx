@@ -97,6 +97,7 @@ export function ConversationNotesReview({
   const saveDisabled =
     controller.loading ||
     controller.saveState === "saving" ||
+    controller.generationActionState === "applying" ||
     conflictActive ||
     controller.conflictRecovery.state === "saving";
   const followUpHasContent = controller.values.followUpDraft.trim().length > 0;
@@ -190,8 +191,9 @@ export function ConversationNotesReview({
         actionState={controller.generationActionState}
         actionError={controller.generationError}
         checking={controller.loading}
-        refreshDisabled={conflictActive}
-        workspaceActionsDisabled={conflictActive}
+        workspaceActionsDisabled={
+          conflictActive || controller.saveState === "saving"
+        }
         hasUnsavedChanges={controller.isDirty}
         personalNotesChangedLocally={controller.dirtyFields.liveNotes}
         onRetry={() => void controller.retryGeneration()}
@@ -409,7 +411,6 @@ export function PostConversationDraftStatus({
   actionState,
   actionError,
   checking = false,
-  refreshDisabled = false,
   workspaceActionsDisabled = false,
   hasUnsavedChanges = false,
   personalNotesChangedLocally = false,
@@ -421,7 +422,6 @@ export function PostConversationDraftStatus({
   actionState: WorkspaceGenerationActionState;
   actionError: string | null;
   checking?: boolean;
-  refreshDisabled?: boolean;
   workspaceActionsDisabled?: boolean;
   hasUnsavedChanges?: boolean;
   personalNotesChangedLocally?: boolean;
@@ -434,6 +434,13 @@ export function PostConversationDraftStatus({
     version === null ? "" : ` for transcript version ${version}`;
   const actionPending =
     actionState === "retrying" || actionState === "applying";
+  const refreshRequired = actionState === "refresh_required";
+  const refreshLabel = refreshRequired
+    ? "Load latest saved draft"
+    : "Check status";
+  const checkingLabel = refreshRequired
+    ? "Loading latest saved draft…"
+    : "Checking…";
 
   return (
     <section
@@ -463,22 +470,12 @@ export function PostConversationDraftStatus({
       ) : null}
       {workspace.generationState === "pending" ||
       workspace.generationState === "processing" ? (
-        <>
-          <p className="mt-2 text-sm leading-6 text-slate-700" role="status">
-            {workspace.generationState === "pending" ? "Pending" : "Preparing"}
-            {versionLabel}. Oryntela is building enhanced notes, decisions,
-            suggested actions and a transcript-only follow-up draft. The result
-            stays private to you and is never sent or shared automatically.
-          </p>
-          <button
-            type="button"
-            className="secondary-button mt-3"
-            disabled={checking || refreshDisabled}
-            onClick={onRefresh}
-          >
-            {checking ? "Checking…" : "Check status"}
-          </button>
-        </>
+        <p className="mt-2 text-sm leading-6 text-slate-700" role="status">
+          {workspace.generationState === "pending" ? "Pending" : "Preparing"}
+          {versionLabel}. Oryntela is building enhanced notes, decisions,
+          suggested actions and a transcript-only follow-up draft. The result
+          stays private to you and is never sent or shared automatically.
+        </p>
       ) : null}
       {workspace.generationState === "failed" ? (
         <>
@@ -490,7 +487,9 @@ export function PostConversationDraftStatus({
             <button
               type="button"
               className="secondary-button mt-3"
-              disabled={actionPending || workspaceActionsDisabled}
+              disabled={
+                actionPending || refreshRequired || workspaceActionsDisabled
+              }
               onClick={onRetry}
             >
               {actionState === "retrying" ? "Retrying…" : "Retry private draft"}
@@ -522,7 +521,11 @@ export function PostConversationDraftStatus({
                 type="button"
                 className="secondary-button mt-3"
                 disabled={
-                  actionPending || hasUnsavedChanges || workspaceActionsDisabled
+                  actionPending ||
+                  hasUnsavedChanges ||
+                  workspaceActionsDisabled ||
+                  refreshRequired ||
+                  checking
                 }
                 onClick={onApply}
               >
@@ -539,6 +542,14 @@ export function PostConversationDraftStatus({
           {actionError}
         </p>
       ) : null}
+      <button
+        type="button"
+        className="secondary-button mt-3"
+        disabled={checking || actionPending || workspaceActionsDisabled}
+        onClick={onRefresh}
+      >
+        {checking ? checkingLabel : refreshLabel}
+      </button>
     </section>
   );
 }
