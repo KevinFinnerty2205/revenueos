@@ -6,6 +6,17 @@ export interface ConversationWorkspaceIdentity {
   ownerUserId: string;
 }
 
+type ConversationWorkspaceSave = Pick<
+  ConversationWorkspaceResponse,
+  | "liveNotes"
+  | "enhancedNotes"
+  | "followUpDraft"
+  | "followUpReviewed"
+  | "generationFingerprint"
+> & {
+  expectedLockVersion: number;
+};
+
 const generationStates = new Set([
   "not_started",
   "pending",
@@ -108,4 +119,25 @@ export function decodeConversationWorkspaceResponse(
     importedFromBrowserAt: value.importedFromBrowserAt,
     updatedAt: value.updatedAt,
   };
+}
+
+export function decodeConversationWorkspaceSaveResponse(
+  value: unknown,
+  expected: ConversationWorkspaceIdentity,
+  submitted: ConversationWorkspaceSave,
+): ConversationWorkspaceResponse | null {
+  const response = decodeConversationWorkspaceResponse(value, expected);
+  if (
+    response === null ||
+    !response.exists ||
+    response.lockVersion !== submitted.expectedLockVersion + 1 ||
+    response.liveNotes !== submitted.liveNotes ||
+    response.enhancedNotes !== submitted.enhancedNotes ||
+    response.followUpDraft !== submitted.followUpDraft ||
+    response.followUpReviewed !== submitted.followUpReviewed ||
+    response.generationFingerprint !== submitted.generationFingerprint
+  ) {
+    return null;
+  }
+  return response;
 }

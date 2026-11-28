@@ -38,6 +38,8 @@ export function ConversationWorkspaceConflictRecovery({
   }
   const waiting = recovery.state === "loading";
   const saving = recovery.state === "saving";
+  const needsVerifiedReload =
+    recovery.state === "ready" && recovery.error !== null;
   const latest = recovery.latestValues;
 
   return (
@@ -71,7 +73,7 @@ export function ConversationWorkspaceConflictRecovery({
         </p>
       ) : null}
 
-      {recovery.state === "failed" ? (
+      {recovery.state === "failed" || needsVerifiedReload ? (
         <div className="mt-4">
           <p role="alert" className="text-sm font-semibold text-rose-800">
             {recovery.error ??
@@ -114,7 +116,7 @@ export function ConversationWorkspaceConflictRecovery({
             <button
               type="button"
               className="primary-button"
-              disabled={saving}
+              disabled={saving || needsVerifiedReload}
               onClick={() => {
                 void controller
                   .saveReviewedConflict(reviewedValues)
@@ -131,7 +133,7 @@ export function ConversationWorkspaceConflictRecovery({
             <button
               type="button"
               className="secondary-button"
-              disabled={saving}
+              disabled={saving || needsVerifiedReload}
               onClick={() => {
                 if (controller.useLatestConflict()) {
                   onUsedLatest?.();

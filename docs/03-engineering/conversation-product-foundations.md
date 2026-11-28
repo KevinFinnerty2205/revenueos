@@ -75,6 +75,11 @@ latest workspace and lock, overlays only the reviewed local fields and therefore
 does not replace newer unrelated enhanced-note or follow-up fields. A second
 conflict repeats the comparison rather than forcing an overwrite.
 
+The editor accepts a save confirmation only for the same conversation, user and
+organisation, with the exact submitted text, review state and generation
+fingerprint saved at the next revision. An unverified confirmation keeps local
+edits visible and leaves any open conflict comparison available for retry.
+
 A conflict while choosing a generated version gives the user **Load latest saved
 draft** in the review panel. The refresh verifies the private workspace before
 updating it. Local edits made while the request was pending stay visible for

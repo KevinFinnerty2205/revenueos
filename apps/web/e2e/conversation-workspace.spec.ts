@@ -8,6 +8,7 @@ test("account history opens one CRM-independent conversation workspace and prese
   const completionResponse = Promise.withResolvers<void>();
   const applyRequests: { generationId: string; expectedLockVersion: number }[] =
     [];
+  let returnStaleSaveConfirmation = true;
   let interaction = {
     id: "conversation-proof",
     organisationId: "organisation-proof",
@@ -191,6 +192,11 @@ test("account history opens one CRM-independent conversation workspace and prese
     }
     if (path.endsWith("/personal-workspace")) {
       if (request.method() === "PUT") {
+        if (returnStaleSaveConfirmation) {
+          returnStaleSaveConfirmation = false;
+          await route.fulfill({ json: workspace });
+          return;
+        }
         workspace = {
           ...workspace,
           ...request.postDataJSON(),
@@ -320,6 +326,21 @@ test("account history opens one CRM-independent conversation workspace and prese
     .click();
   await expect(notes).toHaveValue("Ask about the rollout timeline.");
 
+  await page.getByRole("button", { name: "Save private notes" }).click();
+  await expect(
+    page.getByText(
+      "Private notes could not be saved. Your local text is still visible.",
+    ),
+  ).toBeVisible();
+  await expect(notes).toHaveValue("Ask about the rollout timeline.");
+  expect(workspace.liveNotes).toBe("");
+  if (process.env.CAPTURE_PRIVATE_SAVE_CONFIRMATION_SCREENSHOT === "1") {
+    await page.getByRole("main").screenshot({
+      path: "../../docs/07-sprints/assets/private-note-save-confirmation.png",
+      animations: "disabled",
+    });
+  }
+
   const completionRequest = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
@@ -346,7 +367,7 @@ test("account history opens one CRM-independent conversation workspace and prese
   ).toBeVisible();
   expect(workspace.liveNotes).toBe("Ask about the rollout timeline.");
   expect(
-    requests.indexOf(
+    requests.lastIndexOf(
       "PUT /api/v1/interactions/conversation-proof/personal-workspace",
     ),
   ).toBeLessThan(

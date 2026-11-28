@@ -12,7 +12,10 @@ import {
 } from "react";
 import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { ApiClientError, apiRequest } from "@/lib/api";
-import { decodeConversationWorkspaceResponse } from "@/lib/conversation-workspace-response";
+import {
+  decodeConversationWorkspaceResponse,
+  decodeConversationWorkspaceSaveResponse,
+} from "@/lib/conversation-workspace-response";
 
 export type WorkspaceSaveState =
   "idle" | "saving" | "saved" | "failed" | "conflict";
@@ -74,6 +77,8 @@ const AUTHORITATIVE_EMPTY_VALUES = {
 
 const SAFE_WORKSPACE_IDENTITY_ERROR =
   "Your private conversation workspace response could not be verified. Your local changes are still safe.";
+const SAFE_WORKSPACE_SAVE_ERROR =
+  "Your private workspace save could not be verified. Your local changes are still safe.";
 
 const generationMetadataKeys = [
   "generationState",
@@ -819,6 +824,13 @@ export function useConversationWorkspace({
         ) {
           return false;
         }
+        if (
+          previousRecovery.state === "ready" &&
+          previousRecovery.error !== null
+        ) {
+          setConflictRecovery(previousRecovery);
+          return false;
+        }
         setConflictRecovery({
           state: "failed",
           latestWorkspace: null,
@@ -942,11 +954,17 @@ export function useConversationWorkspace({
       const requestStartValues = snapshot.values;
       const requestStartRevision = valuesRevision.current;
       const merged = { ...requestStartValues, ...next };
+      const submitted = {
+        ...merged,
+        expectedLockVersion: snapshot.workspace.lockVersion,
+        generationFingerprint: snapshot.workspace.generationFingerprint,
+        importFromBrowser: options.importFromBrowser === true,
+      };
       const conflictSubmission: WorkspaceConflictSubmission = {
         values: merged,
         localValues: requestStartValues,
         fields: submittedFields(merged, snapshot.baseline, next),
-        importFromBrowser: options.importFromBrowser === true,
+        importFromBrowser: submitted.importFromBrowser,
       };
       const token = nextOperationToken(target);
       activeSaveToken.current = token;
@@ -956,15 +974,7 @@ export function useConversationWorkspace({
       try {
         const payload = await apiRequest<unknown>(workspacePath(target), {
           method: "PUT",
-          body: JSON.stringify({
-            expectedLockVersion: snapshot.workspace.lockVersion,
-            liveNotes: merged.liveNotes,
-            enhancedNotes: merged.enhancedNotes,
-            followUpDraft: merged.followUpDraft,
-            followUpReviewed: merged.followUpReviewed,
-            generationFingerprint: snapshot.workspace.generationFingerprint,
-            importFromBrowser: options.importFromBrowser === true,
-          }),
+          body: JSON.stringify(submitted),
         });
         if (
           activeSaveToken.current !== token ||
@@ -973,24 +983,20 @@ export function useConversationWorkspace({
         ) {
           return false;
         }
-        const response = decodeConversationWorkspaceResponse(payload, target);
+        const response = decodeConversationWorkspaceSaveResponse(
+          payload,
+          target,
+          submitted,
+        );
         if (response === null) {
           setSaveState("failed");
-          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
+          setError(SAFE_WORKSPACE_SAVE_ERROR);
           return false;
         }
-        const savedValues: WorkspaceValues = {
-          liveNotes: response.liveNotes ?? merged.liveNotes,
-          enhancedNotes: response.enhancedNotes ?? merged.enhancedNotes,
-          followUpDraft: response.followUpDraft ?? merged.followUpDraft,
-          followUpReviewed: response.followUpReviewed,
-        };
         setWorkspace(response);
-        setBaseline(savedValues);
+        setBaseline(merged);
         setValuesState((current) =>
-          valuesRevision.current === requestStartRevision
-            ? savedValues
-            : current,
+          valuesRevision.current === requestStartRevision ? merged : current,
         );
         setSaveState("saved");
         setConflictRecovery(EMPTY_CONFLICT_RECOVERY);
@@ -1043,6 +1049,7 @@ export function useConversationWorkspace({
       snapshot.owner === null ||
       !sameWorkspaceSession(snapshot.owner, target) ||
       recovery.state !== "ready" ||
+      recovery.error !== null ||
       recovery.latestWorkspace === null ||
       recovery.latestValues === null
     ) {
@@ -1078,6 +1085,7 @@ export function useConversationWorkspace({
           sameWorkspaceSession(activeSaveToken.current, target)) ||
         snapshot.saveState !== "conflict" ||
         recovery.state !== "ready" ||
+        recovery.error !== null ||
         latestWorkspace === null ||
         latestValues === null ||
         submittedValues === null ||
@@ -1096,18 +1104,24 @@ export function useConversationWorkspace({
         ...reviewed,
       };
       const resolved = applyReviewedValues(latestValues, reviewedValues);
+      const submitted = {
+        ...resolved,
+        expectedLockVersion: latestWorkspace.lockVersion,
+        generationFingerprint: latestWorkspace.generationFingerprint,
+        importFromBrowser: recovery.importFromBrowser,
+      };
       const conflictSubmission: WorkspaceConflictSubmission = {
         values: resolved,
         localValues: requestStartValues,
         fields: submittedFields(resolved, latestValues, reviewedValues),
-        importFromBrowser: recovery.importFromBrowser,
+        importFromBrowser: submitted.importFromBrowser,
       };
       const token = nextOperationToken(target);
       activeSaveToken.current = token;
       invalidateActiveRead(target);
       setSaveState("saving");
       setError(null);
-      setConflictRecovery({
+      const pendingRecovery: WorkspaceConflictRecovery = {
         state: "saving",
         latestWorkspace,
         latestValues,
@@ -1116,19 +1130,12 @@ export function useConversationWorkspace({
         submittedFields: conflictSubmission.fields,
         importFromBrowser: conflictSubmission.importFromBrowser,
         error: null,
-      });
+      };
+      setConflictRecovery(pendingRecovery);
       try {
         const payload = await apiRequest<unknown>(workspacePath(target), {
           method: "PUT",
-          body: JSON.stringify({
-            expectedLockVersion: latestWorkspace.lockVersion,
-            liveNotes: resolved.liveNotes,
-            enhancedNotes: resolved.enhancedNotes,
-            followUpDraft: resolved.followUpDraft,
-            followUpReviewed: resolved.followUpReviewed,
-            generationFingerprint: latestWorkspace.generationFingerprint,
-            importFromBrowser: recovery.importFromBrowser,
-          }),
+          body: JSON.stringify(submitted),
         });
         if (
           activeSaveToken.current !== token ||
@@ -1137,27 +1144,29 @@ export function useConversationWorkspace({
         ) {
           return false;
         }
-        const response = decodeConversationWorkspaceResponse(payload, target);
+        const response = decodeConversationWorkspaceSaveResponse(
+          payload,
+          target,
+          submitted,
+        );
         if (response === null) {
           setSaveState("conflict");
-          setConflictRecovery(recovery);
-          setError(SAFE_WORKSPACE_IDENTITY_ERROR);
+          setConflictRecovery({
+            ...pendingRecovery,
+            state: "ready",
+            error: SAFE_WORKSPACE_SAVE_ERROR,
+          });
+          setError(SAFE_WORKSPACE_SAVE_ERROR);
           return false;
         }
-        const savedValues: WorkspaceValues = {
-          liveNotes: response.liveNotes ?? resolved.liveNotes,
-          enhancedNotes: response.enhancedNotes ?? resolved.enhancedNotes,
-          followUpDraft: response.followUpDraft ?? resolved.followUpDraft,
-          followUpReviewed: response.followUpReviewed,
-        };
         setWorkspace(response);
-        setBaseline(savedValues);
+        setBaseline(resolved);
         setValuesState((current) =>
           mergeSavedValuesPreservingEdits(
             current,
             requestStartValues,
             localValuesAtSubmission,
-            savedValues,
+            resolved,
           ),
         );
         setSaveState("saved");
@@ -1184,13 +1193,8 @@ export function useConversationWorkspace({
           await fetchLatestConflict(conflictSubmission, target);
         } else {
           setConflictRecovery({
+            ...pendingRecovery,
             state: "failed",
-            latestWorkspace,
-            latestValues,
-            submittedValues: conflictSubmission.values,
-            localValuesAtSubmission: conflictSubmission.localValues,
-            submittedFields: conflictSubmission.fields,
-            importFromBrowser: conflictSubmission.importFromBrowser,
             error:
               reason instanceof Error
                 ? reason.message

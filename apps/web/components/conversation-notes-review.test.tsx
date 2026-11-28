@@ -147,7 +147,15 @@ describe("ConversationNotesReview", () => {
       "",
       "/conversations/interaction-1?view=review#follow-up",
     );
-    const fetchMock = vi.fn(() => Promise.resolve(response(readyWorkspace)));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(readyWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...readyWorkspace,
+          lockVersion: readyWorkspace.lockVersion + 1,
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ReviewHarness />);
@@ -163,7 +171,10 @@ describe("ConversationNotesReview", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Save rough notes" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText(/Saved privately to your Oryntela workspace/),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(scrollIntoView).toHaveBeenCalledOnce();
   });
 
@@ -705,6 +716,114 @@ describe("ConversationNotesReview", () => {
         name: "Private notes changed in another session",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("requires a verified refresh after an uncertain reviewed save before allowing resolution", async () => {
+    const comparedWorkspace = {
+      ...readyWorkspace,
+      lockVersion: 5,
+      enhancedNotes: "First verified comparison.",
+    };
+    const refreshedWorkspace = {
+      ...comparedWorkspace,
+      lockVersion: 6,
+      enhancedNotes: "Newer verified comparison.",
+      followUpDraft: "Newer private follow-up.",
+    };
+    const reviewedNotes = "My reconciled enhanced notes.";
+    const newerLocalNotes = "My additional edits after the uncertain save.";
+    const latestRead = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(readyWorkspace))
+      .mockResolvedValueOnce(
+        response({ code: "conversation_workspace_conflict" }, 409),
+      )
+      .mockResolvedValueOnce(response(comparedWorkspace))
+      .mockResolvedValueOnce(
+        response({ ...comparedWorkspace, enhancedNotes: reviewedNotes }),
+      )
+      .mockImplementationOnce(() => latestRead.promise)
+      .mockResolvedValueOnce(
+        response({
+          ...refreshedWorkspace,
+          lockVersion: 7,
+          enhancedNotes: newerLocalNotes,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewHarness />);
+
+    const enhanced = await screen.findByLabelText(
+      "Enhanced conversation notes",
+    );
+    fireEvent.change(enhanced, { target: { value: reviewedNotes } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save enhanced notes" }),
+    );
+    const comparison = await screen.findByLabelText(
+      "Latest saved enhanced notes",
+    );
+    expect(comparison).toHaveValue(comparedWorkspace.enhancedNotes);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save reviewed changes" }),
+    );
+
+    const notice = await screen.findByText(
+      "Your private workspace save could not be verified. Your local changes are still safe.",
+    );
+    expect(notice).toHaveAttribute("role", "alert");
+    expect(comparison).toBeVisible();
+    expect(comparison).toHaveValue(comparedWorkspace.enhancedNotes);
+    expect(enhanced).toBeEnabled();
+    expect(enhanced).toHaveValue(reviewedNotes);
+    expect(
+      screen.getByRole("button", { name: "Save reviewed changes" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Use latest saved version" }),
+    ).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    fireEvent.change(enhanced, { target: { value: newerLocalNotes } });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Try loading the latest version again",
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(
+      screen.getByText("Loading the latest saved private notes…"),
+    ).toHaveAttribute("role", "status");
+    await act(async () => {
+      latestRead.resolve(response(refreshedWorkspace));
+    });
+
+    expect(
+      await screen.findByLabelText("Latest saved enhanced notes"),
+    ).toHaveValue(refreshedWorkspace.enhancedNotes);
+    expect(enhanced).toHaveValue(newerLocalNotes);
+    expect(notice).not.toBeInTheDocument();
+    const saveReviewed = screen.getByRole("button", {
+      name: "Save reviewed changes",
+    });
+    expect(saveReviewed).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Use latest saved version" }),
+    ).toBeEnabled();
+    fireEvent.click(saveReviewed);
+
+    expect(
+      await screen.findByText(/Saved privately to your Oryntela workspace/i),
+    ).toBeVisible();
+    expect(enhanced).toHaveValue(newerLocalNotes);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[5]?.[1]?.body)),
+    ).toMatchObject({
+      expectedLockVersion: refreshedWorkspace.lockVersion,
+      enhancedNotes: newerLocalNotes,
+      followUpDraft: refreshedWorkspace.followUpDraft,
+    });
   });
 
   it("does not claim changed rough notes match the generated version", async () => {

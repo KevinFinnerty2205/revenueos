@@ -369,6 +369,66 @@ describe("useConversationWorkspace", () => {
     expect(result.current.error).toMatch(/could not be verified/i);
   });
 
+  it.each([
+    ["an absent workspace", { exists: false }],
+    ["the previous lock", { lockVersion: 4 }],
+    ["a skipped lock", { lockVersion: 6 }],
+    ["a different rough note", { liveNotes: "Different server rough note" }],
+    ["null after an intentional clear", { enhancedNotes: null }],
+    ["a different follow-up", { followUpDraft: "Different server follow-up" }],
+    ["an unconfirmed review", { followUpReviewed: false }],
+    [
+      "a different generation fingerprint",
+      { generationFingerprint: "b".repeat(64) },
+    ],
+  ] as const)(
+    "preserves unsaved text when the save receipt reports %s",
+    async (_description, mismatch) => {
+      const localNote = "The rough note submitted with the review";
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(response(savedWorkspace))
+        .mockResolvedValueOnce(
+          response({
+            ...savedWorkspace,
+            lockVersion: 5,
+            liveNotes: localNote,
+            enhancedNotes: "",
+            followUpReviewed: true,
+            ...mismatch,
+          }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const { result } = renderHook(() =>
+        useConversationWorkspace({ interactionId: "interaction-1" }),
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() =>
+        result.current.setValues((current) => ({
+          ...current,
+          liveNotes: localNote,
+          enhancedNotes: "",
+        })),
+      );
+
+      await act(async () =>
+        expect(await result.current.save({ followUpReviewed: true })).toBe(
+          false,
+        ),
+      );
+      expect(result.current.saveState).toBe("failed");
+      expect(result.current.workspace?.lockVersion).toBe(4);
+      expect(result.current.values).toMatchObject({
+        liveNotes: localNote,
+        enhancedNotes: "",
+        followUpDraft: savedWorkspace.followUpDraft,
+        followUpReviewed: false,
+      });
+      expect(result.current.dirtyFields.enhancedNotes).toBe(true);
+      expect(result.current.error).toMatch(/could not be verified/i);
+    },
+  );
+
   it("retains a retryable local conflict when the conflict read returns a foreign owner", async () => {
     const fetchMock = vi
       .fn()
@@ -867,8 +927,100 @@ describe("useConversationWorkspace", () => {
         liveNotes: "Verified latest server note",
       },
       submittedValues: { liveNotes: "Local reviewed conflict note" },
+      error: expect.stringMatching(/could not be verified/i),
     });
     expect(result.current.error).toMatch(/could not be verified/i);
+  });
+
+  it("requires a verified comparison read after an unconfirmed reviewed save", async () => {
+    const localNote = "My reviewed rough notes";
+    const latestWorkspace = {
+      ...savedWorkspace,
+      lockVersion: 5,
+      liveNotes: "Verified latest rough notes",
+    };
+    const refreshedWorkspace = {
+      ...latestWorkspace,
+      lockVersion: 6,
+      enhancedNotes: "Enhanced notes saved in another session",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(savedWorkspace))
+      .mockResolvedValueOnce(
+        response({ code: "conversation_workspace_conflict" }, 409),
+      )
+      .mockResolvedValueOnce(response(latestWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...latestWorkspace,
+          lockVersion: 6,
+          liveNotes: "This receipt did not confirm the reviewed rough notes",
+        }),
+      )
+      .mockResolvedValueOnce(response({ code: "not_found" }, 404))
+      .mockResolvedValueOnce(response(refreshedWorkspace))
+      .mockResolvedValueOnce(
+        response({
+          ...refreshedWorkspace,
+          lockVersion: 7,
+          liveNotes: localNote,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() =>
+      result.current.setValues((current) => ({
+        ...current,
+        liveNotes: localNote,
+      })),
+    );
+    await act(async () => expect(await result.current.save()).toBe(false));
+
+    await act(async () =>
+      expect(await result.current.saveReviewedConflict()).toBe(false),
+    );
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "ready",
+      latestWorkspace: { lockVersion: 5 },
+      error: expect.stringMatching(/could not be verified/i),
+    });
+    expect(result.current.values.liveNotes).toBe(localNote);
+    act(() => expect(result.current.useLatestConflict()).toBe(false));
+    await act(async () =>
+      expect(await result.current.saveReviewedConflict()).toBe(false),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    await act(async () =>
+      expect(await result.current.loadLatestConflict()).toBe(false),
+    );
+    expect(result.current.conflictRecovery).toMatchObject({
+      state: "ready",
+      latestWorkspace: { lockVersion: 5 },
+      error: expect.stringMatching(/could not be verified/i),
+    });
+    await act(async () =>
+      expect(await result.current.loadLatestConflict()).toBe(true),
+    );
+    expect(result.current.conflictRecovery.error).toBeNull();
+    expect(result.current.values.liveNotes).toBe(localNote);
+
+    await act(async () =>
+      expect(await result.current.saveReviewedConflict()).toBe(true),
+    );
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[6]?.[1]?.body)),
+    ).toMatchObject({
+      expectedLockVersion: 6,
+      liveNotes: localNote,
+      enhancedNotes: refreshedWorkspace.enhancedNotes,
+    });
+    expect(result.current.workspace?.lockVersion).toBe(7);
+    expect(result.current.conflictRecovery.state).toBe("idle");
   });
 
   it("preserves browser-import provenance through reviewed conflict recovery", async () => {
@@ -1736,6 +1888,8 @@ describe("useConversationWorkspace", () => {
       ...workspaceB,
       lockVersion: 10,
       liveNotes: "New B note",
+      enhancedNotes: "",
+      followUpDraft: "",
     };
     const fetchMock = vi
       .fn()
