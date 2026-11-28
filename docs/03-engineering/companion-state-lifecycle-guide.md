@@ -38,6 +38,12 @@ mounted behind a generic accessible warning. A later valid response can recover 
 place. These browser checks are defence in depth; tenant-scoped API authorisation
 and transition validation remain authoritative.
 
+Private notes stay editable while an end request is saving them. A new edit
+while that save is pending keeps the conversation open for another save. Once
+the completion request is sent, the editor pauses until it receives a result.
+An unsuccessful or unverifiable completion restores editing in place. After a
+verified completion, **Review & follow-up** opens the saved rough notes.
+
 ## DURING substates
 
 Capture choice is `undecided`, `recording` or `passive`. It is stored in

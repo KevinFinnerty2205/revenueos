@@ -211,6 +211,7 @@ function FaceToFaceCompanionSession({
   const [loading, setLoading] = useState(seededInteraction === null);
   const [interactionLoadRetryKey, setInteractionLoadRetryKey] = useState(0);
   const [working, setWorking] = useState(false);
+  const [completionPending, setCompletionPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recordingActivity, setRecordingActivity] =
@@ -228,14 +229,19 @@ function FaceToFaceCompanionSession({
   const recordingBlocksCompletion = useRef(false);
   const elapsedSecondsRef = useRef(0);
   const liveNotesRevisionRef = useRef(0);
+  const completionPendingRef = useRef(false);
   const personalWorkspace = useConversationWorkspace({ interactionId });
   const liveNotes = personalWorkspace.values.liveNotes;
   const updateLiveNotes = (value: string) => {
+    if (completionPendingRef.current) return;
     liveNotesRevisionRef.current += 1;
     personalWorkspace.setValues((current) => ({
       ...current,
       liveNotes: value,
     }));
+  };
+  const saveLiveNotes = () => {
+    if (!completionPendingRef.current) void personalWorkspace.save();
   };
   const liveNotesStatus = personalWorkspace.loading
     ? "Loading your private notes…"
@@ -782,6 +788,7 @@ function FaceToFaceCompanionSession({
   }
 
   async function endInteraction(callOutcome?: CallOutcome) {
+    if (completionPendingRef.current) return;
     if (recoveryRecording && isUnfinishedBrowserRecording(recoveryRecording)) {
       setError(RECORDING_RECOVERY_WARNING);
       return;
@@ -816,13 +823,18 @@ function FaceToFaceCompanionSession({
         setError(RECORDING_COMPLETION_WARNING);
         return;
       }
+      completionPendingRef.current = true;
+      setCompletionPending(true);
       const payload = await apiRequest<unknown>(
         `/api/v1/interactions/${encodeURIComponent(interactionId)}/complete`,
         {
           method: "POST",
           body: JSON.stringify(callOutcome ? { callOutcome } : {}),
         },
-      );
+      ).finally(() => {
+        completionPendingRef.current = false;
+        if (sessionActiveRef.current) setCompletionPending(false);
+      });
       if (!sessionActiveRef.current) return;
       const completed = decodeInteractionResponse(payload, {
         interactionId,
@@ -1038,17 +1050,22 @@ function FaceToFaceCompanionSession({
           inputId={`companion-private-notes-${interactionId}`}
           liveNotes={liveNotes}
           onLiveNotesChange={updateLiveNotes}
-          onSave={() => void personalWorkspace.save()}
+          onSave={saveLiveNotes}
           inputDisabled={
-            personalWorkspace.loading || !personalWorkspace.workspace
+            completionPending ||
+            personalWorkspace.loading ||
+            !personalWorkspace.workspace
           }
           saveDisabled={
+            completionPending ||
             personalWorkspace.loading ||
             !personalWorkspace.workspace ||
             personalWorkspace.saveState === "saving" ||
             personalWorkspace.saveState === "conflict"
           }
-          status={liveNotesStatus}
+          status={
+            completionPending ? "Ending the conversation…" : liveNotesStatus
+          }
         />
       ) : null}
 
@@ -1136,7 +1153,7 @@ function FaceToFaceCompanionSession({
                 fallbackLabel="Continue with passive Companion"
                 liveNotes={liveNotes}
                 onLiveNotesChange={updateLiveNotes}
-                onSaveLiveNotes={() => void personalWorkspace.save()}
+                onSaveLiveNotes={saveLiveNotes}
                 liveNotesSaveDisabled={
                   personalWorkspace.loading ||
                   !personalWorkspace.workspace ||

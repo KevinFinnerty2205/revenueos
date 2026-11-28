@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test";
+import type { ConversationWorkspaceResponse } from "@revenueos/shared";
 
 test("account history opens one CRM-independent conversation workspace and preserves private notes across sections", async ({
   page,
 }) => {
   const requests: string[] = [];
+  const completionResponse = Promise.withResolvers<void>();
+  const applyRequests: { generationId: string; expectedLockVersion: number }[] =
+    [];
   let interaction = {
     id: "conversation-proof",
     organisationId: "organisation-proof",
@@ -32,7 +36,7 @@ test("account history opens one CRM-independent conversation workspace and prese
     createdAt: "2026-11-01T00:00:00Z",
     updatedAt: "2026-11-01T00:00:00Z",
   };
-  let workspace = {
+  let workspace: ConversationWorkspaceResponse = {
     exists: false,
     interactionId: "conversation-proof",
     organisationId: "organisation-proof",
@@ -197,6 +201,33 @@ test("account history opens one CRM-independent conversation workspace and prese
       await route.fulfill({ json: workspace });
       return;
     }
+    if (path.endsWith("/personal-workspace/generation/apply")) {
+      const body = request.postDataJSON() as (typeof applyRequests)[number];
+      applyRequests.push(body);
+      if (body.expectedLockVersion !== workspace.lockVersion) {
+        await route.fulfill({
+          status: 409,
+          json: {
+            code: "conversation_workspace_conflict",
+            message: "This private workspace changed in another session.",
+          },
+        });
+        return;
+      }
+      expect(body.generationId).toBe(workspace.generationId);
+      workspace = {
+        ...workspace,
+        lockVersion: workspace.lockVersion + 1,
+        enhancedNotes: "Decision: agree the rollout owner before Friday.",
+        followUpDraft: "Could you confirm who will own the rollout?",
+        followUpReviewed: false,
+        generationFingerprint: "2".repeat(64),
+        generationUpdateAvailable: false,
+        updatedAt: "2026-11-01T02:12:00Z",
+      };
+      await route.fulfill({ json: workspace });
+      return;
+    }
     if (path.endsWith("/companion/brief")) {
       await route.fulfill({
         json: {
@@ -225,6 +256,7 @@ test("account history opens one CRM-independent conversation workspace and prese
       return;
     }
     if (path.endsWith("/complete")) {
+      await completionResponse.promise;
       interaction = {
         ...interaction,
         lifecycleStatus: "completed",
@@ -288,9 +320,27 @@ test("account history opens one CRM-independent conversation workspace and prese
     .click();
   await expect(notes).toHaveValue("Ask about the rollout timeline.");
 
-  await page
-    .getByRole("button", { name: "Save notes and end interaction" })
-    .click();
+  const completionRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/interactions/conversation-proof/complete"),
+  );
+  try {
+    await page
+      .getByRole("button", { name: "Save notes and end interaction" })
+      .click();
+    await completionRequest;
+    await expect(notes).toBeDisabled();
+    await expect(notes).toHaveValue("Ask about the rollout timeline.");
+    if (process.env.CAPTURE_REVIEW_HANDOFF_SCREENSHOT === "1") {
+      await page.getByRole("main").screenshot({
+        path: "../../docs/07-sprints/assets/conversation-review-handoff.png",
+        animations: "disabled",
+      });
+    }
+  } finally {
+    completionResponse.resolve();
+  }
   await expect(
     page.getByRole("heading", { name: "Conversation ended" }),
   ).toBeVisible();
@@ -306,6 +356,62 @@ test("account history opens one CRM-independent conversation workspace and prese
   await page
     .getByRole("button", { name: "Open Review & follow-up", exact: true })
     .click();
+  await expect(page.getByLabel("Your rough notes (original)")).toHaveValue(
+    "Ask about the rollout timeline.",
+  );
+  await expect(
+    page.getByText(/No automatic transcript version has been prepared yet/),
+  ).toBeVisible();
+  workspace = {
+    ...workspace,
+    generationState: "ready",
+    generationId: "generated-review-version-2",
+    generationTranscriptVersion: 2,
+    generationUpdateAvailable: true,
+    generationCompletedAt: "2026-11-01T02:10:00Z",
+  };
+  await page.getByRole("button", { name: "Check status" }).click();
+  const applyVersion = page.getByRole("button", {
+    name: "Use generated version 2",
+  });
+  await expect(applyVersion).toBeEnabled();
+  workspace = {
+    ...workspace,
+    liveNotes: "Another tab confirmed the Friday deadline.",
+    lockVersion: workspace.lockVersion + 1,
+    updatedAt: "2026-11-01T02:11:00Z",
+  };
+  await applyVersion.click();
+  const loadLatest = page.getByRole("button", {
+    name: "Load latest saved draft",
+  });
+  await expect(loadLatest).toBeVisible();
+  await expect(applyVersion).toBeDisabled();
+  expect(applyRequests).toEqual([
+    { generationId: "generated-review-version-2", expectedLockVersion: 1 },
+  ]);
+  if (process.env.CAPTURE_REVIEW_HANDOFF_SCREENSHOT === "1") {
+    await page
+      .getByRole("region", { name: "Private post-conversation draft" })
+      .screenshot({
+        path: "../../docs/07-sprints/assets/conversation-generated-draft-conflict.png",
+        animations: "disabled",
+      });
+  }
+  await loadLatest.click();
+  await expect(page.getByLabel("Your rough notes (original)")).toHaveValue(
+    "Another tab confirmed the Friday deadline.",
+  );
+  await expect(applyVersion).toBeEnabled();
+  expect(applyRequests).toHaveLength(1);
+  await applyVersion.click();
+  await expect(page.getByLabel("Private follow-up draft")).toHaveValue(
+    "Could you confirm who will own the rollout?",
+  );
+  expect(applyRequests).toEqual([
+    { generationId: "generated-review-version-2", expectedLockVersion: 1 },
+    { generationId: "generated-review-version-2", expectedLockVersion: 2 },
+  ]);
   await expect(
     page.getByRole("heading", { name: "Northstar discovery", exact: true }),
   ).toHaveCount(1);

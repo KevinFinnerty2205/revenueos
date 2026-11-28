@@ -480,6 +480,47 @@ describe("useConversationWorkspace", () => {
     expect(result.current.generationError).toMatch(/could not be verified/i);
   });
 
+  it("rejects a receipt for another generated version in the same private workspace", async () => {
+    const applicable = {
+      ...savedWorkspace,
+      generationId: "generation-2",
+      generationTranscriptVersion: 2,
+      generationUpdateAvailable: true,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(applicable))
+      .mockResolvedValueOnce(
+        response({
+          ...applicable,
+          lockVersion: 5,
+          generationId: "generation-3",
+          generationTranscriptVersion: 3,
+          generationUpdateAvailable: false,
+          enhancedNotes: "Wrong generation's notes",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConversationWorkspace({ interactionId: "interaction-1" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () =>
+      expect(await result.current.applyGeneratedVersion()).toBe(false),
+    );
+
+    expect(result.current.workspace?.lockVersion).toBe(4);
+    expect(result.current.values.enhancedNotes).toBe(
+      savedWorkspace.enhancedNotes,
+    );
+    expect(result.current.generationActionState).toBe("refresh_required");
+    await act(async () =>
+      expect(await result.current.applyGeneratedVersion()).toBe(false),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("prefers durable user edits over regenerated defaults and saves with a lock version", async () => {
     const fetchMock = vi
       .fn()

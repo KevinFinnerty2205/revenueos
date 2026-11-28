@@ -17,7 +17,7 @@ import { decodeConversationWorkspaceResponse } from "@/lib/conversation-workspac
 export type WorkspaceSaveState =
   "idle" | "saving" | "saved" | "failed" | "conflict";
 export type WorkspaceGenerationActionState =
-  "idle" | "retrying" | "applying" | "failed";
+  "idle" | "retrying" | "applying" | "failed" | "refresh_required";
 export type WorkspaceConflictRecoveryState =
   "idle" | "loading" | "ready" | "saving" | "failed";
 
@@ -238,6 +238,7 @@ interface CommittedWorkspaceState {
   values: WorkspaceValues;
   baseline: WorkspaceValues;
   saveState: WorkspaceSaveState;
+  generationActionState: WorkspaceGenerationActionState;
   conflictRecovery: WorkspaceConflictRecovery;
 }
 
@@ -409,6 +410,7 @@ export function useConversationWorkspace({
     values,
     baseline,
     saveState,
+    generationActionState,
     conflictRecovery,
   });
 
@@ -421,11 +423,13 @@ export function useConversationWorkspace({
       values,
       baseline,
       saveState,
+      generationActionState,
       conflictRecovery,
     };
   }, [
     baseline,
     conflictRecovery,
+    generationActionState,
     saveState,
     stateOwnerSession,
     values,
@@ -605,7 +609,7 @@ export function useConversationWorkspace({
   );
 
   const refreshForSession = useCallback(
-    async (target: WorkspaceSession) => {
+    async (target: WorkspaceSession, recoverGeneratedVersion = false) => {
       const requestStartState = committedState.current;
       if (
         !verifiedSessionIsCurrent(target) ||
@@ -642,14 +646,19 @@ export function useConversationWorkspace({
         ) {
           return false;
         }
-        const preserveLocalValues =
-          Object.values(
-            dirtyFields(latestState.values, latestState.baseline),
-          ).some(Boolean) ||
-          valuesRevision.current !== requestStartRevision ||
-          latestState.saveState === "saving" ||
+        const editedFields = dirtyFields(
+          latestState.values,
+          latestState.baseline,
+        );
+        const hasLocalEdits = Object.values(editedFields).some(Boolean);
+        const conflictActive =
           latestState.saveState === "conflict" ||
           latestState.conflictRecovery.state !== "idle";
+        const preserveLocalValues =
+          hasLocalEdits ||
+          valuesRevision.current !== requestStartRevision ||
+          latestState.saveState === "saving" ||
+          conflictActive;
         if (!preserveLocalValues) {
           return hydrate(target, response, {
             liveNotes: defaults.current.liveNotes,
@@ -657,13 +666,35 @@ export function useConversationWorkspace({
             followUpDraft: defaults.current.followUpDraft,
           });
         }
+        if (
+          recoverGeneratedVersion &&
+          !conflictActive &&
+          latestState.saveState !== "saving"
+        ) {
+          setSaveState("conflict");
+          setConflictRecovery({
+            state: "ready",
+            latestWorkspace: response,
+            latestValues: responseValues(response, AUTHORITATIVE_EMPTY_VALUES),
+            submittedValues: latestState.values,
+            localValuesAtSubmission: latestState.values,
+            submittedFields: editedFields,
+            importFromBrowser: false,
+            error: null,
+          });
+          setGenerationActionState("idle");
+          setGenerationError(null);
+          return true;
+        }
         setWorkspace((current) =>
           current === null
             ? response
             : mergeGenerationMetadata(current, response),
         );
-        setGenerationActionState("idle");
-        setGenerationError(null);
+        if (latestState.generationActionState !== "refresh_required") {
+          setGenerationActionState("idle");
+          setGenerationError(null);
+        }
         return true;
       } catch (reason: unknown) {
         if (!readIsCurrent(request)) return false;
@@ -704,7 +735,10 @@ export function useConversationWorkspace({
 
   const refresh = useCallback(async () => {
     if (!verifiedSessionIsCurrent(renderSession)) return;
-    await refreshForSession(renderSession);
+    await refreshForSession(
+      renderSession,
+      committedState.current.generationActionState === "refresh_required",
+    );
   }, [refreshForSession, renderSession, verifiedSessionIsCurrent]);
 
   const fetchLatestConflict = useCallback(
@@ -1266,6 +1300,11 @@ export function useConversationWorkspace({
       workspaceAtStart === null ||
       workspaceAtStart.generationId === null ||
       !workspaceAtStart.generationUpdateAvailable ||
+      snapshot.generationActionState === "refresh_required" ||
+      snapshot.saveState === "conflict" ||
+      snapshot.conflictRecovery.state !== "idle" ||
+      (activeSaveToken.current !== null &&
+        sameWorkspaceSession(activeSaveToken.current, target)) ||
       (activeGenerationToken.current !== null &&
         sameWorkspaceSession(activeGenerationToken.current, target))
     ) {
@@ -1296,8 +1335,18 @@ export function useConversationWorkspace({
         return false;
       }
       const response = decodeConversationWorkspaceResponse(payload, target);
-      if (response === null) {
-        setGenerationActionState("failed");
+      if (
+        response === null ||
+        !response.exists ||
+        response.generationId !== workspaceAtStart.generationId ||
+        response.generationTranscriptVersion !==
+          workspaceAtStart.generationTranscriptVersion ||
+        response.generationState !== "ready" ||
+        response.generationUpdateAvailable ||
+        (response.lockVersion !== workspaceAtStart.lockVersion &&
+          response.lockVersion !== workspaceAtStart.lockVersion + 1)
+      ) {
+        setGenerationActionState("refresh_required");
         setGenerationError(SAFE_WORKSPACE_IDENTITY_ERROR);
         return false;
       }
@@ -1338,17 +1387,25 @@ export function useConversationWorkspace({
       ) {
         return false;
       }
-      const conflict =
-        reason instanceof ApiClientError &&
-        reason.code === "conversation_workspace_conflict";
-      setGenerationActionState("failed");
-      setGenerationError(
-        conflict
-          ? "Your private draft changed in another session. Reload before choosing this generated version."
-          : reason instanceof Error
+      const code = reason instanceof ApiClientError ? reason.code : null;
+      if (code === "conversation_workspace_conflict") {
+        setGenerationActionState("refresh_required");
+        setGenerationError(
+          "Your private draft changed in another session. Load the latest saved draft before choosing a generated version.",
+        );
+      } else if (code === "conversation_draft_generation_not_ready") {
+        setGenerationActionState("refresh_required");
+        setGenerationError(
+          "This generated version is no longer ready. Load the latest saved draft to check which version is available.",
+        );
+      } else {
+        setGenerationActionState("failed");
+        setGenerationError(
+          reason instanceof Error
             ? reason.message
             : "The generated private draft version could not be applied.",
-      );
+        );
+      }
       return false;
     } finally {
       if (activeGenerationToken.current === token) {
