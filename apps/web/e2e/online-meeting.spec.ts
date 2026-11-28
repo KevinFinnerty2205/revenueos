@@ -200,6 +200,8 @@ test("online meeting offers deliberate audio capture and persists transcript imp
       if (path.endsWith("/live-intelligence")) {
         await route.fulfill({
           json: {
+            interactionId: baseInteraction.id,
+            organisationId: baseInteraction.organisationId,
             availability: "unavailable",
             state: "unavailable",
             safeMessage:

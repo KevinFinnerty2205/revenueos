@@ -1539,6 +1539,8 @@ export interface LiveReconciliationSummary {
 }
 
 export interface LiveIntelligenceResponse {
+  interactionId: string;
+  organisationId: string;
   availability: LiveIntelligenceAvailability;
   state: LiveIntelligenceState;
   safeMessage: string;
@@ -1556,6 +1558,10 @@ export interface LiveIntelligenceResponse {
 export interface LiveProcessResponse extends LiveIntelligenceResponse {
   processed: boolean;
   newSegmentCount: number;
+}
+
+export interface LiveReconcileResponse extends LiveIntelligenceResponse {
+  reconciled: boolean;
 }
 
 export type DebriefCaptureType = "ai_debrief" | "voice_journal";

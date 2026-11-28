@@ -2,12 +2,18 @@
 
 import type {
   LiveIntelligenceResponse,
-  LiveProcessResponse,
   ProvisionalLiveSignal,
 } from "@revenueos/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { apiRequest } from "@/lib/api";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { ApiClientError, apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { decodeLiveIntelligenceResponse } from "@/lib/live-intelligence-response-identity";
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -27,169 +33,269 @@ function sentenceCase(value: string): string {
   return `${words.slice(0, 1).toUpperCase()}${words.slice(1)}`;
 }
 
-export function LiveInteractionIntelligence({
-  interactionId,
-  interactionInProgress = false,
-  interactionCompleted = false,
-}: {
+interface LiveInteractionIntelligenceProps {
   interactionId: string;
+  organisationId: string;
   interactionInProgress?: boolean;
   interactionCompleted?: boolean;
-}) {
+}
+
+interface LiveCommand {
+  endpoint: string;
+  body: string;
+  failure: string;
+  kind?: "reconcile";
+  accepts: (response: LiveIntelligenceResponse) => boolean;
+  expand?: boolean;
+}
+
+interface LiveAlert {
+  message: string;
+  reload?: true;
+}
+
+function canProcess(live: LiveIntelligenceResponse | null): boolean {
+  return live?.state === "active" || live?.state === "processing";
+}
+
+function safeError(reason: unknown, fallback: string): string {
+  return reason instanceof ApiClientError ? reason.message : fallback;
+}
+
+export function LiveInteractionIntelligence(
+  props: LiveInteractionIntelligenceProps,
+) {
+  return (
+    <LiveInteractionIntelligenceSession
+      key={JSON.stringify([props.organisationId, props.interactionId])}
+      {...props}
+    />
+  );
+}
+
+function LiveInteractionIntelligenceSession({
+  interactionId,
+  organisationId,
+  interactionInProgress = false,
+  interactionCompleted = false,
+}: LiveInteractionIntelligenceProps) {
   const [live, setLive] = useState<LiveIntelligenceResponse | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LiveAlert | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const latestLive = useRef<LiveIntelligenceResponse | null>(null);
+  const sessionActive = useRef(false);
+  const requestEpoch = useRef(0);
+  const lifecycleEpoch = useRef(0);
+  const commandPending = useRef(false);
   const processingRef = useRef(false);
+  const basePath = `/api/v1/interactions/${encodeURIComponent(interactionId)}/live-intelligence`;
 
-  const load = useCallback(async () => {
-    return apiRequest<LiveIntelligenceResponse>(
-      `/api/v1/interactions/${interactionId}/live-intelligence`,
-    );
-  }, [interactionId]);
+  const acceptLive = useCallback((response: LiveIntelligenceResponse) => {
+    latestLive.current = response;
+    setLive(response);
+    setError(null);
+  }, []);
+
+  const isCurrent = useCallback(
+    (epoch: number) => sessionActive.current && epoch === requestEpoch.current,
+    [],
+  );
+
+  useLayoutEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+      requestEpoch.current += 1;
+    };
+  }, []);
+
+  useLayoutEffect(
+    () => () => {
+      lifecycleEpoch.current += 1;
+    },
+    [interactionCompleted, interactionInProgress],
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    void load()
-      .then((response) => {
-        if (!cancelled) setLive(response);
+    const controller = new AbortController();
+    const epoch = requestEpoch.current;
+    const expectedSessionId = latestLive.current?.sessionId ?? undefined;
+    const loadIsCurrent = () => !controller.signal.aborted && isCurrent(epoch);
+    void apiRequest<unknown>(basePath, { signal: controller.signal })
+      .then((payload) => {
+        if (!loadIsCurrent()) return;
+        acceptLive(
+          decodeLiveIntelligenceResponse(payload, {
+            interactionId,
+            organisationId,
+            sessionId: expectedSessionId,
+          }),
+        );
       })
       .catch((requestError: unknown) => {
-        if (cancelled) return;
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Live Intelligence could not be loaded.",
-        );
+        if (!loadIsCurrent()) return;
+        setError({
+          message: safeError(
+            requestError,
+            "Live Intelligence could not be loaded.",
+          ),
+          reload: true,
+        });
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+    return () => controller.abort();
+  }, [
+    acceptLive,
+    basePath,
+    interactionCompleted,
+    interactionId,
+    isCurrent,
+    organisationId,
+    retryKey,
+  ]);
 
+  const sessionId = canProcess(live) ? live?.sessionId : null;
+  const nextPollSeconds = live?.nextPollSeconds;
   useEffect(() => {
-    if (!live || !["active", "processing"].includes(live.state)) return;
+    if (!interactionInProgress || !sessionId || nextPollSeconds === undefined)
+      return;
+    const phase = lifecycleEpoch.current;
     const interval = window.setInterval(() => {
-      if (processingRef.current) return;
+      if (
+        !sessionActive.current ||
+        phase !== lifecycleEpoch.current ||
+        commandPending.current ||
+        processingRef.current ||
+        !canProcess(latestLive.current) ||
+        latestLive.current?.sessionId !== sessionId
+      ) {
+        return;
+      }
       processingRef.current = true;
-      void apiRequest<LiveProcessResponse>(
-        `/api/v1/interactions/${interactionId}/live-intelligence/process`,
-        {
-          method: "POST",
-          body: JSON.stringify({ idempotencyKey: requestKey("live-poll") }),
-        },
-      )
-        .then((response) => {
-          setLive(response);
-          setError(null);
+      const epoch = requestEpoch.current;
+      const pollIsCurrent = () =>
+        isCurrent(epoch) && phase === lifecycleEpoch.current;
+      void apiRequest<unknown>(`${basePath}/process`, {
+        method: "POST",
+        body: JSON.stringify({ idempotencyKey: requestKey("live-poll") }),
+      })
+        .then((payload) => {
+          if (!pollIsCurrent()) return;
+          acceptLive(
+            decodeLiveIntelligenceResponse(
+              payload,
+              { interactionId, organisationId, sessionId },
+              "process",
+            ),
+          );
         })
         .catch((requestError: unknown) => {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "The latest provisional update is unavailable.",
-          );
+          if (!pollIsCurrent()) return;
+          setError({
+            message: safeError(
+              requestError,
+              "The latest provisional update is unavailable.",
+            ),
+          });
         })
         .finally(() => {
           processingRef.current = false;
         });
-    }, live.nextPollSeconds * 1_000);
+    }, nextPollSeconds * 1_000);
     return () => window.clearInterval(interval);
-  }, [interactionId, live]);
+  }, [
+    acceptLive,
+    basePath,
+    interactionInProgress,
+    interactionId,
+    isCurrent,
+    nextPollSeconds,
+    organisationId,
+    sessionId,
+  ]);
 
-  async function start() {
+  async function mutate(command: LiveCommand) {
+    if (commandPending.current) return;
+    commandPending.current = true;
+    const epoch = ++requestEpoch.current;
+    const phase = lifecycleEpoch.current;
+    const commandIsCurrent = () =>
+      isCurrent(epoch) && phase === lifecycleEpoch.current;
+    const expectedSessionId = latestLive.current?.sessionId ?? undefined;
     setWorking(true);
     setError(null);
     try {
-      const response = await apiRequest<LiveIntelligenceResponse>(
-        `/api/v1/interactions/${interactionId}/live-intelligence/start`,
+      const payload = await apiRequest<unknown>(
+        `${basePath}/${command.endpoint}`,
         {
           method: "POST",
-          body: JSON.stringify({ externalProcessingAcknowledged: false }),
+          body: command.body,
         },
       );
-      setLive(response);
-      setExpanded(true);
-    } catch (requestError: unknown) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Live Intelligence could not be enabled.",
+      if (!commandIsCurrent()) return;
+      const response = decodeLiveIntelligenceResponse(
+        payload,
+        { interactionId, organisationId, sessionId: expectedSessionId },
+        command.kind,
       );
+      if (!command.accepts(response)) {
+        setError({ message: command.failure });
+        return;
+      }
+      acceptLive(response);
+      if (command.expand) setExpanded(true);
+    } catch (requestError: unknown) {
+      if (commandIsCurrent()) {
+        setError({ message: safeError(requestError, command.failure) });
+      }
     } finally {
-      setWorking(false);
+      commandPending.current = false;
+      if (isCurrent(epoch)) setWorking(false);
     }
   }
 
-  async function stop() {
-    setWorking(true);
-    setError(null);
-    try {
-      setLive(
-        await apiRequest<LiveIntelligenceResponse>(
-          `/api/v1/interactions/${interactionId}/live-intelligence/stop`,
-          {
-            method: "POST",
-            body: JSON.stringify({ reason: "user_disabled" }),
-          },
-        ),
-      );
-    } catch (requestError: unknown) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Live Intelligence could not be stopped.",
-      );
-    } finally {
-      setWorking(false);
-    }
+  function start() {
+    return mutate({
+      endpoint: "start",
+      body: JSON.stringify({ externalProcessingAcknowledged: false }),
+      failure: "Live Intelligence could not be enabled.",
+      accepts: canProcess,
+      expand: true,
+    });
   }
 
-  async function dismiss(signal: ProvisionalLiveSignal) {
-    setWorking(true);
-    setError(null);
-    try {
-      setLive(
-        await apiRequest<LiveIntelligenceResponse>(
-          `/api/v1/interactions/${interactionId}/live-intelligence/${signal.id}/dismiss`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              idempotencyKey: requestKey("live-dismiss"),
-            }),
-          },
-        ),
-      );
-    } catch (requestError: unknown) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "The provisional signal could not be dismissed.",
-      );
-    } finally {
-      setWorking(false);
-    }
+  function stop() {
+    return mutate({
+      endpoint: "stop",
+      body: JSON.stringify({ reason: "user_disabled" }),
+      failure: "Live Intelligence could not be stopped.",
+      accepts: (response) => response.state === "completed",
+    });
   }
 
-  async function reconcile() {
-    setWorking(true);
-    setError(null);
-    try {
-      setLive(
-        await apiRequest<LiveIntelligenceResponse>(
-          `/api/v1/interactions/${interactionId}/live-intelligence/reconcile`,
-          { method: "POST", body: "{}" },
+  function dismiss(signal: ProvisionalLiveSignal) {
+    return mutate({
+      endpoint: `${encodeURIComponent(signal.id)}/dismiss`,
+      body: JSON.stringify({ idempotencyKey: requestKey("live-dismiss") }),
+      failure: "The provisional signal could not be dismissed.",
+      accepts: (response) =>
+        response.signals.every(
+          (item) =>
+            item.id !== signal.id || item.lifecycleStatus === "dismissed",
         ),
-      );
-    } catch (requestError: unknown) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Live-to-final reconciliation is not ready.",
-      );
-    } finally {
-      setWorking(false);
-    }
+    });
+  }
+
+  function reconcile() {
+    return mutate({
+      endpoint: "reconcile",
+      body: "{}",
+      failure: "Live-to-final reconciliation is not ready.",
+      kind: "reconcile",
+      accepts: (response) =>
+        response.state === "completed" && response.reconciliation !== null,
+    });
   }
 
   if (!live && !error) {
@@ -198,13 +304,34 @@ export function LiveInteractionIntelligence({
     );
   }
 
+  const retry = error?.reload ? (
+    <button
+      type="button"
+      className="secondary-button mt-3 min-h-12"
+      onClick={() => {
+        setError(null);
+        setRetryKey((current) => current + 1);
+      }}
+    >
+      Try again
+    </button>
+  ) : null;
+
   if (!live) {
     return (
-      <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-900">
-        {error}
-      </p>
+      <div className="rounded-xl bg-red-50 p-4 text-sm text-red-900">
+        <p role="alert">{error?.message}</p>
+        {retry}
+      </div>
     );
   }
+
+  const errorNotice = error ? (
+    <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
+      <p role="alert">{error.message}</p>
+      {retry}
+    </div>
+  ) : null;
 
   if (["unavailable", "disabled"].includes(live.state)) {
     return (
@@ -221,6 +348,7 @@ export function LiveInteractionIntelligence({
         <p className="mt-1 text-sm leading-6 text-slate-600">
           {live.safeMessage}
         </p>
+        {errorNotice}
       </section>
     );
   }
@@ -244,6 +372,7 @@ export function LiveInteractionIntelligence({
           It uses the authorised progressive source and shows only provisional,
           reviewable signals. It never updates Revenue Brain or acts for you.
         </p>
+        {errorNotice}
         {interactionInProgress ? (
           <button
             type="button"
@@ -300,14 +429,7 @@ export function LiveInteractionIntelligence({
       <p className="mt-2 text-sm leading-6 text-slate-600">
         {live.safeMessage}
       </p>
-      {error ? (
-        <p
-          role="alert"
-          className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950"
-        >
-          {error}
-        </p>
-      ) : null}
+      {errorNotice}
 
       {expanded ? (
         <div className="mt-5 space-y-6">
@@ -378,7 +500,7 @@ export function LiveInteractionIntelligence({
                           </p>
                         ) : null}
                       </div>
-                      {live.state === "active" ? (
+                      {live.state === "active" && interactionInProgress ? (
                         <button
                           type="button"
                           className="rounded-lg px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus"
@@ -438,7 +560,7 @@ export function LiveInteractionIntelligence({
             </button>
           ) : null}
 
-          {live.state === "active" ? (
+          {live.state === "active" && interactionInProgress ? (
             <button
               type="button"
               className="rounded-lg px-3 py-2 text-sm font-bold text-slate-700 underline focus:outline-none focus:ring-2 focus:ring-brand-focus"

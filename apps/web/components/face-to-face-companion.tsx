@@ -1159,8 +1159,9 @@ function FaceToFaceCompanionSession({
       capabilities?.featureFlags.liveInteractionIntelligence === true ? (
         <LiveInteractionIntelligence
           interactionId={interactionId}
-          interactionInProgress={phase === "DURING"}
-          interactionCompleted={phase === "AFTER"}
+          organisationId={organisationId}
+          interactionInProgress={interaction.lifecycleStatus === "in_progress"}
+          interactionCompleted={interaction.lifecycleStatus === "completed"}
         />
       ) : null}
     </div>

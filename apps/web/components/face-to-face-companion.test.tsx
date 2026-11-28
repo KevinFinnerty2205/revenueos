@@ -1224,6 +1224,45 @@ describe("FaceToFaceCompanion", () => {
     },
   );
 
+  it("keeps frozen live state readable without offering reconciliation on a cancelled conversation", async () => {
+    const initialInteraction = interaction({ lifecycleStatus: "cancelled" });
+    installApi(initialInteraction, {
+      liveInteractionIntelligenceEnabled: true,
+      captureResponse: (url) =>
+        url.endsWith("/live-intelligence")
+          ? jsonResponse({
+              interactionId: initialInteraction.id,
+              organisationId: initialInteraction.organisationId,
+              availability: "available",
+              state: "completed",
+              safeMessage: "Live Intelligence is stopped and frozen.",
+              sourceKind: "progressive_transcript",
+              sessionId: "live-session-1",
+              signals: [],
+              objectives: [],
+              openQuestions: [],
+              reconciliation: null,
+              generatedAt: null,
+              updatedAt: "2026-08-15T02:05:00Z",
+              nextPollSeconds: 15,
+            })
+          : undefined,
+    });
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Live Intelligence is stopped and frozen."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Compare with final intelligence" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("rejects a mixed marker list and can recover without losing typed private notes", async () => {
     window.sessionStorage.setItem(
       "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",

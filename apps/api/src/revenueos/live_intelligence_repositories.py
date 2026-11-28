@@ -74,6 +74,26 @@ class LiveIntelligenceRepository:
             ),
         )
 
+    async def transcript_by_id(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        transcript_version_id: UUID,
+    ) -> TranscriptVersion | None:
+        return cast(
+            TranscriptVersion | None,
+            await self.session.scalar(
+                select(TranscriptVersion).where(
+                    TranscriptVersion.organisation_id == organisation_id,
+                    TranscriptVersion.interaction_id == interaction_id,
+                    TranscriptVersion.id == transcript_version_id,
+                    TranscriptVersion.source == "progressive",
+                    TranscriptVersion.status.in_(("provisional", "final")),
+                    TranscriptVersion.deleted_at.is_(None),
+                )
+            ),
+        )
+
     async def latest_brief(
         self,
         organisation_id: UUID,
@@ -96,6 +116,7 @@ class LiveIntelligenceRepository:
     async def brief_by_id(
         self,
         organisation_id: UUID,
+        interaction_id: UUID,
         brief_id: UUID,
     ) -> PreInteractionBrief | None:
         return cast(
@@ -103,6 +124,7 @@ class LiveIntelligenceRepository:
             await self.session.scalar(
                 select(PreInteractionBrief).where(
                     PreInteractionBrief.organisation_id == organisation_id,
+                    PreInteractionBrief.interaction_id == interaction_id,
                     PreInteractionBrief.id == brief_id,
                     PreInteractionBrief.status == "completed",
                 )

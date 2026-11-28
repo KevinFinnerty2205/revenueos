@@ -36,12 +36,14 @@ from revenueos.live_intelligence_provider import (
     OpenAILiveSignalProvider,
     create_live_signal_provider,
 )
+from revenueos.live_intelligence_repositories import LiveIntelligenceRepository
 from revenueos.live_intelligence_services import (
     LiveInteractionIntelligenceService,
     expire_live_intelligence,
 )
 from revenueos.models import (
     CaptureSession,
+    Interaction,
     InteractionIntelligenceSnapshot,
     LiveBriefProgress,
     LiveInteractionSession,
@@ -68,6 +70,11 @@ def enable_live(app: FastAPI) -> None:
     app.state.settings.feature_live_interaction_intelligence_enabled = True
     app.state.settings.private_beta_live_min_new_segments = 1
     app.state.settings.private_beta_live_min_new_characters = 40
+
+
+def assert_live_response_identity(payload: dict[str, object], interaction_id: str) -> None:
+    assert payload["interactionId"] == interaction_id
+    assert payload["organisationId"] == str(PRIMARY_ORGANISATION_ID)
 
 
 class _LiveResponseCreate:
@@ -291,6 +298,7 @@ def test_live_lifecycle_incremental_detection_speaker_safety_and_idempotency(
     availability = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
     assert availability.status_code == 200
     assert availability.json()["state"] == "available"
+    assert_live_response_identity(availability.json(), interaction_id)
 
     started = client.post(
         f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
@@ -300,6 +308,7 @@ def test_live_lifecycle_incremental_detection_speaker_safety_and_idempotency(
     assert started.json()["state"] == "active"
     assert started.json()["signals"] == []
     assert started.json()["sourceKind"] == "progressive_transcript"
+    assert_live_response_identity(started.json(), interaction_id)
 
     repeated_start = client.post(
         f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
@@ -315,6 +324,7 @@ def test_live_lifecycle_incremental_detection_speaker_safety_and_idempotency(
     assert processed.status_code == 200, processed.text
     payload = processed.json()
     assert payload["processed"] is True
+    assert_live_response_identity(payload, interaction_id)
     signal_types = {item["signalType"] for item in payload["signals"]}
     assert {
         "buying_signal",
@@ -399,6 +409,28 @@ def test_missing_and_out_of_order_segments_wait_without_advancing_cursor(
     assert waiting.status_code == 200
     assert waiting.json()["processed"] is False
     assert waiting.json()["signals"] == []
+
+
+def test_stop_response_preserves_verified_identity(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    interaction_id, _ = create_supported_interaction(app, client)
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={},
+    )
+    assert started.status_code == 200, started.text
+
+    stopped = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/stop",
+        json={"reason": "user_disabled"},
+    )
+
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["state"] == "completed"
+    assert stopped.json()["sessionId"] == started.json()["sessionId"]
+    assert_live_response_identity(stopped.json(), interaction_id)
 
 
 def test_next_window_uses_overlap_advances_server_cursor_and_supersedes_changed_signal(
@@ -495,6 +527,7 @@ def test_dismiss_completion_freeze_reconciliation_and_no_final_store_mutation(
         json={"idempotencyKey": "dismiss-risk"},
     )
     assert dismissed.status_code == 200
+    assert_live_response_identity(dismissed.json(), interaction_id)
     assert (
         next(item for item in dismissed.json()["signals"] if item["id"] == risk["id"])["lifecycleStatus"] == "dismissed"
     )
@@ -569,6 +602,7 @@ def test_dismiss_completion_freeze_reconciliation_and_no_final_store_mutation(
     )
     assert reconciled.status_code == 200, reconciled.text
     assert reconciled.json()["reconciled"] is True
+    assert_live_response_identity(reconciled.json(), interaction_id)
     assert reconciled.json()["reconciliation"]["confirmed"] >= 1
     confirmed = next(item for item in reconciled.json()["signals"] if item["id"] == buying["id"])
     assert confirmed["resolutionStatus"] == "confirmed"
@@ -600,6 +634,7 @@ def test_disabled_unavailable_invalid_transition_and_cross_tenant_hiding(
     disabled = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
     assert disabled.status_code == 200
     assert disabled.json()["state"] == "disabled"
+    assert_live_response_identity(disabled.json(), interaction_id)
     disabled_start = client.post(
         f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
         json={},
@@ -610,6 +645,7 @@ def test_disabled_unavailable_invalid_transition_and_cross_tenant_hiding(
     assert client.post(f"/api/v1/interactions/{interaction_id}/start", json={}).status_code == 200
     unavailable = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
     assert unavailable.json()["state"] == "unavailable"
+    assert_live_response_identity(unavailable.json(), interaction_id)
     start = client.post(
         f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
         json={},
@@ -622,6 +658,403 @@ def test_disabled_unavailable_invalid_transition_and_cross_tenant_hiding(
     app.dependency_overrides.pop(get_current_user)
     assert hidden.status_code == 404
     assert hidden.json()["code"] == "interaction_not_found"
+
+
+def test_live_parent_and_source_repository_substitutions_fail_closed(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    interaction_id, transcript_version_id = create_supported_interaction(app, client)
+
+    async def substituted_interaction(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_interaction_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> Interaction:
+        del repository, requested_interaction_id, for_update
+        return Interaction(id=uuid4(), organisation_id=organisation_id)
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "get_interaction", substituted_interaction)
+        wrong_interaction = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert wrong_interaction.status_code == 500
+    assert wrong_interaction.json()["code"] == "live_intelligence_identity_mismatch"
+
+    async def substituted_available_source(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_interaction_id: UUID,
+    ) -> TranscriptVersion:
+        del repository, requested_interaction_id
+        return TranscriptVersion(
+            id=transcript_version_id,
+            organisation_id=organisation_id,
+            interaction_id=uuid4(),
+            source="progressive",
+            status="provisional",
+            deleted_at=None,
+        )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            LiveIntelligenceRepository,
+            "latest_progressive_transcript",
+            substituted_available_source,
+        )
+        wrong_source = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert wrong_source.status_code == 500
+    assert wrong_source.json()["code"] == "live_intelligence_identity_mismatch"
+
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={},
+    )
+    assert started.status_code == 200, started.text
+
+    async def substituted_session(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_interaction_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> LiveInteractionSession:
+        del repository, requested_interaction_id, for_update
+        return LiveInteractionSession(
+            id=uuid4(),
+            organisation_id=organisation_id,
+            interaction_id=uuid4(),
+            transcript_version_id=transcript_version_id,
+            source_kind="progressive_transcript",
+        )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "get_live_session", substituted_session)
+        wrong_session = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert wrong_session.status_code == 500
+    assert wrong_session.json()["code"] == "live_intelligence_identity_mismatch"
+
+    async def substituted_bound_source(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_interaction_id: UUID,
+        requested_transcript_version_id: UUID,
+    ) -> TranscriptVersion:
+        del repository
+        return TranscriptVersion(
+            id=requested_transcript_version_id,
+            organisation_id=organisation_id,
+            interaction_id=uuid4(),
+            source="progressive",
+            status="provisional",
+            deleted_at=None,
+        )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "transcript_by_id", substituted_bound_source)
+        wrong_bound_source = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert wrong_bound_source.status_code == 500
+    assert wrong_bound_source.json()["code"] == "live_intelligence_identity_mismatch"
+    assert interaction_id not in wrong_bound_source.json()["message"]
+
+
+def test_live_response_and_dismiss_child_substitutions_fail_closed(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    interaction_id, transcript_version_id = create_supported_interaction(app, client)
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={},
+    )
+    assert started.status_code == 200, started.text
+    live_session_id = UUID(started.json()["sessionId"])
+
+    substituted_signal = ProvisionalSignal(
+        id=uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        interaction_id=uuid4(),
+        live_session_id=live_session_id,
+        transcript_version_id=transcript_version_id,
+        lifecycle_status="detected",
+    )
+
+    async def substituted_signals(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_live_session_id: UUID,
+        *,
+        include_inactive: bool = True,
+        for_update: bool = False,
+    ) -> list[ProvisionalSignal]:
+        del repository, organisation_id, requested_live_session_id, include_inactive, for_update
+        return [substituted_signal]
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "list_signals", substituted_signals)
+        wrong_signal = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert wrong_signal.status_code == 500
+    assert wrong_signal.json()["code"] == "live_intelligence_identity_mismatch"
+
+    substituted_progress = LiveBriefProgress(
+        id=uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        live_session_id=uuid4(),
+    )
+
+    async def substituted_progress_items(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_live_session_id: UUID,
+    ) -> list[LiveBriefProgress]:
+        del repository, organisation_id, requested_live_session_id
+        return [substituted_progress]
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "list_progress", substituted_progress_items)
+        wrong_progress = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert wrong_progress.status_code == 500
+    assert wrong_progress.json()["code"] == "live_intelligence_identity_mismatch"
+
+    async def missing_bound_brief(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_interaction_id: UUID,
+        requested_brief_id: UUID,
+    ) -> None:
+        del repository, organisation_id, requested_interaction_id, requested_brief_id
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "brief_by_id", missing_bound_brief)
+        missing_brief = client.get(f"/api/v1/interactions/{interaction_id}/live-intelligence")
+    assert missing_brief.status_code == 500
+    assert missing_brief.json()["code"] == "live_intelligence_identity_mismatch"
+
+    requested_signal_id = uuid4()
+
+    async def substituted_signal_by_id(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_live_session_id: UUID,
+        signal_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ProvisionalSignal:
+        del repository, organisation_id, requested_live_session_id, for_update
+        substituted_signal.id = signal_id
+        return substituted_signal
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "signal_by_id", substituted_signal_by_id)
+        wrong_dismissal = client.post(
+            f"/api/v1/interactions/{interaction_id}/live-intelligence/{requested_signal_id}/dismiss",
+            json={"idempotencyKey": "wrong-signal"},
+        )
+    assert wrong_dismissal.status_code == 500
+    assert wrong_dismissal.json()["code"] == "live_intelligence_identity_mismatch"
+    assert substituted_signal.lifecycle_status == "detected"
+
+
+def test_live_process_repository_substitutions_roll_back_before_adoption(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    interaction_id, transcript_version_id = create_supported_interaction(app, client)
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={},
+    )
+    assert started.status_code == 200, started.text
+    live_session_id = UUID(started.json()["sessionId"])
+
+    substituted_segment = TranscriptSegment(
+        id=uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        transcript_version_id=uuid4(),
+        sequence_number=0,
+    )
+
+    async def substituted_segments(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_transcript_version_id: UUID,
+        *,
+        cursor: int,
+        overlap: int,
+        limit: int,
+    ) -> list[TranscriptSegment]:
+        del repository, organisation_id, requested_transcript_version_id, cursor, overlap, limit
+        return [substituted_segment]
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(LiveIntelligenceRepository, "processing_segments", substituted_segments)
+        wrong_segment = client.post(
+            f"/api/v1/interactions/{interaction_id}/live-intelligence/process",
+            json={"idempotencyKey": "wrong-segment"},
+        )
+    assert wrong_segment.status_code == 500
+    assert wrong_segment.json()["code"] == "live_intelligence_identity_mismatch"
+
+    substituted_window = LiveProcessingWindow(
+        id=uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        live_session_id=uuid4(),
+        trigger_idempotency_key="wrong-window",
+    )
+
+    async def substituted_window_by_trigger(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_live_session_id: UUID,
+        trigger_idempotency_key: str,
+    ) -> LiveProcessingWindow:
+        del repository, organisation_id, requested_live_session_id
+        substituted_window.trigger_idempotency_key = trigger_idempotency_key
+        return substituted_window
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            LiveIntelligenceRepository,
+            "window_by_trigger",
+            substituted_window_by_trigger,
+        )
+        wrong_window = client.post(
+            f"/api/v1/interactions/{interaction_id}/live-intelligence/process",
+            json={"idempotencyKey": "wrong-window"},
+        )
+    assert wrong_window.status_code == 500
+    assert wrong_window.json()["code"] == "live_intelligence_identity_mismatch"
+
+    substituted_existing_signal = ProvisionalSignal(
+        id=uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        interaction_id=UUID(interaction_id),
+        live_session_id=live_session_id,
+        transcript_version_id=uuid4(),
+        lifecycle_status="detected",
+        signal_fingerprint="0" * 64,
+        subject_fingerprint="1" * 64,
+    )
+
+    async def substituted_signal_by_fingerprint(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_live_session_id: UUID,
+        fingerprint: str,
+    ) -> ProvisionalSignal:
+        del repository, organisation_id, requested_live_session_id
+        substituted_existing_signal.signal_fingerprint = fingerprint
+        return substituted_existing_signal
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            LiveIntelligenceRepository,
+            "signal_by_fingerprint",
+            substituted_signal_by_fingerprint,
+        )
+        wrong_detection_target = client.post(
+            f"/api/v1/interactions/{interaction_id}/live-intelligence/process",
+            json={"idempotencyKey": "wrong-detection-target"},
+        )
+    assert wrong_detection_target.status_code == 500
+    assert wrong_detection_target.json()["code"] == "live_intelligence_identity_mismatch"
+
+    async def persisted_state() -> tuple[str, int, int]:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            live_session = await session.scalar(
+                select(LiveInteractionSession).where(
+                    LiveInteractionSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                    LiveInteractionSession.id == live_session_id,
+                )
+            )
+            assert live_session is not None
+            window_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(LiveProcessingWindow)
+                    .where(
+                        LiveProcessingWindow.organisation_id == PRIMARY_ORGANISATION_ID,
+                        LiveProcessingWindow.live_session_id == live_session_id,
+                    )
+                )
+                or 0
+            )
+            state = (live_session.status, live_session.last_processed_sequence, window_count)
+        await engine.dispose()
+        return state
+
+    assert asyncio.run(persisted_state()) == ("active", -1, 0)
+    assert substituted_existing_signal.transcript_version_id != transcript_version_id
+
+
+def test_live_reconcile_rejects_substituted_final_intelligence_before_mutation(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    interaction_id, _ = create_supported_interaction(app, client)
+    started = client.post(
+        f"/api/v1/interactions/{interaction_id}/live-intelligence/start",
+        json={},
+    )
+    assert started.status_code == 200, started.text
+    live_session_id = UUID(started.json()["sessionId"])
+    completed = client.post(f"/api/v1/interactions/{interaction_id}/complete", json={})
+    assert completed.status_code == 200, completed.text
+
+    async def reconciliation_state() -> tuple[str, datetime | None, UUID | None]:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            live_session = await session.scalar(
+                select(LiveInteractionSession).where(
+                    LiveInteractionSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                    LiveInteractionSession.id == live_session_id,
+                )
+            )
+            assert live_session is not None
+            state = (
+                live_session.status,
+                live_session.reconciled_at,
+                live_session.final_intelligence_id,
+            )
+        await engine.dispose()
+        return state
+
+    before = asyncio.run(reconciliation_state())
+    substituted_final = InteractionIntelligenceSnapshot(
+        id=uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        interaction_id=uuid4(),
+    )
+
+    async def substituted_final_intelligence(
+        repository: LiveIntelligenceRepository,
+        organisation_id: UUID,
+        requested_interaction_id: UUID,
+    ) -> InteractionIntelligenceSnapshot:
+        del repository, organisation_id, requested_interaction_id
+        return substituted_final
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            LiveIntelligenceRepository,
+            "latest_final_intelligence",
+            substituted_final_intelligence,
+        )
+        wrong_final = client.post(
+            f"/api/v1/interactions/{interaction_id}/live-intelligence/reconcile",
+            json={},
+        )
+    assert wrong_final.status_code == 500
+    assert wrong_final.json()["code"] == "live_intelligence_identity_mismatch"
+    assert asyncio.run(reconciliation_state()) == before
 
 
 def test_retention_expires_signal_content_and_preserves_metadata(

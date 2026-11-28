@@ -120,6 +120,8 @@ class LiveReconciliationSummary(APIModel):
 
 
 class LiveIntelligenceResponse(APIModel):
+    interaction_id: UUID
+    organisation_id: UUID
     availability: LiveAvailability
     state: LivePublicState
     safe_message: str
