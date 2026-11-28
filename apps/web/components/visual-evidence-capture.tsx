@@ -21,6 +21,14 @@ import {
 } from "react";
 import { apiBlob, apiRequest, apiUpload } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { isRecord } from "@/lib/private-response-identity";
+import {
+  hasVisualCandidateSourceIdentity,
+  validateVisualEvidenceListForInteraction,
+  VISUAL_RESPONSE_IDENTITY_ERROR,
+  VISUAL_SOURCE_OWNERSHIP,
+  VISUAL_TYPES,
+} from "@/lib/visual-evidence-identity";
 
 type ReviewDecision = { decision: "accept" | "reject"; statement: string };
 
@@ -36,30 +44,6 @@ type VisualUploadIdentity = Pick<
 
 const VISUAL_UPLOAD_IDENTITY_ERROR =
   "The image upload could not be verified. Your selected image has been kept so you can try again.";
-const VISUAL_RESPONSE_IDENTITY_ERROR =
-  "Visual evidence could not be verified. Unverified data was not used; please try again.";
-
-const VISUAL_TYPES: VisualType[] = [
-  "whiteboard",
-  "workshop_output",
-  "architecture_diagram",
-  "handwritten_notes",
-  "agenda",
-  "business_card",
-  "presentation_slide",
-  "presentation_deck_page",
-  "customer_document_photo",
-  "site_photo",
-  "product_photo",
-  "screenshot",
-  "other",
-];
-const OWNERSHIP: VisualSourceOwnership[] = [
-  "customer_created",
-  "salesperson_created",
-  "jointly_created",
-  "unknown_origin",
-];
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -99,18 +83,6 @@ function quickType(interactionType: InteractionType): VisualType {
 
 function isNonEmptyIdentifier(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function hasCandidateSourceIdentity(response: VisualEvidence): boolean {
-  return (
-    Array.isArray(response.candidates) &&
-    response.candidates.every(
-      (candidate) =>
-        Boolean(candidate) &&
-        candidate.sourceVisualId === response.id &&
-        candidate.sourceOwnership === response.sourceOwnership,
-    )
-  );
 }
 
 function visualIdentity(visual: VisualEvidence): VisualUploadIdentity {
@@ -175,31 +147,10 @@ function requireVisualIdentity(
     response.mimeType !== expected.mimeType ||
     response.visualType !== expected.visualType ||
     response.sourceOwnership !== expected.sourceOwnership ||
-    !hasCandidateSourceIdentity(response)
+    !hasVisualCandidateSourceIdentity(response)
   ) {
     throw new Error(errorMessage);
   }
-}
-
-function requireVisualListIdentity(
-  response: VisualEvidence[],
-  interactionId: string,
-): VisualEvidence[] {
-  if (
-    !Array.isArray(response) ||
-    response.some(
-      (visual) =>
-        !visual ||
-        visual.interactionId !== interactionId ||
-        !isNonEmptyIdentifier(visual.id) ||
-        !isNonEmptyIdentifier(visual.captureSessionId) ||
-        visual.captureSessionId !== visual.id ||
-        !hasCandidateSourceIdentity(visual),
-    )
-  ) {
-    throw new Error(VISUAL_RESPONSE_IDENTITY_ERROR);
-  }
-  return response;
 }
 
 function isAbortError(reason: unknown): boolean {
@@ -259,8 +210,8 @@ function VisualEvidenceCaptureSession({
     const controller = new AbortController();
     listRequestController.current = controller;
     try {
-      const response = await apiRequest<VisualEvidence[]>(
-        `/api/v1/interactions/${interactionId}/visual-evidence`,
+      const response = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/visual-evidence`,
         { signal: controller.signal },
       );
       if (
@@ -270,7 +221,10 @@ function VisualEvidenceCaptureSession({
       ) {
         return;
       }
-      const loaded = requireVisualListIdentity(response, interactionId);
+      const loaded = validateVisualEvidenceListForInteraction(
+        response,
+        interactionId,
+      );
       if (
         !sessionActive.current ||
         controller.signal.aborted ||
@@ -566,13 +520,21 @@ function VisualEvidenceCaptureSession({
     }
     setWorking(true);
     setError(null);
+    setMessage(null);
     try {
-      const response = await apiRequest<{
-        deleted: boolean;
-        retryRequired: boolean;
-      }>(`/api/v1/interactions/${interactionId}/visual-evidence/${visual.id}`, {
-        method: "DELETE",
-      });
+      const response = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/visual-evidence/${encodeURIComponent(visual.id)}`,
+        { method: "DELETE" },
+      );
+      if (!sessionActive.current) return;
+      if (
+        !isRecord(response) ||
+        response.id !== visual.id ||
+        typeof response.deleted !== "boolean" ||
+        response.retryRequired !== !response.deleted
+      ) {
+        throw new Error("The photo deletion could not be confirmed.");
+      }
       setMessage(
         response.deleted
           ? "Visual and its current derived evidence were deleted."
@@ -580,13 +542,14 @@ function VisualEvidenceCaptureSession({
       );
       await load();
     } catch (requestError: unknown) {
+      if (!sessionActive.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : "The visual could not be deleted.",
       );
     } finally {
-      setWorking(false);
+      if (sessionActive.current) setWorking(false);
     }
   }
 
@@ -768,7 +731,7 @@ function VisualEvidenceCaptureSession({
                 }
                 className="form-input mt-2"
               >
-                {OWNERSHIP.map((value) => (
+                {VISUAL_SOURCE_OWNERSHIP.map((value) => (
                   <option key={value} value={value}>
                     {humanise(value)}
                   </option>

@@ -53,8 +53,9 @@ receives a narrow activity projection from the recording component:
 - elapsed seconds; and
 - current recording session.
 
-The interaction cannot complete while recording is active, finalisation is in
-progress or audio remains queued in the current tab. A backend rule separately
+The interaction cannot complete while audio permissions are pending, recording
+is active, finalisation is in progress, or audio remains queued in the current
+tab. These checks also run after a pending private-note save. A backend rule separately
 rejects a second active recording session for the same tenant Interaction.
 
 ## Marker state
@@ -64,12 +65,28 @@ Markers can be created and soft-deleted only while the Interaction is
 and idempotency key. Metadata is immutable; only the first soft-delete
 transition is permitted. Completed Interactions expose markers read-only.
 
+The browser verifies the complete marker list before displaying it. A create
+response must confirm the verified user, requested marker type and recording
+offset. A delete response must confirm the requested marker ID. If the result is
+uncertain, **Refresh markers** reads the authoritative list before enabling
+further marker changes. Existing markers and unsaved private notes stay visible
+while the list is checked.
+
 ## AFTER state
 
 The latest recording, active visual count and active marker count form the
 capture summary. The Opportunity Workspace uses a tenant-scoped bounded query
 to expose the latest linked Interaction capture status, including processing,
 review-required and completed states.
+
+The Companion validates marker, recording and photo lists independently. Each
+list must contain only complete entries for the active Interaction, with unique
+record identities. If a list cannot be verified, the summary retains the prior
+verified values for that list. A verified empty list clears the corresponding
+summary. The photo panel uses the same list check and confirms the exact photo
+ID in a deletion acknowledgement. The Companion verifies recording metadata in
+activity and finalisation callbacks while keeping the recorder's local
+completion guard active.
 
 No phase transition automatically generates evidence or intelligence. Existing
 recording transcription, Visual Evidence review and AI Debrief review rules

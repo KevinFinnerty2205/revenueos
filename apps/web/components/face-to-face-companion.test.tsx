@@ -7,10 +7,15 @@ import {
 } from "@testing-library/react";
 import type {
   Interaction,
+  InteractionMarker,
   PreInteractionBriefResponse,
+  RecordingSession,
+  VisualEvidence,
 } from "@revenueos/shared";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FaceToFaceCompanion } from "@/components/face-to-face-companion";
+import type { RecordingActivity } from "@/components/recording-foundation";
 
 const verifiedOrganisation = vi.hoisted(() => ({
   state: {
@@ -25,6 +30,30 @@ const verifiedOrganisation = vi.hoisted(() => ({
 vi.mock("@/components/verified-organisation-context", () => ({
   useVerifiedOrganisation: () => verifiedOrganisation.state,
 }));
+
+const recorderStub = vi.hoisted(() => ({
+  enabled: false,
+  activity: undefined as ((value: RecordingActivity) => void) | undefined,
+}));
+
+vi.mock(import("@/components/recording-foundation"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    RecordingFoundation(
+      props: ComponentProps<typeof original.RecordingFoundation>,
+    ) {
+      if (!recorderStub.enabled)
+        return <original.RecordingFoundation {...props} />;
+      recorderStub.activity = props.onActivityChange;
+      return (
+        <button type="button" disabled={props.startDisabled}>
+          Start recording
+        </button>
+      );
+    },
+  };
+});
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -104,6 +133,69 @@ function interaction(overrides: Partial<Interaction> = {}): Interaction {
     ...overrides,
   };
 }
+
+const priorMarker: InteractionMarker = {
+  id: "marker-prior",
+  interactionId: "interaction-1",
+  createdByUserId: "colleague-1",
+  markerType: "decision",
+  recordingOffsetMs: null,
+  createdAt: "2026-08-15T02:05:00Z",
+};
+
+const priorRecording: RecordingSession = {
+  id: "recording-1",
+  interactionId: "interaction-1",
+  captureSessionId: "capture-1",
+  recordingType: "live_audio_recording",
+  recordingSource: null,
+  lifecycleStatus: "uploaded",
+  consentState: "acknowledged",
+  startedAt: "2026-08-15T02:01:00Z",
+  stoppedAt: "2026-08-15T02:02:00Z",
+  durationSeconds: 60,
+  expectedMimeType: "audio/webm",
+  finalMimeType: "audio/webm",
+  totalBytes: 72,
+  chunkCount: 1,
+  uploadCompletedAt: "2026-08-15T02:03:00Z",
+  transcriptionStatus: "queued",
+  transcriptionAttempts: 0,
+  failureCode: null,
+  autoIntelligenceStatus: "disabled",
+  sessionExpiresAt: "2026-08-16T00:00:00Z",
+  providerMode: "mock",
+  externalProcessing: false,
+  createdAt: "2026-08-15T02:01:00Z",
+  updatedAt: "2026-08-15T02:03:00Z",
+};
+
+const priorPhoto: VisualEvidence = {
+  id: "visual-1",
+  interactionId: "interaction-1",
+  captureSessionId: "visual-1",
+  visualType: "whiteboard",
+  sourceOwnership: "unknown_origin",
+  contextLabel: null,
+  filename: "board.png",
+  mimeType: "image/png",
+  byteSize: 68,
+  width: 1,
+  height: 1,
+  checksumSha256: "a".repeat(64),
+  capturedAt: "2026-08-15T02:04:00Z",
+  processingStatus: "review",
+  processingAttempts: 1,
+  failureCode: null,
+  providerMode: "mock",
+  externalProcessing: false,
+  candidates: [],
+  downloadUrl: null,
+  interactionIntelligenceId: null,
+  revenueBrainSnapshotId: null,
+  createdAt: "2026-08-15T02:04:00Z",
+  updatedAt: "2026-08-15T02:04:00Z",
+};
 
 const completedBrief: PreInteractionBriefResponse = {
   interactionId: "interaction-1",
@@ -189,6 +281,7 @@ function installApi(
     interactionLoadResponses,
     startResponses,
     completeResponses,
+    captureResponse,
   }: {
     aiCompanionEnabled?: boolean;
     liveInteractionIntelligenceEnabled?: boolean;
@@ -208,6 +301,7 @@ function installApi(
     interactionLoadResponses?: object[];
     startResponses?: object[];
     completeResponses?: object[];
+    captureResponse?: (url: string, method: string) => Response | undefined;
   } = {},
 ) {
   let currentInteraction = initialInteraction;
@@ -290,6 +384,8 @@ function installApi(
       }
       return Promise.resolve(jsonResponse(completedBrief));
     }
+    const captureOverride = captureResponse?.(url, method);
+    if (captureOverride) return Promise.resolve(captureOverride);
     if (url.endsWith("/companion/markers") && method === "GET") {
       if (failedCompanionEndpoint === "markers") {
         return Promise.resolve(
@@ -462,6 +558,8 @@ function installApi(
 
 describe("FaceToFaceCompanion", () => {
   afterEach(() => {
+    recorderStub.enabled = false;
+    recorderStub.activity = undefined;
     window.sessionStorage.clear();
     verifiedOrganisation.state.status = "available";
     verifiedOrganisation.state.organisationId = "organisation-1";
@@ -1126,6 +1224,230 @@ describe("FaceToFaceCompanion", () => {
     },
   );
 
+  it("rejects a mixed marker list and can recover without losing typed private notes", async () => {
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
+      "passive",
+    );
+    const initialInteraction = interaction({ lifecycleStatus: "in_progress" });
+    let reads = 0;
+    installApi(initialInteraction, {
+      captureResponse: (url, method) => {
+        if (!url.endsWith("/companion/markers") || method !== "GET") return;
+        reads += 1;
+        return jsonResponse(
+          reads === 1
+            ? [
+                priorMarker,
+                {
+                  ...priorMarker,
+                  id: "marker-foreign",
+                  interactionId: "foreign",
+                  markerType: "risk",
+                },
+              ]
+            : [priorMarker],
+        );
+      },
+    });
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    const notes = await screen.findByLabelText("Private live notes");
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, {
+      target: { value: "Keep the handover private." },
+    });
+    expect(
+      await screen.findByText(/Conversation markers could not be loaded/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Remove Decision marker" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove Risk marker" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh markers" }));
+    expect(
+      await screen.findByRole("button", { name: "Remove Decision marker" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByText(/Conversation markers could not be loaded/),
+    ).not.toBeInTheDocument();
+    expect(notes).toBe(screen.getByLabelText("Private live notes"));
+    expect(notes).toHaveValue("Keep the handover private.");
+  });
+
+  it("retains verified markers until an uncertain create or delete is reconciled", async () => {
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
+      "passive",
+    );
+    const initialInteraction = interaction({ lifecycleStatus: "in_progress" });
+    const savedMarker: InteractionMarker = {
+      ...priorMarker,
+      id: "marker-new",
+      createdByUserId: "user-1",
+      markerType: "important_moment",
+    };
+    let stored = [priorMarker];
+    installApi(initialInteraction, {
+      captureResponse: (url, method) => {
+        if (url.endsWith("/companion/markers") && method === "GET")
+          return jsonResponse(stored);
+        if (url.endsWith("/companion/markers") && method === "POST") {
+          stored = [...stored, savedMarker];
+          return jsonResponse(
+            { ...savedMarker, createdByUserId: "wrong-user" },
+            201,
+          );
+        }
+        if (
+          url.endsWith("/companion/markers/marker-prior") &&
+          method === "DELETE"
+        ) {
+          stored = stored.filter(({ id }) => id !== priorMarker.id);
+          return jsonResponse({ id: savedMarker.id, deleted: true });
+        }
+      },
+    });
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add marker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Important" }));
+    const warning = /The marker change could not be confirmed/;
+    expect(await screen.findByText(warning)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Remove Decision marker" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByText("Important Moment marked."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove Important Moment marker" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh markers" }));
+    expect(
+      await screen.findByRole("button", {
+        name: "Remove Important Moment marker",
+      }),
+    ).toBeEnabled();
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Decision marker" }),
+    );
+    expect(await screen.findByText(warning)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Remove Decision marker" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Remove Important Moment marker" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh markers" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Remove Decision marker" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Remove Important Moment marker" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps the verified capture summary when completion returns mixed or malformed lists", async () => {
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
+      "passive",
+    );
+    const initialInteraction = interaction({ lifecycleStatus: "in_progress" });
+    let completed = false;
+    installApi(initialInteraction, {
+      captureResponse: (url, method) => {
+        if (url.endsWith("/complete") && method === "POST") completed = true;
+        if (url.endsWith("/companion/markers"))
+          return jsonResponse(
+            completed
+              ? [
+                  priorMarker,
+                  {
+                    ...priorMarker,
+                    id: "wrong-marker",
+                    interactionId: "other",
+                  },
+                ]
+              : [priorMarker],
+          );
+        if (url.endsWith("/recordings"))
+          return jsonResponse(
+            completed
+              ? [
+                  { ...priorRecording, durationSeconds: 180 },
+                  {
+                    ...priorRecording,
+                    id: "wrong-recording",
+                    interactionId: "other",
+                  },
+                ]
+              : [priorRecording],
+          );
+        if (url.endsWith("/visual-evidence"))
+          return jsonResponse(
+            completed
+              ? [
+                  priorPhoto,
+                  {
+                    ...priorPhoto,
+                    id: "wrong-photo",
+                    captureSessionId: "wrong-photo",
+                    candidates: null,
+                  },
+                ]
+              : [priorPhoto],
+          );
+      },
+    });
+    render(
+      <FaceToFaceCompanion
+        interactionId="interaction-1"
+        initialInteraction={initialInteraction}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Remove Decision marker" }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "End interaction" }));
+    expect(
+      await screen.findByText(/Previous recording details could not be loaded/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Previous visual evidence could not be loaded/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Conversation markers could not be loaded/),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Recording", { selector: "dt" }).nextElementSibling,
+    ).toHaveTextContent("1:00");
+    expect(
+      screen.getByText("Photos", { selector: "dt" }).nextElementSibling,
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByText("Markers", { selector: "dt" }).nextElementSibling,
+    ).toHaveTextContent("1");
+  });
+
   it.each([
     { embedded: true, route: "conversation workspace" },
     { embedded: false, route: "direct Companion route" },
@@ -1464,6 +1786,73 @@ describe("FaceToFaceCompanion", () => {
         name: "Fill the gaps while they are fresh",
       }),
     ).toBeVisible();
+  });
+
+  it("holds completion on an uncertain recorder update, including while a note save is pending", async () => {
+    recorderStub.enabled = true;
+    window.sessionStorage.setItem(
+      "revenueos:companion:capture-choice:organisation-1:user-1:interaction-1",
+      "recording",
+    );
+    const save = deferred<Response>();
+    const fetchMock = installApi(
+      interaction({ lifecycleStatus: "in_progress" }),
+      {
+        personalWorkspaceSaveResponse: save.promise,
+      },
+    );
+    render(<FaceToFaceCompanion interactionId="interaction-1" />);
+    const start = await screen.findByRole("button", {
+      name: "Start recording",
+    });
+    const foreignActivity: RecordingActivity = {
+      state: "ready",
+      active: false,
+      blocksInteractionCompletion: false,
+      elapsedSeconds: 0,
+      recording: { ...priorRecording, interactionId: "foreign-conversation" },
+    };
+    act(() => recorderStub.activity?.(foreignActivity));
+    expect(
+      screen.getByRole("button", { name: "End interaction" }),
+    ).toBeDisabled();
+    act(() => recorderStub.activity?.({ ...foreignActivity, recording: null }));
+    expect(
+      screen.getByRole("button", { name: "End interaction" }),
+    ).toBeEnabled();
+
+    const noteText = "Hand over the release checklist.";
+    const notes = screen.getByLabelText("Private live notes");
+    await waitFor(() => expect(notes).toBeEnabled());
+    fireEvent.change(notes, { target: { value: noteText } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save notes and end interaction" }),
+    );
+    expect(start).toBeDisabled();
+    act(() => recorderStub.activity?.(foreignActivity));
+    await act(async () =>
+      save.resolve(
+        jsonResponse({
+          ...emptyWorkspace(),
+          exists: true,
+          lockVersion: 1,
+          liveNotes: noteText,
+          enhancedNotes: "",
+          followUpDraft: "",
+          updatedAt: "2026-08-15T03:00:00Z",
+        }),
+      ),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /before ending the interaction/,
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/complete"),
+      ),
+    ).toBe(false);
+    expect(notes).toHaveValue(noteText);
   });
 
   it("keeps a newer note edit open when it changes during save-before-end", async () => {

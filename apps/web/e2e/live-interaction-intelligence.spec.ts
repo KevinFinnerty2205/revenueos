@@ -174,6 +174,33 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
         await route.fulfill({ json: completedBrief() });
         return;
       }
+      if (path.endsWith("/personal-workspace")) {
+        await route.fulfill({
+          json: {
+            exists: false,
+            interactionId,
+            organisationId: plannedInteraction.organisationId,
+            ownerUserId: plannedInteraction.createdByUserId,
+            lockVersion: 0,
+            liveNotes: null,
+            enhancedNotes: null,
+            followUpDraft: null,
+            followUpReviewed: false,
+            generationFingerprint: null,
+            generationState: "not_started",
+            generationId: null,
+            generationTranscriptVersion: null,
+            generationPersonalNotesState: "not_included",
+            generationFailureCode: null,
+            generationRetryAvailable: false,
+            generationUpdateAvailable: false,
+            generationCompletedAt: null,
+            importedFromBrowserAt: null,
+            updatedAt: null,
+          },
+        });
+        return;
+      }
       if (path.endsWith("/companion/markers")) {
         if (request.method() === "POST") {
           const marker = {
@@ -185,7 +212,10 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
             createdAt: "2026-08-15T01:17:00Z",
           };
           markers = [marker];
-          await route.fulfill({ status: 201, json: marker });
+          await route.fulfill({
+            status: 201,
+            json: { ...marker, createdByUserId: "unverified-user" },
+          });
         } else {
           await route.fulfill({ json: markers });
         }
@@ -259,7 +289,26 @@ test("optional Live Companion progresses and reconciles without exposing raw sou
 
   await page.getByRole("button", { name: "Add marker" }).click();
   await page.getByRole("button", { name: "Important" }).click();
-  await expect(page.getByText("Important moment marked.")).toBeVisible();
+  const markerRecovery = page.getByRole("button", { name: "Refresh markers" });
+  await expect(markerRecovery).toBeVisible();
+  const notes = page.getByLabel("Private live notes");
+  await expect(notes).toBeEnabled();
+  await expect(
+    page.getByText(/The marker change could not be confirmed/),
+  ).toBeVisible();
+  const savedMarker = page.getByRole("button", {
+    name: "Remove Important Moment marker",
+  });
+  await expect(savedMarker).toHaveCount(0);
+  if (process.env.CAPTURE_COMPANION_MARKER_RECOVERY_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/companion-marker-recovery.png",
+      fullPage: true,
+    });
+  }
+  await markerRecovery.click();
+  await expect(savedMarker).toBeVisible();
+  await expect(notes).toBeEnabled();
   await page.getByRole("button", { name: "End interaction" }).click();
   await page
     .getByRole("button", { name: "Compare with final intelligence" })

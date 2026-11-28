@@ -8,7 +8,6 @@ import type {
   PreInteractionBriefRequestResponse,
   PreInteractionBriefResponse,
   RecordingSession,
-  VisualEvidence,
 } from "@revenueos/shared";
 import Link from "next/link";
 import {
@@ -31,10 +30,20 @@ import { ConversationWorkspaceConflictRecovery } from "@/components/conversation
 import { useVerifiedOrganisation } from "@/components/verified-organisation-context";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import {
+  validateCreatedInteractionMarker,
+  validateDeletedInteractionMarker,
+  validateInteractionMarkers,
+} from "@/lib/interaction-marker-identity";
 import { decodeInteractionResponse } from "@/lib/interaction-response-identity";
 import { formatInteractionDate } from "@/lib/interactions";
 import { assertPreInteractionBriefIdentity } from "@/lib/pre-interaction-brief-identity";
+import {
+  decodeRecordingSessionForInteraction,
+  decodeRecordingSessionsForInteraction,
+} from "@/lib/recording-session-identity";
 import { useConversationWorkspace } from "@/lib/use-conversation-workspace";
+import { validateVisualEvidenceListForInteraction } from "@/lib/visual-evidence-identity";
 
 type CaptureChoice = "undecided" | "recording" | "passive";
 type CompanionAvailability = "checking" | "ready" | "disabled" | "unavailable";
@@ -71,6 +80,14 @@ const LIVE_NOTE_CONFLICT_FIELDS = [
 
 const INTERACTION_RESPONSE_ERROR =
   "The interaction response did not match this conversation. Try again.";
+const MARKER_LOAD_WARNING =
+  "Conversation markers could not be loaded. Your private notes remain available.";
+const MARKER_MUTATION_WARNING =
+  "The marker change could not be confirmed. Refresh markers to check what was saved.";
+const RECORDING_RESPONSE_WARNING =
+  "Updated recording details could not be verified. Your private notes remain available.";
+const RECORDING_COMPLETION_WARNING =
+  "Finish recording setup and any queued upload before ending the interaction.";
 
 function requestKey(prefix: string): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -174,12 +191,13 @@ function FaceToFaceCompanionSession({
   const [brief, setBrief] = useState<PreInteractionBriefResponse | null>(null);
   const [markers, setMarkers] = useState<InteractionMarker[]>([]);
   const [recordings, setRecordings] = useState<RecordingSession[]>([]);
-  const [visuals, setVisuals] = useState<VisualEvidence[]>([]);
+  const [visualCount, setVisualCount] = useState(0);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [companionAvailability, setCompanionAvailability] =
     useState<CompanionAvailability>("checking");
   const [companionWarnings, setCompanionWarnings] = useState<string[]>([]);
   const [markersAvailable, setMarkersAvailable] = useState(false);
+  const [markersNeedRefresh, setMarkersNeedRefresh] = useState(false);
   const [captureChoice, setCaptureChoice] =
     useState<CaptureChoice>("undecided");
   const [showMarkers, setShowMarkers] = useState(false);
@@ -192,6 +210,7 @@ function FaceToFaceCompanionSession({
   const [recordingActivity, setRecordingActivity] =
     useState<RecordingActivity | null>(null);
   const sessionActiveRef = useRef(true);
+  const recordingBlocksCompletion = useRef(false);
   const elapsedSecondsRef = useRef(0);
   const liveNotesRevisionRef = useRef(0);
   const personalWorkspace = useConversationWorkspace({ interactionId });
@@ -238,10 +257,10 @@ function FaceToFaceCompanionSession({
       return {
         availability: "unavailable" as const,
         brief: null,
-        markers: [],
+        markers: null,
         markersAvailable: false,
-        recordings: [],
-        visuals: [],
+        recordings: null,
+        visualCount: null,
         capabilities: null,
         warnings: [
           "Companion availability could not be checked. Your private notes remain available.",
@@ -255,32 +274,38 @@ function FaceToFaceCompanionSession({
         markers: [],
         markersAvailable: false,
         recordings: [],
-        visuals: [],
+        visualCount: 0,
         capabilities: loadedCapabilities,
         warnings: [],
       };
     }
+    const interactionPath = `/api/v1/interactions/${encodeURIComponent(interactionId)}`;
     const [briefResult, markersResult, recordingsResult, visualsResult] =
       await Promise.allSettled([
         apiRequest<PreInteractionBriefResponse>(
-          `/api/v1/interactions/${interactionId}/companion/brief`,
+          `${interactionPath}/companion/brief`,
         ).then((response) => {
           assertPreInteractionBriefIdentity(response, interactionId);
           return response;
         }),
-        apiRequest<InteractionMarker[]>(
-          `/api/v1/interactions/${interactionId}/companion/markers`,
+        apiRequest<unknown>(`${interactionPath}/companion/markers`).then(
+          (response) => validateInteractionMarkers(response, interactionId),
         ),
         loadedCapabilities.featureFlags.recordingCapture === true
-          ? apiRequest<RecordingSession[]>(
-              `/api/v1/interactions/${interactionId}/recordings`,
+          ? apiRequest<unknown>(`${interactionPath}/recordings`).then(
+              (response) =>
+                decodeRecordingSessionsForInteraction(response, interactionId),
             )
           : Promise.resolve<RecordingSession[]>([]),
         loadedCapabilities.featureFlags.visualEvidence === true
-          ? apiRequest<VisualEvidence[]>(
-              `/api/v1/interactions/${interactionId}/visual-evidence`,
+          ? apiRequest<unknown>(`${interactionPath}/visual-evidence`).then(
+              (response) =>
+                validateVisualEvidenceListForInteraction(
+                  response,
+                  interactionId,
+                ),
             )
-          : Promise.resolve<VisualEvidence[]>([]),
+          : Promise.resolve([]),
       ]);
     const warnings: string[] = [];
     if (briefResult.status === "rejected") {
@@ -289,9 +314,7 @@ function FaceToFaceCompanionSession({
       );
     }
     if (markersResult.status === "rejected") {
-      warnings.push(
-        "Conversation markers could not be loaded. Your private notes remain available.",
-      );
+      warnings.push(MARKER_LOAD_WARNING);
     }
     if (recordingsResult.status === "rejected") {
       warnings.push(
@@ -306,11 +329,15 @@ function FaceToFaceCompanionSession({
     return {
       availability: "ready" as const,
       brief: briefResult.status === "fulfilled" ? briefResult.value : null,
-      markers: markersResult.status === "fulfilled" ? markersResult.value : [],
+      markers:
+        markersResult.status === "fulfilled" ? markersResult.value : null,
       markersAvailable: markersResult.status === "fulfilled",
       recordings:
-        recordingsResult.status === "fulfilled" ? recordingsResult.value : [],
-      visuals: visualsResult.status === "fulfilled" ? visualsResult.value : [],
+        recordingsResult.status === "fulfilled" ? recordingsResult.value : null,
+      visualCount:
+        visualsResult.status === "fulfilled"
+          ? visualsResult.value.length
+          : null,
       capabilities: loadedCapabilities,
       warnings,
     };
@@ -319,10 +346,13 @@ function FaceToFaceCompanionSession({
   const applyLoaded = useCallback(
     (loaded: Awaited<ReturnType<typeof fetchCompanion>>) => {
       setBrief(loaded.brief);
-      setMarkers(loaded.markers);
-      setMarkersAvailable(loaded.markersAvailable);
-      setRecordings(loaded.recordings);
-      setVisuals(loaded.visuals);
+      if (loaded.markers !== null) {
+        setMarkers(loaded.markers);
+        setMarkersAvailable(loaded.markersAvailable);
+      }
+      setMarkersNeedRefresh(loaded.markers === null);
+      if (loaded.recordings !== null) setRecordings(loaded.recordings);
+      if (loaded.visualCount !== null) setVisualCount(loaded.visualCount);
       setCapabilities(loaded.capabilities);
       setCompanionAvailability(loaded.availability);
       setCompanionWarnings(loaded.warnings);
@@ -397,20 +427,50 @@ function FaceToFaceCompanionSession({
 
   const handleRecordingActivityChange = useCallback(
     (activity: RecordingActivity) => {
-      if (sessionActiveRef.current) setRecordingActivity(activity);
+      if (!sessionActiveRef.current) return;
+      try {
+        if (activity.recording !== null) {
+          decodeRecordingSessionForInteraction(
+            activity.recording,
+            interactionId,
+          );
+        }
+        recordingBlocksCompletion.current =
+          activity.blocksInteractionCompletion;
+        setRecordingActivity(activity);
+      } catch {
+        // Keep a completion guard until a later verified activity update can clear it.
+        recordingBlocksCompletion.current = true;
+        setRecordingActivity((current) => ({
+          ...activity,
+          active: activity.active || current?.active === true,
+          blocksInteractionCompletion: true,
+          recording: current?.recording ?? null,
+        }));
+        appendCompanionWarning(RECORDING_RESPONSE_WARNING);
+      }
     },
-    [],
+    [appendCompanionWarning, interactionId],
   );
 
   const handleRecordingFinalized = useCallback(
     (finalized: RecordingSession) => {
       if (!sessionActiveRef.current) return;
-      setRecordings((current) => [
-        finalized,
-        ...current.filter((item) => item.id !== finalized.id),
-      ]);
+      try {
+        const verified = decodeRecordingSessionForInteraction(
+          finalized,
+          interactionId,
+          "finalised",
+        );
+        setRecordings((current) => [
+          verified,
+          ...current.filter((item) => item.id !== verified.id),
+        ]);
+      } catch {
+        appendCompanionWarning(RECORDING_RESPONSE_WARNING);
+      }
     },
-    [],
+    [appendCompanionWarning, interactionId],
   );
 
   useEffect(() => {
@@ -531,66 +591,98 @@ function FaceToFaceCompanionSession({
   }
 
   async function addMarker(markerType: InteractionMarkerType) {
+    if (!markersAvailable || markersNeedRefresh) return;
     setWorking(true);
     setError(null);
+    setMessage(null);
+    const recordingOffsetMs =
+      recordingActivity?.active && elapsedSecondsRef.current > 0
+        ? elapsedSecondsRef.current * 1_000
+        : null;
     try {
-      const marker = await apiRequest<InteractionMarker>(
-        `/api/v1/interactions/${interactionId}/companion/markers`,
+      const response = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/companion/markers`,
         {
           method: "POST",
           body: JSON.stringify({
             markerType,
-            recordingOffsetMs:
-              recordingActivity?.active && elapsedSecondsRef.current > 0
-                ? elapsedSecondsRef.current * 1_000
-                : null,
+            recordingOffsetMs,
             idempotencyKey: requestKey("companion-marker"),
           }),
         },
       );
       if (!sessionActiveRef.current) return;
-      setMarkers((current) => [...current, marker]);
+      const marker = validateCreatedInteractionMarker(response, {
+        interactionId,
+        createdByUserId: userId,
+        markerType,
+        recordingOffsetMs,
+      });
+      setMarkers((current) =>
+        current.some(({ id }) => id === marker.id)
+          ? current.map((item) => (item.id === marker.id ? marker : item))
+          : [...current, marker],
+      );
       setMessage(`${humanise(markerType)} marked.`);
       setShowMarkers(false);
-    } catch (requestError: unknown) {
+    } catch {
       if (!sessionActiveRef.current) return;
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "The marker could not be saved.",
-      );
+      setMarkersNeedRefresh(true);
+      setError(MARKER_MUTATION_WARNING);
     } finally {
       if (sessionActiveRef.current) setWorking(false);
     }
   }
 
   async function deleteMarker(marker: InteractionMarker) {
+    if (!markersAvailable || markersNeedRefresh) return;
     setWorking(true);
     setError(null);
+    setMessage(null);
     try {
-      await apiRequest(
-        `/api/v1/interactions/${interactionId}/companion/markers/${marker.id}`,
+      const response = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/companion/markers/${encodeURIComponent(marker.id)}`,
         { method: "DELETE" },
       );
       if (!sessionActiveRef.current) return;
+      validateDeletedInteractionMarker(response, marker.id);
       setMarkers((current) => current.filter((item) => item.id !== marker.id));
-    } catch (requestError: unknown) {
+    } catch {
       if (!sessionActiveRef.current) return;
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "The marker could not be removed.",
+      setMarkersNeedRefresh(true);
+      setError(MARKER_MUTATION_WARNING);
+    } finally {
+      if (sessionActiveRef.current) setWorking(false);
+    }
+  }
+
+  async function refreshMarkers() {
+    setWorking(true);
+    try {
+      const response = await apiRequest<unknown>(
+        `/api/v1/interactions/${encodeURIComponent(interactionId)}/companion/markers`,
       );
+      if (!sessionActiveRef.current) return;
+      setMarkers(validateInteractionMarkers(response, interactionId));
+      setMarkersAvailable(true);
+      setMarkersNeedRefresh(false);
+      setError((current) =>
+        current === MARKER_MUTATION_WARNING ? null : current,
+      );
+      setCompanionWarnings((current) =>
+        current.filter((warning) => warning !== MARKER_LOAD_WARNING),
+      );
+    } catch {
+      if (!sessionActiveRef.current) return;
+      appendCompanionWarning(MARKER_LOAD_WARNING);
     } finally {
       if (sessionActiveRef.current) setWorking(false);
     }
   }
 
   async function endInteraction(callOutcome?: CallOutcome) {
-    if (recordingActivity?.blocksInteractionCompletion) {
-      setError(
-        "Stop and finish the recording upload before ending the interaction.",
-      );
+    if (recordingBlocksCompletion.current) {
+      setError(RECORDING_COMPLETION_WARNING);
       return;
     }
     if (interaction === null) return;
@@ -614,6 +706,10 @@ function FaceToFaceCompanionSession({
           );
           return;
         }
+      }
+      if (recordingBlocksCompletion.current) {
+        setError(RECORDING_COMPLETION_WARNING);
+        return;
       }
       const payload = await apiRequest<unknown>(
         `/api/v1/interactions/${encodeURIComponent(interactionId)}/complete`,
@@ -683,7 +779,7 @@ function FaceToFaceCompanionSession({
         : "AFTER";
   const recordingEnabled = capabilities?.featureFlags.recordingCapture === true;
   const visualEnabled = capabilities?.featureFlags.visualEvidence === true;
-  const latestRecording = recordings[0] ?? recordingActivity?.recording ?? null;
+  const latestRecording = recordings[0] ?? null;
   const canUseBrowserRecording = interaction.interactionType !== "phone_call";
   const effectiveCaptureChoice = canUseBrowserRecording
     ? captureChoice
@@ -767,6 +863,17 @@ function FaceToFaceCompanionSession({
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {companionAvailability === "ready" && markersNeedRefresh ? (
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          disabled={working}
+          onClick={() => void refreshMarkers()}
+        >
+          Refresh markers
+        </button>
       ) : null}
 
       {privateWorkspaceNeedsRecovery ? (
@@ -885,6 +992,7 @@ function FaceToFaceCompanionSession({
                 interactionId={interactionId}
                 interactionType={interaction.interactionType}
                 lifecycleStatus={interaction.lifecycleStatus}
+                startDisabled={working}
                 showTranscript={false}
                 fallbackHref="#companion-controls"
                 fallbackLabel="Continue with passive Companion"
@@ -931,7 +1039,7 @@ function FaceToFaceCompanionSession({
             <CompanionControls
               markers={markers}
               markersAvailable={markersAvailable}
-              working={working}
+              markerWritesDisabled={working || markersNeedRefresh}
               visualEnabled={visualEnabled}
               showMarkers={showMarkers}
               onToggleMarkers={() => setShowMarkers((value) => !value)}
@@ -1011,7 +1119,7 @@ function FaceToFaceCompanionSession({
           interaction={interaction}
           latestRecording={latestRecording}
           markerCount={markers.length}
-          visualCount={visuals.length}
+          visualCount={visualCount}
           visualEnabled={visualEnabled}
           debriefEnabled={capabilities?.featureFlags.aiDebrief === true}
           showVisuals={showVisuals}
@@ -1454,7 +1562,7 @@ function CaptureChoicePanel({
 function CompanionControls({
   markers,
   markersAvailable,
-  working,
+  markerWritesDisabled,
   visualEnabled,
   showMarkers,
   onToggleMarkers,
@@ -1467,7 +1575,7 @@ function CompanionControls({
 }: {
   markers: InteractionMarker[];
   markersAvailable: boolean;
-  working: boolean;
+  markerWritesDisabled: boolean;
   visualEnabled: boolean;
   showMarkers: boolean;
   onToggleMarkers(): void;
@@ -1497,6 +1605,7 @@ function CompanionControls({
           <button
             type="button"
             className="secondary-button min-h-16 text-base"
+            disabled={markerWritesDisabled}
             onClick={onToggleMarkers}
           >
             Add marker
@@ -1528,7 +1637,7 @@ function CompanionControls({
               <button
                 key={marker.type}
                 type="button"
-                disabled={working}
+                disabled={markerWritesDisabled}
                 className="min-h-14 rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                 onClick={() => onAddMarker(marker.type)}
               >
@@ -1552,7 +1661,7 @@ function CompanionControls({
                 {humanise(marker.markerType)}
                 <button
                   type="button"
-                  disabled={working}
+                  disabled={markerWritesDisabled}
                   className="rounded px-1 text-red-800 focus:outline-none focus:ring-2 focus:ring-red-700"
                   aria-label={`Remove ${humanise(marker.markerType)} marker`}
                   onClick={() => onDeleteMarker(marker)}

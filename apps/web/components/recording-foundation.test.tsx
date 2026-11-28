@@ -1901,6 +1901,13 @@ describe("RecordingFoundation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
     expect(await screen.findByRole("button", { name: "Pause" })).toBeVisible();
     expect(serverLifecycle).toBe("recording");
+    expect(activityChanges).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: "requesting_permission",
+        active: false,
+        blocksInteractionCompletion: true,
+      }),
+    );
     expect(screen.getByLabelText("Private live notes")).toHaveValue(
       "Keep the agreed renewal date.",
     );

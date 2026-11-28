@@ -148,6 +148,53 @@ describe("VisualEvidenceCapture", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    { id: "wrong-photo", deleted: true, retryRequired: false },
+    { id: "visual-1", deleted: true, retryRequired: true },
+    { id: "visual-1", deleted: false, retryRequired: false },
+  ])(
+    "keeps the photo when the deletion acknowledgement is invalid (%j)",
+    async (acknowledgement) => {
+      const fetchMock = vi.fn(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          if (
+            String(input).endsWith("/visual-evidence/visual-1") &&
+            init?.method === "DELETE"
+          ) {
+            return Promise.resolve(jsonResponse(acknowledgement));
+          }
+          return Promise.resolve(
+            jsonResponse([
+              visual({ processingStatus: "completed", candidates: [] }),
+            ]),
+          );
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      try {
+        render(
+          <VisualEvidenceCapture
+            interactionId="interaction-1"
+            interactionType="face_to_face_meeting"
+            lifecycleStatus="in_progress"
+          />,
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+          /photo deletion could not be confirmed/i,
+        );
+        expect(screen.getByText("board.png")).toBeVisible();
+        expect(
+          screen.queryByText(/derived evidence were deleted/),
+        ).not.toBeInTheDocument();
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        confirm.mockRestore();
+      }
+    },
+  );
+
   it("previews before upload and requires complete review before updating intelligence", async () => {
     const pending = uploadVisual({
       visualType: "screenshot",

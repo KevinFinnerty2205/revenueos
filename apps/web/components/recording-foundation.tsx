@@ -13,6 +13,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -277,6 +278,7 @@ export function RecordingFoundation({
   interactionId,
   interactionType,
   lifecycleStatus,
+  startDisabled = false,
   showTranscript = true,
   fallbackHref = "#debrief",
   fallbackLabel = "Use AI Debrief instead",
@@ -293,6 +295,7 @@ export function RecordingFoundation({
   interactionId: string;
   interactionType: InteractionType;
   lifecycleStatus: InteractionLifecycleStatus;
+  startDisabled?: boolean;
   showTranscript?: boolean;
   fallbackHref?: string;
   fallbackLabel?: string;
@@ -656,12 +659,13 @@ export function RecordingFoundation({
       document.removeEventListener("visibilitychange", handleVisibility);
   }, [requestWakeLock]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const active = ["recording", "paused", "uploading"].includes(state);
     onActivityChange?.({
       state,
       active,
-      blocksInteractionCompletion: active || pendingChunkCount > 0,
+      blocksInteractionCompletion:
+        active || state === "requesting_permission" || pendingChunkCount > 0,
       elapsedSeconds,
       recording,
     });
@@ -889,6 +893,7 @@ export function RecordingFoundation({
   }
 
   async function start() {
+    if (startDisabled) return;
     if (!consentConfirmed) {
       setError("Confirm consent and authority before recording.");
       return;
@@ -1696,7 +1701,7 @@ export function RecordingFoundation({
               <button
                 type="button"
                 className="primary-button min-h-12 px-6"
-                disabled={!consentConfirmed}
+                disabled={startDisabled || !consentConfirmed}
                 onClick={() => void start()}
               >
                 {interactionType === "online_meeting"
